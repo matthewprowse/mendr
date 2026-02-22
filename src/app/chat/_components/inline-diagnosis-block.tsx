@@ -85,7 +85,7 @@ export function InlineDiagnosisBlock({
                     <div className="mt-3 space-y-2">
                         <h1 className="text-xl font-semibold">{diagnosis.diagnosis}</h1>
                         {diagnosis.action_required && diagnosis.action_required !== 'N/A' && (
-                            <p className="text-sm">
+                            <p className="text-sm leading-relaxed whitespace-pre-wrap">
                                 {sanitizeAiContent(diagnosis.action_required)}
                             </p>
                         )}
@@ -95,7 +95,7 @@ export function InlineDiagnosisBlock({
                             <h3 className="text-md font-semibold text-foreground">
                                 Estimated Repair Cost
                             </h3>
-                            <p className="text-sm text-foreground">
+                            <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">
                                 {sanitizeAiContent(diagnosis.estimated_cost)}
                             </p>
                         </div>

@@ -1,15 +1,91 @@
+import { Card, CardHeader, CardTitle } from '@/components/ui/card';
+import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
+
+/** Skeleton that matches ProviderCard structure exactly for seamless loading transition. */
+function ProviderCardSkeleton() {
+    return (
+        <Card className="flex flex-col h-full border-input shadow-none p-4 rounded-md">
+            <CardHeader className="flex flex-col gap-3 p-0">
+                <div className="flex flex-col gap-2 w-full min-w-0">
+                    <div className="flex justify-between items-center gap-2 w-full min-w-0">
+                        <div className="min-w-0 flex-1">
+                            <CardTitle className="p-0 text-lg font-semibold">
+                                <Skeleton className="h-6 w-[70%] max-w-[180px]" />
+                            </CardTitle>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                            <Skeleton className="h-4 w-4 rounded" />
+                            <Skeleton className="h-4 w-8" />
+                            <Skeleton className="h-3 w-6" />
+                        </div>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                        <Skeleton className="h-6 w-14 rounded-full" />
+                        <Skeleton className="h-6 w-20 rounded-full" />
+                        <Skeleton className="h-6 w-16 rounded-full" />
+                    </div>
+                </div>
+            </CardHeader>
+            <div className="flex items-center gap-1 w-full min-w-0">
+                <Skeleton className="h-3.5 w-[85%] max-w-[220px]" />
+            </div>
+            <div className="flex flex-col gap-2">
+                <div className="flex items-center justify-between gap-2">
+                    <Skeleton className="h-4 w-32" />
+                    <Skeleton className="h-7 w-16 rounded-md" />
+                </div>
+                <div className="border-l-2 border-input pl-3">
+                    <Skeleton className="h-3.5 w-full mb-1.5" />
+                    <Skeleton className="h-3.5 w-[90%] mb-1.5" />
+                    <Skeleton className="h-3.5 w-[70%]" />
+                </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 mt-auto">
+                <Skeleton className="h-9 flex-1 min-w-0 rounded-md" />
+                <Skeleton className="h-9 w-9 rounded-md shrink-0" />
+                <Skeleton className="h-9 w-9 rounded-md shrink-0" />
+            </div>
+        </Card>
+    );
+}
+
+/** Scandio's Pick skeleton: matches populated layout exactly for seamless switch. */
+function ScandiosPickSkeleton() {
+    return (
+        <div className="flex flex-col gap-6">
+            <Separator className="w-full" />
+            <div className="flex flex-col gap-0.5">
+                <h2 className="text-lg font-semibold text-foreground">Scandio&apos;s Pick</h2>
+            </div>
+            <ProviderCardSkeleton />
+        </div>
+    );
+}
+
+/** Other Recommended Providers skeleton: matches populated layout exactly for seamless switch. */
+function OtherProvidersSkeleton() {
+    return (
+        <div className="flex flex-col gap-6">
+            <div className="flex flex-col gap-0.5">
+                <h3 className="text-lg font-semibold text-foreground">Other Recommended Providers</h3>
+                <p className="text-sm text-foreground leading-relaxed">
+                    Was this diagnosis accurate? Additional photos or details help us create a clearer report for your chosen provider and can speed up the job.
+                </p>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <ProviderCardSkeleton />
+                <ProviderCardSkeleton />
+            </div>
+        </div>
+    );
+}
 
 export function ProvidersSkeleton() {
     return (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {[1, 2, 3, 4].map((i) => (
-                <div key={i} className="rounded-lg border border-border p-4 flex flex-col gap-3">
-                    <Skeleton className="h-5 w-3/4" />
-                    <Skeleton className="h-4 w-full" />
-                    <Skeleton className="h-4 w-1/2" />
-                </div>
-            ))}
+        <div className="flex flex-col gap-6">
+            <ScandiosPickSkeleton />
+            <OtherProvidersSkeleton />
         </div>
     );
 }

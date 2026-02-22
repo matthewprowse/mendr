@@ -31,7 +31,7 @@ export function DiagnosisReport({ diagnosis }: { diagnosis: DiagnosisData | null
     return (
         <div className="space-y-3">
             <h2 className="text-2xl font-semibold leading-tight tracking-tight">{diagnosis.diagnosis}</h2>
-            <p className="text-sm">
+            <p className="text-sm leading-relaxed whitespace-pre-wrap">
                 <RevealText text={sanitizeAiContent(diagnosis.action_required || '')} />
             </p>
         </div>

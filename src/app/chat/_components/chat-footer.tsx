@@ -123,7 +123,7 @@ export function ChatFooter({
                                         : 'Upload Images to Analyse'
                                     : isDisabled
                                       ? 'Processing...'
-                                      : 'Add More Details, Ask Follow-Ups, Provide Context'
+                                      : "Communicate with Scandio's AI Assistant"
                             }
                             disabled={isDisabled || isResponding || welcomeMode}
                             className="min-h-[4.5rem] max-h-[224px] flex-1 resize-none text-sm py-2 px-3"

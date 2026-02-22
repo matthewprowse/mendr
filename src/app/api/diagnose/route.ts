@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
         const hasUserContext = userSelectedTrade?.trade && userSelectedTrade?.diagnosis;
         const systemInstruction = `
 You are an expert home maintenance assistant and diagnostic AI. Your job is to have a proper conversation with the user and only give a formal diagnosis when you are confident.
-${isFollowUp ? 'FOLLOW-UP MODE: Keep <thought> to one sentence. Reuse diagnosis/trade unless user provides NEW image or NEW substantive details (e.g. describes the actual issue, corrects their initial selection like "actually it\'s a garage door"). When they do, UPDATE the diagnosis and trade to match.\n' : ''}
+${isFollowUp ? 'FOLLOW-UP MODE: Keep <thought> to one short sentence. Reuse diagnosis/trade unless user provides NEW image or NEW substantive details.\n' : ''}
 ${hasUserContext ? `USER CONTEXT: The user first selected "${userSelectedTrade.diagnosis}" (trade: ${userSelectedTrade.trade}) before sharing their issue. Use this as an initial hint only.
 - CRITICAL: If the user explicitly corrects or clarifies a DIFFERENT issue (e.g. "Actually it's a garage door", "No, it's plumbing", "I meant gate repair", "it's actually a garage door that needs replacement"), you MUST update diagnosis and trade to match their correction. Their explicit statement OVERRIDES their initial card selection.
 - Otherwise, bridge their selection with what they share: recommend the best trade for the actual issue.\n` : ''}
@@ -102,11 +102,11 @@ CRITICAL INSTRUCTIONS:
 5. Be inquisitive and conversational. If you're unsure about something in a new image, ask for clarification.
 6. BE CONCISE in the structured fields, but natural and thorough in the 'message' field. If the user's question doesn't change the overall diagnosis, keep the structured fields (diagnosis, trade, action_required, estimated_cost) consistent with your previous assessment.
 7. DO NOT just repeat your previous diagnosis if the user is challenging it or asking something else.
-8. You MUST output the <thought> block FIRST — before any other content. The user sees this in real time below the image. Describe what you see in the image and what you assume the issue to be. Do not output <json> until after </thought>.
-9. The <thought> block is shown to the user in real time — it must describe what you see in the image and what you assume the issue to be. Be descriptive and helpful.
+8. You MUST output the <thought> block FIRST — before any other content. The user sees this in real time below the image. Be CONCISE: 1–2 short sentences maximum. Do not output <json> until after </thought>.
+9. The <thought> block is shown in real time — keep it BRIEF and FAST. Example: "Gate motor with burnt wiring. Likely electrical damage. 85%." Then immediately close </thought> and output <json>.
 
 OUTPUT FORMAT:
-1. Start with <thought> IMMEDIATELY. The user sees this in real time. Describe: (a) what is clearly visible in the image (equipment, damage, context), and (b) what you assume the issue/diagnosis to be. Include your confidence (0–100). Example: "I can see a gate motor control box with exposed wiring and what appears to be a burnt component. This suggests electrical damage or motor failure. Confidence: 85%." Then close </thought> and output <json>.
+1. Start with <thought> IMMEDIATELY. Output it as quickly as possible — 1–2 short sentences only. State: (a) what you see, (b) likely issue, (c) confidence. Example: "Gate motor control box with burnt component. Electrical damage or motor failure. 85%." Then close </thought> and output <json>.
 2. After the </thought> block, provide the final structured data in a <json> block.
 3. The 'message' field is the DIRECT answer to the user — what they see in chat. NEVER put: reasoning, "The user seems...", "I need to...", "I will...", or any meta-commentary. Only put what you would say out loud to them.
 4. The 'action_required' field is ONLY technical analysis (repair steps, what's wrong, next steps). NEVER put meta-commentary, "The user seems...", or conversational content there. Do NOT start any sentence with "A" or "The" (e.g. use "Qualified gate motor technicians should..." not "A qualified gate motor technician should...").
@@ -170,8 +170,8 @@ Analyse this description and provide a diagnosis. Output <thought> (1–2 senten
             // Add the primary image as the first user message
             const imagePrompt = !history?.length
                 ? hasUserContext
-                    ? `The user selected "${userSelectedTrade.diagnosis}" (${userSelectedTrade.trade}) and has now uploaded this image. Analyse the image considering their interest. Output <thought> (1–2 sentences + confidence) then <json>.`
-                    : 'Analyse this image. Output <thought> (1–2 sentences + confidence) then <json>.'
+                    ? `The user selected "${userSelectedTrade.diagnosis}" (${userSelectedTrade.trade}) and has now uploaded this image. Analyse quickly. Output <thought> (1–2 short sentences + confidence) then <json>.`
+                    : 'Analyse this image. Output <thought> (1–2 short sentences + confidence) then <json>.'
                 : null;
             contents.push({
                 role: 'user',

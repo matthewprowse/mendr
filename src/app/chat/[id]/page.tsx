@@ -731,16 +731,20 @@ function ResultsContent() {
                                 parsedJson.trade &&
                                 parsedJson.trade !== 'N/A' &&
                                 conf >= 85;
-                            const canFetchEarly = conf >= 75 && !parsedJson.rejected && !parsedJson.requires_clarification && parsedJson.trade && parsedJson.trade !== 'N/A';
+                            // Fetch providers immediately when we identify an actual issue (diagnosis + trade) — don't wait for high confidence
+                            const canFetchEarly =
+                                parsedJson.diagnosis &&
+                                !parsedJson.rejected &&
+                                !parsedJson.requires_clarification &&
+                                parsedJson.trade &&
+                                parsedJson.trade !== 'N/A';
                             const assistantContent =
                                 parsedJson.message || `I identified a ${parsedJson.diagnosis}.`;
 
-                            // At 75%+ confidence: add message and start provider fetch in parallel (don't wait for full stream)
+                            // When we identify an actual issue: add message and start provider fetch immediately (in parallel)
                             if (canFetchEarly && !providersFetchStartedRef.current) {
                                 providersFetchStartedRef.current = true;
                                 initialMessageAddedRef.current = true;
-                                await saveConversation({ diag });
-                                saveMessage('assistant', assistantContent, [], false, diag, undefined);
                                 let newMsgIndex = 0;
                                 setMessages((prev) => {
                                     newMsgIndex = prev.length;
@@ -755,6 +759,9 @@ function ResultsContent() {
                                         },
                                     ];
                                 });
+                                // Run saves and provider fetch in parallel — don't block on DB
+                                void saveConversation({ diag });
+                                void saveMessage('assistant', assistantContent, [], false, diag, undefined);
                                 const loc = userLocation;
                                 const hasLoc =
                                     typeof loc?.lat === 'number' &&
@@ -1120,12 +1127,17 @@ function ResultsContent() {
                                 !parsedJson.rejected &&
                                 parsedJson.trade &&
                                 parsedJson.trade !== 'N/A';
+                            const canFetchEarly =
+                                !parsedJson.requires_clarification &&
+                                !parsedJson.rejected &&
+                                parsedJson.trade &&
+                                parsedJson.trade !== 'N/A';
 
                             if (fullText.toLowerCase().includes('</json>')) {
-                                await saveConversation({ diag });
+                                void saveConversation({ diag });
                                 saveMessage('assistant', assistantContent, [], hasChanged, diag, undefined);
                             }
-                            if (canShowProvs && !providersFetchedForStream) {
+                            if (canFetchEarly && !providersFetchedForStream) {
                                 providersFetchedForStream = true;
                                 const msgIdx = messages.length;
                                 const loc = userLocation;

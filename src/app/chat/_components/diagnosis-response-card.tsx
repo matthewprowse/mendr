@@ -111,11 +111,11 @@ export function DiagnosisResponseCard({
                 <>
                     <div className="space-y-4">
                         <h3 className="text-xl font-semibold">{diagnosis.diagnosis}</h3>
-                        <p className="text-sm text-muted-foreground leading-relaxed">
+                        <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap">
                             {sanitizeAiContent(diagnosis.action_required || '')}
                         </p>
                         {diagnosis.estimated_cost && diagnosis.estimated_cost !== 'N/A' && (
-                            <p className="text-sm font-medium text-foreground">
+                            <p className="text-sm font-medium text-foreground leading-relaxed whitespace-pre-wrap">
                                 {sanitizeAiContent(diagnosis.estimated_cost)}
                             </p>
                         )}
