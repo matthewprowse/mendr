@@ -5,6 +5,10 @@ export interface DiagnosisData {
     action_required: string;
     estimated_cost: string;
     message?: string;
+    rejected?: boolean;
+    requires_clarification?: boolean;
+    /** 0–100. Below 85: ask for more photos/context before showing providers. */
+    confidence?: number;
 }
 
 export interface Message {
@@ -13,6 +17,10 @@ export interface Message {
     feedback?: 'up' | 'down' | null;
     attachments?: string[];
     hasUpdatedDiagnosis?: boolean;
+    /** When present, this assistant message includes a diagnosis (shown as inline response card). */
+    diagnosis?: DiagnosisData;
+    /** Providers recommended for this message's diagnosis. */
+    providers?: Provider[];
 }
 
 export interface Service {
@@ -26,6 +34,8 @@ export interface Provider {
     rating?: number;
     ratingCount?: number;
     phone?: string;
+    /** International format for wa.me links */
+    phoneInternational?: string;
     website?: string;
     latitude?: number;
     longitude?: number;
@@ -33,4 +43,10 @@ export interface Provider {
     services: Service[];
     distanceText?: string;
     isOpen?: boolean | null;
+    /** Google Place ID for linking to Maps/reviews */
+    place_id?: string;
+    /** AI-selected favourite: open, 4.5+ rating, 25+ reviews */
+    isFavourite?: boolean;
+    /** 3-5 sentence explanation of why this provider was selected as the pick */
+    favouriteReason?: string;
 }

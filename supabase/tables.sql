@@ -31,7 +31,8 @@ CREATE TABLE IF NOT EXISTS conversations (
     user_lat DOUBLE PRECISION,
     user_lng DOUBLE PRECISION,
     user_address TEXT,
-    diagnosis_json JSONB,                
+    diagnosis_json JSONB,
+    diagnosis_confirmed BOOLEAN DEFAULT FALSE,
     providers_json JSONB,
     device_type TEXT,
     user_agent TEXT,
@@ -48,6 +49,7 @@ ALTER TABLE conversations ADD COLUMN IF NOT EXISTS user_lat DOUBLE PRECISION;
 ALTER TABLE conversations ADD COLUMN IF NOT EXISTS user_lng DOUBLE PRECISION;
 ALTER TABLE conversations ADD COLUMN IF NOT EXISTS user_address TEXT;
 ALTER TABLE conversations ADD COLUMN IF NOT EXISTS diagnosis_json JSONB;
+ALTER TABLE conversations ADD COLUMN IF NOT EXISTS diagnosis_confirmed BOOLEAN DEFAULT FALSE;
 ALTER TABLE conversations ADD COLUMN IF NOT EXISTS providers_json JSONB;
 ALTER TABLE conversations ADD COLUMN IF NOT EXISTS device_type TEXT;
 ALTER TABLE conversations ADD COLUMN IF NOT EXISTS user_agent TEXT;
@@ -68,6 +70,25 @@ CREATE TABLE IF NOT EXISTS messages (
 ALTER TABLE messages ADD COLUMN IF NOT EXISTS feedback TEXT CHECK (feedback IN ('up', 'down'));
 ALTER TABLE messages ADD COLUMN IF NOT EXISTS attachments TEXT[];
 ALTER TABLE messages ADD COLUMN IF NOT EXISTS has_updated_diagnosis BOOLEAN DEFAULT FALSE;
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS diagnosis_json JSONB;
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS providers_json JSONB;
 
 -- Indexes for performance
 CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(conversation_id);
+
+-- 4. Leads (track contact clicks)
+CREATE TABLE IF NOT EXISTS leads (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    conversation_id UUID REFERENCES conversations(id) ON DELETE SET NULL,
+    provider_place_id TEXT,
+    provider_name TEXT,
+    contact_type TEXT NOT NULL CHECK (contact_type IN ('whatsapp', 'phone', 'email')),
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_leads_conversation ON leads(conversation_id);
+CREATE INDEX IF NOT EXISTS idx_leads_created ON leads(created_at);
+
+-- Add locked flag to conversations (when report/WhatsApp summary is sent)
+ALTER TABLE conversations ADD COLUMN IF NOT EXISTS locked BOOLEAN DEFAULT FALSE;
+ALTER TABLE conversations ADD COLUMN IF NOT EXISTS locked_at TIMESTAMPTZ;

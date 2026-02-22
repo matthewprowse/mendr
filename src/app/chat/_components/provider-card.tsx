@@ -1,11 +1,20 @@
 import { useState, useRef, useMemo, useEffect } from 'react';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
-import { StarFill } from 'geist-icons';
+import { StarFill, Globe, Location } from 'geist-icons';
 import { Badge } from '@/components/ui/badge';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { Provider } from './types';
+import { toWhatsAppPhone } from '@/lib/utils';
 
 function ServiceBadges({
     services,
@@ -148,7 +157,7 @@ function ServiceBadges({
                 <Badge
                     key={i}
                     variant={service.isStatus ? 'default' : 'secondary'}
-                    className="whitespace-nowrap truncate min-w-0 flex-shrink-1 h-6 max-w-[150px] font-medium"
+                    className="whitespace-nowrap truncate min-w-0 flex-shrink-1 h-6 max-w-[240px] font-medium"
                     title={service.full}
                 >
                     {service.short}
@@ -202,6 +211,8 @@ function ServiceBadges({
 export function ProviderCard({
     provider,
     index,
+    diagnosis,
+    conversationId,
     openPopoverId,
     setOpenPopoverId,
     trade,
@@ -209,14 +220,68 @@ export function ProviderCard({
 }: {
     provider: Provider;
     index: number;
+    diagnosis?: { diagnosis: string; trade?: string; action_required?: string; estimated_cost?: string } | null;
+    conversationId?: string;
     openPopoverId: string | null;
     setOpenPopoverId: (id: string | null) => void;
     trade?: string;
     userLocation?: { lat: number; lng: number } | null;
 }) {
+    const [whatsappDialogOpen, setWhatsappDialogOpen] = useState(false);
+    const [whatsappLoading, setWhatsappLoading] = useState(false);
+
     if (!provider) return null;
     const popoverId = `contact-${index}`;
     const displayName = provider.name.replace(/\band\b/gi, '&');
+    const waPhone = toWhatsAppPhone(provider.phoneInternational || provider.phone);
+
+    const logLead = async (contactType: 'whatsapp' | 'phone' | 'email') => {
+        try {
+            await fetch('/api/leads', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    conversation_id: conversationId || null,
+                    provider_place_id: provider.place_id,
+                    provider_name: provider.name,
+                    contact_type: contactType,
+                }),
+            });
+        } catch (_e) {}
+    };
+
+    const handleSendWhatsAppSummary = () => {
+        setOpenPopoverId(null);
+        setWhatsappDialogOpen(true);
+    };
+
+    const confirmWhatsAppSummary = async () => {
+        if (!diagnosis?.diagnosis || !waPhone) return;
+        setWhatsappLoading(true);
+        try {
+            const res = await fetch('/api/whatsapp-message', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    diagnosis: diagnosis.diagnosis,
+                    provider_name: provider.name,
+                    trade: diagnosis.trade,
+                    action_required: diagnosis.action_required,
+                    estimated_cost: diagnosis.estimated_cost,
+                }),
+            });
+            const data = await res.json();
+            if (data.message) {
+                logLead('whatsapp');
+                const text = encodeURIComponent(data.message);
+                window.open(`https://wa.me/${waPhone}?text=${text}`, '_blank');
+            }
+            setWhatsappDialogOpen(false);
+        } catch (_e) {
+        } finally {
+            setWhatsappLoading(false);
+        }
+    };
 
     // Calculate distance if coordinates are available (fallback to Haversine if API driving distance missing)
     const distance = useMemo(() => {
@@ -238,7 +303,7 @@ export function ProviderCard({
     }, [userLocation, provider.latitude, provider.longitude]);
 
     return (
-        <Card className="flex flex-col h-full border-input shadow-none p-4 rounded-lg">
+        <Card className="flex flex-col h-full border-input shadow-none p-4 rounded-md">
             <CardHeader className="flex flex-col gap-3 p-0">
                 <div className="flex flex-col gap-2 w-full min-w-0">
                     <div className="flex justify-between items-center gap-2 w-full min-w-0">
@@ -279,20 +344,35 @@ export function ProviderCard({
                 {distance && <span className="flex-none whitespace-nowrap"> • {distance} km</span>}
             </div>
             <div className="flex flex-col gap-2">
-                <p className="text-sm font-medium">Customer Summary</p>
+                <div className="flex items-center justify-between gap-2">
+                    <p className="text-sm font-medium">Customer Summary</p>
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        className="shrink-0 text-xs px-2 max-h-7"
+                        onClick={() => {
+                            const url = provider.place_id
+                                ? `https://www.google.com/maps/place/?q=place_id:${encodeURIComponent(provider.place_id)}`
+                                : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([provider.name, provider.address].join(' '))}`;
+                            window.open(url, '_blank');
+                        }}
+                    >
+                        View All
+                    </Button>
+                </div>
                 <blockquote className="border-l-2 border-input pl-3">
                     <p className="text-sm text-muted-foreground leading-relaxed">
                         {provider.summary}
                     </p>
                 </blockquote>
             </div>
-            <div className="flex flex-wrap gap-2 mt-auto">
+            <div className="flex flex-wrap items-center gap-2 mt-auto">
                 <Popover
                     open={openPopoverId === popoverId}
                     onOpenChange={(open) => setOpenPopoverId(open ? popoverId : null)}
                 >
                     <PopoverTrigger asChild>
-                        <Button variant="default" className="flex-1">
+                        <Button variant="default" className="flex-1 min-w-0">
                             Contact
                         </Button>
                     </PopoverTrigger>
@@ -305,17 +385,22 @@ export function ProviderCard({
                             <p className="text-xs text-muted-foreground font-semibold mb-1">
                                 Recommended
                             </p>
-                            <Button variant="secondary" className="justify-start w-full">
-                                Send Summary
+                            <Button
+                                variant="secondary"
+                                className="justify-start w-full"
+                                onClick={handleSendWhatsAppSummary}
+                            >
+                                Send WhatsApp Summary
                             </Button>
 
                             <Separator className="my-2" />
 
                             {provider.phone && (
-                                <Button variant="ghost" className="justify-start w-full" asChild>
+                                <Button variant="ghost" className="justify-start w-full mb-1" asChild>
                                     <a
                                         href={`tel:${provider.phone}`}
-                                        className="flex items-center justify-between w-full mb-1"
+                                        onClick={() => logLead('phone')}
+                                        className="flex items-center justify-between w-full"
                                     >
                                         Immediate Assistance
                                     </a>
@@ -324,37 +409,65 @@ export function ProviderCard({
                             <Button
                                 variant="ghost"
                                 className="justify-start"
-                                onClick={() =>
+                                onClick={() => {
+                                    logLead('email');
                                     window.open(
                                         `mailto:info@${provider.name.toLowerCase().replace(/\s+/g, '')}.com`
-                                    )
-                                }
+                                    );
+                                }}
                             >
                                 Request Quote
                             </Button>
                         </div>
                     </PopoverContent>
                 </Popover>
+
+                <Dialog open={whatsappDialogOpen} onOpenChange={setWhatsappDialogOpen}>
+                    <DialogContent>
+                        <DialogHeader>
+                            <DialogTitle>Send WhatsApp Summary</DialogTitle>
+                            <DialogDescription>
+                                We've generated a summary of your diagnosis for{' '}
+                                <strong>{provider.name}</strong>. You will open WhatsApp to send it.
+                            </DialogDescription>
+                        </DialogHeader>
+                        <DialogFooter>
+                            <Button variant="outline" onClick={() => setWhatsappDialogOpen(false)}>
+                                Cancel
+                            </Button>
+                            <Button
+                                onClick={confirmWhatsAppSummary}
+                                disabled={!waPhone || whatsappLoading}
+                            >
+                                {whatsappLoading ? 'Generating…' : 'Continue'}
+                            </Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
                 {provider.website && (
                     <Button
                         variant="secondary"
-                        className="flex-1"
-                        onClick={() => window.open(provider.website, '_blank')}
+                        size="icon"
+                        className="h-9 w-9 flex-shrink-0"
+                        onClick={() => window.open(provider.website!, '_blank')}
+                        title="Website"
                     >
-                        Website
+                        <Globe size={18} />
                     </Button>
                 )}
                 <Button
                     variant="secondary"
-                    className="flex-1"
+                    size="icon"
+                    className="h-9 w-9 flex-shrink-0"
                     onClick={() =>
                         window.open(
                             `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(provider.address)}`,
                             '_blank'
                         )
                     }
+                    title="Directions"
                 >
-                    Directions
+                    <Location size={18} />
                 </Button>
             </div>
         </Card>

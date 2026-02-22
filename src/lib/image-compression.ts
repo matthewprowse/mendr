@@ -5,15 +5,16 @@
 
 /**
  * Compresses an image data URL by resizing it and reducing its quality.
+ * Optimised for faster uploads and AI processing while preserving diagnostic clarity.
  * @param dataUrl - The original base64 image data URL.
- * @param maxWidth - Maximum width of the compressed image (default 1024px).
- * @param quality - JPEG quality from 0 to 1 (default 0.8).
+ * @param maxWidth - Maximum width of the compressed image (default 768px).
+ * @param quality - JPEG quality from 0 to 1 (default 0.75).
  * @returns A promise that resolves to the compressed base64 data URL.
  */
 export async function compressImage(
     dataUrl: string,
-    maxWidth = 1024,
-    quality = 0.8
+    maxWidth = 768,
+    quality = 0.75
 ): Promise<string> {
     return new Promise((resolve, reject) => {
         const img = new Image();
