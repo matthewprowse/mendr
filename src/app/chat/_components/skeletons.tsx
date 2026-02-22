@@ -70,7 +70,7 @@ function OtherProvidersSkeleton() {
             <div className="flex flex-col gap-0.5">
                 <h3 className="text-lg font-semibold text-foreground">Other Recommended Providers</h3>
                 <p className="text-sm text-foreground leading-relaxed">
-                    Was this diagnosis accurate? Additional photos or details help us create a clearer report for your chosen provider and can speed up the job.
+                    Compare these providers based on ratings, reviews, and availability to find the best fit for you.
                 </p>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">

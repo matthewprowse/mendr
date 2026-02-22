@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef } from 'react';
+import { forwardRef, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { ArrowUp, Paperclip, X } from 'lucide-react';
@@ -8,19 +8,7 @@ import { cn } from '@/lib/utils';
 
 const MAX_ATTACHMENTS = 5;
 
-export function ChatFooter({
-    message,
-    setMessage,
-    handleSend,
-    isDiagnosing,
-    isResponding,
-    hasDiagnosis,
-    pendingAttachments,
-    onAddAttachments,
-    onRemoveAttachment,
-    welcomeMode = false,
-    inputRef,
-}: {
+export const ChatFooter = forwardRef<HTMLElement, {
     message: string;
     setMessage: (v: string) => void;
     handleSend: () => void;
@@ -32,7 +20,19 @@ export function ChatFooter({
     onRemoveAttachment: (index: number) => void;
     welcomeMode?: boolean;
     inputRef?: React.RefObject<HTMLInputElement | null>;
-}) {
+}>(({
+    message,
+    setMessage,
+    handleSend,
+    isDiagnosing,
+    isResponding,
+    hasDiagnosis,
+    pendingAttachments,
+    onAddAttachments,
+    onRemoveAttachment,
+    welcomeMode = false,
+    inputRef,
+}, ref) => {
     const internalRef = useRef<HTMLInputElement>(null);
     const fileInputRef = inputRef ?? internalRef;
     const isDisabled = (!hasDiagnosis && isDiagnosing) || isResponding;
@@ -51,7 +51,7 @@ export function ChatFooter({
     };
 
     return (
-        <footer className="fixed bottom-0 left-0 right-0 z-50 bg-background border-t border-border p-4">
+        <footer ref={ref} className="fixed bottom-0 left-0 right-0 z-50 bg-background p-4">
             <div className="max-w-3xl mx-auto w-full flex flex-col gap-2">
                 {!welcomeMode && pendingAttachments.length > 0 && (
                     <div className="flex flex-wrap gap-2">
@@ -146,4 +146,5 @@ export function ChatFooter({
             </div>
         </footer>
     );
-}
+});
+ChatFooter.displayName = 'ChatFooter';

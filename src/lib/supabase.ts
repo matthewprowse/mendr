@@ -29,25 +29,42 @@ export const getSupabase = () => {
     return supabaseInstance;
 };
 
-// Export a dummy client during build to avoid "supabaseUrl is required" error.
-// The actual initialization happens when getSupabase() is called.
+// Export a dummy client when env vars are missing — prevents runtime crashes.
+// Implements all methods the app uses so it degrades gracefully.
+const noop = () => {};
+const emptyResult = { data: [], error: null };
+const emptySingle = { data: null, error: null };
+const dummyFrom = (table: string) => {
+    const chain = {
+        eq: () => chain,
+        order: () => Promise.resolve(emptyResult),
+        in: () => Promise.resolve(emptyResult),
+        then: (resolve: (v: any) => void) => resolve(emptyResult),
+        catch: (fn: (e: any) => void) => chain,
+    };
+    return {
+        select: () => chain,
+        insert: () => Promise.resolve(emptySingle),
+        upsert: () => Promise.resolve(emptySingle),
+        update: () => ({ eq: () => Promise.resolve(emptySingle) }),
+    };
+};
+
 const dummyClient = {
     auth: {
         getSession: async () => ({ data: { session: null }, error: null }),
-        onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } }),
+        onAuthStateChange: () => ({ data: { subscription: { unsubscribe: noop } } }),
         signInWithOtp: async () => ({ data: null, error: null }),
         exchangeCodeForSession: async () => ({ data: null, error: null }),
+        verifyOtp: async () => ({ data: null, error: null }),
         signOut: async () => ({ error: null }),
+        getUser: async () => ({ data: { user: null }, error: null }),
     },
-    from: () => ({
-        select: () => ({
-            eq: () => ({
-                order: () => ({
-                    in: () => Promise.resolve({ data: [], error: null }),
-                }),
-            }),
-        }),
+    from: dummyFrom,
+    channel: () => ({
+        on: () => ({ subscribe: () => ({}) }),
     }),
+    removeChannel: noop,
 } as any;
 
 export const supabase =

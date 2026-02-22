@@ -38,7 +38,7 @@ export function ChatMessage({
         message.diagnosis.diagnosis &&
         message.diagnosis.diagnosis !== 'N/A' &&
         !message.diagnosis.requires_clarification &&
-        message.hasUpdatedDiagnosis !== false &&
+        (message.hasUpdatedDiagnosis !== false || (message.providers?.length ?? 0) > 0) &&
         !!inlineDiagnosisProps;
 
     return (

@@ -39,3 +39,24 @@ DROP POLICY IF EXISTS "Leads allow insert" ON leads;
 DROP POLICY IF EXISTS "Leads allow select" ON leads;
 CREATE POLICY "Leads allow insert" ON leads FOR INSERT WITH CHECK (true);
 CREATE POLICY "Leads allow select" ON leads FOR SELECT USING (true);
+
+-- 5. Report Access: Allow anonymous insert (when generating PIN) and select (when verifying PIN)
+ALTER TABLE report_access ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Report access allow insert" ON report_access;
+DROP POLICY IF EXISTS "Report access allow select" ON report_access;
+DROP POLICY IF EXISTS "Report access allow update" ON report_access;
+CREATE POLICY "Report access allow insert" ON report_access FOR INSERT WITH CHECK (true);
+CREATE POLICY "Report access allow select" ON report_access FOR SELECT USING (true);
+CREATE POLICY "Report access allow update" ON report_access FOR UPDATE USING (true) WITH CHECK (true);
+
+-- 6. Provider Signups: Allow anonymous insert
+ALTER TABLE provider_signups ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Provider signups allow insert" ON provider_signups;
+CREATE POLICY "Provider signups allow insert" ON provider_signups FOR INSERT WITH CHECK (true);
+
+-- 7. Report Owner Tokens: Allow insert and select (for create + verify)
+ALTER TABLE report_owner_tokens ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Report owner tokens allow insert" ON report_owner_tokens;
+DROP POLICY IF EXISTS "Report owner tokens allow select" ON report_owner_tokens;
+CREATE POLICY "Report owner tokens allow insert" ON report_owner_tokens FOR INSERT WITH CHECK (true);
+CREATE POLICY "Report owner tokens allow select" ON report_owner_tokens FOR SELECT USING (true);

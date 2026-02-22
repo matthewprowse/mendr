@@ -92,3 +92,47 @@ CREATE INDEX IF NOT EXISTS idx_leads_created ON leads(created_at);
 -- Add locked flag to conversations (when report/WhatsApp summary is sent)
 ALTER TABLE conversations ADD COLUMN IF NOT EXISTS locked BOOLEAN DEFAULT FALSE;
 ALTER TABLE conversations ADD COLUMN IF NOT EXISTS locked_at TIMESTAMPTZ;
+
+-- 5. Report Access (PIN per provider per conversation)
+-- Same report URL for all providers; each provider gets a unique 4-digit PIN.
+CREATE TABLE IF NOT EXISTS report_access (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    conversation_id UUID NOT NULL,
+    provider_place_id TEXT NOT NULL,
+    pin CHAR(4) NOT NULL CHECK (pin ~ '^\d{4}$'),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(conversation_id, provider_place_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_report_access_conversation_pin ON report_access(conversation_id, pin);
+CREATE INDEX IF NOT EXISTS idx_report_access_conversation ON report_access(conversation_id);
+
+-- 6. Provider Signups (Scandio coming soon - service providers register interest)
+CREATE TABLE IF NOT EXISTS provider_signups (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    company_name TEXT NOT NULL,
+    email TEXT NOT NULL,
+    descriptive_text TEXT,
+    team_size TEXT,
+    spend_per_month TEXT,
+    price_per_lead TEXT,
+    report_conversation_id UUID,
+    marketing_consent BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE provider_signups ADD COLUMN IF NOT EXISTS team_size TEXT;
+ALTER TABLE provider_signups ADD COLUMN IF NOT EXISTS spend_per_month TEXT;
+ALTER TABLE provider_signups ADD COLUMN IF NOT EXISTS price_per_lead TEXT;
+ALTER TABLE provider_signups ADD COLUMN IF NOT EXISTS marketing_consent BOOLEAN DEFAULT FALSE;
+
+CREATE INDEX IF NOT EXISTS idx_provider_signups_created ON provider_signups(created_at);
+
+-- 7. Report Owner Tokens (homeowner accesses report without PIN)
+CREATE TABLE IF NOT EXISTS report_owner_tokens (
+    conversation_id UUID PRIMARY KEY,
+    token TEXT NOT NULL UNIQUE,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_report_owner_tokens_token ON report_owner_tokens(token);

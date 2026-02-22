@@ -5,7 +5,12 @@ import { createSupabaseServerClient, createSupabaseAdminClient } from '@/lib/sup
 export async function POST(req: NextRequest) {
     try {
         const { lat, lng, trade, radius: customRadius, pageToken, searchQuery: providedSearchQuery } = await req.json();
-        const supabase = await createSupabaseServerClient();
+        let supabase: Awaited<ReturnType<typeof createSupabaseServerClient>> | null = null;
+        try {
+            supabase = await createSupabaseServerClient();
+        } catch (e) {
+            console.warn('Supabase not configured — provider cache disabled:', (e as Error).message);
+        }
 
         if (!lat || !lng || !trade) {
             return NextResponse.json({ error: 'Missing required parameters (lat, lng, trade)' }, { status: 400 });
@@ -37,7 +42,7 @@ export async function POST(req: NextRequest) {
             `Using API Key starting with: ${apiKey.substring(0, 6)}... (Length: ${apiKey.length})`
         );
 
-        const radius = customRadius || 25000; // Default 25km
+        const radius = customRadius || 50000; // Default 50km — wider search for rural/sparse areas
 
         const genAI = new GoogleGenerativeAI(geminiKey || '');
         const model = genAI.getGenerativeModel({
@@ -287,29 +292,29 @@ ${JSON.stringify(providersContext, null, 2)}`;
         });
 
         // Batch update the cache in the background (don't await it to keep response fast)
-        if (toCache.length > 0) {
-            createSupabaseAdminClient().then((adminSupabase) => {
-                const dbToCache = toCache.map((p) => ({
-                    place_id: p.place_id,
-                    name: p.name,
-                    address: p.address,
-                    rating: p.rating,
-                    rating_count: p.rating_count,
-                    phone: p.phone,
-                    website: p.website,
-                    latitude: p.latitude,
-                    longitude: p.longitude,
-                    summary: p.summary,
-                    services: p.services,
-                }));
+        if (toCache.length > 0 && supabase) {
+            createSupabaseAdminClient()
+                .then((adminSupabase) => {
+                    const dbToCache = toCache.map((p) => ({
+                        place_id: p.place_id,
+                        name: p.name,
+                        address: p.address,
+                        rating: p.rating,
+                        rating_count: p.rating_count,
+                        phone: p.phone,
+                        website: p.website,
+                        latitude: p.latitude,
+                        longitude: p.longitude,
+                        summary: p.summary,
+                        services: p.services,
+                    }));
 
-                adminSupabase
-                    .from('cached_providers')
-                    .upsert(dbToCache)
-                    .then(({ error }) => {
-                        if (error) console.error('Background cache update failed:', error);
-                    });
-            });
+                    return adminSupabase.from('cached_providers').upsert(dbToCache);
+                })
+                .then(({ error }) => {
+                    if (error) console.error('Background cache update failed:', error);
+                })
+                .catch((e) => console.warn('Supabase cache update skipped:', (e as Error).message));
         }
 
         const withReviews = processedProviders.filter(

@@ -1,6 +1,6 @@
 import { useState, useRef, useMemo, useEffect } from 'react';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
-import { StarFill, Globe, Location } from 'geist-icons';
+import { StarFill } from 'geist-icons';
 import { Badge } from '@/components/ui/badge';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import {
@@ -14,7 +14,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { Provider } from './types';
-import { toWhatsAppPhone } from '@/lib/utils';
+import { toWhatsAppPhone, isWhatsAppCapablePhone } from '@/lib/utils';
 
 function ServiceBadges({
     services,
@@ -233,7 +233,9 @@ export function ProviderCard({
     if (!provider) return null;
     const popoverId = `contact-${index}`;
     const displayName = provider.name.replace(/\band\b/gi, '&');
-    const waPhone = toWhatsAppPhone(provider.phoneInternational || provider.phone);
+    const rawPhone = provider.phoneInternational || provider.phone;
+    const waPhone = toWhatsAppPhone(rawPhone);
+    const waCapable = isWhatsAppCapablePhone(rawPhone);
 
     const logLead = async (contactType: 'whatsapp' | 'phone' | 'email') => {
         try {
@@ -251,29 +253,53 @@ export function ProviderCard({
     };
 
     const handleSendWhatsAppSummary = () => {
+        if (!waCapable) return;
         setOpenPopoverId(null);
         setWhatsappDialogOpen(true);
     };
 
     const confirmWhatsAppSummary = async () => {
-        if (!diagnosis?.diagnosis || !waPhone) return;
+        if (!diagnosis?.diagnosis || !waPhone || !waCapable) return;
         setWhatsappLoading(true);
         try {
-            const res = await fetch('/api/whatsapp-message', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    diagnosis: diagnosis.diagnosis,
-                    provider_name: provider.name,
-                    trade: diagnosis.trade,
-                    action_required: diagnosis.action_required,
-                    estimated_cost: diagnosis.estimated_cost,
+            const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
+            const reportUrl = conversationId ? `${baseUrl}/report/${conversationId}` : '';
+
+            const [pinRes, msgRes] = await Promise.all([
+                reportUrl && provider.place_id
+                    ? fetch('/api/report-pin', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                              conversation_id: conversationId,
+                              provider_place_id: provider.place_id,
+                          }),
+                      })
+                    : Promise.resolve(null),
+                fetch('/api/whatsapp-message', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        diagnosis: diagnosis.diagnosis,
+                        provider_name: provider.name,
+                        trade: diagnosis.trade,
+                        action_required: diagnosis.action_required,
+                        estimated_cost: diagnosis.estimated_cost,
+                    }),
                 }),
-            });
-            const data = await res.json();
-            if (data.message) {
+            ]);
+
+            const pinData = pinRes ? await pinRes.json() : null;
+            const msgData = await msgRes.json();
+
+            let fullMessage = msgData.message || '';
+            if (reportUrl && pinData?.pin) {
+                fullMessage += `\n\nView the full diagnosis report: ${reportUrl}\nYour access code: ${pinData.pin}`;
+            }
+
+            if (fullMessage) {
                 logLead('whatsapp');
-                const text = encodeURIComponent(data.message);
+                const text = encodeURIComponent(fullMessage);
                 window.open(`https://wa.me/${waPhone}?text=${text}`, '_blank');
             }
             setWhatsappDialogOpen(false);
@@ -389,6 +415,8 @@ export function ProviderCard({
                                 variant="secondary"
                                 className="justify-start w-full"
                                 onClick={handleSendWhatsAppSummary}
+                                disabled={!waCapable}
+                                title={!waCapable && waPhone ? "This number doesn't appear to be a mobile number — WhatsApp requires a mobile number." : undefined}
                             >
                                 Send WhatsApp Summary
                             </Button>
@@ -427,8 +455,17 @@ export function ProviderCard({
                         <DialogHeader>
                             <DialogTitle>Send WhatsApp Summary</DialogTitle>
                             <DialogDescription>
-                                We've generated a summary of your diagnosis for{' '}
-                                <strong>{provider.name}</strong>. You will open WhatsApp to send it.
+                                {waCapable ? (
+                                    <>
+                                        We've generated a summary of your diagnosis for{' '}
+                                        <span className="font-medium">{provider.name}</span>. You will open WhatsApp to send it.
+                                        <blockquote className="mt-2 border-l-2 border-input pl-3 text-muted-foreground text-sm">
+                                            We try to ensure all numbers are available on WhatsApp. If you're having trouble, please try phoning them directly.
+                                        </blockquote>
+                                    </>
+                                ) : (
+                                    <>This provider's number doesn't appear to be a mobile number. WhatsApp requires a mobile number to work.</>
+                                )}
                             </DialogDescription>
                         </DialogHeader>
                         <DialogFooter>
@@ -437,7 +474,7 @@ export function ProviderCard({
                             </Button>
                             <Button
                                 onClick={confirmWhatsAppSummary}
-                                disabled={!waPhone || whatsappLoading}
+                                disabled={!waPhone || !waCapable || whatsappLoading}
                             >
                                 {whatsappLoading ? 'Generating…' : 'Continue'}
                             </Button>
@@ -447,27 +484,23 @@ export function ProviderCard({
                 {provider.website && (
                     <Button
                         variant="secondary"
-                        size="icon"
-                        className="h-9 w-9 flex-shrink-0"
+                        className="flex-1 min-w-0"
                         onClick={() => window.open(provider.website!, '_blank')}
-                        title="Website"
                     >
-                        <Globe size={18} />
+                        Website
                     </Button>
                 )}
                 <Button
                     variant="secondary"
-                    size="icon"
-                    className="h-9 w-9 flex-shrink-0"
+                    className="flex-1 min-w-0"
                     onClick={() =>
                         window.open(
                             `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(provider.address)}`,
                             '_blank'
                         )
                     }
-                    title="Directions"
                 >
-                    <Location size={18} />
+                    Get Directions
                 </Button>
             </div>
         </Card>

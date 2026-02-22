@@ -120,9 +120,10 @@ export function InlineDiagnosisBlock({
                                         </PopoverTrigger>
                                         <PopoverContent className="w-96" align="start">
                                             <div className="flex flex-col gap-3">
-                                                <p className="text-sm font-medium">Search for a different address</p>
+                                                <p className="text-sm font-medium">Search Locations</p>
                                                 <Input
-                                                    placeholder="Enter address or place"
+                                                    placeholder="Enter Address, Places, or Locations"
+                                                    className="text-[14px] sm:text-sm"
                                                     value={addressQuery}
                                                     onChange={(e) => {
                                                         setAddressQuery(e.target.value);
@@ -134,7 +135,6 @@ export function InlineDiagnosisBlock({
                                                     <p className="text-xs text-destructive">{addressError}</p>
                                                 )}
                                                 <Button
-                                                    size="sm"
                                                     onClick={handleAddressSearch}
                                                     disabled={addressSearching || !addressQuery.trim()}
                                                 >
@@ -160,9 +160,10 @@ export function InlineDiagnosisBlock({
                                             </PopoverTrigger>
                                             <PopoverContent className="w-80" align="start">
                                                 <div className="flex flex-col gap-3">
-                                                    <p className="text-sm font-medium">Search for an address</p>
+                                                    <p className="text-sm font-semibold">Search for an address</p>
                                                     <Input
                                                         placeholder="Enter address or place"
+                                                        className="text-[14px] sm:text-sm"
                                                         value={addressQuery}
                                                         onChange={(e) => {
                                                             setAddressQuery(e.target.value);
@@ -236,7 +237,7 @@ export function InlineDiagnosisBlock({
                                                         Other Recommended Providers
                                                     </h3>
                                                     <p className="text-sm text-foreground leading-relaxed">
-                                                        Was this diagnosis accurate? Additional photos or details help us create a clearer report for your chosen provider and can speed up the job.
+                                                        Compare these providers based on ratings, reviews, and availability to find the best fit for you.
                                                     </p>
                                                 </div>
                                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -264,8 +265,30 @@ export function InlineDiagnosisBlock({
                     {(providers?.length ?? 0) > 0 && (
                         <div className="pt-4">
                             <p className="text-sm text-foreground leading-relaxed">
-                                Was this diagnosis accurate? Additional photos or details help us create a clearer report for your chosen provider and can speed up the job.
+                                We've generated a report from this conversation, and will be shared with your chosen provider automatically when you send our WhatsApp summary. If you provide additional context or images in the chat, they will be included in the diagnosis.
                             </p>
+                            {conversationId && (
+                                <Button
+                                    variant="outline"
+                                    className="mt-3"
+                                    onClick={async () => {
+                                        try {
+                                            const res = await fetch(
+                                                `/api/report-owner-token?conversation_id=${encodeURIComponent(conversationId)}`
+                                            );
+                                            const data = await res.json();
+                                            const url = data.token
+                                                ? `/report/${conversationId}?t=${encodeURIComponent(data.token)}`
+                                                : `/report/${conversationId}`;
+                                            window.open(url, '_blank');
+                                        } catch {
+                                            window.open(`/report/${conversationId}`, '_blank');
+                                        }
+                                    }}
+                                >
+                                    Open Report
+                                </Button>
+                            )}
                         </div>
                     )}
                 </div>

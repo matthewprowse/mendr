@@ -76,9 +76,23 @@ function ResultsContent() {
         providers: Provider[];
     } | null>(null);
     const [isLoadingDirectProviders, setIsLoadingDirectProviders] = useState(false);
+    const [headerScrolled, setHeaderScrolled] = useState(false);
+    const [footerHeight, setFooterHeight] = useState(104);
     // --- Refs ---
     const messagesEndRef = useRef<HTMLDivElement>(null);
+    const mainRef = useRef<HTMLElement>(null);
+    const footerRef = useRef<HTMLElement>(null);
     const welcomeFileInputRef = useRef<HTMLInputElement>(null);
+
+    useEffect(() => {
+        const el = footerRef.current;
+        if (!el) return;
+        const updateHeight = () => setFooterHeight(el.getBoundingClientRect().height);
+        updateHeight();
+        const ro = new ResizeObserver(updateHeight);
+        ro.observe(el);
+        return () => ro.disconnect();
+    }, []);
     const startInitialDiagnosisAbortRef = useRef<AbortController | null>(null);
 
     const handleWelcomeUpload = async (file: File) => {
@@ -234,6 +248,9 @@ function ResultsContent() {
         if (error && typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
             console.warn('[Supabase] conversation:', error.code, error.message);
         }
+        if (!error && finalDiagnosis?.diagnosis && typeof fetch !== 'undefined') {
+            fetch(`/api/report-owner-token?conversation_id=${encodeURIComponent(id)}`).catch(() => {});
+        }
     };
 
     const scrollToBottom = useCallback(() => {
@@ -330,9 +347,11 @@ function ResultsContent() {
                     updateMessageProviders(messageIndex, finalProviders);
                 } else {
                     console.error('API Error:', data.error || 'Unknown error');
+                    toast.error(data.error || 'Couldn\'t load providers. Try "Use my location" again.');
                 }
             } catch (err) {
                 console.error('Failed to fetch providers:', err);
+                toast.error('Couldn\'t load providers. Check your connection and try again.');
             } finally {
                 setIsLoadingProvidersForMessage(null);
             }
@@ -486,9 +505,10 @@ function ResultsContent() {
             hasUpdatedDiagnosis?: boolean;
             diagnosis?: DiagnosisData;
         }) => {
+            const doFetch = (lat: number, lng: number) => useLocationRef.current(lat, lng, opts);
             const stored = getLocation();
             if (stored && typeof stored.lat === 'number' && typeof stored.lng === 'number') {
-                useLocationAndFetchProviders(stored.lat, stored.lng, opts);
+                doFetch(stored.lat, stored.lng);
                 return;
             }
 
@@ -517,7 +537,7 @@ function ResultsContent() {
             navigator.geolocation.getCurrentPosition(
                 (pos) => {
                     const { latitude: lat, longitude: lng } = pos.coords;
-                    useLocationAndFetchProviders(lat, lng, opts);
+                    doFetch(lat, lng);
                 },
                 (err) => {
                     if (opts?.directTrade) {
@@ -539,7 +559,7 @@ function ResultsContent() {
                 { enableHighAccuracy: false, timeout: 20000, maximumAge: 300000 }
             );
         },
-        [useLocationAndFetchProviders]
+        []
     );
 
     const handleServiceSelect = useCallback((trade: string, diagnosis: string) => {
@@ -756,12 +776,13 @@ function ResultsContent() {
                                             content: assistantContent,
                                             feedback: null,
                                             diagnosis: diag,
+                                            hasUpdatedDiagnosis: true,
                                         },
                                     ];
                                 });
                                 // Run saves and provider fetch in parallel — don't block on DB
                                 void saveConversation({ diag });
-                                void saveMessage('assistant', assistantContent, [], false, diag, undefined);
+                                void saveMessage('assistant', assistantContent, [], true, diag, undefined);
                                 const loc = userLocation;
                                 const hasLoc =
                                     typeof loc?.lat === 'number' &&
@@ -810,7 +831,7 @@ function ResultsContent() {
                                 } else {
                                     initialMessageAddedRef.current = true;
                                     await saveConversation({ diag });
-                                    saveMessage('assistant', assistantContent, [], false, diag, undefined);
+                                    saveMessage('assistant', assistantContent, [], true, diag, undefined);
                                     let newMsgIndex = 0;
                                     setMessages((prev) => {
                                         newMsgIndex = prev.length;
@@ -821,6 +842,7 @@ function ResultsContent() {
                                                 content: assistantContent,
                                                 feedback: null,
                                                 diagnosis: diag,
+                                                hasUpdatedDiagnosis: true,
                                             },
                                         ];
                                     });
@@ -925,7 +947,7 @@ function ResultsContent() {
     }, [id, loadConversation]);
 
     // Request location once when chat loads so it's ready when diagnosis arrives
-    // Uses ref to avoid re-running when useLocationAndFetchProviders identity changes (e.g. messages update)
+    // On mobile, this may fail without user gesture — user can tap "Use my location" when prompted
     useEffect(() => {
         if (!id || typeof window === 'undefined' || !navigator.geolocation) return;
         const stored = getLocation();
@@ -936,8 +958,10 @@ function ResultsContent() {
         navigator.geolocation.getCurrentPosition(
             (pos) =>
                 useLocationRef.current(pos.coords.latitude, pos.coords.longitude),
-            () => {},
-            { enableHighAccuracy: false, timeout: 20000, maximumAge: 300000 }
+            () => {
+                // Silently fail — user will tap "Use my location" when providers load (required on some mobile browsers)
+            },
+            { enableHighAccuracy: false, timeout: 15000, maximumAge: 300000 }
         );
     }, [id]);
 
@@ -1669,9 +1693,14 @@ function ResultsContent() {
 
     return (
         <div className="flex flex-col min-h-screen bg-background">
-            <AppHeader title={headerTitle} imageSrc={displayImage} />
+            <AppHeader title={headerTitle} imageSrc={displayImage} scrolled={headerScrolled} />
 
-            <main className="flex flex-1 overflow-y-auto pb-36">
+            <main
+                ref={mainRef}
+                style={{ paddingBottom: footerHeight }}
+                className="flex flex-1 overflow-y-auto"
+                onScroll={() => setHeaderScrolled((mainRef.current?.scrollTop ?? 0) > 0)}
+            >
                 <div className="max-w-4xl mx-auto w-full px-4 py-4 flex flex-col gap-6">
                     {/* Provider results - when direct trade with providers */}
                     {(directTradeResult || (directTradeSelection && isLoadingDirectProviders)) && (
@@ -1774,6 +1803,7 @@ function ResultsContent() {
             </main>
 
             <ChatFooter
+                ref={footerRef}
                 message={message}
                 setMessage={setMessage}
                 handleSend={handleSend}

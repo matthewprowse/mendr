@@ -87,6 +87,20 @@ export function toWhatsAppPhone(phone: string | undefined | null): string | null
     return digits;
 }
 
+/** Returns true only if the number is a valid mobile number that supports WhatsApp.
+ * WhatsApp requires mobile numbers — landlines don't work.
+ * For South Africa: mobile = 06x, 07x, 08x (international: 27 6x, 7x, 8x + 8 digits).
+ * Landlines (021, 031, 011...) are rejected. Only SA mobile format accepted. */
+export function isWhatsAppCapablePhone(phone: string | undefined | null): boolean {
+    const normalized = toWhatsAppPhone(phone);
+    if (!normalized) return false;
+    if (normalized.startsWith('27') && normalized.length === 11) {
+        const third = normalized.charAt(2);
+        return third === '6' || third === '7' || third === '8';
+    }
+    return false;
+}
+
 /** Strip meta-commentary the AI mistakenly put in message or action_required (e.g. "The user seems frustrated", "I need to...") */
 export function sanitizeAiContent(text: string): string {
     if (!text?.trim()) return text;
