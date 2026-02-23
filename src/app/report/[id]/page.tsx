@@ -1,7 +1,7 @@
 /**
- * Server Component wrapper for the provider report detail page.
+ * Server Component wrapper for the report detail page.
  * Route: /report/[id]
- * Passes reportId and token (from searchParams) to the Client Component.
+ * Reports are public and shareable by URL.
  */
 
 import type { Metadata } from 'next';
@@ -12,20 +12,18 @@ import { ReportDetailContent } from './_components/report-detail-content';
 
 type PageProps = {
     params: Promise<{ id: string }>;
-    searchParams: Promise<{ t?: string }>;
 };
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
     const { id } = await params;
     return {
-        title: id ? `Job Report | Scandio` : 'Report | Scandio',
-        description: 'View job report and diagnosis for home maintenance services.',
+        title: id ? `Scandio: Job Report` : 'Scandio: Job Report',
+        description: '',
     };
 }
 
-export default async function ReportDetailPage({ params, searchParams }: PageProps) {
+export default async function ReportDetailPage({ params }: PageProps) {
     const { id } = await params;
-    const { t: token } = await searchParams;
 
     if (!id || typeof id !== 'string' || id.trim() === '') {
         redirect('/');
@@ -39,7 +37,7 @@ export default async function ReportDetailPage({ params, searchParams }: PagePro
                 </div>
             }
         >
-            <ReportDetailContent reportId={id} token={token ?? null} />
+            <ReportDetailContent reportId={id} />
         </Suspense>
     );
 }

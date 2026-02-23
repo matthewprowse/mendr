@@ -60,7 +60,6 @@ export function ChatPageClient({ conversationId }: ChatPageClientProps) {
         providers: Provider[];
     } | null>(null);
     const [isLoadingDirectProviders, setIsLoadingDirectProviders] = useState(false);
-    const [headerScrolled, setHeaderScrolled] = useState(false);
     const [footerHeight, setFooterHeight] = useState(104);
     // --- Refs ---
     const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -231,9 +230,6 @@ export function ChatPageClient({ conversationId }: ChatPageClientProps) {
         });
         if (error && typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
             console.warn('[Supabase] conversation:', error.code, error.message);
-        }
-        if (!error && finalDiagnosis?.diagnosis && typeof fetch !== 'undefined') {
-            fetch(`/api/report-owner-token?conversation_id=${encodeURIComponent(id)}`).catch(() => {});
         }
     };
 
@@ -979,7 +975,7 @@ export function ChatPageClient({ conversationId }: ChatPageClientProps) {
     ]);
 
     const handleSend = async (overrideMessage?: string, options?: { diagnosisRejected?: boolean }) => {
-        const msgToSend = (overrideMessage ?? message).trim();
+        const msgToSend = String(overrideMessage ?? message ?? '').trim();
         const attachmentsToSend = options?.diagnosisRejected ? [] : pendingAttachments;
         if (!msgToSend && attachmentsToSend.length === 0) return;
         if (isResponding) return;
@@ -1035,6 +1031,7 @@ export function ChatPageClient({ conversationId }: ChatPageClientProps) {
                 body: JSON.stringify({
                     image: isFirstMessage ? imageSrc : null,
                     textQuery: isFirstMessage ? undefined : msgToSend,
+                    attachments: attachmentsToSend.length > 0 ? attachmentsToSend : undefined,
                     history: historyForApi,
                     providers: providersFromMessages,
                     previousDiagnosis: diagnosis
@@ -1651,7 +1648,7 @@ export function ChatPageClient({ conversationId }: ChatPageClientProps) {
     if (!isLoaded && !displayImage) {
         return (
             <div className="flex flex-1 flex-col">
-                <AppHeader isLoading />
+                <AppHeader />
                 <div className="flex flex-1 items-center justify-center">
                     <Spinner className="size-8 text-muted-foreground" />
                 </div>
@@ -1659,20 +1656,14 @@ export function ChatPageClient({ conversationId }: ChatPageClientProps) {
         );
     }
 
-    const directTrade = directTradeResult || directTradeSelection;
-    const headerTitle =
-        diagnosis?.diagnosis ||
-        (directTrade?.diagnosis ?? 'New Diagnosis');
-
     return (
         <div className="flex flex-col min-h-screen bg-background">
-            <AppHeader title={headerTitle} imageSrc={displayImage} scrolled={headerScrolled} />
+            <AppHeader imageSrc={displayImage} />
 
             <main
                 ref={mainRef}
                 style={{ paddingBottom: footerHeight }}
                 className="flex flex-1 overflow-y-auto"
-                onScroll={() => setHeaderScrolled((mainRef.current?.scrollTop ?? 0) > 0)}
             >
                 <div className="max-w-4xl mx-auto w-full px-4 py-4 flex flex-col gap-6">
                     {/* Provider results - when direct trade with providers */}
@@ -1787,7 +1778,7 @@ export function ChatPageClient({ conversationId }: ChatPageClientProps) {
                 onAddAttachments={
                     displayImage
                         ? async (files) => {
-                              const remaining = 5 - pendingAttachments.length;
+                              const remaining = 10 - pendingAttachments.length;
                               const toAdd = files.slice(0, remaining);
                               const dataUrls: string[] = [];
                               for (const file of toAdd) {
@@ -1795,17 +1786,32 @@ export function ChatPageClient({ conversationId }: ChatPageClientProps) {
                                       const url = await new Promise<string>((resolve, reject) => {
                                           const r = new FileReader();
                                           r.onload = () => resolve(r.result as string);
-                                          r.onerror = reject;
+                                          r.onerror = () => reject(new Error('Failed to read file'));
                                           r.readAsDataURL(file);
                                       });
-                                      const compressed = await compressImage(url);
-                                      dataUrls.push(compressed);
+                                      const isImage = file.type.startsWith('image/');
+                                      let finalUrl: string;
+                                      if (isImage) {
+                                          try {
+                                              finalUrl = await compressImage(url);
+                                          } catch {
+                                              finalUrl = url;
+                                          }
+                                      } else {
+                                          finalUrl = url;
+                                      }
+                                      dataUrls.push(finalUrl);
                                   } catch (e) {
-                                      console.error('Failed to process image:', e);
+                                      console.error('Failed to process attachment:', e);
+                                      toast.error(
+                                          file.type.startsWith('video/')
+                                              ? 'Video uploads are not supported. Please use images.'
+                                              : `Could not process ${file.name}. Please try a different image.`
+                                      );
                                   }
                               }
                               if (dataUrls.length > 0) {
-                                  setPendingAttachments((prev) => [...prev, ...dataUrls].slice(0, 5));
+                                  setPendingAttachments((prev) => [...prev, ...dataUrls].slice(0, 10));
                               }
                           }
                         : async (files) => {

@@ -6,7 +6,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { ArrowUp, Paperclip, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-const MAX_ATTACHMENTS = 5;
+const MAX_ATTACHMENTS = 10;
 
 export const ChatFooter = forwardRef<HTMLElement, {
     message: string;
@@ -52,61 +52,42 @@ export const ChatFooter = forwardRef<HTMLElement, {
 
     return (
         <footer ref={ref} className="fixed bottom-0 left-0 right-0 z-50 bg-background p-4">
-            <div className="max-w-3xl mx-auto w-full flex flex-col gap-2">
-                {!welcomeMode && pendingAttachments.length > 0 && (
-                    <div className="flex flex-wrap gap-2">
-                        {pendingAttachments.map((url, i) => (
-                            <div
-                                key={i}
-                                className="relative size-14 rounded-lg overflow-hidden border border-border shrink-0 group"
-                            >
-                                <img
-                                    src={url}
-                                    alt={`Attachment ${i + 1}`}
-                                    className="size-full object-cover"
-                                />
-                                <button
-                                    type="button"
-                                    onClick={() => onRemoveAttachment(i)}
-                                    className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
-                                    aria-label="Remove attachment"
+            <div className="max-w-4xl px-0 md:px-4 mx-auto w-full">
+                <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*,video/*"
+                    multiple={!welcomeMode}
+                    className="hidden"
+                    onChange={handleFileChange}
+                />
+                <div className="relative flex-1 min-w-0 rounded-md border border-input bg-transparent shadow-xs min-h-[4.5rem] max-h-[224px] flex flex-col focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/50 transition-[color,box-shadow] outline-none">
+                    {!welcomeMode && pendingAttachments.length > 0 && (
+                        <div className="px-3 pt-3 pb-1.5 flex flex-nowrap gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden shrink-0">
+                            {pendingAttachments.map((url, i) => (
+                                <div
+                                    key={i}
+                                    className="relative h-17 w-17 rounded-lg overflow-hidden border border-border shrink-0 group"
                                 >
-                                    <X className="size-5 text-white" />
-                                </button>
-                            </div>
-                        ))}
-                    </div>
-                )}
-                <div className="flex flex-col gap-1.5">
-                    <div className="flex gap-2 items-end min-w-0">
-                        <input
-                            ref={fileInputRef}
-                            type="file"
-                            accept="image/*,video/*"
-                            multiple={!welcomeMode}
-                            className="hidden"
-                            onChange={handleFileChange}
-                        />
-                        <Button
-                            type="button"
-                            variant={welcomeMode ? 'secondary' : 'ghost'}
-                            size="icon"
-                            className={cn(
-                                'flex-shrink-0 shrink-0',
-                                welcomeMode ? 'size-10' : 'size-9'
-                            )}
-                            onClick={() => fileInputRef.current?.click()}
-                            disabled={
-                                welcomeMode
-                                    ? isResponding
-                                    : isDisabled || pendingAttachments.length >= MAX_ATTACHMENTS
-                            }
-                            title={welcomeMode ? 'Upload photo' : `Add images (max ${MAX_ATTACHMENTS})`}
-                        >
-                            <Paperclip
-                                className={cn(welcomeMode ? 'size-5' : 'size-4', 'text-muted-foreground')}
-                            />
-                        </Button>
+                                    <img
+                                        src={url}
+                                        alt={`Attachment ${i + 1}`}
+                                        className="h-full w-full object-cover"
+                                    />
+                                    <Button
+                                        onClick={() => onRemoveAttachment(i)}
+                                        size="icon"
+                                        variant="secondary"
+                                        className="absolute h-6 w-6 top-1 right-1 p-0.5 text-black rounded-md"
+                                        aria-label="Remove Attachment"
+                                    >
+                                        <X className="size-3.5" />
+                                    </Button>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                    <div className="relative flex-1 min-w-0 flex">
                         <Textarea
                             value={message}
                             onChange={(e) => setMessage(e.target.value)}
@@ -123,24 +104,49 @@ export const ChatFooter = forwardRef<HTMLElement, {
                                         : 'Upload Images to Analyse'
                                     : isDisabled
                                       ? 'Processing...'
-                                      : "Communicate with Scandio's AI Assistant"
+                                      : "Scandio's AI Assistant"
                             }
                             disabled={isDisabled || isResponding || welcomeMode}
-                            className="min-h-[4.5rem] max-h-[224px] flex-1 resize-none text-sm py-2 px-3"
-                        />
-                        <Button
-                            type="button"
-                            variant="secondary"
-                            size="icon"
                             className={cn(
-                                'flex-shrink-0 shrink-0',
-                                welcomeMode ? 'size-10' : 'size-9'
+                                'min-h-[4.5rem] max-h-48 flex-1 resize-none overflow-y-auto text-sm border-0 focus-visible:ring-0 focus-visible:ring-offset-0 rounded-none rounded-b-md pr-20 pb-12',
+                                'field-sizing-fixed [scrollbar-width:none] [&::-webkit-scrollbar]:hidden'
                             )}
-                            onClick={handleSend}
-                            disabled={isDisabled || isResponding || !canSend}
-                        >
-                            <ArrowUp className={cn(welcomeMode ? 'size-5' : 'size-4')} />
-                        </Button>
+                        />
+                        <div className="absolute bottom-2 right-2 flex gap-2 shrink-0">
+                            <Button
+                                type="button"
+                                variant={welcomeMode ? 'secondary' : 'ghost'}
+                                size="icon"
+                                className={cn(
+                                    'flex-shrink-0 shrink-0',
+                                    welcomeMode ? 'size-9' : 'size-9'
+                                )}
+                                onClick={() => fileInputRef.current?.click()}
+                                disabled={
+                                    welcomeMode
+                                        ? isResponding
+                                        : isDisabled || pendingAttachments.length >= MAX_ATTACHMENTS
+                                }
+                                title={welcomeMode ? 'Upload Image' : `Add Images (Max ${MAX_ATTACHMENTS})`}
+                            >
+                                <Paperclip
+                                    className={cn(welcomeMode ? 'size-5' : 'size-4', 'text-muted-foreground')}
+                                />
+                            </Button>
+                            <Button
+                                type="button"
+                                variant="secondary"
+                                size="icon"
+                                className={cn(
+                                    'flex-shrink-0 shrink-0',
+                                    welcomeMode ? 'size-9' : 'size-9'
+                                )}
+                                onClick={handleSend}
+                                disabled={isDisabled || isResponding || !canSend}
+                            >
+                                <ArrowUp className={cn(welcomeMode ? 'size-5' : 'size-4')} />
+                            </Button>
+                        </div>
                     </div>
                 </div>
             </div>

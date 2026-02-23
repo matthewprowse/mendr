@@ -5,17 +5,21 @@ export async function POST(req: NextRequest) {
     console.log('POST /api/diagnose received request');
     try {
         const body = await req.json();
-        const { image, textQuery, history, feedback, providers, previousDiagnosis, diagnosisRejected, userSelectedTrade } =
+        const { image, textQuery, history, feedback, providers, previousDiagnosis, diagnosisRejected, userSelectedTrade, attachments } =
             body;
+
+        const attachmentImages = Array.isArray(attachments) ? attachments.filter((a: unknown) => typeof a === 'string' && a.startsWith('data:')) : [];
 
         console.log('Request body keys:', Object.keys(body));
         if (image) console.log('Image size:', image.length);
         if (textQuery) console.log('Text query length:', textQuery?.length);
+        if (attachmentImages.length) console.log('Attachments count:', attachmentImages.length);
         if (history) console.log('History length:', history.length);
 
-        const isTextOnly = !image && textQuery && typeof textQuery === 'string';
-        if (!image && !isTextOnly) {
-            console.error('No image or text query provided');
+        const isTextOnly = !image && typeof textQuery === 'string';
+        const hasAttachments = attachmentImages.length > 0;
+        if (!image && !isTextOnly && !hasAttachments) {
+            console.error('No image, text query, or attachments provided');
             return new Response(
                 JSON.stringify({ error: 'Please provide an image or describe your issue in text.' }),
                 { status: 400 }
@@ -151,10 +155,10 @@ CRITICAL: "confidence" must be an integer 0–100. If you are less than 85% conf
         const contents = [];
 
         if (isTextOnly) {
-            // Text-only: user has described their issue. No image.
-            // If we have history, this is a follow-up: add history (stripped of base64) then textQuery as final user turn.
+            // Text-only or follow-up with optional new images.
+            // If we have history, this is a follow-up: add history (stripped of base64) then textQuery + attachments as final user turn.
             if (history && history.length > 0) {
-                // Follow-up flow: add history with placeholders, then textQuery
+                // Follow-up flow: add history with placeholders, then textQuery (and any new images)
                 for (let i = 0; i < history.length; i++) {
                     const msg = history[i];
                     const parts: any[] = [];
@@ -172,10 +176,27 @@ CRITICAL: "confidence" must be an integer 0–100. If you are less than 85% conf
                 }
                 const formatReminder =
                     "\n\nCRITICAL: You MUST respond with <thought> then <json>. The JSON must be valid (no trailing commas, escape quotes). Put your answer in the 'message' field.";
-                contents.push({
-                    role: 'user',
-                    parts: [{ text: (textQuery as string).trim() + formatReminder }],
-                });
+                const finalParts: any[] = [];
+                for (const att of attachmentImages) {
+                    const base64Data = att.split(',')[1];
+                    const mimeType = att.split(';')[0].split(':')[1];
+                    if (base64Data && mimeType) {
+                        finalParts.push({ inlineData: { data: base64Data, mimeType } });
+                    }
+                }
+                const textPart = ((textQuery as string) || '').trim();
+                if (textPart) {
+                    finalParts.push({ text: textPart + formatReminder });
+                } else if (finalParts.length > 0) {
+                    finalParts.push({
+                        text:
+                            'The user uploaded new images for you to analyse. CRITICAL: Output <thought> FIRST (1–2 sentences + confidence), then </thought>, then <json>.' +
+                            formatReminder,
+                    });
+                }
+                if (finalParts.length > 0) {
+                    contents.push({ role: 'user', parts: finalParts });
+                }
             } else {
                 const textPrompt = hasUserContext
                     ? `The user selected "${userSelectedTrade.diagnosis}" (${userSelectedTrade.trade}) and has described their issue:
@@ -191,33 +212,47 @@ Analyse this description and provide a diagnosis. Output <thought> (1–2 senten
                 contents.push({ role: 'user', parts: [{ text: textPrompt }] });
             }
         } else {
-            const base64Data = image.split(',')[1];
-            const mimeType = image.split(';')[0].split(':')[1];
-            // Add the primary image as the first user message
+            const imageParts: any[] = [];
+
+            if (image) {
+                const base64Data = image.split(',')[1];
+                const mimeType = image.split(';')[0].split(':')[1];
+                imageParts.push({
+                    inlineData: { data: base64Data, mimeType },
+                });
+            }
+
+            for (const att of attachmentImages) {
+                const base64Data = att.split(',')[1];
+                const mimeType = att.split(';')[0].split(':')[1];
+                if (base64Data && mimeType) {
+                    imageParts.push({
+                        inlineData: { data: base64Data, mimeType },
+                    });
+                }
+            }
+
             const imagePrompt = !history?.length
                 ? hasUserContext
-                    ? `The user selected "${userSelectedTrade.diagnosis}" (${userSelectedTrade.trade}) and has now uploaded this image. Analyse quickly. Output <thought> (1–2 short sentences + confidence) then <json>.`
-                    : 'Analyse this image. Output <thought> (1–2 short sentences + confidence) then <json>.'
+                    ? `The user selected "${userSelectedTrade.diagnosis}" (${userSelectedTrade.trade}) and has now uploaded ${imageParts.length > 1 ? 'these images' : 'this image'}. Analyse quickly.
+
+CRITICAL: Output <thought> FIRST (1–2 short sentences + confidence), then </thought>, then <json>. Never skip the thought block.`
+                    : `Analyse ${imageParts.length > 1 ? 'these images' : 'this image'}.
+
+CRITICAL: Output <thought> FIRST (1–2 short sentences summarising what you see across the images + confidence), then </thought>, then <json>. Never skip the thought block — the user sees it in real time.`
                 : null;
+
             contents.push({
                 role: 'user',
-                parts: [
-                    {
-                        inlineData: {
-                            data: base64Data,
-                            mimeType: mimeType,
-                        },
-                    },
-                    ...(imagePrompt ? [{ text: imagePrompt }] : []),
-                ],
+                parts: [...imageParts, ...(imagePrompt ? [{ text: imagePrompt }] : [])],
             });
         }
 
         const formatReminder =
             "\n\nCRITICAL: You MUST respond with <thought> then <json>. The JSON must be valid (no trailing commas, escape quotes). Put your answer in the 'message' field. Even for short questions like 'What?' or 'Are you sure?' — answer in message. If you cannot output valid JSON, use <message>Your answer</message> instead.";
 
-        // Add history if present (strip base64 from attachments; use text placeholder to avoid re-sending images)
-        if (history && history.length > 0) {
+        // Add history if present (image branch only; text-only builds full contents above)
+        if (!isTextOnly && history && history.length > 0) {
             for (let i = 0; i < history.length; i++) {
                 const msg = history[i];
                 const parts: any[] = [];

@@ -265,36 +265,23 @@ export function ProviderCard({
             const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
             const reportUrl = conversationId ? `${baseUrl}/report/${conversationId}` : '';
 
-            const [pinRes, msgRes] = await Promise.all([
-                reportUrl && provider.place_id
-                    ? fetch('/api/report-pin', {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({
-                              conversation_id: conversationId,
-                              provider_place_id: provider.place_id,
-                          }),
-                      })
-                    : Promise.resolve(null),
-                fetch('/api/whatsapp-message', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        diagnosis: diagnosis.diagnosis,
-                        provider_name: provider.name,
-                        trade: diagnosis.trade,
-                        action_required: diagnosis.action_required,
-                        estimated_cost: diagnosis.estimated_cost,
-                    }),
+            const msgRes = await fetch('/api/whatsapp-message', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    diagnosis: diagnosis.diagnosis,
+                    provider_name: provider.name,
+                    trade: diagnosis.trade,
+                    action_required: diagnosis.action_required,
+                    estimated_cost: diagnosis.estimated_cost,
                 }),
-            ]);
+            });
 
-            const pinData = pinRes ? await pinRes.json() : null;
             const msgData = await msgRes.json();
 
             let fullMessage = msgData.message || '';
-            if (reportUrl && pinData?.pin) {
-                fullMessage += `\n\nView the full diagnosis report: ${reportUrl}\nYour access code: ${pinData.pin}`;
+            if (reportUrl) {
+                fullMessage += `\n\nView the full diagnosis report: ${reportUrl}`;
             }
 
             if (fullMessage) {

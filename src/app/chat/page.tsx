@@ -9,5 +9,5 @@ export default async function ChatIndexPage({
     if (params.id) {
         redirect(`/chat/${params.id}`);
     }
-    redirect('/chat/start');
+    redirect('/');
 }

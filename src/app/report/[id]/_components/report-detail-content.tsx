@@ -1,6 +1,5 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
 import { useEffect, useState, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -21,9 +20,6 @@ import { Badge } from '@/components/ui/badge';
 import { ReportMap } from '../report-map';
 import { toast } from 'sonner';
 
-const VERIFIED_KEY = 'report_verified_';
-const OWNER_KEY = 'report_owner_';
-
 type ReportData = {
     diagnosis: any;
     image_url: string | null;
@@ -35,17 +31,11 @@ type ReportData = {
 
 export interface ReportDetailContentProps {
     reportId: string;
-    /** Token from ?t= for owner verification (passed from Server Component searchParams) */
-    token?: string | null;
 }
 
-export function ReportDetailContent({ reportId, token }: ReportDetailContentProps) {
-    const router = useRouter();
+export function ReportDetailContent({ reportId }: ReportDetailContentProps) {
     const id = reportId;
 
-    const [pin, setPin] = useState('');
-    const [verified, setVerified] = useState(false);
-    const [verifying, setVerifying] = useState(false);
     const [loading, setLoading] = useState(true);
     const [reportData, setReportData] = useState<ReportData | null>(null);
     const [error, setError] = useState<string | null>(null);
@@ -63,23 +53,10 @@ export function ReportDetailContent({ reportId, token }: ReportDetailContentProp
     const [directionsLoading, setDirectionsLoading] = useState(false);
     const [providerLocation, setProviderLocation] = useState<{ lat: number; lng: number } | null>(null);
     const [directionsAttempted, setDirectionsAttempted] = useState(false);
-    const [headerScrolled, setHeaderScrolled] = useState(false);
     const [directions, setDirections] = useState<{
         distance_text: string;
         duration_text: string;
     } | null>(null);
-
-    const checkVerified = useCallback(() => {
-        if (!id || typeof window === 'undefined') return false;
-        try {
-            return (
-                sessionStorage.getItem(VERIFIED_KEY + id) === '1' ||
-                sessionStorage.getItem(OWNER_KEY + id) === '1'
-            );
-        } catch {
-            return false;
-        }
-    }, [id]);
 
     const loadReport = useCallback(async () => {
         if (!id) return;
@@ -122,62 +99,8 @@ export function ReportDetailContent({ reportId, token }: ReportDetailContentProp
 
     useEffect(() => {
         if (!id) return;
-        if (token) {
-            fetch('/api/report-owner-verify', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ conversation_id: id, token }),
-            })
-                .then((r) => r.json())
-                .then((data) => {
-                    if (data.valid) {
-                        try {
-                            sessionStorage.setItem(OWNER_KEY + id, '1');
-                        } catch {}
-                        setVerified(true);
-                        loadReport();
-                        router.replace(`/report/${id}`, { scroll: false });
-                    } else {
-                        setLoading(false);
-                    }
-                })
-                .catch(() => setLoading(false));
-            return;
-        }
-        if (checkVerified()) {
-            setVerified(true);
-            loadReport();
-        } else {
-            setLoading(false);
-        }
-    }, [id, token, checkVerified, loadReport, router]);
-
-    const handleVerify = async () => {
-        if (!id || !pin.trim()) return;
-        setVerifying(true);
-        setError(null);
-        try {
-            const res = await fetch('/api/report-verify', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ conversation_id: id, pin: pin.trim() }),
-            });
-            const data = await res.json();
-            if (data.valid) {
-                try {
-                    sessionStorage.setItem(VERIFIED_KEY + id, '1');
-                } catch {}
-                setVerified(true);
-                loadReport();
-            } else {
-                setError('Invalid access code. Please try again.');
-            }
-        } catch (e) {
-            setError('Verification failed. Please try again.');
-        } finally {
-            setVerifying(false);
-        }
-    };
+        loadReport();
+    }, [id, loadReport]);
 
     const fetchDirections = useCallback(async () => {
         const hasLoc = reportData?.user_lat != null && reportData?.user_lng != null;
@@ -270,38 +193,14 @@ export function ReportDetailContent({ reportId, token }: ReportDetailContentProp
         );
     }
 
-    if (!verified) {
-        return (
-            <div className="flex flex-col min-h-screen bg-background">
-                <AppHeader title="Report" />
-                <main className="flex flex-1 items-center justify-center p-4">
-                    <div className="w-full max-w-sm space-y-4">
-                        <h2 className="text-lg font-semibold text-foreground">Enter Access Code</h2>
-                        <p className="text-sm text-muted-foreground">
-                            Use the 4-digit code shared with you to view this report.
-                        </p>
-                        <Input
-                            type="text"
-                            inputMode="numeric"
-                            maxLength={4}
-                            placeholder="0000"
-                            value={pin}
-                            onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))}
-                            onKeyDown={(e) => e.key === 'Enter' && handleVerify()}
-                            className="text-center text-lg tracking-[0.5em]"
-                            autoFocus
-                        />
-                        {error && <p className="text-sm text-destructive">{error}</p>}
-                        <Button onClick={handleVerify} disabled={verifying || pin.length !== 4} className="w-full">
-                            {verifying ? 'Verifying…' : 'View Report'}
-                        </Button>
-                    </div>
-                </main>
-            </div>
-        );
-    }
-
     if (loading || !reportData) {
+        if (error && !loading) {
+            return (
+                <div className="flex min-h-screen items-center justify-center bg-background">
+                    <p className="text-muted-foreground">{error}</p>
+                </div>
+            );
+        }
         return (
             <div className="flex min-h-screen items-center justify-center bg-background">
                 <Spinner className="size-8 text-muted-foreground" />
@@ -322,11 +221,10 @@ export function ReportDetailContent({ reportId, token }: ReportDetailContentProp
 
     return (
         <div className="flex flex-col min-h-screen bg-background">
-            <AppHeader title={diag?.diagnosis || 'Job Report'} imageSrc={mainImage} scrolled={headerScrolled} showViewImage={false} />
+            <AppHeader imageSrc={mainImage} showViewImage={false} />
 
             <main
                 className="flex flex-1 flex-col overflow-y-auto"
-                onScroll={(e) => setHeaderScrolled((e.target as HTMLElement).scrollTop > 0)}
             >
                 <div className="max-w-4xl mx-auto w-full px-4 md:px-12 py-4 flex flex-col gap-8">
                     {/* Map card - directions from you to customer */}

@@ -18,7 +18,7 @@ export function StripeBrandText() {
       const containerWidth = container.offsetWidth;
       const measureWidth = measure.offsetWidth;
       if (measureWidth > 0 && containerWidth > 0) {
-        const scale = (containerWidth / measureWidth) * 0.98;
+        const scale = (containerWidth / measureWidth) * 0.95;
         setFontSize(MEASURE_FONT_SIZE * scale);
       }
     };

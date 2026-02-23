@@ -1,10 +1,9 @@
 import type { Metadata } from "next";
-import Link from "next/link";
-import { Button } from "@/components/ui/button";
 import { LandingFooter } from "@/components/landing-footer";
 import { LandingHeader } from "@/app/page/_components/landing-header";
 import { TestimonialsSection } from "@/app/page/_components/testimonials-section";
 import { CoverageMap } from "@/app/page/_components/coverage-map";
+import { StartDiagnosisButton } from "@/app/page/_components/start-diagnosis-button";
 
 export const metadata: Metadata = {
   title: "Scandio: Home Maintenance Assistant",
@@ -28,9 +27,44 @@ function Placeholder({
 }) {
   return (
     <div
-      className={`flex items-center justify-center rounded-lg border border-dashed border-border bg-muted/50 text-center text-sm text-muted-foreground ${aspectRatio} ${className}`}
+      className={`flex items-center justify-center rounded-lg border border-border/50 bg-secondary/50 hover:bg-secondary/25 hover:border-border/75 transition-all duration-250 text-center text-sm text-muted-foreground ${aspectRatio} ${className}`}
     >
       <span className="max-w-[85%] px-2">{label}</span>
+    </div>
+  );
+}
+
+function FeaturesChatPlaceholder({
+  label,
+  aspectRatio = "aspect-video",
+  className = "",
+  title = "",
+  description = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.",
+}: {
+  label: string;
+  aspectRatio?: string;
+  className?: string;
+  title?: string;
+  description?: string;
+}) {
+  const aspectClass =
+    aspectRatio === "aspect-[4/3]"
+      ? "lg:aspect-[4/3]"
+      : aspectRatio === "aspect-[21/9]"
+        ? "lg:aspect-[21/9]"
+        : "lg:aspect-video";
+
+  return (
+    <div
+      className={`flex flex-col rounded-lg border border-border/50 bg-secondary/50 transition-all duration-250 hover:border-border/75 hover:bg-secondary/25 max-lg:aspect-auto max-lg:min-h-[300px] ${aspectClass} ${className}`}
+    >
+      <div className="flex flex-1 min-h-0 items-center justify-center">
+        <span className="px-2 text-center text-sm text-muted-foreground">{title || label}</span>
+      </div>
+      <div className="flex shrink-0 flex-col gap-1 rounded-b-lg border-t border-border/50 bg-white p-4">
+        {title && <p className="text-sm font-medium text-foreground">{title}</p>}
+        <p className="text-sm text-muted-foreground">{description}</p>
+      </div>
     </div>
   );
 }
@@ -44,23 +78,25 @@ export default function LandingPage() {
         {/* Hero Section (Split Layout) */}
         <section className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-24 lg:px-8 lg:py-32">
           <div className="grid items-center gap-12 lg:grid-cols-2 lg:gap-16">
-            <div className="flex flex-col items-center space-y-8 text-center lg:items-start lg:text-left">
-              <h1 className="text-2xl font-bold tracking-tight sm:text-3xl lg:text-4xl">
-                Stop the Maintenance Guesswork. 
-                <br />
-                Get Scandio's Report.
-              </h1>
-              <p className="max-w-xl text-lg text-muted-foreground">
-                Your home didn&apos;t come with a manual, so we&apos;re attempting to create one. Scandio is trained to identify common home maintenance issues and connect you to the best service providers near you. We&apos;ll always be free to assist you in taking care of your home.
+            <div className="flex flex-col items-center space-y-6 text-center lg:items-start lg:text-left">
+              <div className="flex flex-col gap-4 w-full">
+                <div className="h-9 bg-secondary w-full rounded-md" />
+                <div className="h-9 bg-secondary w-full rounded-md" />
+              </div>
+              <p className="text-base text-muted-foreground">
+              Your home didn't come with a manual, and home maintenance shouldn't be a guessing game. Scandio diagnoses faults instantly and generates a secure, professional Scandio Report for you to own and share with a provider of your choice.
+              <br />
+              <br />
+              Skip the uncertainty, gain instant clarity on costs, and connect with local specialists to resolve your repairs faster and more accurately.
               </p>
-              <Button asChild size="lg" className="h-12 px-8 text-base">
-                <Link href="/chat/start">Start Diagnosis (Free)</Link>
-              </Button>
+              <StartDiagnosisButton className="text-sm">
+                Generate Free Scandio Report
+              </StartDiagnosisButton>
             </div>
             <div className="flex justify-center">
-              <div className="relative w-full max-w-[260px] overflow-hidden rounded-[2.5rem] border-2 border-border bg-secondary shadow-xl sm:max-w-[280px]">
+              <div className="relative w-full max-w-[348px] overflow-hidden rounded-3xl border border-border/50 bg-secondary/50 hover:bg-secondary/25 transition-all duration-250">
                 <div className="aspect-[9/16] flex items-center justify-center p-4 text-center text-sm text-muted-foreground">
-                  [PLACEHOLDER: Phone Model showing Chat UI]
+                  Scandio Report Mockup
                 </div>
               </div>
             </div>
@@ -68,15 +104,15 @@ export default function LandingPage() {
         </section>
 
         {/* Trust / Social Proof Bar */}
-        <section className="bg-muted/30 py-12">
-          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-            <div className="grid grid-cols-2 gap-6 sm:grid-cols-4 sm:grid-rows-2">
+        <section className="bg-muted/50 py-12">
+          <div className="mx-auto max-w-7xl px-4 sm:px-4 lg:px-6">
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4 sm:grid-rows-2">
               {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
                 <div
                   key={i}
-                  className="flex h-16 items-center justify-center rounded-lg bg-muted/50 text-center text-xs text-muted-foreground"
+                  className="flex h-24 items-center justify-center rounded-lg border border-border/50 hover:border-border/75 transition-all duration-250 bg-white text-center text-sm text-muted-foreground"
                 >
-                  [Press Logo / Stat {i}]
+                  Contractor Logo
                 </div>
               ))}
             </div>
@@ -84,27 +120,27 @@ export default function LandingPage() {
         </section>
 
         {/* How It Works (Alternating Z-Pattern) */}
-        <section id="how-it-works" className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
-          <div className="mb-10 text-center">
+        <section id="how-it-works" className="mx-auto max-w-7xl space-y-12 px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
+          <div className="text-center">
             <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">
               How Scandio Works
             </h2>
-            <p className="mx-auto mt-4 max-w-2xl text-muted-foreground">
-              From a single photo to a repair report you can share with contractors—no account, no guesswork. Our AI home repair diagnosis puts expert-level insight in your pocket and connects you with trusted local professionals in minutes.
+            <p className="mx-auto mt-4 max-w-3xl text-muted-foreground">
+                We have transformed the search for home maintenance contractors into a streamlined, professional process. Scandio analyses your image, identifies your respective fault and returns a diagnosis and resolution summary, linking you directly to the best local contractors in the Western Cape.
             </p>
           </div>
 
           {/* Row 1: Left text, Right visual */}
-          <div className="grid items-center gap-8 py-8 lg:grid-cols-2 lg:gap-12">
-            <div className="space-y-4 order-2 lg:order-1">
-              <h3 className="text-xl font-semibold">Step One — Snap a Photo</h3>
-              <p className="text-muted-foreground">
-                Spot a leak, a crack, or something that just doesn&apos;t look right? Snap a photo of the issue—or describe it in plain English. No sign-up required. Scandio&apos;s AI is trained to recognise common home maintenance problems, from electrical faults to plumbing, roofing, and more.
+          <div className="grid items-center gap-6 lg:grid-cols-2 lg:gap-12">
+            <div className="space-y-2 order-2 lg:order-1">
+              <h3 className="text-xl font-semibold">Step 1. Capture Fault</h3>
+              <p className="text-base text-muted-foreground">
+                Capture your maintenance issue with a photo. Scandio identifies the respective fault and analyses the symptoms in real-time to provide an accurate and professional starting point for your repair.
               </p>
             </div>
             <div className="order-1 lg:order-2">
               <Placeholder
-                label="[PLACEHOLDER: Image Upload UI Mockup]"
+                label="Capture Fault Mockup"
                 aspectRatio="aspect-[4/3]"
                 className="w-full"
               />
@@ -112,33 +148,33 @@ export default function LandingPage() {
           </div>
 
           {/* Row 2: Right text, Left visual */}
-          <div className="grid items-center gap-8 py-8 lg:grid-cols-2 lg:gap-12">
+          <div className="grid items-center gap-6 lg:grid-cols-2 lg:gap-12">
             <div>
               <Placeholder
-                label="[PLACEHOLDER: AI Diagnosis Report UI Mockup]"
+                label="Generate Scandio Report Mockup"
                 aspectRatio="aspect-[4/3]"
                 className="w-full"
               />
             </div>
-            <div className="space-y-4">
-              <h3 className="text-xl font-semibold">Step Two — Get Your Diagnosis</h3>
-              <p className="text-muted-foreground">
-                Within seconds, you&apos;ll receive an expert-level home repair analysis: what&apos;s wrong, what parts you might need, and an estimated cost range. Save or share your report—it&apos;s the perfect handover for any contractor. No more vague call-outs or second opinions; you&apos;re already informed.
+            <div className="space-y-2">
+              <h3 className="text-xl font-semibold">Step 2. Generate Scandio Report</h3>
+              <p className="text-base text-muted-foreground">
+                Within seconds, you will receive an expert-level home repair analysis. You will also receive a secure Scandio Report outlining the details from your diagnosis, readily available to share with your chosen contractors to assist in a prompt resolution.
               </p>
             </div>
           </div>
 
           {/* Row 3: Left text, Right visual */}
-          <div className="grid items-center gap-8 py-8 lg:grid-cols-2 lg:gap-12">
-            <div className="space-y-4 order-2 lg:order-1">
-              <h3 className="text-xl font-semibold">Step Three — Connect with Local Contractors</h3>
-              <p className="text-muted-foreground">
-                We match you with trusted plumbers, electricians, roofers, and other home service professionals near you. Share your diagnosis report so they arrive ready with the right tools and parts. Compare options, get quotes, and book—all from one place. Taking care of your home just got simpler.
+          <div className="grid items-center gap-6 lg:grid-cols-2 lg:gap-12">
+            <div className="space-y-2 order-2 lg:order-1">
+              <h3 className="text-xl font-semibold">Step 3. Connect with Local Contractors</h3>
+              <p className="text-base text-muted-foreground">
+                You can choose to contact the contractors directly, or send them our prepared WhatsApp summary of our conversation. You choose which contractor in your area receives your Scandio Report, ensuring they arrive informed and ready to fix the issue on the first visit.
               </p>
             </div>
             <div className="order-1 lg:order-2">
               <Placeholder
-                label="[PLACEHOLDER: Contractor Selection UI Mockup]"
+                label="Connect with Local Contractors Mockup"
                 aspectRatio="aspect-[4/3]"
                 className="w-full"
               />
@@ -147,43 +183,73 @@ export default function LandingPage() {
         </section>
 
         {/* Bento Box UI Showcase */}
-        <section id="features" className="border-t border-b border-border bg-muted/20 py-20 sm:py-28">
+        <section id="features" className="bg-muted/50 py-16">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <div className="mb-12 text-center">
               <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">
-                Features
+                Our Features
               </h2>
-              <p className="mx-auto mt-4 max-w-2xl text-muted-foreground">
+              <p className="mx-auto mt-4 max-w-3xl text-muted-foreground">
                 Lorem ipsum dolor sit amet, consectetur adipiscing elit. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris.
               </p>
             </div>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 lg:grid-rows-2">
-              <div className="lg:col-span-2 lg:row-span-2">
-                <Placeholder
-                  label="[PLACEHOLDER: Chat Bubble Snippet]"
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-4 lg:grid-rows-3 lg:gap-4">
+              {/* Large hero card - spans 2 cols, 2 rows on lg only */}
+              <div className="min-h-[200px] lg:col-span-2 lg:row-span-2 lg:min-h-0">
+                <FeaturesChatPlaceholder
+                  label="Secure Scandio Report"
                   aspectRatio="aspect-[4/3]"
-                  className="h-full min-h-[240px] w-full"
+                  className="h-full min-h-[200px] w-full"
+                  title="Secure Scandio Report"
+                  description="Lorem ipsum dolor sit amet, consectetur adipiscing elit. Ut enim ad minim veniam."
                 />
               </div>
-              <div>
-                <Placeholder
+              {/* Top right - 2 small cards */}
+              <div className="min-h-[180px] lg:min-h-0">
+                <FeaturesChatPlaceholder
                   label="[PLACEHOLDER: Cost Estimate UI]"
                   aspectRatio="aspect-video"
-                  className="h-full min-h-[160px] w-full"
+                  className="h-full min-h-[180px] w-full"
+                  title="Data Privacy"
+                  description="Lorem ipsum dolor sit amet, consectetur adipiscing elit. Ut enim ad minim veniam."
                 />
               </div>
-              <div>
-                <Placeholder
+              <div className="min-h-[180px] lg:min-h-0">
+                <FeaturesChatPlaceholder
                   label="[PLACEHOLDER: Repair Report Card]"
                   aspectRatio="aspect-video"
-                  className="h-full min-h-[160px] w-full"
+                  className="h-full min-h-[180px] w-full"
+                  title="Cost Estimates"
+                  description="Lorem ipsum dolor sit amet, consectetur adipiscing elit. Ut enim ad minim veniam."
                 />
               </div>
-              <div className="sm:col-span-2 lg:col-span-2">
-                <Placeholder
+              {/* Wide card - spans 2 cols on lg */}
+              <div className="min-h-[160px] lg:col-span-2 lg:min-h-0">
+                <FeaturesChatPlaceholder
                   label="[PLACEHOLDER: Provider List / Match UI]"
                   aspectRatio="aspect-[21/9]"
-                  className="h-full min-h-[120px] w-full"
+                  className="h-full min-h-[160px] w-full"
+                  title="Estimated Fault Diagnosis"
+                  description="Lorem ipsum dolor sit amet, consectetur adipiscing elit. Ut enim ad minim veniam."
+                />
+              </div>
+              {/* Bottom row - 2 medium cards */}
+              <div className="min-h-[180px] lg:col-span-2 lg:min-h-0">
+                <FeaturesChatPlaceholder
+                  label="[PLACEHOLDER: Share Report]"
+                  aspectRatio="aspect-video"
+                  className="h-full min-h-[180px] w-full"
+                  title="Local Contractors"
+                  description="Lorem ipsum dolor sit amet, consectetur adipiscing elit. Ut enim ad minim veniam."
+                />
+              </div>
+              <div className="min-h-[180px] lg:col-span-2 lg:min-h-0">
+                <FeaturesChatPlaceholder
+                  label="[PLACEHOLDER: Local Specialists]"
+                  aspectRatio="aspect-video"
+                  className="h-full min-h-[180px] w-full"
+                  title="Easy Communication with Contractors"
+                  description="Lorem ipsum dolor sit amet, consectetur adipiscing elit. Ut enim ad minim veniam."
                 />
               </div>
             </div>
@@ -191,13 +257,13 @@ export default function LandingPage() {
         </section>
 
         {/* Dedicated Map / Coverage Section */}
-        <section id="coverage" className="mx-auto max-w-7xl px-4 py-20 sm:px-6 sm:py-28 lg:px-8">
-          <div className="mb-12 text-center">
+        <section id="coverage" className="mx-auto max-w-7xl flex flex-col gap-12 px-4 py-16 sm:px-6 sm:py-28 lg:px-8">
+          <div className="flex flex-col gap-4 text-center">
             <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">
               Service Coverage
             </h2>
-            <p className="mx-auto mt-4 max-w-2xl text-muted-foreground">
-              Find out if we serve your area. Search or use your location to see nearby plumbers, electricians, gate repair, and roofing professionals.
+            <p className="mx-auto max-w-3xl text-muted-foreground">
+              Lorem ipsum dolor sit amet, consectetur adipiscing elit. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris.
             </p>
           </div>
           {process.env.NEXT_PUBLIC_GOOGLE_MAPS_EMBED_KEY ||
@@ -210,28 +276,13 @@ export default function LandingPage() {
               }
             />
           ) : (
-            <div className="flex min-h-[400px] items-center justify-center rounded-lg border border-dashed border-border bg-muted/30 text-sm text-muted-foreground">
-              Configure NEXT_PUBLIC_GOOGLE_MAPS_EMBED_KEY or NEXT_PUBLIC_GOOGLE_PLACES_API_KEY to show the map.
+            <div className="flex min-h-[400px] items-center justify-center rounded-lg border border-border/50 bg-secondary/75 hover:border-border/75 hover:bg-secondary/50 transition-all duration-250 text-sm text-muted-foreground p-4 text-center">
+              Configure NEXT_PUBLIC_GOOGLE_MAPS_EMBED_KEY or NEXT_PUBLIC_GOOGLE_PLACES_API_KEY to Show Map.
             </div>
           )}
         </section>
 
         <TestimonialsSection />
-
-        {/* Final CTA Banner */}
-        <section className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
-          <div className="rounded-xl border border-border bg-muted/20 px-8 py-12 text-center sm:px-12 sm:py-16">
-            <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">
-              Start Diagnosis (Free)
-            </h2>
-            <p className="mx-auto mt-4 max-w-2xl text-muted-foreground">
-              Lorem ipsum dolor sit amet, consectetur adipiscing elit. Join thousands of satisfied users today.
-            </p>
-            <Button asChild size="lg" className="mt-8">
-              <Link href="/chat/start">Start Diagnosis (Free)</Link>
-            </Button>
-          </div>
-        </section>
       </main>
 
       <LandingFooter
@@ -243,7 +294,7 @@ export default function LandingPage() {
               { href: "#how-it-works", label: "How It Works" },
               { href: "#features", label: "Features" },
               { href: "#coverage", label: "Coverage" },
-              { href: "/chat/start", label: "Start Diagnosis (Free)" },
+              { href: "/", label: "Start Diagnosis (Free)" },
             ],
           },
           {

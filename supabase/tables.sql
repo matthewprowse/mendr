@@ -4,6 +4,10 @@
  * This file is idempotent and can be run multiple times to create OR update your database.
  */
 
+-- Migration: Reports are now public; drop obsolete PIN/token tables
+DROP TABLE IF EXISTS report_owner_tokens;
+DROP TABLE IF EXISTS report_access;
+
 -- 1. Providers Cache
 CREATE TABLE IF NOT EXISTS cached_providers (
     place_id TEXT PRIMARY KEY,
@@ -93,21 +97,7 @@ CREATE INDEX IF NOT EXISTS idx_leads_created ON leads(created_at);
 ALTER TABLE conversations ADD COLUMN IF NOT EXISTS locked BOOLEAN DEFAULT FALSE;
 ALTER TABLE conversations ADD COLUMN IF NOT EXISTS locked_at TIMESTAMPTZ;
 
--- 5. Report Access (PIN per provider per conversation)
--- Same report URL for all providers; each provider gets a unique 4-digit PIN.
-CREATE TABLE IF NOT EXISTS report_access (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    conversation_id UUID NOT NULL,
-    provider_place_id TEXT NOT NULL,
-    pin CHAR(4) NOT NULL CHECK (pin ~ '^\d{4}$'),
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    UNIQUE(conversation_id, provider_place_id)
-);
-
-CREATE INDEX IF NOT EXISTS idx_report_access_conversation_pin ON report_access(conversation_id, pin);
-CREATE INDEX IF NOT EXISTS idx_report_access_conversation ON report_access(conversation_id);
-
--- 6. Provider Signups (Scandio coming soon - service providers register interest)
+-- 5. Provider Signups (Scandio coming soon - service providers register interest)
 CREATE TABLE IF NOT EXISTS provider_signups (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     company_name TEXT NOT NULL,
@@ -128,16 +118,7 @@ ALTER TABLE provider_signups ADD COLUMN IF NOT EXISTS marketing_consent BOOLEAN 
 
 CREATE INDEX IF NOT EXISTS idx_provider_signups_created ON provider_signups(created_at);
 
--- 7. Report Owner Tokens (homeowner accesses report without PIN)
-CREATE TABLE IF NOT EXISTS report_owner_tokens (
-    conversation_id UUID PRIMARY KEY,
-    token TEXT NOT NULL UNIQUE,
-    created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-CREATE INDEX IF NOT EXISTS idx_report_owner_tokens_token ON report_owner_tokens(token);
-
--- 8. Provider Reports (users report providers to Scandio — scam, fake listing, etc.)
+-- 6. Provider Reports (users report providers to Scandio — scam, fake listing, etc.)
 CREATE TABLE IF NOT EXISTS provider_reports (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     provider_place_id TEXT NOT NULL,

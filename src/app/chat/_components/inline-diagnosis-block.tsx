@@ -271,20 +271,7 @@ export function InlineDiagnosisBlock({
                                 <Button
                                     variant="outline"
                                     className="mt-3"
-                                    onClick={async () => {
-                                        try {
-                                            const res = await fetch(
-                                                `/api/report-owner-token?conversation_id=${encodeURIComponent(conversationId)}`
-                                            );
-                                            const data = await res.json();
-                                            const url = data.token
-                                                ? `/report/${conversationId}?t=${encodeURIComponent(data.token)}`
-                                                : `/report/${conversationId}`;
-                                            window.open(url, '_blank');
-                                        } catch {
-                                            window.open(`/report/${conversationId}`, '_blank');
-                                        }
-                                    }}
+                                    onClick={() => window.open(`/report/${conversationId}`, '_blank')}
                                 >
                                     Open Report
                                 </Button>

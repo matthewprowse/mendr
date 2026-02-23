@@ -168,7 +168,7 @@ export function CoverageMap({ apiKey }: CoverageMapProps) {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
         <input
           type="text"
-          placeholder="Search Location"
+          placeholder="Enter Address, Places, or Locations"
           value={searchValue}
           onChange={(e) => setSearchValue(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
@@ -179,7 +179,7 @@ export function CoverageMap({ apiKey }: CoverageMapProps) {
             Search
           </Button>
           <Button variant="secondary" size="default" onClick={handleGetLocation}>
-            Use my location
+            Use Current Location
           </Button>
         </div>
       </div>
@@ -193,9 +193,6 @@ export function CoverageMap({ apiKey }: CoverageMapProps) {
           <div ref={containerRef} className="h-full w-full" />
         </div>
       </div>
-      <p className="text-center text-xs text-muted-foreground">
-        Showing service providers within 25km. Search or use your location to explore coverage.
-      </p>
     </div>
   );
 }

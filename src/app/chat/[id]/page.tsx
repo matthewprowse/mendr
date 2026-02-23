@@ -18,8 +18,8 @@ type PageProps = {
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
     const { id } = await params;
     return {
-        title: id ? `Diagnosis | Scandio` : 'Chat | Scandio',
-        description: 'AI-powered home maintenance diagnosis and local provider discovery.',
+        title: id ? `Scandio: Diagnosis` : 'Scandio: Chat',
+        description: '',
     };
 }
 
