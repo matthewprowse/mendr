@@ -60,3 +60,8 @@ DROP POLICY IF EXISTS "Report owner tokens allow insert" ON report_owner_tokens;
 DROP POLICY IF EXISTS "Report owner tokens allow select" ON report_owner_tokens;
 CREATE POLICY "Report owner tokens allow insert" ON report_owner_tokens FOR INSERT WITH CHECK (true);
 CREATE POLICY "Report owner tokens allow select" ON report_owner_tokens FOR SELECT USING (true);
+
+-- 8. Provider Reports: Allow anonymous insert (users report providers)
+ALTER TABLE provider_reports ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Provider reports allow insert" ON provider_reports;
+CREATE POLICY "Provider reports allow insert" ON provider_reports FOR INSERT WITH CHECK (true);

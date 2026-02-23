@@ -152,18 +152,44 @@ CRITICAL: "confidence" must be an integer 0–100. If you are less than 85% conf
 
         if (isTextOnly) {
             // Text-only: user has described their issue. No image.
-            const textPrompt = hasUserContext
-                ? `The user selected "${userSelectedTrade.diagnosis}" (${userSelectedTrade.trade}) and has described their issue:
+            // If we have history, this is a follow-up: add history (stripped of base64) then textQuery as final user turn.
+            if (history && history.length > 0) {
+                // Follow-up flow: add history with placeholders, then textQuery
+                for (let i = 0; i < history.length; i++) {
+                    const msg = history[i];
+                    const parts: any[] = [];
+                    let content = msg.content || '';
+                    if (msg.attachments && msg.attachments.length > 0) {
+                        content += (content ? '\n\n' : '') + '[User uploaded an image here]';
+                    }
+                    if (content) parts.push({ text: content });
+                    if (parts.length > 0) {
+                        contents.push({
+                            role: msg.role === 'assistant' ? 'model' : 'user',
+                            parts,
+                        });
+                    }
+                }
+                const formatReminder =
+                    "\n\nCRITICAL: You MUST respond with <thought> then <json>. The JSON must be valid (no trailing commas, escape quotes). Put your answer in the 'message' field.";
+                contents.push({
+                    role: 'user',
+                    parts: [{ text: (textQuery as string).trim() + formatReminder }],
+                });
+            } else {
+                const textPrompt = hasUserContext
+                    ? `The user selected "${userSelectedTrade.diagnosis}" (${userSelectedTrade.trade}) and has described their issue:
 
-"${textQuery.trim()}"
+"${(textQuery as string).trim()}"
 
 Analyse this description considering their stated interest. Output <thought> (1–2 sentences + confidence) then <json>.`
-                : `The user has described their home maintenance issue:
+                    : `The user has described their home maintenance issue:
 
-"${textQuery.trim()}"
+"${(textQuery as string).trim()}"
 
 Analyse this description and provide a diagnosis. Output <thought> (1–2 sentences + confidence) then <json>.`;
-            contents.push({ role: 'user', parts: [{ text: textPrompt }] });
+                contents.push({ role: 'user', parts: [{ text: textPrompt }] });
+            }
         } else {
             const base64Data = image.split(',')[1];
             const mimeType = image.split(';')[0].split(':')[1];
@@ -190,38 +216,22 @@ Analyse this description and provide a diagnosis. Output <thought> (1–2 senten
         const formatReminder =
             "\n\nCRITICAL: You MUST respond with <thought> then <json>. The JSON must be valid (no trailing commas, escape quotes). Put your answer in the 'message' field. Even for short questions like 'What?' or 'Are you sure?' — answer in message. If you cannot output valid JSON, use <message>Your answer</message> instead.";
 
-        // Add history if present
+        // Add history if present (strip base64 from attachments; use text placeholder to avoid re-sending images)
         if (history && history.length > 0) {
             for (let i = 0; i < history.length; i++) {
                 const msg = history[i];
                 const parts: any[] = [];
 
                 let content = msg.content || '';
-                if (msg.role === 'user' && i === history.length - 1) {
+                if (msg.attachments && msg.attachments.length > 0) {
+                    content += (content ? '\n\n' : '') + '[User uploaded an image here]';
+                }
+                if (msg.role === 'user' && i === history.length - 1 && !isTextOnly) {
                     content += formatReminder;
                 }
 
                 if (content) {
                     parts.push({ text: content });
-                }
-
-                if (msg.attachments && msg.attachments.length > 0) {
-                    for (const attachment of msg.attachments) {
-                        try {
-                            const attBase64 = attachment.split(',')[1];
-                            const attMimeType = attachment.split(';')[0].split(':')[1];
-                            if (attBase64 && attMimeType) {
-                                parts.push({
-                                    inlineData: {
-                                        data: attBase64,
-                                        mimeType: attMimeType,
-                                    },
-                                });
-                            }
-                        } catch (e) {
-                            console.error('Failed to parse attachment', e);
-                        }
-                    }
                 }
 
                 if (parts.length > 0) {

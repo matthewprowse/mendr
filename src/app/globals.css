@@ -126,3 +126,20 @@
         @apply bg-background text-foreground;
     }
 }
+
+@layer utilities {
+    .text-striped-muted {
+        --striped-fill: var(--muted-foreground);
+        color: var(--striped-fill);
+        background: repeating-linear-gradient(
+            -45deg,
+            var(--striped-fill),
+            var(--striped-fill) 2px,
+            color-mix(in oklch, var(--striped-fill) 40%, transparent) 2px,
+            color-mix(in oklch, var(--striped-fill) 40%, transparent) 4px
+        );
+        -webkit-background-clip: text;
+        background-clip: text;
+        -webkit-text-fill-color: transparent;
+    }
+}

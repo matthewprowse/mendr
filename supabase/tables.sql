@@ -136,3 +136,18 @@ CREATE TABLE IF NOT EXISTS report_owner_tokens (
 );
 
 CREATE INDEX IF NOT EXISTS idx_report_owner_tokens_token ON report_owner_tokens(token);
+
+-- 8. Provider Reports (users report providers to Scandio — scam, fake listing, etc.)
+CREATE TABLE IF NOT EXISTS provider_reports (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    provider_place_id TEXT NOT NULL,
+    provider_name TEXT NOT NULL,
+    provider_address TEXT,
+    subject TEXT NOT NULL,
+    body TEXT NOT NULL,
+    reporter_email TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_provider_reports_created ON provider_reports(created_at);
+CREATE INDEX IF NOT EXISTS idx_provider_reports_place_id ON provider_reports(provider_place_id);
