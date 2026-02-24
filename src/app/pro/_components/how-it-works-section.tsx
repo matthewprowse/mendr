@@ -23,8 +23,7 @@ const ROWS: RowConfig[] = [
         count: 1,
         items: [
             {
-                label:
-                    '[PLACEHOLDER: Web Dashboard UI showing AI breakdown of a broken DB board and estimated repair costs]',
+                label: '[PLACEHOLDER: Web Dashboard UI showing AI breakdown of a broken DB board and estimated repair costs]',
             },
         ],
         textFirst: true,
@@ -57,8 +56,7 @@ const ROWS: RowConfig[] = [
         count: 1,
         items: [
             {
-                label:
-                    "[PLACEHOLDER: Contractor's branded WhatsApp share link and custom QR code]",
+                label: "[PLACEHOLDER: Contractor's branded WhatsApp share link and custom QR code]",
             },
         ],
         textFirst: false,
@@ -95,20 +93,13 @@ function PlaceholderRow({ config }: { config: RowConfig }) {
         </div>
     );
     const placeholderGridClass =
-        config.count === 1
-            ? 'grid-cols-1'
-            : config.count === 2
-              ? 'grid-cols-2'
-              : 'grid-cols-2';
+        config.count === 1 ? 'grid-cols-1' : config.count === 2 ? 'grid-cols-2' : 'grid-cols-2';
     const aspectRatio = config.count === 2 ? 'aspect-[3/4]' : 'aspect-[4/3]';
     const is2x2 = config.count === 4;
     const gridWrapperClass = is2x2 ? 'max-h-[396px] grid-rows-2' : '';
-    const placeholderClassName =
-        is2x2 ? 'h-full min-h-0 w-full' : 'h-[396px] w-full min-h-[200px]';
+    const placeholderClassName = is2x2 ? 'h-full min-h-0 w-full' : 'h-[396px] w-full min-h-[200px]';
     const placeholdersCol = (
-        <div
-            className={`grid gap-4 ${placeholderGridClass} lg:gap-6 ${gridWrapperClass}`}
-        >
+        <div className={`grid gap-4 ${placeholderGridClass} lg:gap-6 ${gridWrapperClass}`}>
             {config.items.map((item, i) => (
                 <Placeholder
                     key={i}
@@ -148,8 +139,8 @@ export function HowItWorksSection() {
                     How Scandio Pro Works
                 </h2>
                 <p className="mx-auto mt-4 max-w-2xl text-muted-foreground">
-                    Pre-diagnosed leads delivered to your dashboard. Accept jobs, show up
-                    informed, get paid. No call-out fees, no dead leads.
+                    Pre-diagnosed leads delivered to your dashboard. Accept jobs, show up informed,
+                    get paid. No call-out fees, no dead leads.
                 </p>
             </div>
 

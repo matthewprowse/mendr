@@ -43,9 +43,7 @@ export function FeaturesSection() {
         <section id="features" className="bg-muted/50 py-16">
             <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
                 <div className="mb-12 text-center">
-                    <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">
-                        Our Features
-                    </h2>
+                    <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">Our Features</h2>
                     <p className="mx-auto mt-4 max-w-3xl text-muted-foreground">
                         Lorem ipsum dolor sit amet, consectetur adipiscing elit. Ut enim ad minim
                         veniam, quis nostrud exercitation ullamco laboris.

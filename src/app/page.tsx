@@ -75,7 +75,7 @@ export default function LandingPage() {
         <div className="flex min-h-screen flex-col bg-background">
             <LandingHeader
                 navLinks={[
-                    { href: '#trades', label: 'Trades'},
+                    { href: '#trades', label: 'Trades' },
                     { href: '#how-it-works', label: 'How It Works' },
                     { href: '#features', label: 'Features' },
                     { href: '#coverage', label: 'Coverage' },
@@ -89,10 +89,8 @@ export default function LandingPage() {
                 <section className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-24 lg:px-8 lg:py-32">
                     <div className="grid items-center gap-12 lg:grid-cols-2 lg:gap-16">
                         <div className="flex flex-col items-center space-y-6 text-center lg:items-start lg:text-left">
-                            <div className="flex flex-col gap-4 w-full">
-                                <div className="h-9 bg-secondary w-full rounded-md" />
-                                <div className="h-9 bg-secondary w-full rounded-md" />
-                            </div>
+                            <h3 className="text-base text-muted-foreground font-medium">Sophisticated Systems, Spimplified Solutions.</h3>
+                            <h1 className="text-4xl font-bold leading-tight tracking-tight sm:text-4xl">Western Cape's New Standard in Home Maintenance</h1>
                             <p className="text-base text-muted-foreground">
                                 Your home didn't come with a manual, and home maintenance shouldn't
                                 be a guessing game. Scandio diagnoses faults instantly and generates

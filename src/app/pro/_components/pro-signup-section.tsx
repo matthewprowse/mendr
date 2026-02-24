@@ -60,9 +60,7 @@ export function ProSignupSection() {
         <section id="register" className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
             <div className="mx-auto max-w-2xl">
                 <div className="mb-8 text-center">
-                    <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">
-                        Join Network
-                    </h2>
+                    <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">Join Network</h2>
                     <p className="mt-4 text-muted-foreground">
                         Join Western Cape contractors on Scandio Pro. We&apos;re listing and
                         promoting providers for free until September 2026.

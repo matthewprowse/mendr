@@ -88,7 +88,7 @@ export function LandingHeader({
 
             {/* Full-screen mobile nav */}
             <div
-                className={`fixed inset-0 z-[60] bg-background md:hidden ${mobileNavOpen ? 'visible' : 'invisible pointer-events-none'}`}
+                className={`fixed inset-0 z-[60] bg-background md:hidden ${mobileNavOpen ? 'visible' : 'hidden'}`}
                 aria-hidden={!mobileNavOpen}
             >
                 <div className="flex h-full flex-col">

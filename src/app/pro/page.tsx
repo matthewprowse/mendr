@@ -11,21 +11,15 @@ import { ProSignupSection } from './_components/pro-signup-section';
 import { TestimonialsSection } from './_components/testimonials-section';
 
 export const metadata: Metadata = {
-    title: 'Scandio Pro | Contractor Lead Generation Western Cape — Scandio Professional Network',
+    title: 'Scandio Pro',
     description:
-        'Contractor lead generation Western Cape. Join Scandio Professional Network. Stop paying for dead leads. Get AI pre-diagnosed jobs, 0% upfront costs.',
+        '',
     keywords: [
-        'Contractor lead generation Western Cape',
-        'Scandio Professional Network',
-        'contractor leads Cape Town',
-        'plumber leads',
-        'electrician leads',
-        'AI pre-diagnosed leads',
     ],
     openGraph: {
-        title: 'Scandio Pro — Contractor Lead Generation Western Cape',
+        title: 'Scandio Pro',
         description:
-            'Scandio Professional Network. Pre-diagnosed leads, no dead leads, no call-out fees.',
+            '',
     },
 };
 
