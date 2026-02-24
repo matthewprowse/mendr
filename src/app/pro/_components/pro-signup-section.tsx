@@ -12,6 +12,7 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { toast } from 'sonner';
+import { Label } from '@/components/ui/label';
 
 export function ProSignupSection() {
     const [companyName, setCompanyName] = useState('');
@@ -176,6 +177,26 @@ export function ProSignupSection() {
                         </Button>
                     </form>
                 )}
+            </div>
+
+            <div className="flex flex-col bg-card border border-border/50 rounded-lg max-w-3xl mx-auto">
+                <div className="flex flex-col gap-4 text-center mx-auto border-b border-border/50 px-4 py-12">
+                    <h3 className="text-2xl font-bold tracking-tight sm:text-3xl">Join Network</h3>
+                    <p className="text-base text-muted-foreground max-w-3xl">
+                        Lorem ipsum dolor sit amet, consectetur adipiscing elit. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.
+                    </p>
+                </div>
+
+                <form className="flex flex-col gap-6 mx-auto px-4 py-6">
+
+                    <div className="flex flex-col gap-2">
+                        <Label className="text-sm">Company Name</Label>
+                        <Input placeholder="Scandio Incorporated" />
+                    </div>
+
+                    <Button>Join Network</Button>
+                </form>
+
             </div>
         </section>
     );

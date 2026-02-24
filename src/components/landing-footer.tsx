@@ -102,7 +102,7 @@ export function LandingFooter({
         <footer className="bg-card">
             <div className="mx-auto max-w-7xl space-y-12 px-4 py-16 sm:px-6 lg:px-8">
                 {/* Link columns + Newsletter — equal grid */}
-                <div className="grid grid-cols-2 md:grid-cols-6 gap-6">
+                <div className="grid grid-cols-2 md:grid-cols-6 gap-12">
                     {sections.map((section) => (
                         <div key={section.title}>
                             <h3 className="text-sm font-semibold text-foreground">

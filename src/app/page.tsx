@@ -75,7 +75,6 @@ export default function LandingPage() {
         <div className="flex min-h-screen flex-col bg-background">
             <LandingHeader
                 navLinks={[
-                    { href: '#trades', label: 'Trades' },
                     { href: '#how-it-works', label: 'How It Works' },
                     { href: '#features', label: 'Features' },
                     { href: '#coverage', label: 'Coverage' },
@@ -119,7 +118,7 @@ export default function LandingPage() {
                 {/* Trust / Social Proof Bar */}
                 <section className="bg-muted/50 py-12">
                     <div className="mx-auto max-w-7xl px-4 sm:px-4 lg:px-6">
-                        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4 sm:grid-rows-2">
+                        <div className="grid grid-cols-2 gap-6 sm:grid-cols-4 sm:grid-rows-2">
                             {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
                                 <div
                                     key={i}
@@ -226,7 +225,7 @@ export default function LandingPage() {
                                 minim veniam, quis nostrud exercitation ullamco laboris.
                             </p>
                         </div>
-                        <div className="grid grid-cols-1 gap-4 lg:grid-cols-4 lg:grid-rows-3 lg:gap-4">
+                        <div className="grid grid-cols-1 gap-6 lg:grid-cols-4 lg:grid-rows-3 lg:gap-6">
                             {/* Large hero card - spans 2 cols, 2 rows on lg only */}
                             <div className="min-h-[200px] lg:col-span-2 lg:row-span-2 lg:min-h-0">
                                 <FeaturesChatPlaceholder

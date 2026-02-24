@@ -76,7 +76,7 @@ export default function ProLandingPage() {
                 {/* Contractors / Trust Bar */}
                 <section className="bg-muted/50 py-12">
                     <div className="mx-auto max-w-7xl px-4 sm:px-4 lg:px-6">
-                        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4 sm:grid-rows-2">
+                        <div className="grid grid-cols-2 gap-6 sm:grid-cols-4 sm:grid-rows-2">
                             {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
                                 <div
                                     key={i}

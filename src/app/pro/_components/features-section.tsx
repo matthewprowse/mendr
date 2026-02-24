@@ -49,7 +49,7 @@ export function FeaturesSection() {
                         veniam, quis nostrud exercitation ullamco laboris.
                     </p>
                 </div>
-                <div className="grid grid-cols-1 gap-4 lg:grid-cols-4 lg:grid-rows-3 lg:gap-4">
+                <div className="grid grid-cols-1 gap-6 lg:grid-cols-4 lg:grid-rows-3 lg:gap-6">
                     {/* Large hero card - spans 2 cols, 2 rows on lg only */}
                     <div className="min-h-[200px] lg:col-span-2 lg:row-span-2 lg:min-h-0">
                         <FeaturesChatPlaceholder
