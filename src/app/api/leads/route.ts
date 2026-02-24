@@ -10,10 +10,7 @@ export async function POST(req: NextRequest) {
         const { conversation_id, provider_place_id, provider_name, contact_type } = body;
 
         if (!contact_type || !VALID_TYPES.includes(contact_type)) {
-            return NextResponse.json(
-                { error: 'Invalid or missing contact_type' },
-                { status: 400 }
-            );
+            return NextResponse.json({ error: 'Invalid or missing contact_type' }, { status: 400 });
         }
 
         const { error } = await supabase.from('leads').insert({

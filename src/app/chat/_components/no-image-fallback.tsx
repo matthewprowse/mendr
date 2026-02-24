@@ -24,11 +24,14 @@ export function NoImageFallback({
     return (
         <div className="flex flex-1 flex-col items-center justify-center gap-6 px-4 py-12">
             <h2 className="text-lg font-semibold text-foreground">
-                {diagnosis?.diagnosis ? 'Add an image to continue' : 'Upload an image to get started'}
+                {diagnosis?.diagnosis
+                    ? 'Add an image to continue'
+                    : 'Upload an image to get started'}
             </h2>
             {diagnosis?.diagnosis && (
                 <p className="text-sm text-muted-foreground text-center max-w-md">
-                    Your diagnosis: {diagnosis.diagnosis}. Upload a new or additional image to continue the conversation.
+                    Your diagnosis: {diagnosis.diagnosis}. Upload a new or additional image to
+                    continue the conversation.
                 </p>
             )}
             <input

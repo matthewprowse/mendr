@@ -3,10 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 export async function GET(req: NextRequest) {
     const apiKey = process.env.GOOGLE_PLACES_API_KEY;
     if (!apiKey) {
-        return NextResponse.json(
-            { error: 'Directions API not configured' },
-            { status: 500 }
-        );
+        return NextResponse.json({ error: 'Directions API not configured' }, { status: 500 });
     }
 
     const { searchParams } = new URL(req.url);
@@ -14,10 +11,7 @@ export async function GET(req: NextRequest) {
     const destination = searchParams.get('destination');
 
     if (!origin || !destination) {
-        return NextResponse.json(
-            { error: 'origin and destination are required' },
-            { status: 400 }
-        );
+        return NextResponse.json({ error: 'origin and destination are required' }, { status: 400 });
     }
 
     try {
@@ -53,9 +47,6 @@ export async function GET(req: NextRequest) {
         });
     } catch (e: any) {
         console.error('Directions API error:', e);
-        return NextResponse.json(
-            { error: e?.message || 'Internal error' },
-            { status: 500 }
-        );
+        return NextResponse.json({ error: e?.message || 'Internal error' }, { status: 500 });
     }
 }

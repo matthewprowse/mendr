@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS cached_providers (
 ALTER TABLE cached_providers ALTER COLUMN services TYPE JSONB USING to_jsonb(services);
 
 -- 2. Conversations
+-- diagnosis_json: cached snapshot of latest diagnosis (denormalized for quick access). Source of truth: diagnoses table.
 CREATE TABLE IF NOT EXISTS conversations (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     title TEXT DEFAULT 'New Diagnosis',
@@ -71,14 +72,49 @@ CREATE TABLE IF NOT EXISTS messages (
 );
 
 -- IDEMPOTENT UPDATES: Ensure all columns exist for messages
+-- diagnosis_json, providers_json: cached per message (denormalized). Source of truth for diagnosis: diagnoses table.
 ALTER TABLE messages ADD COLUMN IF NOT EXISTS feedback TEXT CHECK (feedback IN ('up', 'down'));
 ALTER TABLE messages ADD COLUMN IF NOT EXISTS attachments TEXT[];
 ALTER TABLE messages ADD COLUMN IF NOT EXISTS has_updated_diagnosis BOOLEAN DEFAULT FALSE;
 ALTER TABLE messages ADD COLUMN IF NOT EXISTS diagnosis_json JSONB;
 ALTER TABLE messages ADD COLUMN IF NOT EXISTS providers_json JSONB;
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS emerging_providers_json JSONB;
 
 -- Indexes for performance
 CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(conversation_id);
+
+-- 3b. Diagnoses (source of truth; one per diagnosis event; conversation 1→many diagnoses)
+-- Single owning FK: diagnosis belongs to message via message_id (no redundant messages.diagnosis_id).
+CREATE TABLE IF NOT EXISTS diagnoses (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    conversation_id UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+    message_id UUID REFERENCES messages(id) ON DELETE SET NULL,
+    diagnosis_json JSONB NOT NULL,
+    trade TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_diagnoses_conversation ON diagnoses(conversation_id);
+CREATE INDEX IF NOT EXISTS idx_diagnoses_message ON diagnoses(message_id);
+CREATE INDEX IF NOT EXISTS idx_diagnoses_created ON diagnoses(created_at);
+
+-- 3c. Scandio Reports = shareable diagnosis report document
+-- Links to one diagnosis. Conversation can have multiple reports. Denormalized conversation_id for query performance.
+CREATE TABLE IF NOT EXISTS scandio_reports (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    conversation_id UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+    diagnosis_id UUID NOT NULL REFERENCES diagnoses(id) ON DELETE CASCADE,
+    title TEXT,
+    share_token TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_scandio_reports_conversation ON scandio_reports(conversation_id);
+CREATE INDEX IF NOT EXISTS idx_scandio_reports_diagnosis ON scandio_reports(diagnosis_id);
+
+ALTER TABLE scandio_reports ADD COLUMN IF NOT EXISTS title TEXT;
+ALTER TABLE scandio_reports ADD COLUMN IF NOT EXISTS share_token TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_scandio_reports_share_token ON scandio_reports(share_token) WHERE share_token IS NOT NULL;
 
 -- 4. Leads (track contact clicks)
 CREATE TABLE IF NOT EXISTS leads (
@@ -97,7 +133,7 @@ CREATE INDEX IF NOT EXISTS idx_leads_created ON leads(created_at);
 ALTER TABLE conversations ADD COLUMN IF NOT EXISTS locked BOOLEAN DEFAULT FALSE;
 ALTER TABLE conversations ADD COLUMN IF NOT EXISTS locked_at TIMESTAMPTZ;
 
--- 5. Provider Signups (Scandio coming soon - service providers register interest)
+-- 5. Provider Signups (Scandio coming soon - service providers join network)
 CREATE TABLE IF NOT EXISTS provider_signups (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     company_name TEXT NOT NULL,

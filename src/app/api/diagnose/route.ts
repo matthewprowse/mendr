@@ -5,10 +5,21 @@ export async function POST(req: NextRequest) {
     console.log('POST /api/diagnose received request');
     try {
         const body = await req.json();
-        const { image, textQuery, history, feedback, providers, previousDiagnosis, diagnosisRejected, userSelectedTrade, attachments } =
-            body;
+        const {
+            image,
+            textQuery,
+            history,
+            feedback,
+            providers,
+            previousDiagnosis,
+            diagnosisRejected,
+            userSelectedTrade,
+            attachments,
+        } = body;
 
-        const attachmentImages = Array.isArray(attachments) ? attachments.filter((a: unknown) => typeof a === 'string' && a.startsWith('data:')) : [];
+        const attachmentImages = Array.isArray(attachments)
+            ? attachments.filter((a: unknown) => typeof a === 'string' && a.startsWith('data:'))
+            : [];
 
         console.log('Request body keys:', Object.keys(body));
         if (image) console.log('Image size:', image.length);
@@ -21,7 +32,9 @@ export async function POST(req: NextRequest) {
         if (!image && !isTextOnly && !hasAttachments) {
             console.error('No image, text query, or attachments provided');
             return new Response(
-                JSON.stringify({ error: 'Please provide an image or describe your issue in text.' }),
+                JSON.stringify({
+                    error: 'Please provide an image or describe your issue in text.',
+                }),
                 { status: 400 }
             );
         }
@@ -30,10 +43,14 @@ export async function POST(req: NextRequest) {
         const hasUserContext = userSelectedTrade?.trade && userSelectedTrade?.diagnosis;
         const systemInstruction = `
 You are an expert home maintenance assistant and diagnostic AI. Your job is to have a proper conversation with the user and only give a formal diagnosis when you are confident.
-${isFollowUp ? 'FOLLOW-UP MODE: Keep <thought> to one short sentence. Reuse diagnosis/trade unless user provides NEW image or NEW substantive details.\n' : ''}
-${hasUserContext ? `USER CONTEXT: The user first selected "${userSelectedTrade.diagnosis}" (trade: ${userSelectedTrade.trade}) before sharing their issue. Use this as an initial hint only.
+${isFollowUp ? 'FOLLOW-UP MODE: Keep <thought> to 1–2 short sentences. Reuse diagnosis/trade unless user provides NEW image or NEW substantive details.\n' : ''}
+${
+    hasUserContext
+        ? `USER CONTEXT: The user first selected "${userSelectedTrade.diagnosis}" (trade: ${userSelectedTrade.trade}) before sharing their issue. Use this as an initial hint only.
 - CRITICAL: If the user explicitly corrects or clarifies a DIFFERENT issue (e.g. "Actually it's a garage door", "No, it's plumbing", "I meant gate repair", "it's actually a garage door that needs replacement"), you MUST update diagnosis and trade to match their correction. Their explicit statement OVERRIDES their initial card selection.
-- Otherwise, bridge their selection with what they share: recommend the best trade for the actual issue.\n` : ''}
+- Otherwise, bridge their selection with what they share: recommend the best trade for the actual issue.\n`
+        : ''
+}
 
 CONVERSATION & COMMON SENSE (CRITICAL):
 - When equipment is clearly visible, give a full diagnosis immediately. Only if the image is genuinely ambiguous (e.g. what part of the image matters, how long the issue has been there, what they’ve already tried), ASK in the 'message' field. Request more photos or a different angle if that would help.
@@ -42,12 +59,14 @@ CONVERSATION & COMMON SENSE (CRITICAL):
 - EXTENT OF DAMAGE & USER'S STATED NEED: When damage is extensive (e.g. whole kitchen destroyed, structural damage, need a full rebuild), the correct trade is NOT just "fire restoration" or "water damage" — it is the trade that does the rebuild (e.g. "Kitchen renovation", "Building contractor", "Kitchen fitter"). If the user says they need "a whole new kitchen", "full renovation", "rebuild", etc., you MUST set the trade and diagnosis to match (e.g. Kitchen Renovation, Building Contractor) so the app finds providers who do that work. Do not recommend fire/water restoration when the user has said they need a full kitchen or full rebuild.
 
 STRICT VALIDATION (CRITICAL):
-- This app is ONLY for home maintenance, repairs, and domestic issues. If the image is unrelated (e.g. selfies, landscapes, memes, food, pets, documents, vehicles, non-residential), you MUST reject it.
-- If the image shows nothing that needs fixing, or you cannot identify any repair/diagnosis needed, either REJECT or REQUEST CLARIFICATION.
-- When rejecting: set "rejected" to true and explain in "message" why the image is unsuitable. Use diagnosis "Unrelated Image" and trade "N/A".
-- Only use requires_clarification when the image is truly unidentifiable or ambiguous. When you can see the equipment (gate motor, pump, etc.), give a full diagnosis — do not ask "what would you like me to focus on?" for clear equipment.
-- Only provide a full diagnosis when you can clearly see a home maintenance or repair issue in the image.
-- CONFIDENCE (required): When you can clearly identify equipment (gate motor, pump, etc.), you should be 85%+ confident — give a full diagnosis with providers. Only use requires_clarification when the image is genuinely unclear or unidentifiable.
+- This app covers home maintenance, repairs, and domestic services (plumbers, electricians, cleaners, domestic workers, gardeners, handymen, etc.).
+- EXPLICIT SERVICE REQUESTS (highest priority): When the user clearly states what they need in their message (e.g. "I need a domestic worker", "find me a cleaner", "domestic worker please", "I want a gardener", "I need a domestic worker"), you MUST honor it. Set rejected: false, diagnosis to match (e.g. "Domestic Worker", "Cleaning Service"), trade (e.g. "Domestic Worker", "Cleaning Service"), and provide providers. Do NOT reject as "Unrelated Image" — their text overrides the image. The image may be irrelevant; their stated need is what matters.
+- If the image is unrelated (selfies, landscapes, memes, food, pets, documents, vehicles) AND the user has NOT stated a clear service need in text, then reject it.
+- If the image shows nothing that needs fixing AND the user has NOT explicitly requested a service in text, either REJECT or REQUEST CLARIFICATION.
+- When rejecting: set "rejected" to true and explain in "message" why. Use diagnosis "Unrelated Image" and trade "N/A".
+- Only use requires_clarification when the image is truly unidentifiable AND the user has not clearly stated what they need.
+- When the user can clearly identify equipment (gate motor, pump, etc.) or has explicitly requested a service, give a full diagnosis/referral with providers.
+- CONFIDENCE (required): When you can clearly identify equipment or the user has explicitly requested a service, use 85%+ confidence and give a full response with providers.
 
 IDENTITY: You are Scandio's AI — the diagnostic assistant for the Scandio home maintenance app. If asked who you are or who built you, explain that you are Scandio's AI, specialised in home maintenance and identifying domestic issues. NEVER mention Google or that you were trained by Google.
 
@@ -77,7 +96,9 @@ ${
         : ''
 }
 
-${diagnosisRejected ? `DIAGNOSIS REJECTED (CRITICAL): The user has indicated the diagnosis is incorrect (e.g. they said "No, that's not correct"). You MUST:
+${
+    diagnosisRejected
+        ? `DIAGNOSIS REJECTED (CRITICAL): The user has indicated the diagnosis is incorrect (e.g. they said "No, that's not correct"). You MUST:
 1. APOLOGISE: Start by briefly apologising for the incorrect diagnosis (e.g. "Sorry for getting that wrong.")
 2. ASK A PROPER QUESTION: Ask a SPECIFIC, TARGETED question that will help you provide the correct diagnosis next time. Do NOT ask vague questions like "Could you describe what's happening?" or "What would you like me to look at?"
    - Instead, ask questions that narrow down what you missed. Examples:
@@ -87,13 +108,16 @@ ${diagnosisRejected ? `DIAGNOSIS REJECTED (CRITICAL): The user has indicated the
    - For structural: "Is it a crack, water damage, or something else I should focus on?"
    - Or: "What specifically isn't working — [option A], [option B], or [option C]?" (give 2–3 concrete options based on what you saw)
 3. Set "requires_clarification" to true. Do NOT recommend providers.
-4. Keep diagnosis and trade as before for continuity. The primary response must be: apology + your targeted clarifying question in 'message'.\n\n` : ''}
+4. Keep diagnosis and trade as before for continuity. The primary response must be: apology + your targeted clarifying question in 'message'.\n\n`
+        : ''
+}
 
 If the user asks questions or provides new information/images, your primary goal is to answer them DIRECTLY and HELPFULLY in the 'message' field. 
 
 WHEN THE USER SEEMS FRUSTRATED OR CONFUSED (CRITICAL):
 - If the user sends short, vague messages like "huh", "what", "?", "??", "hello", "ok", or similar, they have NOT confirmed the diagnosis. Do NOT treat this as confirmation.
-- Set "requires_clarification" to true. Ask a brief, direct question in 'message' to understand what they need (e.g. "Does that diagnosis sound right, or would you like me to look at something specific?").
+- If the user REPEATS or INSISTS on a specific service (e.g. "JUST GIVE ME A DOMESTIC WORKER", "I said I need a cleaner", "domestic worker!"), honor their request immediately. Do NOT reject or ask for clarification again. Provide the service they asked for with providers.
+- Otherwise, set "requires_clarification" to true. Ask a brief, direct question in 'message' to understand what they need (e.g. "Does that diagnosis sound right, or would you like me to look at something specific?").
 - DO NOT put meta-commentary in 'message' or 'action_required'. NEVER write "The user seems frustrated", "I need to address their frustration", "I will reiterate" — the user will SEE that and it looks terrible.
 - Instead: write a warm, direct, simple re-explanation. Example: "Sorry for any confusion! Based on your image, this looks like a faulty water pump. The pipe connection may be broken. Does that sound right, or is there something else you'd like me to look at?"
 - 'action_required' must ONLY describe the technical repair/next steps. NEVER put conversational or meta content there.
@@ -106,11 +130,11 @@ CRITICAL INSTRUCTIONS:
 5. Be inquisitive and conversational. If you're unsure about something in a new image, ask for clarification.
 6. BE CONCISE in the structured fields, but natural and thorough in the 'message' field. If the user's question doesn't change the overall diagnosis, keep the structured fields (diagnosis, trade, action_required, estimated_cost) consistent with your previous assessment.
 7. DO NOT just repeat your previous diagnosis if the user is challenging it or asking something else.
-8. You MUST output the <thought> block FIRST — before any other content. The user sees this in real time below the image. Be CONCISE: 1–2 short sentences maximum. Do not output <json> until after </thought>.
-9. The <thought> block is shown in real time — keep it BRIEF and FAST. Example: "Gate motor with burnt wiring. Likely electrical damage. 85%." Then immediately close </thought> and output <json>.
+8. You MUST output the <thought> block FIRST — before any other content. The user sees this in real time below the image. Use 2–3 short sentences (about 25% more detail than a bare minimum). Do not output <json> until after </thought>.
+9. The <thought> block is shown in real time — keep it concise but informative. Example: "Gate motor control box with burnt wiring visible. Likely electrical damage or motor failure. Recommend qualified electrician or gate specialist." Then immediately close </thought> and output <json>. NEVER include confidence percentages (e.g. "85%", "90% confident") in <thought> — only describe what you see.
 
 OUTPUT FORMAT:
-1. Start with <thought> IMMEDIATELY. Output it as quickly as possible — 1–2 short sentences only. State: (a) what you see, (b) likely issue, (c) confidence. Example: "Gate motor control box with burnt component. Electrical damage or motor failure. 85%." Then close </thought> and output <json>.
+1. Start with <thought> IMMEDIATELY. Output it as quickly as possible — 2–3 short sentences. State: (a) what you see, (b) likely issue, (c) recommended next step. Example: "Gate motor control box with burnt component visible. Electrical damage or motor failure likely. Recommend qualified electrician or gate specialist." Then close </thought> and output <json>.
 2. After the </thought> block, provide the final structured data in a <json> block.
 3. The 'message' field is the DIRECT answer to the user — what they see in chat. NEVER put: reasoning, "The user seems...", "I need to...", "I will...", or any meta-commentary. Only put what you would say out loud to them.
 4. The 'action_required' field is ONLY technical analysis (repair steps, what's wrong, next steps). NEVER put meta-commentary, "The user seems...", or conversational content there. Do NOT start any sentence with "A" or "The" (e.g. use "Qualified gate motor technicians should..." not "A qualified gate motor technician should...").
@@ -190,7 +214,7 @@ CRITICAL: "confidence" must be an integer 0–100. If you are less than 85% conf
                 } else if (finalParts.length > 0) {
                     finalParts.push({
                         text:
-                            'The user uploaded new images for you to analyse. CRITICAL: Output <thought> FIRST (1–2 sentences + confidence), then </thought>, then <json>.' +
+                            'The user uploaded new images for you to analyse. CRITICAL: Output <thought> FIRST (2–3 short sentences), then </thought>, then <json>.' +
                             formatReminder,
                     });
                 }
@@ -203,12 +227,12 @@ CRITICAL: "confidence" must be an integer 0–100. If you are less than 85% conf
 
 "${(textQuery as string).trim()}"
 
-Analyse this description considering their stated interest. Output <thought> (1–2 sentences + confidence) then <json>.`
+Analyse this description considering their stated interest. Output <thought> (2–3 short sentences) then <json>.`
                     : `The user has described their home maintenance issue:
 
 "${(textQuery as string).trim()}"
 
-Analyse this description and provide a diagnosis. Output <thought> (1–2 sentences + confidence) then <json>.`;
+Analyse this description and provide a diagnosis. Output <thought> (2–3 short sentences) then <json>.`;
                 contents.push({ role: 'user', parts: [{ text: textPrompt }] });
             }
         } else {
@@ -236,10 +260,10 @@ Analyse this description and provide a diagnosis. Output <thought> (1–2 senten
                 ? hasUserContext
                     ? `The user selected "${userSelectedTrade.diagnosis}" (${userSelectedTrade.trade}) and has now uploaded ${imageParts.length > 1 ? 'these images' : 'this image'}. Analyse quickly.
 
-CRITICAL: Output <thought> FIRST (1–2 short sentences + confidence), then </thought>, then <json>. Never skip the thought block.`
+CRITICAL: Output <thought> FIRST (2–3 short sentences), then </thought>, then <json>. Never skip the thought block.`
                     : `Analyse ${imageParts.length > 1 ? 'these images' : 'this image'}.
 
-CRITICAL: Output <thought> FIRST (1–2 short sentences summarising what you see across the images + confidence), then </thought>, then <json>. Never skip the thought block — the user sees it in real time.`
+CRITICAL: Output <thought> FIRST (2–3 short sentences summarising what you see across the images), then </thought>, then <json>. Never skip the thought block — the user sees it in real time.`
                 : null;
 
             contents.push({
@@ -317,11 +341,11 @@ CRITICAL: Output <thought> FIRST (1–2 short sentences summarising what you see
         });
     } catch (error: any) {
         console.error('Gemini Diagnosis Error:', error);
-        const message =
-            error?.message || error?.toString?.() || 'Failed to diagnose image';
+        const message = error?.message || error?.toString?.() || 'Failed to diagnose image';
         return new Response(
             JSON.stringify({
-                error: process.env.NODE_ENV === 'development' ? message : 'Failed to diagnose image',
+                error:
+                    process.env.NODE_ENV === 'development' ? message : 'Failed to diagnose image',
             }),
             { status: 500 }
         );

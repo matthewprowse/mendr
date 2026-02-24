@@ -28,13 +28,19 @@ function RevealText({ text }: { text: string }) {
 
     const visible = words.slice(0, visibleCount).join(' ');
     const trailingSpace = visibleCount > 0 && visibleCount < words.length ? ' ' : '';
-    return <>{visible}{trailingSpace}</>;
+    return (
+        <>
+            {visible}
+            {trailingSpace}
+        </>
+    );
 }
 
 export function DiagnosisResponseCard({
     conversationId,
     diagnosis,
     providers,
+    emergingProviders = [],
     isLoadingProviders,
     userLocation,
     onRequestLocation,
@@ -49,6 +55,7 @@ export function DiagnosisResponseCard({
     conversationId?: string;
     diagnosis: DiagnosisData;
     providers: Provider[];
+    emergingProviders?: Provider[];
     isLoadingProviders: boolean;
     userLocation: { lat: number; lng: number; address?: string } | null;
     onRequestLocation: (trade?: string) => void;
@@ -106,7 +113,6 @@ export function DiagnosisResponseCard({
 
     return (
         <div className="w-full">
-
             {diagnosis.diagnosis && !diagnosis.requires_clarification && (
                 <>
                     <div className="space-y-4">
@@ -120,21 +126,24 @@ export function DiagnosisResponseCard({
                             </p>
                         )}
                     </div>
-                    {canShowProviders && diagnosisConfirmed === null && onConfirmYes && onConfirmNo && (
-                        <div className="flex flex-row items-center gap-4 mt-4">
-                            <p className="flex-1 text-sm text-muted-foreground">
-                                Does this diagnosis sound correct?
-                            </p>
-                            <div className="flex-1 flex flex-row gap-3">
-                                <Button variant="default" size="sm" onClick={onConfirmYes}>
-                                    Yes
-                                </Button>
-                                <Button variant="outline" size="sm" onClick={onConfirmNo}>
-                                    No
-                                </Button>
+                    {canShowProviders &&
+                        diagnosisConfirmed === null &&
+                        onConfirmYes &&
+                        onConfirmNo && (
+                            <div className="flex flex-row items-center gap-4 mt-4">
+                                <p className="flex-1 text-sm text-muted-foreground">
+                                    Does this diagnosis sound correct?
+                                </p>
+                                <div className="flex-1 flex flex-row gap-3">
+                                    <Button variant="default" size="sm" onClick={onConfirmYes}>
+                                        Yes
+                                    </Button>
+                                    <Button variant="outline" size="sm" onClick={onConfirmNo}>
+                                        No
+                                    </Button>
+                                </div>
                             </div>
-                        </div>
-                    )}
+                        )}
                 </>
             )}
 
@@ -142,19 +151,25 @@ export function DiagnosisResponseCard({
                 <div className="mt-8 flex flex-col gap-4">
                     <Separator className="w-full mb-3" />
                     <div>
-                        <h4 className="text-lg font-semibold text-foreground">Recommended Service Providers</h4>
+                        <h4 className="text-lg font-semibold text-foreground">
+                            Recommended Service Providers
+                        </h4>
                         <p className="text-sm text-muted-foreground mt-1 leading-relaxed">
-                            We’ve selected top-rated {trade?.toLowerCase() || 'service'} specialists near you based on reviews and distance.
-                            You can use your current location or search for a different address below.
+                            We’ve selected top-rated {trade?.toLowerCase() || 'service'} specialists
+                            near you based on reviews and distance. You can use your current
+                            location or search for a different address below.
                         </p>
                     </div>
                     <div className="flex flex-col gap-3 mb-2">
-                        {(hasLocation && userLocation?.address) ? (
+                        {hasLocation && userLocation?.address ? (
                             <div className="flex items-center justify-between gap-2">
                                 <span className="text-sm text-muted-foreground truncate min-w-0">
                                     {userLocation.address}
                                 </span>
-                                <Popover open={addressPopoverOpen} onOpenChange={setAddressPopoverOpen}>
+                                <Popover
+                                    open={addressPopoverOpen}
+                                    onOpenChange={setAddressPopoverOpen}
+                                >
                                     <PopoverTrigger asChild>
                                         <Button variant="outline" size="sm" className="shrink-0">
                                             Change Location
@@ -162,18 +177,24 @@ export function DiagnosisResponseCard({
                                     </PopoverTrigger>
                                     <PopoverContent className="w-96" align="start">
                                         <div className="flex flex-col gap-3">
-                                            <p className="text-sm font-medium">Search Address</p>
+                                            <p className="text-sm font-medium">
+                                                Search Address (Western Cape only)
+                                            </p>
                                             <Input
-                                                placeholder="Enter Address or Place"
+                                                placeholder="Enter address in Western Cape, South Africa"
                                                 value={addressQuery}
                                                 onChange={(e) => {
                                                     setAddressQuery(e.target.value);
                                                     setAddressError(null);
                                                 }}
-                                                onKeyDown={(e) => e.key === 'Enter' && handleAddressSearch()}
+                                                onKeyDown={(e) =>
+                                                    e.key === 'Enter' && handleAddressSearch()
+                                                }
                                             />
                                             {addressError && (
-                                                <p className="text-xs text-destructive">{addressError}</p>
+                                                <p className="text-xs text-destructive">
+                                                    {addressError}
+                                                </p>
                                             )}
                                             <Button
                                                 onClick={handleAddressSearch}
@@ -188,34 +209,48 @@ export function DiagnosisResponseCard({
                         ) : (
                             <div className="flex flex-col items-start gap-2">
                                 <p className="text-sm text-muted-foreground">
-                                    Use your current location or search for an address to find providers nearby.
+                                    Use your current location or search for an address to find
+                                    providers nearby.
                                 </p>
                                 <div className="flex flex-wrap items-center gap-2">
-                                    <Button onClick={() => onRequestLocation(trade)}>Use my location</Button>
-                                    <Popover open={addressPopoverOpen} onOpenChange={setAddressPopoverOpen}>
+                                    <Button onClick={() => onRequestLocation(trade)}>
+                                        Use my location
+                                    </Button>
+                                    <Popover
+                                        open={addressPopoverOpen}
+                                        onOpenChange={setAddressPopoverOpen}
+                                    >
                                         <PopoverTrigger asChild>
                                             <Button variant="outline">Search address</Button>
                                         </PopoverTrigger>
                                         <PopoverContent className="w-80" align="start">
                                             <div className="flex flex-col gap-3">
-                                                <p className="text-sm font-medium">Search Address</p>
+                                                <p className="text-sm font-medium">
+                                                    Search Address (Western Cape only)
+                                                </p>
                                                 <Input
-                                                    placeholder="Enter Address or Place"
+                                                    placeholder="Enter address in Western Cape, South Africa"
                                                     value={addressQuery}
                                                     onChange={(e) => {
                                                         setAddressQuery(e.target.value);
                                                         setAddressError(null);
                                                     }}
-                                                    onKeyDown={(e) => e.key === 'Enter' && handleAddressSearch()}
+                                                    onKeyDown={(e) =>
+                                                        e.key === 'Enter' && handleAddressSearch()
+                                                    }
                                                     className="rounded-lg"
                                                 />
                                                 {addressError && (
-                                                    <p className="text-xs text-destructive">{addressError}</p>
+                                                    <p className="text-xs text-destructive">
+                                                        {addressError}
+                                                    </p>
                                                 )}
                                                 <Button
                                                     size="sm"
                                                     onClick={handleAddressSearch}
-                                                    disabled={addressSearching || !addressQuery.trim()}
+                                                    disabled={
+                                                        addressSearching || !addressQuery.trim()
+                                                    }
                                                 >
                                                     {addressSearching ? 'Searching…' : 'Search'}
                                                 </Button>
@@ -229,8 +264,10 @@ export function DiagnosisResponseCard({
                     {hasLocation &&
                         (isLoadingProviders ? (
                             <ProvidersSkeleton />
-                        ) : providers.length === 0 ? (
-                            <p className="text-sm text-muted-foreground py-2">No providers found in your area.</p>
+                        ) : providers.length === 0 && emergingProviders.length === 0 ? (
+                            <p className="text-sm text-muted-foreground py-2">
+                                No providers found in your area.
+                            </p>
                         ) : (
                             <div className="flex flex-col gap-6">
                                 {(() => {
@@ -245,7 +282,9 @@ export function DiagnosisResponseCard({
                                                     </h4>
                                                     {favourite.favouriteReason && (
                                                         <p className="text-sm text-muted-foreground leading-relaxed">
-                                                            {sanitizeAiContent(favourite.favouriteReason)}
+                                                            {sanitizeAiContent(
+                                                                favourite.favouriteReason
+                                                            )}
                                                         </p>
                                                     )}
                                                     <ProviderCard
@@ -263,7 +302,7 @@ export function DiagnosisResponseCard({
                                             {others.length > 0 && (
                                                 <>
                                                     <h4 className="text-base font-semibold text-foreground">
-                                                        More options
+                                                        Other Recommended Providers
                                                     </h4>
                                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                                         {others.map((p, i) => (
@@ -282,15 +321,44 @@ export function DiagnosisResponseCard({
                                                     </div>
                                                 </>
                                             )}
+                                            {emergingProviders.length > 0 && (
+                                                <>
+                                                    <Separator className="w-full" />
+                                                    <h4 className="text-base font-semibold text-foreground">
+                                                        Emerging Providers
+                                                    </h4>
+                                                    <p className="text-sm text-muted-foreground leading-relaxed">
+                                                        Good reviews but fewer of them — newer
+                                                        businesses worth considering.
+                                                    </p>
+                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                                        {emergingProviders.map((p, i) => (
+                                                            <ProviderCard
+                                                                key={i}
+                                                                provider={p}
+                                                                index={providers.length + i}
+                                                                diagnosis={diagnosis}
+                                                                conversationId={conversationId}
+                                                                openPopoverId={openPopoverId}
+                                                                setOpenPopoverId={setOpenPopoverId}
+                                                                trade={trade}
+                                                                userLocation={userLocation}
+                                                            />
+                                                        ))}
+                                                    </div>
+                                                </>
+                                            )}
                                         </>
                                     );
                                 })()}
                             </div>
                         ))}
-                    {hasLocation && providers.length > 0 && (
+                    {hasLocation && (providers.length > 0 || emergingProviders.length > 0) && (
                         <div className="mt-6 pt-4 border-t border-border">
                             <p className="text-sm text-muted-foreground leading-relaxed">
-                                Was this diagnosis accurate? Additional photos or details help us create a clearer report for your chosen provider and can speed up the job.
+                                Was this diagnosis accurate? Additional photos or details help us
+                                create a clearer report for your chosen provider and can speed up
+                                the job.
                             </p>
                         </div>
                     )}

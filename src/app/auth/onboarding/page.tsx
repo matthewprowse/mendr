@@ -98,7 +98,9 @@ export default function OnboardingPage() {
             <main className="flex flex-1 flex-col items-center justify-center px-4 py-12 sm:px-6 lg:px-8">
                 <div className="w-full max-w-sm space-y-6">
                     <div className="space-y-2 text-center">
-                        <h1 className="text-2xl font-semibold tracking-tight">Complete your profile</h1>
+                        <h1 className="text-2xl font-semibold tracking-tight">
+                            Complete your profile
+                        </h1>
                         <p className="text-sm text-muted-foreground">
                             Tell us a bit about yourself.
                         </p>
@@ -149,9 +151,7 @@ export default function OnboardingPage() {
                         </Button>
                     </form>
 
-                    {error && (
-                        <p className="text-center text-sm text-destructive">{error}</p>
-                    )}
+                    {error && <p className="text-center text-sm text-destructive">{error}</p>}
                 </div>
             </main>
         </div>

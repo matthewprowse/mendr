@@ -39,6 +39,8 @@ const dummyFrom = (table: string) => {
         eq: () => chain,
         order: () => Promise.resolve(emptyResult),
         in: () => Promise.resolve(emptyResult),
+        maybeSingle: () => Promise.resolve(emptySingle),
+        single: () => Promise.resolve(emptySingle),
         then: (resolve: (v: any) => void) => resolve(emptyResult),
         catch: (fn: (e: any) => void) => chain,
     };

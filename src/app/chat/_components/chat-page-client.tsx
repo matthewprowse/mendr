@@ -40,7 +40,9 @@ export function ChatPageClient({ conversationId }: ChatPageClientProps) {
     const [hasStartedDiagnosis, setHasStartedDiagnosis] = useState(false);
     const diagnosisStartedRef = useRef(false);
     const [isResponding, setIsResponding] = useState(false);
-    const [isLoadingProvidersForMessage, setIsLoadingProvidersForMessage] = useState<number | null>(null);
+    const [isLoadingProvidersForMessage, setIsLoadingProvidersForMessage] = useState<number | null>(
+        null
+    );
     const [isUploading, setIsUploading] = useState(false);
     const [userLocation, setUserLocation] = useState<{
         lat: number;
@@ -58,6 +60,7 @@ export function ChatPageClient({ conversationId }: ChatPageClientProps) {
         trade: string;
         diagnosis: string;
         providers: Provider[];
+        emergingProviders?: Provider[];
     } | null>(null);
     const [isLoadingDirectProviders, setIsLoadingDirectProviders] = useState(false);
     const [footerHeight, setFooterHeight] = useState(104);
@@ -166,10 +169,12 @@ export function ChatPageClient({ conversationId }: ChatPageClientProps) {
                         hasUpdatedDiagnosis: m.has_updated_diagnosis,
                         diagnosis: m.diagnosis_json ?? undefined,
                         providers: m.providers_json ?? undefined,
+                        emergingProviders: m.emerging_providers_json ?? undefined,
                     }));
                     setMessages(mappedMsgs);
-                    return mappedMsgs;
+                    return { msgs: mappedMsgs, loadedConvWithImage: !!conv?.image_url };
                 }
+                return { msgs: null, loadedConvWithImage: !!conv?.image_url };
             } catch (err) {
                 if (!getCancelled?.()) {
                     console.error('Failed to load conversation:', err);
@@ -237,13 +242,12 @@ export function ChatPageClient({ conversationId }: ChatPageClientProps) {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, []);
 
-
     useEffect(() => {
         scrollToBottom();
     }, [messages, scrollToBottom]);
 
     const updateMessageProviders = useCallback(
-        async (messageIndex: number, providers: Provider[]) => {
+        async (messageIndex: number, providers: Provider[], emergingProviders?: Provider[]) => {
             if (!id) return;
             try {
                 const { data: all } = await (supabase as any)
@@ -253,10 +257,17 @@ export function ChatPageClient({ conversationId }: ChatPageClientProps) {
                     .order('created_at', { ascending: true });
                 const targetId = all?.[messageIndex]?.id;
                 if (targetId) {
-                    await (supabase as any).from('messages').update({ providers_json: providers }).eq('id', targetId);
+                    await (supabase as any)
+                        .from('messages')
+                        .update({
+                            providers_json: providers,
+                            emerging_providers_json: emergingProviders ?? null,
+                        })
+                        .eq('id', targetId);
                 }
             } catch (e) {
-                if (process.env.NODE_ENV === 'development') console.warn('[Supabase] updateMessageProviders:', e);
+                if (process.env.NODE_ENV === 'development')
+                    console.warn('[Supabase] updateMessageProviders:', e);
             }
         },
         [id]
@@ -279,59 +290,73 @@ export function ChatPageClient({ conversationId }: ChatPageClientProps) {
                         .eq('id', targetId);
                 }
             } catch (e) {
-                if (process.env.NODE_ENV === 'development') console.warn('[Supabase] updateMessageContent:', e);
+                if (process.env.NODE_ENV === 'development')
+                    console.warn('[Supabase] updateMessageContent:', e);
             }
         },
         [id]
     );
 
     const fetchProvidersForMessage = useCallback(
-        async (messageIndex: number, trade: string, lat: number, lng: number, msgContent: string, hasUpdatedDiag: boolean, diag: DiagnosisData) => {
+        async (
+            messageIndex: number,
+            trade: string,
+            lat: number,
+            lng: number,
+            msgContent: string,
+            hasUpdatedDiag: boolean,
+            diag: DiagnosisData,
+            opts?: { pageToken?: string; searchQuery?: string }
+        ) => {
             const validCoords =
-                typeof lat === 'number' &&
-                typeof lng === 'number' &&
-                !isNaN(lat) &&
-                !isNaN(lng);
+                typeof lat === 'number' && typeof lng === 'number' && !isNaN(lat) && !isNaN(lng);
             if (!trade || trade === 'N/A' || !validCoords) return;
+            if (opts?.pageToken && !opts?.searchQuery) {
+                console.warn('searchQuery required when using pageToken');
+                return;
+            }
 
             setIsLoadingProvidersForMessage(messageIndex);
             try {
+                const body: Record<string, unknown> = { lat, lng, trade };
+                if (opts?.pageToken) body.pageToken = opts.pageToken;
+                if (opts?.searchQuery) body.searchQuery = opts.searchQuery;
+
                 const res = await fetch('/api/providers', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ lat, lng, trade }),
+                    body: JSON.stringify(body),
                 });
                 const data = await res.json();
                 if (res.ok && data.providers) {
-                    const withReviews = (data.providers as Provider[]).filter(
-                        (p: Provider) => (p.ratingCount ?? 0) > 0
-                    );
-                    const toUse = withReviews.length > 0 ? withReviews : (data.providers as Provider[]);
-                    const sorted = [...toUse].sort(
-                        (a: Provider, b: Provider) =>
-                            (b.rating ?? 0) - (a.rating ?? 0) ||
-                            (b.ratingCount ?? 0) - (a.ratingCount ?? 0)
-                    );
-                    const count = sorted.length;
-                    const take = Math.min(5, count); // 1 Scandio's Pick + 4 others
-                    const finalProviders = sorted.slice(0, take);
+                    const finalProviders = data.providers as Provider[];
+                    const finalEmerging = (data.emergingProviders ?? []) as Provider[];
 
                     setMessages((prev) => {
                         const next = [...prev];
                         const msg = next[messageIndex];
                         if (msg && msg.role === 'assistant') {
-                            next[messageIndex] = { ...msg, providers: finalProviders };
+                            next[messageIndex] = {
+                                ...msg,
+                                providers: finalProviders,
+                                emergingProviders: finalEmerging,
+                                providerNextPageToken: data.nextPageToken ?? null,
+                                providerSearchQuery:
+                                    data.searchQuery ?? msg.providerSearchQuery ?? trade,
+                            };
                         }
                         return next;
                     });
-                    updateMessageProviders(messageIndex, finalProviders);
+                    updateMessageProviders(messageIndex, finalProviders, finalEmerging);
                 } else {
                     console.error('API Error:', data.error || 'Unknown error');
-                    toast.error(data.error || 'Couldn\'t load providers. Try "Use my location" again.');
+                    toast.error(
+                        data.error || 'Couldn\'t load providers. Try "Use my location" again.'
+                    );
                 }
             } catch (err) {
                 console.error('Failed to fetch providers:', err);
-                toast.error('Couldn\'t load providers. Check your connection and try again.');
+                toast.error("Couldn't load providers. Check your connection and try again.");
             } finally {
                 setIsLoadingProvidersForMessage(null);
             }
@@ -353,24 +378,21 @@ export function ChatPageClient({ conversationId }: ChatPageClientProps) {
                 });
                 const data = await res.json();
                 if (res.ok && data.providers) {
-                    const withReviews = (data.providers as Provider[]).filter(
-                        (p: Provider) => (p.ratingCount ?? 0) > 0
-                    );
-                    const sorted = [...withReviews].sort(
-                        (a: Provider, b: Provider) =>
-                            (b.rating ?? 0) - (a.rating ?? 0) ||
-                            (b.ratingCount ?? 0) - (a.ratingCount ?? 0)
-                    );
-                    const count = sorted.length;
-                    const take = Math.min(5, count); // 1 Scandio's Pick + 4 others
-                    setDirectTradeResult({ trade, diagnosis, providers: sorted.slice(0, take) });
+                    const providers = data.providers as Provider[];
+                    const emergingProviders = (data.emergingProviders ?? []) as Provider[];
+                    setDirectTradeResult({ trade, diagnosis, providers, emergingProviders });
                     setDirectTradeSelection(null);
                 } else {
-                    setDirectTradeResult({ trade, diagnosis, providers: [] });
+                    setDirectTradeResult({
+                        trade,
+                        diagnosis,
+                        providers: [],
+                        emergingProviders: [],
+                    });
                     setDirectTradeSelection(null);
                 }
             } catch {
-                setDirectTradeResult({ trade, diagnosis, providers: [] });
+                setDirectTradeResult({ trade, diagnosis, providers: [], emergingProviders: [] });
                 setDirectTradeSelection(null);
             } finally {
                 setIsLoadingDirectProviders(false);
@@ -392,23 +414,30 @@ export function ChatPageClient({ conversationId }: ChatPageClientProps) {
                 diagnosis?: DiagnosisData;
             }
         ) => {
-            const geocodePromise = fetch('/api/geocode', {
+            const geocodeRes = await fetch('/api/geocode', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ lat, lng }),
-            })
-                .then((res) => res.json())
-                .catch(() => ({ address: 'Current Location' }));
+            });
+            const geoData = await geocodeRes.json();
 
             try {
-                const geoData = await geocodePromise;
+                if (!geocodeRes.ok) {
+                    toast.error(geoData.error || 'Location must be in Western Cape, South Africa');
+                    return;
+                }
                 const address = geoData.address || 'Current Location';
                 const loc = { lat, lng, address };
                 setUserLocation(loc);
                 saveConversation({ loc });
                 clearLocation();
                 if (opts?.directTrade) {
-                    fetchDirectProviders(opts.directTrade.trade, lat, lng, opts.directTrade.diagnosis);
+                    fetchDirectProviders(
+                        opts.directTrade.trade,
+                        lat,
+                        lng,
+                        opts.directTrade.diagnosis
+                    );
                 } else if (opts?.messageIndex != null && opts?.trade) {
                     const msg = messages[opts.messageIndex];
                     const msgContent = msg?.content ?? opts.msgContent ?? '';
@@ -427,32 +456,47 @@ export function ChatPageClient({ conversationId }: ChatPageClientProps) {
                 }
             } catch (e) {
                 console.error('Error getting location:', e);
-                setUserLocation({ lat, lng, address: 'Current Location' });
+                toast.error(
+                    'Could not verify location. Please try searching for an address in Western Cape.'
+                );
             }
         },
         [saveConversation, messages, fetchProvidersForMessage, fetchDirectProviders]
     );
 
-    const cleanThinkingText = useCallback((s: string) =>
-        s
-            .replace(/<\/?(?:thought|thought_process|thinking)>/gi, '')
-            .replace(/```(?:thought|thinking)/gi, '')
-            .replace(/\s*```(?:json)?\s*$/gi, '')
-            .replace(/^\s*```(?:json)?\s*/gi, '')
-            .replace(/```/g, '')
-            .replace(/[ \t]+/g, ' ')
-            .trim(), []);
+    const cleanThinkingText = useCallback(
+        (s: string) =>
+            s
+                .replace(/<\/?(?:thought|thought_process|thinking)>/gi, '')
+                .replace(/```(?:thought|thinking)/gi, '')
+                .replace(/\s*```(?:json)?\s*$/gi, '')
+                .replace(/^\s*```(?:json)?\s*/gi, '')
+                .replace(/```/g, '')
+                .replace(/[ \t]+/g, ' ')
+                .trim(),
+        []
+    );
 
-    /** Strip confidence from thinking for display only (e.g. "Confidence: 85%" or "I am 85% confident"). */
+    /** Strip confidence/percentage from thinking for display (e.g. "Confidence: 85%", "95%", "I am 85% confident"). */
     const thinkingForDisplay = useCallback((s: string | undefined) => {
         if (!s?.trim()) return s ?? '';
         return s
             .split(/\n/)
             .map((line) =>
                 line
+                    // Phrase patterns (confidence-related)
                     .replace(/\s*(?:Confidence|I am|I'm)\s*:?\s*\d+\s*%?\s*confident\.?\s*/gi, '')
-                    .replace(/\s*Confidence\s*:?\s*\d+\s*%?\s*\.?\s*$/gi, '')
-                    .replace(/\s*\(\d+\s*%\s*confident\)\s*$/gi, '')
+                    .replace(/\s*\d+\s*%\s*(?:confident|sure|certain|likely)\s*[.:]?\s*/gi, '')
+                    .replace(/\s*Confidence\s*:?\s*\d+\s*%?\s*\.?\s*/gi, '')
+                    .replace(/\s*\(\s*\d+\s*%\s*(?:confident)?\s*\)\s*/gi, '')
+                    // Standalone percentage at end of line
+                    .replace(/\s*[.,;:\s]+\d+\s*%\s*\.?\s*$/g, '')
+                    .replace(/\s*\d+\s*%\s*\.?\s*$/g, '')
+                    // Percentage at start of line
+                    .replace(/^\s*\d+\s*%\s*[.\-\s]*/g, '')
+                    // Inline "... 85%." or "... 85%,"
+                    .replace(/\s+\d+\s*%\s*[.,;]\s*/g, ' ')
+                    .replace(/\s*[.,]\s*\d+\s*%\s*/g, ' ')
                     .trim()
             )
             .filter((line) => line.length > 0)
@@ -463,13 +507,19 @@ export function ChatPageClient({ conversationId }: ChatPageClientProps) {
 
     /** Build chat message content, stripping any thought/reasoning the AI mistakenly put in the message field. */
     const buildAssistantContent = useCallback(
-        (parsedJson: { message?: string; diagnosis?: string; action_required?: string }, currentThinking: string) => {
+        (
+            parsedJson: { message?: string; diagnosis?: string; action_required?: string },
+            currentThinking: string
+        ) => {
             const fallback =
                 (parsedJson.diagnosis || '') + '\n\n' + (parsedJson.action_required || '');
             let content = parsedJson.message || fallback;
             const thought = (currentThinking || '').trim();
             if (thought.length > 15 && content.includes(thought)) {
-                content = content.replace(thought, '').replace(/\n{3,}/g, '\n\n').trim();
+                content = content
+                    .replace(thought, '')
+                    .replace(/\n{3,}/g, '\n\n')
+                    .trim();
             }
             return sanitizeAiContent(content || fallback);
         },
@@ -629,7 +679,9 @@ export function ChatPageClient({ conversationId }: ChatPageClientProps) {
 
                     if (done) {
                         if (!initialMessageAddedRef.current && !diagnosis?.diagnosis) {
-                            const finalJsonMatch = fullText.match(/<json>([\s\S]*?)(?:<\/json>|$)/i);
+                            const finalJsonMatch = fullText.match(
+                                /<json>([\s\S]*?)(?:<\/json>|$)/i
+                            );
                             if (finalJsonMatch) {
                                 await processJson(finalJsonMatch[1], currentThinking, true);
                             } else {
@@ -643,15 +695,23 @@ export function ChatPageClient({ conversationId }: ChatPageClientProps) {
                     }
 
                     // Extract partial thinking so it shows immediately as the model streams
-                    const thoughtOpen = fullText.search(/<(?:thought|thought_process|thinking)\s*>/i);
+                    const thoughtOpen = fullText.search(
+                        /<(?:thought|thought_process|thinking)\s*>/i
+                    );
                     if (thoughtOpen !== -1) {
-                        const afterOpen = fullText.slice(thoughtOpen).replace(/^<(?:thought|thought_process|thinking)\s*>/i, '');
-                        const endClose = afterOpen.search(/<\/(?:thought|thought_process|thinking)\s*>/i);
+                        const afterOpen = fullText
+                            .slice(thoughtOpen)
+                            .replace(/^<(?:thought|thought_process|thinking)\s*>/i, '');
+                        const endClose = afterOpen.search(
+                            /<\/(?:thought|thought_process|thinking)\s*>/i
+                        );
                         const endJson = afterOpen.search(/<json\s*>/i);
                         const end = [endClose, endJson].filter((i) => i >= 0).length
                             ? Math.min(...[endClose, endJson].filter((i) => i >= 0))
                             : undefined;
-                        const raw = (end !== undefined ? afterOpen.slice(0, end) : afterOpen).trim();
+                        const raw = (
+                            end !== undefined ? afterOpen.slice(0, end) : afterOpen
+                        ).trim();
                         if (raw.length > 0) currentThinking = cleanThinkingText(raw);
                     } else {
                         const thoughtMatch =
@@ -720,7 +780,8 @@ export function ChatPageClient({ conversationId }: ChatPageClientProps) {
                         if (parsedJson.diagnosis) {
                             setDiagnosis((prev) => ({
                                 ...parsedJson,
-                                thinking: (thinking && thinking.trim()) ? thinking : (prev?.thinking || ''),
+                                thinking:
+                                    thinking && thinking.trim() ? thinking : prev?.thinking || '',
                             }));
 
                             const diag = { thinking, ...parsedJson };
@@ -762,7 +823,14 @@ export function ChatPageClient({ conversationId }: ChatPageClientProps) {
                                 });
                                 // Run saves and provider fetch in parallel — don't block on DB
                                 void saveConversation({ diag });
-                                void saveMessage('assistant', assistantContent, [], true, diag, undefined);
+                                void saveMessage(
+                                    'assistant',
+                                    assistantContent,
+                                    [],
+                                    true,
+                                    diag,
+                                    undefined
+                                );
                                 const loc = userLocation;
                                 const hasLoc =
                                     typeof loc?.lat === 'number' &&
@@ -794,13 +862,20 @@ export function ChatPageClient({ conversationId }: ChatPageClientProps) {
                             if (isComplete) {
                                 if (initialMessageAddedRef.current) {
                                     // Update the existing message with final content (was added early at 75%)
-                                    const msgIdx = earlyMessageIndexRef.current >= 0 ? earlyMessageIndexRef.current : 0;
+                                    const msgIdx =
+                                        earlyMessageIndexRef.current >= 0
+                                            ? earlyMessageIndexRef.current
+                                            : 0;
                                     setMessages((prev) => {
                                         const lastIdx = prev.length - 1;
                                         if (lastIdx >= 0 && prev[lastIdx]?.role === 'assistant') {
                                             return prev.map((m, i) =>
                                                 i === lastIdx
-                                                    ? { ...m, content: assistantContent, diagnosis: diag }
+                                                    ? {
+                                                          ...m,
+                                                          content: assistantContent,
+                                                          diagnosis: diag,
+                                                      }
                                                     : m
                                             );
                                         }
@@ -811,7 +886,14 @@ export function ChatPageClient({ conversationId }: ChatPageClientProps) {
                                 } else {
                                     initialMessageAddedRef.current = true;
                                     await saveConversation({ diag });
-                                    saveMessage('assistant', assistantContent, [], true, diag, undefined);
+                                    saveMessage(
+                                        'assistant',
+                                        assistantContent,
+                                        [],
+                                        true,
+                                        diag,
+                                        undefined
+                                    );
                                     let newMsgIndex = 0;
                                     setMessages((prev) => {
                                         newMsgIndex = prev.length;
@@ -868,16 +950,27 @@ export function ChatPageClient({ conversationId }: ChatPageClientProps) {
                 setIsDiagnosing(false);
             }
         },
-        [id, saveConversation, saveMessage, cleanThinkingText, userLocation, fetchProvidersForMessage, updateMessageContent]
+        [
+            id,
+            saveConversation,
+            saveMessage,
+            cleanThinkingText,
+            userLocation,
+            fetchProvidersForMessage,
+            updateMessageContent,
+        ]
     );
 
     const useLocationRef = useRef(useLocationAndFetchProviders);
     useLocationRef.current = useLocationAndFetchProviders;
 
-    useEffect(() => () => {
-        startInitialDiagnosisAbortRef.current?.abort();
-        startInitialDiagnosisAbortRef.current = null;
-    }, []);
+    useEffect(
+        () => () => {
+            startInitialDiagnosisAbortRef.current?.abort();
+            startInitialDiagnosisAbortRef.current = null;
+        },
+        []
+    );
 
     useEffect(() => {
         if (!id) return;
@@ -891,9 +984,17 @@ export function ChatPageClient({ conversationId }: ChatPageClientProps) {
         let channel: ReturnType<typeof supabase.channel> | null = null;
         const getCancelled = () => cancelled;
 
-        loadConversation(getCancelled).then((loadedMsgs) => {
+        loadConversation(getCancelled).then((result) => {
             if (cancelled) return;
-            if (imageData && imageData.id === id && (!loadedMsgs || loadedMsgs.length === 0)) {
+            const loadedMsgs =
+                result && typeof result === 'object' && 'msgs' in result ? result.msgs : null;
+            const loadedConvWithImage =
+                result && typeof result === 'object' && 'loadedConvWithImage' in result
+                    ? result.loadedConvWithImage
+                    : false;
+            // Only clear the store when we loaded the conversation with an image from DB.
+            // Keep it when DB returned empty (dummy client, new conv, or load failed) so refresh can restore.
+            if (imageData && imageData.id === id && loadedConvWithImage) {
                 clearImageData();
             }
             if (loadedMsgs && loadedMsgs.length > 0) {
@@ -936,8 +1037,7 @@ export function ChatPageClient({ conversationId }: ChatPageClientProps) {
             return;
         }
         navigator.geolocation.getCurrentPosition(
-            (pos) =>
-                useLocationRef.current(pos.coords.latitude, pos.coords.longitude),
+            (pos) => useLocationRef.current(pos.coords.latitude, pos.coords.longitude),
             () => {
                 // Silently fail — user will tap "Use my location" when providers load (required on some mobile browsers)
             },
@@ -947,19 +1047,14 @@ export function ChatPageClient({ conversationId }: ChatPageClientProps) {
 
     useEffect(() => {
         const img = imageSrc;
-        const canStart =
-            img &&
-            messages.length === 0 &&
-            !diagnosis &&
-            !hasStartedDiagnosis;
+        const canStart = img && messages.length === 0 && !diagnosis && !hasStartedDiagnosis;
         const shouldStart = canStart && isLoaded;
         if (shouldStart) {
-            const userContext =
-                directTradeResult
-                    ? { trade: directTradeResult.trade, diagnosis: directTradeResult.diagnosis }
-                    : directTradeSelection
-                      ? { trade: directTradeSelection.trade, diagnosis: directTradeSelection.diagnosis }
-                      : undefined;
+            const userContext = directTradeResult
+                ? { trade: directTradeResult.trade, diagnosis: directTradeResult.diagnosis }
+                : directTradeSelection
+                  ? { trade: directTradeSelection.trade, diagnosis: directTradeSelection.diagnosis }
+                  : undefined;
             startInitialDiagnosis(img, userContext);
         }
     }, [
@@ -974,7 +1069,10 @@ export function ChatPageClient({ conversationId }: ChatPageClientProps) {
         startInitialDiagnosis,
     ]);
 
-    const handleSend = async (overrideMessage?: string, options?: { diagnosisRejected?: boolean }) => {
+    const handleSend = async (
+        overrideMessage?: string,
+        options?: { diagnosisRejected?: boolean }
+    ) => {
         const msgToSend = String(overrideMessage ?? message ?? '').trim();
         const attachmentsToSend = options?.diagnosisRejected ? [] : pendingAttachments;
         if (!msgToSend && attachmentsToSend.length === 0) return;
@@ -1017,13 +1115,13 @@ export function ChatPageClient({ conversationId }: ChatPageClientProps) {
             ].map((m) => ({ role: m.role, content: m.content, attachments: m.attachments ?? [] }));
 
             const providersFromMessages =
-                [...messages].reverse().find((m) => m.providers && m.providers.length > 0)?.providers ?? [];
-            const userContext =
-                directTradeResult
-                    ? { trade: directTradeResult.trade, diagnosis: directTradeResult.diagnosis }
-                    : directTradeSelection
-                      ? { trade: directTradeSelection.trade, diagnosis: directTradeSelection.diagnosis }
-                      : undefined;
+                [...messages].reverse().find((m) => m.providers && m.providers.length > 0)
+                    ?.providers ?? [];
+            const userContext = directTradeResult
+                ? { trade: directTradeResult.trade, diagnosis: directTradeResult.diagnosis }
+                : directTradeSelection
+                  ? { trade: directTradeSelection.trade, diagnosis: directTradeSelection.diagnosis }
+                  : undefined;
 
             const res = await fetch('/api/diagnose', {
                 method: 'POST',
@@ -1109,9 +1207,15 @@ export function ChatPageClient({ conversationId }: ChatPageClientProps) {
                                 ...(parsedJson.diagnosis
                                     ? {
                                           hasUpdatedDiagnosis:
-                                              (previousDiagnosis?.diagnosis || '').trim().toLowerCase() !==
-                                                  (parsedJson.diagnosis || '').trim().toLowerCase() ||
-                                              (previousDiagnosis?.trade || '').trim().toLowerCase() !==
+                                              (previousDiagnosis?.diagnosis || '')
+                                                  .trim()
+                                                  .toLowerCase() !==
+                                                  (parsedJson.diagnosis || '')
+                                                      .trim()
+                                                      .toLowerCase() ||
+                                              (previousDiagnosis?.trade || '')
+                                                  .trim()
+                                                  .toLowerCase() !==
                                                   (parsedJson.trade || '').trim().toLowerCase(),
                                           diagnosis: { thinking: currentThinking, ...parsedJson },
                                       }
@@ -1124,7 +1228,8 @@ export function ChatPageClient({ conversationId }: ChatPageClientProps) {
                             const conf = (parsedJson.confidence as number) ?? 0;
                             const clean = (s: string | undefined) => (s || '').trim().toLowerCase();
                             const hasChanged =
-                                clean(previousDiagnosis?.diagnosis) !== clean(parsedJson.diagnosis) ||
+                                clean(previousDiagnosis?.diagnosis) !==
+                                    clean(parsedJson.diagnosis) ||
                                 clean(previousDiagnosis?.trade) !== clean(parsedJson.trade);
                             const diag = { thinking: currentThinking, ...parsedJson };
                             setDiagnosis(diag);
@@ -1142,7 +1247,14 @@ export function ChatPageClient({ conversationId }: ChatPageClientProps) {
 
                             if (fullText.toLowerCase().includes('</json>')) {
                                 void saveConversation({ diag });
-                                saveMessage('assistant', assistantContent, [], hasChanged, diag, undefined);
+                                saveMessage(
+                                    'assistant',
+                                    assistantContent,
+                                    [],
+                                    hasChanged,
+                                    diag,
+                                    undefined
+                                );
                             }
                             if (canFetchEarly && !providersFetchedForStream) {
                                 providersFetchedForStream = true;
@@ -1173,14 +1285,72 @@ export function ChatPageClient({ conversationId }: ChatPageClientProps) {
                                     });
                                 }
                             }
+                            if (parsedJson.refetch_providers) {
+                                const loc = userLocation;
+                                const hasLoc =
+                                    typeof loc?.lat === 'number' &&
+                                    typeof loc?.lng === 'number' &&
+                                    !isNaN(loc.lat) &&
+                                    !isNaN(loc.lng);
+                                if (hasLoc) {
+                                    const trade =
+                                        parsedJson.trade ||
+                                        previousDiagnosis?.trade ||
+                                        diagnosis?.trade;
+                                    if (trade && trade !== 'N/A') {
+                                        const lastWithDiag = [...messages]
+                                            .reverse()
+                                            .findIndex(
+                                                (m) =>
+                                                    m.role === 'assistant' &&
+                                                    m.diagnosis &&
+                                                    (m.providers != null ||
+                                                        m.providerNextPageToken != null)
+                                            );
+                                        const targetIdx =
+                                            lastWithDiag >= 0
+                                                ? messages.length - 1 - lastWithDiag
+                                                : messages.length - 1;
+                                        const targetMsg = messages[targetIdx];
+                                        const pageToken =
+                                            targetMsg?.providerNextPageToken ?? undefined;
+                                        const searchQuery = targetMsg?.providerSearchQuery ?? trade;
+                                        if (targetMsg) {
+                                            if (pageToken) {
+                                                fetchProvidersForMessage(
+                                                    targetIdx,
+                                                    trade,
+                                                    loc.lat,
+                                                    loc.lng,
+                                                    targetMsg.content ?? '',
+                                                    targetMsg.hasUpdatedDiagnosis ?? false,
+                                                    targetMsg.diagnosis ?? diag,
+                                                    { pageToken, searchQuery }
+                                                );
+                                            } else {
+                                                toast(
+                                                    'No additional providers available in your area.'
+                                                );
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         } else if (fullText.toLowerCase().includes('</json>')) {
                             saveMessage('assistant', assistantContent, [], false);
                         }
                     } catch (e) {
-                        const parsed = tryParseDiagnosisJson(fullText) as Record<string, unknown> | null;
+                        const parsed = tryParseDiagnosisJson(fullText) as Record<
+                            string,
+                            unknown
+                        > | null;
                         if (parsed) {
                             const assistantContent = buildAssistantContent(
-                                parsed as { message?: string; diagnosis?: string; action_required?: string },
+                                parsed as {
+                                    message?: string;
+                                    diagnosis?: string;
+                                    action_required?: string;
+                                },
                                 currentThinking
                             );
                             const diagObj = parsed as { diagnosis?: string; trade?: string };
@@ -1201,9 +1371,15 @@ export function ChatPageClient({ conversationId }: ChatPageClientProps) {
                                     ...(diagObj.diagnosis
                                         ? {
                                               hasUpdatedDiagnosis:
-                                                  (previousDiagnosis?.diagnosis || '').trim().toLowerCase() !==
-                                                      (diagObj.diagnosis || '').trim().toLowerCase() ||
-                                                  (previousDiagnosis?.trade || '').trim().toLowerCase() !==
+                                                  (previousDiagnosis?.diagnosis || '')
+                                                      .trim()
+                                                      .toLowerCase() !==
+                                                      (diagObj.diagnosis || '')
+                                                          .trim()
+                                                          .toLowerCase() ||
+                                                  (previousDiagnosis?.trade || '')
+                                                      .trim()
+                                                      .toLowerCase() !==
                                                       (diagObj.trade || '').trim().toLowerCase(),
                                               diagnosis: fullDiag,
                                           }
@@ -1254,8 +1430,58 @@ export function ChatPageClient({ conversationId }: ChatPageClientProps) {
                                         });
                                     }
                                 }
+                                if (
+                                    parsed.refetch_providers &&
+                                    hasLoc &&
+                                    tradeVal &&
+                                    tradeVal !== 'N/A'
+                                ) {
+                                    const lastWithDiag = [...messages]
+                                        .reverse()
+                                        .findIndex(
+                                            (m) =>
+                                                m.role === 'assistant' &&
+                                                m.diagnosis &&
+                                                (m.providers != null ||
+                                                    m.providerNextPageToken != null)
+                                        );
+                                    const targetIdx =
+                                        lastWithDiag >= 0
+                                            ? messages.length - 1 - lastWithDiag
+                                            : messages.length - 1;
+                                    const targetMsg = messages[targetIdx];
+                                    if (targetMsg) {
+                                        if (targetMsg.providerNextPageToken) {
+                                            fetchProvidersForMessage(
+                                                targetIdx,
+                                                tradeVal,
+                                                loc.lat,
+                                                loc.lng,
+                                                targetMsg.content ?? '',
+                                                targetMsg.hasUpdatedDiagnosis ?? false,
+                                                targetMsg.diagnosis ?? fullDiag,
+                                                {
+                                                    pageToken: targetMsg.providerNextPageToken,
+                                                    searchQuery:
+                                                        targetMsg.providerSearchQuery ?? tradeVal,
+                                                }
+                                            );
+                                        } else {
+                                            toast(
+                                                'No additional providers available in your area.'
+                                            );
+                                        }
+                                    }
+                                }
                                 await saveConversation({ diag: fullDiag });
-                                saveMessage('assistant', assistantContent, [], hasChanged, fullDiag, undefined);
+                                saveMessage(
+                                    'assistant',
+                                    assistantContent,
+                                    [],
+                                    hasChanged,
+                                    fullDiag,
+                                    undefined
+                                );
                             }
                         }
                     }
@@ -1298,7 +1524,11 @@ export function ChatPageClient({ conversationId }: ChatPageClientProps) {
                     if (last?.role === 'assistant' && !last.diagnosis) {
                         didUpdate = true;
                         const assistantContent = buildAssistantContent(
-                            finalParsed as { message?: string; diagnosis?: string; action_required?: string },
+                            finalParsed as {
+                                message?: string;
+                                diagnosis?: string;
+                                action_required?: string;
+                            },
                             currentThinking
                         );
                         const fullDiag: DiagnosisData = {
@@ -1373,7 +1603,14 @@ export function ChatPageClient({ conversationId }: ChatPageClientProps) {
                                 getCurrentLocation({
                                     messageIndex: msgIdx,
                                     trade: finalParsed.trade,
-                                    msgContent: buildAssistantContent(finalParsed as { message?: string; diagnosis?: string; action_required?: string }, currentThinking),
+                                    msgContent: buildAssistantContent(
+                                        finalParsed as {
+                                            message?: string;
+                                            diagnosis?: string;
+                                            action_required?: string;
+                                        },
+                                        currentThinking
+                                    ),
                                     hasUpdatedDiagnosis: false,
                                     diagnosis: fullDiag,
                                 });
@@ -1400,7 +1637,9 @@ export function ChatPageClient({ conversationId }: ChatPageClientProps) {
                         const extracted = extractMessageFromRaw(fullText);
                         next[next.length - 1] = {
                             ...last,
-                            content: extracted || "I'm sorry, I had trouble processing that. Please try again.",
+                            content:
+                                extracted ||
+                                "I'm sorry, I had trouble processing that. Please try again.",
                         };
                     }
                 }
@@ -1408,7 +1647,9 @@ export function ChatPageClient({ conversationId }: ChatPageClientProps) {
             });
         } catch (err) {
             console.error('Follow-up failed:', err);
-            toast.error(err instanceof Error ? err.message : 'Failed to get response. Please try again.');
+            toast.error(
+                err instanceof Error ? err.message : 'Failed to get response. Please try again.'
+            );
         } finally {
             setIsResponding(false);
         }
@@ -1446,11 +1687,14 @@ export function ChatPageClient({ conversationId }: ChatPageClientProps) {
                 ...(initialMsgContent
                     ? [{ role: 'assistant' as const, content: initialMsgContent }]
                     : []),
-                ...(isFirstRegenTurn ? messageHistory : messageHistory.filter((m) => m !== lastUserMsg)),
+                ...(isFirstRegenTurn
+                    ? messageHistory
+                    : messageHistory.filter((m) => m !== lastUserMsg)),
             ].map((m) => ({ role: m.role, content: m.content, attachments: m.attachments ?? [] }));
 
             const providersFromRegenerate =
-                [...messageHistory].reverse().find((m) => m.providers && m.providers.length > 0)?.providers ?? [];
+                [...messageHistory].reverse().find((m) => m.providers && m.providers.length > 0)
+                    ?.providers ?? [];
             const res = await fetch('/api/diagnose', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -1543,9 +1787,15 @@ export function ChatPageClient({ conversationId }: ChatPageClientProps) {
                                 ...(parsedJson.diagnosis
                                     ? {
                                           hasUpdatedDiagnosis:
-                                              (previousDiagnosis?.diagnosis || '').trim().toLowerCase() !==
-                                                  (parsedJson.diagnosis || '').trim().toLowerCase() ||
-                                              (previousDiagnosis?.trade || '').trim().toLowerCase() !==
+                                              (previousDiagnosis?.diagnosis || '')
+                                                  .trim()
+                                                  .toLowerCase() !==
+                                                  (parsedJson.diagnosis || '')
+                                                      .trim()
+                                                      .toLowerCase() ||
+                                              (previousDiagnosis?.trade || '')
+                                                  .trim()
+                                                  .toLowerCase() !==
                                                   (parsedJson.trade || '').trim().toLowerCase(),
                                           diagnosis: { thinking: currentThinking, ...parsedJson },
                                       }
@@ -1558,13 +1808,21 @@ export function ChatPageClient({ conversationId }: ChatPageClientProps) {
                             const conf = (parsedJson.confidence as number) ?? 0;
                             const clean = (s: string | undefined) => (s || '').trim().toLowerCase();
                             const hasChanged =
-                                clean(previousDiagnosis?.diagnosis) !== clean(parsedJson.diagnosis) ||
+                                clean(previousDiagnosis?.diagnosis) !==
+                                    clean(parsedJson.diagnosis) ||
                                 clean(previousDiagnosis?.trade) !== clean(parsedJson.trade);
                             const diag = { thinking: currentThinking, ...parsedJson };
                             setDiagnosis(diag);
                             if (isComplete) {
                                 await saveConversation({ diag });
-                                saveMessage('assistant', assistantContent, [], hasChanged, diag, undefined);
+                                saveMessage(
+                                    'assistant',
+                                    assistantContent,
+                                    [],
+                                    hasChanged,
+                                    diag,
+                                    undefined
+                                );
                                 const canShowProvs =
                                     conf >= 85 &&
                                     !parsedJson.requires_clarification &&
@@ -1588,6 +1846,51 @@ export function ChatPageClient({ conversationId }: ChatPageClientProps) {
                                         hasChanged,
                                         diag
                                     );
+                                }
+                                if (parsedJson.refetch_providers && hasLoc) {
+                                    const trade =
+                                        parsedJson.trade ||
+                                        previousDiagnosis?.trade ||
+                                        diagnosis?.trade;
+                                    if (trade && trade !== 'N/A') {
+                                        const prevMsgs = messages.slice(0, index + 1);
+                                        const lastWithDiag = [...prevMsgs]
+                                            .reverse()
+                                            .findIndex(
+                                                (m) =>
+                                                    m.role === 'assistant' &&
+                                                    m.diagnosis &&
+                                                    (m.providers != null ||
+                                                        m.providerNextPageToken != null)
+                                            );
+                                        const targetIdx =
+                                            lastWithDiag >= 0
+                                                ? prevMsgs.length - 1 - lastWithDiag
+                                                : index;
+                                        const targetMsg = prevMsgs[targetIdx];
+                                        if (targetMsg) {
+                                            if (targetMsg.providerNextPageToken) {
+                                                fetchProvidersForMessage(
+                                                    targetIdx,
+                                                    trade,
+                                                    loc.lat,
+                                                    loc.lng,
+                                                    targetMsg.content ?? '',
+                                                    targetMsg.hasUpdatedDiagnosis ?? false,
+                                                    targetMsg.diagnosis ?? diag,
+                                                    {
+                                                        pageToken: targetMsg.providerNextPageToken,
+                                                        searchQuery:
+                                                            targetMsg.providerSearchQuery ?? trade,
+                                                    }
+                                                );
+                                            } else {
+                                                toast(
+                                                    'No additional providers available in your area.'
+                                                );
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         } else if (isComplete) {
@@ -1618,7 +1921,9 @@ export function ChatPageClient({ conversationId }: ChatPageClientProps) {
                         const extracted = extractMessageFromRaw(fullText);
                         next[next.length - 1] = {
                             ...last,
-                            content: extracted || "I'm sorry, I had trouble processing that. Please try again.",
+                            content:
+                                extracted ||
+                                "I'm sorry, I had trouble processing that. Please try again.",
                         };
                     }
                 }
@@ -1626,7 +1931,9 @@ export function ChatPageClient({ conversationId }: ChatPageClientProps) {
             });
         } catch (err) {
             console.error('Regeneration failed:', err);
-            toast.error(err instanceof Error ? err.message : 'Failed to regenerate. Please try again.');
+            toast.error(
+                err instanceof Error ? err.message : 'Failed to regenerate. Please try again.'
+            );
         } finally {
             setIsResponding(false);
         }
@@ -1637,7 +1944,9 @@ export function ChatPageClient({ conversationId }: ChatPageClientProps) {
     // Use store image immediately so we never block on loading when coming from home page
     const displayImage = imageSrc;
     const showThinking =
-        isDiagnosing || isResponding || ((displayImage || messages.length > 0) && !diagnosis?.diagnosis);
+        isDiagnosing ||
+        isResponding ||
+        ((displayImage || messages.length > 0) && !diagnosis?.diagnosis);
 
     if (!id) {
         router.replace('/');
@@ -1673,20 +1982,24 @@ export function ChatPageClient({ conversationId }: ChatPageClientProps) {
                                 conversationId={id}
                                 diagnosis={{
                                     thinking: '',
-                                    diagnosis: (directTradeResult || directTradeSelection)!.diagnosis,
+                                    diagnosis: (directTradeResult || directTradeSelection)!
+                                        .diagnosis,
                                     trade: (directTradeResult || directTradeSelection)!.trade,
                                     action_required: '',
                                     estimated_cost: '',
                                     confidence: 100,
                                 }}
                                 providers={directTradeResult?.providers ?? []}
+                                emergingProviders={directTradeResult?.emergingProviders ?? []}
                                 isLoadingProviders={isLoadingDirectProviders}
                                 userLocation={userLocation}
                                 onRequestLocation={() =>
                                     getCurrentLocation({
                                         directTrade: {
-                                            trade: (directTradeResult || directTradeSelection)!.trade,
-                                            diagnosis: (directTradeResult || directTradeSelection)!.diagnosis,
+                                            trade: (directTradeResult || directTradeSelection)!
+                                                .trade,
+                                            diagnosis: (directTradeResult || directTradeSelection)!
+                                                .diagnosis,
                                         },
                                     })
                                 }
@@ -1694,7 +2007,13 @@ export function ChatPageClient({ conversationId }: ChatPageClientProps) {
                                     setUserLocation(loc);
                                     setIsLoadingDirectProviders(true);
                                     const dt = directTradeResult || directTradeSelection;
-                                    if (dt) fetchDirectProviders(dt.trade, loc.lat, loc.lng, dt.diagnosis);
+                                    if (dt)
+                                        fetchDirectProviders(
+                                            dt.trade,
+                                            loc.lat,
+                                            loc.lng,
+                                            dt.diagnosis
+                                        );
                                 }}
                                 onConfirmYes={undefined}
                                 onConfirmNo={undefined}
@@ -1708,59 +2027,64 @@ export function ChatPageClient({ conversationId }: ChatPageClientProps) {
 
                     {/* Diagnosis thinking - tight gap to diagnosis header */}
                     <div className="flex flex-col gap-2">
-                        {(showThinking || (diagnosis?.thinking && !diagnosis?.requires_clarification)) && (
+                        {(showThinking ||
+                            (diagnosis?.thinking && !diagnosis?.requires_clarification)) && (
                             <blockquote className="border-l-2 border-input pl-3">
                                 <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap">
-                                    {diagnosis?.thinking ? thinkingForDisplay(diagnosis.thinking) : 'Analysing…'}
+                                    {diagnosis?.thinking
+                                        ? thinkingForDisplay(diagnosis.thinking)
+                                        : 'Analysing…'}
                                 </p>
                             </blockquote>
                         )}
                         <div className="flex flex-col gap-4 [&>*:first-child]:!mt-0">
-                        {messages.map((msg, i) => (
-                            <ChatMessage
-                                key={i}
-                                message={msg}
-                                index={i}
-                                isLast={i === messages.length - 1}
-                                isResponding={isResponding}
-                                onFeedback={(type) => handleMessageFeedback(i, type)}
-                                onCopy={() => handleCopy(msg.content)}
-                                onRegenerate={() => handleRegenerate(i)}
-                                inlineDiagnosisProps={
-                                    msg.role === 'assistant' && msg.diagnosis
-                                        ? {
-                                              conversationId: id,
-                                              userLocation,
-                                              isLoadingProviders: isLoadingProvidersForMessage === i,
-                                              openPopoverId,
-                                              setOpenPopoverId,
-                                              onRequestLocation: () =>
-                                                  getCurrentLocation({
-                                                      messageIndex: i,
-                                                      trade: msg.diagnosis!.trade,
-                                                      msgContent: msg.content,
-                                                      hasUpdatedDiagnosis: msg.hasUpdatedDiagnosis ?? false,
-                                                      diagnosis: msg.diagnosis!,
-                                                  }),
-                                              onAddressSelect: (loc) => {
-                                                  setUserLocation(loc);
-                                                  saveConversation({ loc });
-                                                  fetchProvidersForMessage(
-                                                      i,
-                                                      msg.diagnosis!.trade ?? '',
-                                                      loc.lat,
-                                                      loc.lng,
-                                                      msg.content,
-                                                      msg.hasUpdatedDiagnosis ?? false,
-                                                      msg.diagnosis!
-                                                  );
-                                              },
-                                          }
-                                        : undefined
-                                }
-                            />
-                        ))}
-                        <div ref={messagesEndRef} />
+                            {messages.map((msg, i) => (
+                                <ChatMessage
+                                    key={i}
+                                    message={msg}
+                                    index={i}
+                                    isLast={i === messages.length - 1}
+                                    isResponding={isResponding}
+                                    onFeedback={(type) => handleMessageFeedback(i, type)}
+                                    onCopy={() => handleCopy(msg.content)}
+                                    onRegenerate={() => handleRegenerate(i)}
+                                    inlineDiagnosisProps={
+                                        msg.role === 'assistant' && msg.diagnosis
+                                            ? {
+                                                  conversationId: id,
+                                                  userLocation,
+                                                  isLoadingProviders:
+                                                      isLoadingProvidersForMessage === i,
+                                                  openPopoverId,
+                                                  setOpenPopoverId,
+                                                  onRequestLocation: () =>
+                                                      getCurrentLocation({
+                                                          messageIndex: i,
+                                                          trade: msg.diagnosis!.trade,
+                                                          msgContent: msg.content,
+                                                          hasUpdatedDiagnosis:
+                                                              msg.hasUpdatedDiagnosis ?? false,
+                                                          diagnosis: msg.diagnosis!,
+                                                      }),
+                                                  onAddressSelect: (loc) => {
+                                                      setUserLocation(loc);
+                                                      saveConversation({ loc });
+                                                      fetchProvidersForMessage(
+                                                          i,
+                                                          msg.diagnosis!.trade ?? '',
+                                                          loc.lat,
+                                                          loc.lng,
+                                                          msg.content,
+                                                          msg.hasUpdatedDiagnosis ?? false,
+                                                          msg.diagnosis!
+                                                      );
+                                                  },
+                                              }
+                                            : undefined
+                                    }
+                                />
+                            ))}
+                            <div ref={messagesEndRef} />
                         </div>
                     </div>
                 </div>
@@ -1786,7 +2110,8 @@ export function ChatPageClient({ conversationId }: ChatPageClientProps) {
                                       const url = await new Promise<string>((resolve, reject) => {
                                           const r = new FileReader();
                                           r.onload = () => resolve(r.result as string);
-                                          r.onerror = () => reject(new Error('Failed to read file'));
+                                          r.onerror = () =>
+                                              reject(new Error('Failed to read file'));
                                           r.readAsDataURL(file);
                                       });
                                       const isImage = file.type.startsWith('image/');
@@ -1811,15 +2136,15 @@ export function ChatPageClient({ conversationId }: ChatPageClientProps) {
                                   }
                               }
                               if (dataUrls.length > 0) {
-                                  setPendingAttachments((prev) => [...prev, ...dataUrls].slice(0, 10));
+                                  setPendingAttachments((prev) =>
+                                      [...prev, ...dataUrls].slice(0, 10)
+                                  );
                               }
                           }
                         : async (files) => {
                               const file = files.find(
-                                                  (f) =>
-                                                      f.type.startsWith('image/') ||
-                                                      f.type.startsWith('video/')
-                                              );
+                                  (f) => f.type.startsWith('image/') || f.type.startsWith('video/')
+                              );
                               if (file) handleWelcomeUpload(file);
                           }
                 }

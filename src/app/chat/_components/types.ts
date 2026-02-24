@@ -19,8 +19,14 @@ export interface Message {
     hasUpdatedDiagnosis?: boolean;
     /** When present, this assistant message includes a diagnosis (shown as inline response card). */
     diagnosis?: DiagnosisData;
-    /** Providers recommended for this message's diagnosis. */
+    /** Providers recommended for this message's diagnosis (25+ reviews). */
     providers?: Provider[];
+    /** Emerging providers (<25 reviews but good rating), shown in separate section below. */
+    emergingProviders?: Provider[];
+    /** Pagination: next page token from Google Places for "load more providers". */
+    providerNextPageToken?: string | null;
+    /** Search query used for this message's provider fetch (required when using pageToken). */
+    providerSearchQuery?: string;
 }
 
 export interface Service {

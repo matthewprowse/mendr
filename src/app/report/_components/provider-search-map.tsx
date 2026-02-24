@@ -32,9 +32,7 @@ export function ProviderSearchMap({
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
-    const validProviders = providers.filter(
-        (p) => p.latitude != null && p.longitude != null
-    );
+    const validProviders = providers.filter((p) => p.latitude != null && p.longitude != null);
 
     useEffect(() => {
         if (!apiKey || !containerRef.current) return;

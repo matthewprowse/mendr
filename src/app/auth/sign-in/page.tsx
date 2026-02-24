@@ -11,7 +11,9 @@ import { Label } from '@/components/ui/label';
 function SignInContent() {
     const [email, setEmail] = useState('');
     const [loading, setLoading] = useState(false);
-    const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+    const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(
+        null
+    );
     const searchParams = useSearchParams();
 
     useEffect(() => {
@@ -29,9 +31,10 @@ function SignInContent() {
         setMessage(null);
 
         const next = searchParams.get('next') ?? '/';
-        const redirectTo = typeof window !== 'undefined'
-            ? `${window.location.origin}/auth/callback${next !== '/' ? `?next=${encodeURIComponent(next)}` : ''}`
-            : undefined;
+        const redirectTo =
+            typeof window !== 'undefined'
+                ? `${window.location.origin}/auth/callback${next !== '/' ? `?next=${encodeURIComponent(next)}` : ''}`
+                : undefined;
 
         const { error } = await supabase.auth.signInWithOtp({
             email: email.trim(),

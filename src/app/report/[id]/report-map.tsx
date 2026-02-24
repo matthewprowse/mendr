@@ -26,11 +26,12 @@ export function ReportMap({ apiKey, origin, destination }: ReportMapProps) {
         let hiddenPanel: HTMLDivElement | null = null;
 
         setOptions({ key: apiKey, v: 'weekly' });
-        const loadLibs = origin && typeof dest !== 'string'
-            ? [importLibrary('maps'), importLibrary('routes')]
-            : typeof dest === 'string'
-                ? [importLibrary('maps'), importLibrary('geocoding')]
-                : [importLibrary('maps')];
+        const loadLibs =
+            origin && typeof dest !== 'string'
+                ? [importLibrary('maps'), importLibrary('routes')]
+                : typeof dest === 'string'
+                  ? [importLibrary('maps'), importLibrary('geocoding')]
+                  : [importLibrary('maps')];
         Promise.all(loadLibs)
             .then(() => {
                 if (!containerRef.current) return;
@@ -56,7 +57,8 @@ export function ReportMap({ apiKey, origin, destination }: ReportMapProps) {
                     const directionsService = new google.maps.DirectionsService();
                     hiddenPanel = document.createElement('div');
                     hiddenPanel.setAttribute('aria-hidden', 'true');
-                    hiddenPanel.style.cssText = 'position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);';
+                    hiddenPanel.style.cssText =
+                        'position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);';
                     document.body.appendChild(hiddenPanel);
                     const directionsRenderer = new google.maps.DirectionsRenderer({
                         map,

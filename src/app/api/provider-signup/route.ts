@@ -4,7 +4,16 @@ import { createSupabaseServerClient } from '@/lib/supabase-server';
 export async function POST(req: NextRequest) {
     try {
         const body = await req.json();
-        const { company_name, email, descriptive_text, team_size, spend_per_month, price_per_lead, report_conversation_id, marketing_consent } = body;
+        const {
+            company_name,
+            email,
+            descriptive_text,
+            team_size,
+            spend_per_month,
+            price_per_lead,
+            report_conversation_id,
+            marketing_consent,
+        } = body;
 
         if (!company_name?.trim() || !email?.trim()) {
             return NextResponse.json(
@@ -27,18 +36,12 @@ export async function POST(req: NextRequest) {
 
         if (error) {
             console.error('Provider signup error:', error);
-            return NextResponse.json(
-                { error: 'Failed to submit' },
-                { status: 500 }
-            );
+            return NextResponse.json({ error: 'Failed to submit' }, { status: 500 });
         }
 
         return NextResponse.json({ success: true });
     } catch (e: any) {
         console.error('Provider signup error:', e);
-        return NextResponse.json(
-            { error: e?.message || 'Internal error' },
-            { status: 500 }
-        );
+        return NextResponse.json({ error: e?.message || 'Internal error' }, { status: 500 });
     }
 }

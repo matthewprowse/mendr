@@ -220,7 +220,12 @@ export function ProviderCard({
 }: {
     provider: Provider;
     index: number;
-    diagnosis?: { diagnosis: string; trade?: string; action_required?: string; estimated_cost?: string } | null;
+    diagnosis?: {
+        diagnosis: string;
+        trade?: string;
+        action_required?: string;
+        estimated_cost?: string;
+    } | null;
     conversationId?: string;
     openPopoverId: string | null;
     setOpenPopoverId: (id: string | null) => void;
@@ -403,7 +408,11 @@ export function ProviderCard({
                                 className="justify-start w-full"
                                 onClick={handleSendWhatsAppSummary}
                                 disabled={!waCapable}
-                                title={!waCapable && waPhone ? "This number doesn't appear to be a mobile number — WhatsApp requires a mobile number." : undefined}
+                                title={
+                                    !waCapable && waPhone
+                                        ? "This number doesn't appear to be a mobile number — WhatsApp requires a mobile number."
+                                        : undefined
+                                }
                             >
                                 Send WhatsApp Summary
                             </Button>
@@ -411,7 +420,11 @@ export function ProviderCard({
                             <Separator className="my-2" />
 
                             {provider.phone && (
-                                <Button variant="ghost" className="justify-start w-full mb-1" asChild>
+                                <Button
+                                    variant="ghost"
+                                    className="justify-start w-full mb-1"
+                                    asChild
+                                >
                                     <a
                                         href={`tel:${provider.phone}`}
                                         onClick={() => logLead('phone')}
@@ -445,13 +458,19 @@ export function ProviderCard({
                                 {waCapable ? (
                                     <>
                                         We've generated a summary of your diagnosis for{' '}
-                                        <span className="font-medium">{provider.name}</span>. You will open WhatsApp to send it.
+                                        <span className="font-medium">{provider.name}</span>. You
+                                        will open WhatsApp to send it.
                                         <blockquote className="mt-2 border-l-2 border-input pl-3 text-muted-foreground text-sm">
-                                            We try to ensure all numbers are available on WhatsApp. If you're having trouble, please try phoning them directly.
+                                            We try to ensure all numbers are available on WhatsApp.
+                                            If you're having trouble, please try phoning them
+                                            directly.
                                         </blockquote>
                                     </>
                                 ) : (
-                                    <>This provider's number doesn't appear to be a mobile number. WhatsApp requires a mobile number to work.</>
+                                    <>
+                                        This provider's number doesn't appear to be a mobile number.
+                                        WhatsApp requires a mobile number to work.
+                                    </>
                                 )}
                             </DialogDescription>
                         </DialogHeader>

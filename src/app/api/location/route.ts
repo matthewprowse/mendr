@@ -21,10 +21,7 @@ export async function GET(req: NextRequest) {
         const lng = parseFloat(data.longitude);
 
         if (isNaN(lat) || isNaN(lng)) {
-            return NextResponse.json(
-                { error: 'Could not determine location' },
-                { status: 400 }
-            );
+            return NextResponse.json({ error: 'Could not determine location' }, { status: 400 });
         }
 
         const city = data.city || data.region_name || data.country_name || 'Unknown';
@@ -44,9 +41,6 @@ export async function GET(req: NextRequest) {
                 address: 'Approximate location',
             });
         }
-        return NextResponse.json(
-            { error: 'Could not determine location' },
-            { status: 500 }
-        );
+        return NextResponse.json({ error: 'Could not determine location' }, { status: 500 });
     }
 }

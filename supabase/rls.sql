@@ -45,7 +45,23 @@ ALTER TABLE provider_signups ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Provider signups allow insert" ON provider_signups;
 CREATE POLICY "Provider signups allow insert" ON provider_signups FOR INSERT WITH CHECK (true);
 
--- 6. Provider Reports: Allow anonymous insert (users report providers)
+-- 6. Provider Incident Reports: Users report bad providers (scam, fake listing, etc.)
 ALTER TABLE provider_reports ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Provider reports allow insert" ON provider_reports;
 CREATE POLICY "Provider reports allow insert" ON provider_reports FOR INSERT WITH CHECK (true);
+
+-- 7. Diagnoses: Source of truth. Conversation 1→many diagnoses.
+ALTER TABLE diagnoses ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Diagnoses allow select" ON diagnoses;
+DROP POLICY IF EXISTS "Diagnoses allow insert" ON diagnoses;
+CREATE POLICY "Diagnoses allow select" ON diagnoses FOR SELECT USING (true);
+CREATE POLICY "Diagnoses allow insert" ON diagnoses FOR INSERT WITH CHECK (true);
+
+-- 8. Scandio Reports: Shareable diagnosis report. One per diagnosis. Anonymous select/insert/update (for share_token).
+ALTER TABLE scandio_reports ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Scandio_reports allow select" ON scandio_reports;
+DROP POLICY IF EXISTS "Scandio_reports allow insert" ON scandio_reports;
+DROP POLICY IF EXISTS "Scandio_reports allow update" ON scandio_reports;
+CREATE POLICY "Scandio_reports allow select" ON scandio_reports FOR SELECT USING (true);
+CREATE POLICY "Scandio_reports allow insert" ON scandio_reports FOR INSERT WITH CHECK (true);
+CREATE POLICY "Scandio_reports allow update" ON scandio_reports FOR UPDATE USING (true) WITH CHECK (true);

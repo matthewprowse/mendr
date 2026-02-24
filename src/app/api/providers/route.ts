@@ -4,16 +4,29 @@ import { createSupabaseServerClient, createSupabaseAdminClient } from '@/lib/sup
 
 export async function POST(req: NextRequest) {
     try {
-        const { lat, lng, trade, radius: customRadius, pageToken, searchQuery: providedSearchQuery } = await req.json();
+        const {
+            lat,
+            lng,
+            trade,
+            radius: customRadius,
+            pageToken,
+            searchQuery: providedSearchQuery,
+        } = await req.json();
         let supabase: Awaited<ReturnType<typeof createSupabaseServerClient>> | null = null;
         try {
             supabase = await createSupabaseServerClient();
         } catch (e) {
-            console.warn('Supabase not configured — provider cache disabled:', (e as Error).message);
+            console.warn(
+                'Supabase not configured — provider cache disabled:',
+                (e as Error).message
+            );
         }
 
         if (!lat || !lng || !trade) {
-            return NextResponse.json({ error: 'Missing required parameters (lat, lng, trade)' }, { status: 400 });
+            return NextResponse.json(
+                { error: 'Missing required parameters (lat, lng, trade)' },
+                { status: 400 }
+            );
         }
         if (pageToken && !providedSearchQuery) {
             return NextResponse.json(
@@ -44,39 +57,45 @@ export async function POST(req: NextRequest) {
 
         const radius = customRadius || 50000; // Default 50km — wider search for rural/sparse areas
 
-        const genAI = new GoogleGenerativeAI(geminiKey || '');
-        const model = genAI.getGenerativeModel({
-            model: 'gemini-2.0-flash',
-            generationConfig: {
-                temperature: 0.1,
-                topP: 0.8,
-                topK: 40,
-            },
-        });
-
-        // 1. Normalize the trade into a robust search query (skip when paginating—must reuse exact query)
-        let searchQuery = providedSearchQuery || `${trade} service provider`;
-        if (!providedSearchQuery) {
-            try {
-                const normalizationPrompt = `
-Convert the following home maintenance trade/speciality into a single, highly effective Google Maps search query.
-Focus on getting the most relevant business results.
-
-Trade: ${trade}
-
-Output ONLY the search query string. No quotes, no explanation.
-Example Input: "Leaking Pipe/Plumbing" -> Output: Plumber
-Example Input: "Gate Technician/Electrician" -> Output: Gate Repair Service
-Example Input: "Roofing/Guttering" -> Output: Roofing Contractor`;
-
-                const result = await model.generateContent(normalizationPrompt);
-                const normalized = result.response.text().trim().replace(/["']/g, '');
-                if (normalized && normalized.length > 2) {
-                    searchQuery = normalized;
-                }
-            } catch (e) {
-                console.error('Trade normalization failed, using fallback:', e);
-            }
+        // 1. Fast trade-to-query mapping (no AI call — saves ~1–2s)
+        const TRADE_QUERY_MAP: Record<string, string> = {
+            plumber: 'Plumber',
+            plumbing: 'Plumber',
+            'leaking pipe': 'Plumber',
+            electrician: 'Electrician',
+            electrical: 'Electrician',
+            'gate technician': 'Gate Repair Service',
+            'gate repair': 'Gate Repair Service',
+            'gate motor': 'Gate Repair Service',
+            roofing: 'Roofing Contractor',
+            roofer: 'Roofing Contractor',
+            guttering: 'Roofing Contractor',
+            painter: 'Painter',
+            painting: 'Painter',
+            carpenter: 'Carpenter',
+            handyman: 'Handyman',
+            'air conditioning': 'AC Repair',
+            'ac repair': 'AC Repair',
+            locksmith: 'Locksmith',
+            tiler: 'Tiler',
+            paving: 'Paving Contractor',
+            pool: 'Pool Service',
+            'water damage': 'Water Damage Restoration',
+            builder: 'Builder',
+            contractor: 'Building Contractor',
+            'domestic worker': 'Domestic Worker',
+            'domestic workers': 'Domestic Worker',
+            cleaner: 'Cleaning Service',
+            cleaning: 'Cleaning Service',
+            housekeeping: 'Cleaning Service',
+            housekeeper: 'Cleaning Service',
+            gardener: 'Gardener',
+            gardening: 'Gardening Service',
+        };
+        let searchQuery = providedSearchQuery;
+        if (!searchQuery) {
+            const normalizedTrade = trade.toLowerCase().trim();
+            searchQuery = TRADE_QUERY_MAP[normalizedTrade] || trade;
         }
 
         // 2. Fetch providers from Google Places API
@@ -135,75 +154,71 @@ Example Input: "Roofing/Guttering" -> Output: Roofing Contractor`;
         const cachedMap = new Map(cachedData?.map((item) => [item.place_id, item]));
         const missingPlaces = places.filter((p: any) => !cachedMap.has(p.id));
 
+        // 3. Use fallback for uncached — return fast; enrich in background for next request (saves ~2–4s)
         let aiResults: any[] = [];
-        if (missingPlaces.length > 0) {
+        if (missingPlaces.length > 0 && geminiKey && supabase) {
             const providersContext = missingPlaces.map((place: any) => {
                 const reviews =
                     place.reviews
-                        ?.map((r: any) => ({
-                            text: r.text?.text,
-                            rating: r.rating,
-                        }))
+                        ?.map((r: any) => ({ text: r.text?.text, rating: r.rating }))
                         .filter((r: any) => r.text)
                         .slice(0, 5) || [];
-
                 return {
                     place_id: place.id,
                     name: place.displayName?.text || 'Unknown',
                     rating: place.rating,
                     rating_count: place.userRatingCount,
                     description: place.editorialSummary?.text || 'N/A',
-                    reviews: reviews,
+                    reviews,
                 };
             });
-
-            const batchPrompt = `
-Analyse the following list of ${providersContext.length} home service providers.
-For each provider, perform the following tasks:
-1. Format the company name in Title Case (e.g. "Kin Electrical" instead of "kin electrical"). Keep acronyms like "DNSD" capitalised.
-2. Provide a "Customer Summary" (max 30 words). 
-   - This must be a balanced, honest overview of their reputation based on the individual reviews provided.
-   - Mention both positives and negatives if they appear in the reviews.
-   - CRITICAL: Weight the proportion of positive vs negative sentiment in your summary to accurately reflect the provided data. If most reviews are positive but there are common complaints, ensure those complaints are mentioned proportionally.
-   - NEVER mention the numeric rating or "stars" in this text. Focus entirely on the feedback content.
-   - DO NOT include the company name in the summary.
-3. List 3–5 specific service categories/specialities they offer (e.g. "Boiler Repair"). Prefer 3 distinct services over 5 repetitive ones.
-
-CRITICAL SERVICE RULES (for the "short" field):
-- Service names MUST NOT exceed 15 characters in length.
-- Use 1-2 word descriptions that are punchy and professional.
-- If a word is too long to fit the 15-character limit, shorten it and append a full stop (e.g., "Maint.", "Install.", "Rep.", "Cert.").
-- Ensure services are highly relevant to the trade: ${trade}.
-- Aim for high quality and clarity while staying strictly within the 15-character limit.
-- AVOID REPETITION: Do NOT list near-identical services (e.g. "Gate Repairs", "Gate Install.", "Gate Maint.", "Gate Mod." — these are all the same trade). Pick 3 meaningfully different specialities instead of 5 that say the same thing. Each service must add distinct value.
-
-FORMAT FOR SERVICES:
-Provide an object for each service with two fields:
-- "short": The shortened name (max 15 chars, professional shortening).
-- "full": The full, descriptive name of the service (max 30 chars).
-
-CRITICAL: 
-- Use British English.
-- Output raw JSON ONLY. 
-- FORMAT: {"results": [{"place_id": "...", "name": "...", "summary": "...", "services": [{"short": "...", "full": "..."}, ...]}, ...]}
-
-DATA:
-${JSON.stringify(providersContext, null, 2)}`;
-
-            try {
-                const result = await model.generateContent(batchPrompt);
-                const responseText = result.response.text().trim();
-                const jsonMatch = responseText.match(/\{[\s\S]*\}/);
-                if (jsonMatch) {
-                    const parsed = JSON.parse(jsonMatch[0]);
-                    aiResults = parsed.results || [];
+            void (async () => {
+                try {
+                    const genAI = new GoogleGenerativeAI(geminiKey);
+                    const model = genAI.getGenerativeModel({
+                        model: 'gemini-2.0-flash',
+                        generationConfig: { temperature: 0.1 },
+                    });
+                    const batchPrompt = `Analyse these ${providersContext.length} home service providers. For each: 1) Title Case name. 2) "summary" (max 30 words, British English, from reviews). 3) "services" array: [{"short":"≤15 chars","full":"≤30 chars"}] for trade: ${trade}. Output JSON only: {"results":[{"place_id":"","name":"","summary":"","services":[]}]}. DATA: ${JSON.stringify(providersContext)}`;
+                    const result = await model.generateContent(batchPrompt);
+                    const jsonMatch = result.response.text().match(/\{[\s\S]*\}/);
+                    if (jsonMatch) {
+                        const parsed = JSON.parse(jsonMatch[0]);
+                        const results = parsed.results || [];
+                        const adminSupabase = await createSupabaseAdminClient();
+                        const toCache = results
+                            .map((r: any) => {
+                                const place = missingPlaces.find((p: any) => p.id === r.place_id);
+                                return place
+                                    ? {
+                                          place_id: place.id,
+                                          name: r.name || place.displayName?.text,
+                                          address: place.formattedAddress || '',
+                                          rating: place.rating,
+                                          rating_count: place.userRatingCount ?? 0,
+                                          phone: place.nationalPhoneNumber,
+                                          website: place.websiteUri,
+                                          latitude: place.location?.latitude,
+                                          longitude: place.location?.longitude,
+                                          summary:
+                                              r.summary ||
+                                              place.editorialSummary?.text ||
+                                              `Local ${trade} professional.`,
+                                          services: r.services || [],
+                                      }
+                                    : null;
+                            })
+                            .filter(Boolean);
+                        if (toCache.length > 0)
+                            await adminSupabase.from('cached_providers').upsert(toCache);
+                    }
+                } catch (e) {
+                    console.warn('Background provider enrichment failed:', (e as Error).message);
                 }
-            } catch (e) {
-                console.error('Batch AI processing failed:', e);
-            }
+            })();
         }
 
-        // 4. Map results back and identify new data to cache
+        // 4. Map results back — use cache, aiResults (if we waited), or fallback for uncached
         const toCache: any[] = [];
         const processedProviders = places.map((place: any, index: number) => {
             const isCached = cachedMap.has(place.id);
@@ -240,8 +255,7 @@ ${JSON.stringify(providersContext, null, 2)}`;
                 distanceText = (meters / 1000).toFixed(1);
             }
 
-            const weekdayDescriptions =
-                place.regularOpeningHours?.weekdayDescriptions ?? [];
+            const weekdayDescriptions = place.regularOpeningHours?.weekdayDescriptions ?? [];
             const nextOpenTime = place.regularOpeningHours?.nextOpenTime ?? null;
             const providerData = {
                 place_id: place.id,
@@ -320,77 +334,50 @@ ${JSON.stringify(providersContext, null, 2)}`;
         const withReviews = processedProviders.filter(
             (p: any) => (p.ratingCount ?? p.rating_count ?? 0) > 0
         );
-        const filteredProviders =
-            withReviews.length > 0 ? withReviews : processedProviders;
+        const filteredProviders = withReviews.length > 0 ? withReviews : processedProviders;
         const sorted = [...filteredProviders].sort(
             (a: any, b: any) =>
                 (b.rating ?? 0) - (a.rating ?? 0) ||
                 (b.ratingCount ?? b.rating_count ?? 0) - (a.ratingCount ?? a.rating_count ?? 0)
         );
 
-        const count = sorted.length;
-        const takeCount = Math.min(5, count); // 1 Scandio's Pick + 4 other recommendations
-        const providers = sorted.slice(0, takeCount);
+        // Established: 25+ reviews — main recommended list only
+        const established = sorted.filter((p: any) => (p.ratingCount ?? p.rating_count ?? 0) >= 25);
+        // Emerging: <25 reviews but good rating — "newbie" section below
+        const emerging = sorted.filter(
+            (p: any) =>
+                (p.ratingCount ?? p.rating_count ?? 0) > 0 &&
+                (p.ratingCount ?? p.rating_count ?? 0) < 25 &&
+                (p.rating ?? 0) >= 4.0
+        );
+
+        const establishedCount = established.length;
+        const takeCount = Math.min(5, establishedCount);
+        const providers = established.slice(0, takeCount);
+        const emergingProviders = emerging.slice(0, 5);
         const nextPageToken = data.nextPageToken || null;
 
-        // AI selects the best "favourite" provider: ideally open, 4.5+ rating, 25+ reviews
+        // Fast heuristic for Scandio's Pick (no AI call — saves ~1–2s): open > 4.5+ & 25+ reviews > best by rating
         let recommendedProviderIndex = 0;
         let favouriteReason = '';
         if (providers.length > 0) {
-            try {
-                const pickPrompt = `You are selecting the single best service provider from this list for a home maintenance job.
-
-CRITERIA (in order of priority):
-1. Ideally OPEN NOW (isOpen: true) - this is a strong preference
-2. Rating >= 4.5 stars
-3. At least 25 reviews (ratingCount >= 25)
-
-Pick the provider that best meets these criteria. If multiple qualify, prefer: open > higher rating > more reviews.
-If NONE meet all criteria, pick the one that comes closest (e.g. 4.3 rating with 50 reviews beats 4.8 with 5 reviews).
-
-Output a JSON object with:
-- "recommended_index": <0-based index>
-- "reason": A brief 3-5 sentence explanation of why you chose this provider. Use British English.
-
-CRITICAL RULES FOR THE REASON:
-- NEVER mention price, cost, or estimated costs. The app shows that separately.
-- NEVER mention "minimum requirement", "25 reviews", or any internal criteria. Instead say they have "many reviews", "a substantial review count", or similar.
-- If they're open: say they're "currently open" and that this "can allow for an immediate resolution or fix if they're available". Do NOT say it's "our top priority".
-- If they're NOT open (isOpen: false): you MUST include when they open next. Prefer nextOpenTime (RFC 3339 timestamp like "2025-02-24T08:00:00Z") if provided - convert to a readable time (e.g. "Opens Monday at 8am", "Opens tomorrow at 9am"). Otherwise use weekdayDescriptions (e.g. "Monday: 8am–5pm").
-
-Example (open): "We recommend [Name]. They're currently open, which can allow for an immediate fix if they're available. With a 4.9 rating and over 40 reviews, they have a strong track record."
-Example (closed): "We recommend [Name]. They are not currently open but open Monday at 8am. With a 4.9 rating and over 40 reviews, they have a strong track record."`;
-
-                const providerList = providers.map((p: any, i: number) => ({
-                    index: i,
-                    name: p.name,
-                    rating: p.rating ?? 0,
-                    ratingCount: p.ratingCount ?? p.rating_count ?? 0,
-                    isOpen: p.isOpen,
-                    weekdayDescriptions: p.weekdayDescriptions ?? [],
-                    nextOpenTime: p.nextOpenTime ?? null,
-                }));
-
-                const pickResult = await model.generateContent(`${pickPrompt}\n\nDATA:\n${JSON.stringify(providerList, null, 2)}`);
-                const pickText = pickResult.response.text().trim();
-                const pickMatch = pickText.match(/\{[\s\S]*\}/);
-                if (pickMatch) {
-                    const parsed = JSON.parse(pickMatch[0]);
-                    const idx = parsed.recommended_index;
-                    if (typeof idx === 'number' && idx >= 0 && idx < providers.length) {
-                        recommendedProviderIndex = idx;
-                        favouriteReason = typeof parsed.reason === 'string' ? parsed.reason.trim() : '';
-                    }
-                }
-            } catch (e) {
-                console.error('Favourite provider selection failed:', e);
-                // Fallback: prefer open + 4.5+ + 25+ reviews; else best by rating/reviews
-                const meetsBar = (p: any) =>
-                    (p.rating ?? 0) >= 4.5 && (p.ratingCount ?? p.rating_count ?? 0) >= 25;
-                const openAndMeets = providers.findIndex((p: any) => meetsBar(p) && p.isOpen === true);
-                const anyMeets = providers.findIndex((p: any) => meetsBar(p));
-                if (openAndMeets >= 0) recommendedProviderIndex = openAndMeets;
-                else if (anyMeets >= 0) recommendedProviderIndex = anyMeets;
+            const meetsBar = (p: any) =>
+                (p.rating ?? 0) >= 4.5 && (p.ratingCount ?? p.rating_count ?? 0) >= 25;
+            const openAndMeets = providers.findIndex((p: any) => meetsBar(p) && p.isOpen === true);
+            const anyMeets = providers.findIndex((p: any) => meetsBar(p));
+            if (openAndMeets >= 0) recommendedProviderIndex = openAndMeets;
+            else if (anyMeets >= 0) recommendedProviderIndex = anyMeets;
+            const pick = providers[recommendedProviderIndex];
+            if (pick) {
+                const r = pick.rating ?? 0;
+                const rc = pick.ratingCount ?? pick.rating_count ?? 0;
+                const openLine =
+                    pick.isOpen === true
+                        ? "They're currently open, which can allow for an immediate fix if they're available."
+                        : pick.weekdayDescriptions?.[0]
+                          ? `They are not currently open (${pick.weekdayDescriptions[0]}).`
+                          : 'They are not currently open.';
+                favouriteReason = `We recommend ${pick.name}. ${openLine} With a ${r.toFixed(1)} rating and ${rc} review${rc === 1 ? '' : 's'}, they have a strong track record.`;
             }
         }
 
@@ -403,6 +390,7 @@ Example (closed): "We recommend [Name]. They are not currently open but open Mon
 
         return NextResponse.json({
             providers: providersWithFavourite,
+            emergingProviders,
             nextPageToken,
             searchQuery,
             recommendedProviderIndex,

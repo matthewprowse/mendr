@@ -93,9 +93,9 @@ export function ReportPageContent() {
                             Thank you for your report
                         </h1>
                         <p className="text-muted-foreground">
-                            Thank you for helping us keep our platform safe. We appreciate you taking
-                            the time to share this with us. We will review your report and get back
-                            to you with more information.
+                            Thank you for helping us keep our platform safe. We appreciate you
+                            taking the time to share this with us. We will review your report and
+                            get back to you with more information.
                         </p>
                     </div>
                 </main>
@@ -109,9 +109,7 @@ export function ReportPageContent() {
             <main className="flex-1 px-4 py-8 sm:px-6 lg:px-8">
                 <div className="mx-auto max-w-2xl space-y-6">
                     <div>
-                        <h1 className="text-2xl font-semibold tracking-tight">
-                            Report a provider
-                        </h1>
+                        <h1 className="text-2xl font-semibold tracking-tight">Report a provider</h1>
                         <p className="mt-1 text-sm text-muted-foreground">
                             Search for a provider to report and help us keep our platform safe.
                         </p>
@@ -182,9 +180,14 @@ export function ReportPageContent() {
 
                     {/* Report form */}
                     {step === 'form' && selectedProvider && (
-                        <form onSubmit={handleSubmit} className="space-y-4 rounded-lg border border-border p-4">
+                        <form
+                            onSubmit={handleSubmit}
+                            className="space-y-4 rounded-lg border border-border p-4"
+                        >
                             <div className="flex items-center justify-between">
-                                <p className="text-sm font-medium">Reporting: {selectedProvider.name}</p>
+                                <p className="text-sm font-medium">
+                                    Reporting: {selectedProvider.name}
+                                </p>
                                 <Button
                                     type="button"
                                     variant="ghost"

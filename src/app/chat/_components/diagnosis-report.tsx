@@ -22,7 +22,12 @@ function RevealText({ text }: { text: string }) {
 
     const visible = words.slice(0, visibleCount).join(' ');
     const trailingSpace = visibleCount > 0 && visibleCount < words.length ? ' ' : '';
-    return <>{visible}{trailingSpace}</>;
+    return (
+        <>
+            {visible}
+            {trailingSpace}
+        </>
+    );
 }
 
 export function DiagnosisReport({ diagnosis }: { diagnosis: DiagnosisData | null }) {
@@ -30,7 +35,9 @@ export function DiagnosisReport({ diagnosis }: { diagnosis: DiagnosisData | null
     const isUnrelated = diagnosis?.rejected || diagnosis?.requires_clarification;
     return (
         <div className="space-y-3">
-            <h2 className="text-2xl font-semibold leading-tight tracking-tight">{diagnosis.diagnosis}</h2>
+            <h2 className="text-2xl font-semibold leading-tight tracking-tight">
+                {diagnosis.diagnosis}
+            </h2>
             <p className="text-sm leading-relaxed whitespace-pre-wrap">
                 <RevealText text={sanitizeAiContent(diagnosis.action_required || '')} />
             </p>

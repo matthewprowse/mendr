@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
         const genAI = new GoogleGenerativeAI(apiKey);
         const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
-        const prompt = `You are writing a WhatsApp message from Scandio's AI Assistant. A homeowner will send this to a service provider.
+        const prompt = `You are writing a WhatsApp message. A homeowner will send this to a service provider. It must sound like a real person wrote it—casual, direct, natural. NO corporate speak, NO "I would appreciate", NO "We've identified". Write like someone texting a contractor.
 
 Context:
 - Provider name: ${provider_name}
@@ -30,20 +30,19 @@ Context:
 - Action required (technical details): ${action_required || 'N/A'}
 - Estimated cost (for context): ${estimated_cost || 'N/A'}
 
-Write a message that EXACTLY follows this structure. Fill in the placeholders from the context above. Do NOT write the diagnosis/issue in title case—use natural sentence casing (e.g. "a leaking pipe" not "A Leaking Pipe"). Output ONLY the message text. No quotes, no preamble.
+Output ONLY the message text. No quotes, no preamble. Use natural sentence casing (e.g. "a leaking pipe" not "A Leaking Pipe").
 
-REQUIRED STRUCTURE:
-
-Hi ${provider_name}.
-
-I'm contacting you with a diagnosis provided by Scandio's assistant, who's assisted in diagnosing my home maintenance issue.
-
-We've identified [ISSUE - summarise the diagnosis in 1 short sentence], and are now looking for [SOLUTION - the trade/service needed in 1 short phrase or sentence]. We want to get started with this [URGENCY - e.g. "as soon as possible", "at your earliest convenience", or a rough timeline like "within the next week"].
-
-I would appreciate an estimated quote, timeline, and am happy to provide further details.`;
+STRUCTURE:
+- Open with a short, natural greeting (e.g. "Hi", "Hey").
+- In your own words, briefly describe the issue and what you need help with. 2–3 short sentences max. Sound like you're explaining it to a mate.
+- End with what you want from them (quote, when they can come, etc.) — keep it brief.
+- At the very bottom only, add a single short line: "Got the diagnosis from Scandio — their app helped me figure out what's going on." Do not mention Scandio anywhere else in the message.`;
 
         const result = await model.generateContent(prompt);
-        const text = result.response.text().trim().replace(/^["']|["']$/g, '');
+        const text = result.response
+            .text()
+            .trim()
+            .replace(/^["']|["']$/g, '');
 
         return NextResponse.json({ message: text });
     } catch (e: any) {

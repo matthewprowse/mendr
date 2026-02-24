@@ -51,7 +51,9 @@ export function ReportDetailContent({ reportId }: ReportDetailContentProps) {
     const [signupSuccess, setSignupSuccess] = useState(false);
 
     const [directionsLoading, setDirectionsLoading] = useState(false);
-    const [providerLocation, setProviderLocation] = useState<{ lat: number; lng: number } | null>(null);
+    const [providerLocation, setProviderLocation] = useState<{ lat: number; lng: number } | null>(
+        null
+    );
     const [directionsAttempted, setDirectionsAttempted] = useState(false);
     const [directions, setDirections] = useState<{
         distance_text: string;
@@ -122,7 +124,10 @@ export function ReportDetailContent({ reportId }: ReportDetailContentProps) {
             );
             const data = await res.json();
             if (data.distance_text && data.duration_text) {
-                setDirections({ distance_text: data.distance_text, duration_text: data.duration_text });
+                setDirections({
+                    distance_text: data.distance_text,
+                    duration_text: data.duration_text,
+                });
             }
         } catch {
             toast.error('Could not get your location or directions.');
@@ -132,7 +137,12 @@ export function ReportDetailContent({ reportId }: ReportDetailContentProps) {
     }, [reportData]);
 
     useEffect(() => {
-        if (reportData && (reportData.user_address || (reportData.user_lat != null && reportData.user_lng != null)) && !directionsAttempted) {
+        if (
+            reportData &&
+            (reportData.user_address ||
+                (reportData.user_lat != null && reportData.user_lng != null)) &&
+            !directionsAttempted
+        ) {
             setDirectionsAttempted(true);
             fetchDirections();
         }
@@ -160,7 +170,7 @@ export function ReportDetailContent({ reportId }: ReportDetailContentProps) {
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'Failed');
             setSignupSuccess(true);
-            toast.success('Thank you! We\'ll be in touch soon.');
+            toast.success("Thank you! We'll be in touch soon.");
             setCompanyName('');
             setEmail('');
             setDescriptiveText('');
@@ -174,17 +184,20 @@ export function ReportDetailContent({ reportId }: ReportDetailContentProps) {
         }
     };
 
-    const mapsKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_EMBED_KEY || process.env.NEXT_PUBLIC_GOOGLE_PLACES_API_KEY;
+    const mapsKey =
+        process.env.NEXT_PUBLIC_GOOGLE_MAPS_EMBED_KEY ||
+        process.env.NEXT_PUBLIC_GOOGLE_PLACES_API_KEY;
     const hasLocation = reportData?.user_lat != null && reportData?.user_lng != null;
     const destinationForMap = hasLocation
         ? `${reportData!.user_lat},${reportData!.user_lng}`
         : reportData?.user_address || '';
     const showDirectionsMap = providerLocation && hasLocation;
-    const directionsMapUrl = providerLocation && hasLocation
-        ? mapsKey
-            ? `https://www.google.com/maps/embed/v1/directions?key=${mapsKey}&origin=${providerLocation.lat},${providerLocation.lng}&destination=${reportData!.user_lat},${reportData!.user_lng}`
-            : `https://www.google.com/maps?output=embed&saddr=${providerLocation.lat},${providerLocation.lng}&daddr=${reportData!.user_lat},${reportData!.user_lng}`
-        : null;
+    const directionsMapUrl =
+        providerLocation && hasLocation
+            ? mapsKey
+                ? `https://www.google.com/maps/embed/v1/directions?key=${mapsKey}&origin=${providerLocation.lat},${providerLocation.lng}&destination=${reportData!.user_lat},${reportData!.user_lng}`
+                : `https://www.google.com/maps?output=embed&saddr=${providerLocation.lat},${providerLocation.lng}&daddr=${reportData!.user_lat},${reportData!.user_lng}`
+            : null;
     if (!id) {
         return (
             <div className="flex min-h-screen items-center justify-center bg-background">
@@ -223,9 +236,7 @@ export function ReportDetailContent({ reportId }: ReportDetailContentProps) {
         <div className="flex flex-col min-h-screen bg-background">
             <AppHeader imageSrc={mainImage} showViewImage={false} />
 
-            <main
-                className="flex flex-1 flex-col overflow-y-auto"
-            >
+            <main className="flex flex-1 flex-col overflow-y-auto">
                 <div className="max-w-4xl mx-auto w-full px-4 md:px-12 py-4 flex flex-col gap-8">
                     {/* Map card - directions from you to customer */}
                     {(reportData.user_address || hasLocation) && destinationForMap && (
@@ -236,7 +247,10 @@ export function ReportDetailContent({ reportId }: ReportDetailContentProps) {
                                     origin={showDirectionsMap ? providerLocation! : undefined}
                                     destination={
                                         hasLocation
-                                            ? { lat: reportData!.user_lat!, lng: reportData!.user_lng! }
+                                            ? {
+                                                  lat: reportData!.user_lat!,
+                                                  lng: reportData!.user_lng!,
+                                              }
                                             : reportData!.user_address!
                                     }
                                 />
@@ -244,7 +258,10 @@ export function ReportDetailContent({ reportId }: ReportDetailContentProps) {
                                 <div className="w-full aspect-video min-h-[200px] overflow-hidden">
                                     <iframe
                                         title="Directions to job"
-                                        src={directionsMapUrl || `https://www.google.com/maps?q=${encodeURIComponent(destinationForMap)}&output=embed`}
+                                        src={
+                                            directionsMapUrl ||
+                                            `https://www.google.com/maps?q=${encodeURIComponent(destinationForMap)}&output=embed`
+                                        }
                                         className="w-full h-full border-0 block"
                                         allowFullScreen
                                         loading="lazy"
@@ -254,7 +271,9 @@ export function ReportDetailContent({ reportId }: ReportDetailContentProps) {
                             )}
                             <div className="p-4 flex items-center justify-between gap-4">
                                 {reportData.user_address ? (
-                                    <span className="text-sm text-muted-foreground min-w-0 truncate">{reportData.user_address}</span>
+                                    <span className="text-sm text-muted-foreground min-w-0 truncate">
+                                        {reportData.user_address}
+                                    </span>
                                 ) : (
                                     <span />
                                 )}
@@ -275,23 +294,29 @@ export function ReportDetailContent({ reportId }: ReportDetailContentProps) {
                         </section>
                     )}
 
-
                     {/* Diagnosis - structured for service provider */}
                     <section className="space-y-6">
                         <div className="space-y-1">
                             <h2 className="text-lg font-semibold text-foreground">Job Summary</h2>
                             <p className="text-sm text-muted-foreground leading-relaxed">
-                                Overview of the reported issue, required service, and recommended next steps for the customer.
+                                Overview of the reported issue, required service, and recommended
+                                next steps for the customer.
                             </p>
                         </div>
                         <div className="grid gap-6">
                             <div>
-                                <p className="text-sm font-medium text-muted-foreground mb-2">Job Type</p>
-                                <p className="text-sm font-medium text-foreground">{diag?.diagnosis || 'Not specified'}</p>
+                                <p className="text-sm font-medium text-muted-foreground mb-2">
+                                    Job Type
+                                </p>
+                                <p className="text-sm font-medium text-foreground">
+                                    {diag?.diagnosis || 'Not specified'}
+                                </p>
                             </div>
                             {diag?.action_required && diag.action_required !== 'N/A' && (
                                 <div>
-                                    <p className="text-sm font-medium text-muted-foreground mb-2">Recommended Action</p>
+                                    <p className="text-sm font-medium text-muted-foreground mb-2">
+                                        Recommended Action
+                                    </p>
                                     <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">
                                         {sanitizeAiContent(diag.action_required)}
                                     </p>
@@ -314,7 +339,12 @@ export function ReportDetailContent({ reportId }: ReportDetailContentProps) {
                                             alt="Main"
                                             className="w-full object-cover max-h-[400px]"
                                         />
-                                        <Badge variant="default" className="absolute bottom-2 right-2">{diag.trade}</Badge>
+                                        <Badge
+                                            variant="default"
+                                            className="absolute bottom-2 right-2"
+                                        >
+                                            {diag.trade}
+                                        </Badge>
                                     </div>
                                 )}
                                 {additionalImages.length > 0 && (
@@ -322,13 +352,19 @@ export function ReportDetailContent({ reportId }: ReportDetailContentProps) {
                                         {additionalImages.map((url, i) => {
                                             const label = `Additional ${i + 1}`;
                                             return (
-                                                <div key={i} className="rounded-lg border border-border overflow-hidden aspect-square relative">
+                                                <div
+                                                    key={i}
+                                                    className="rounded-lg border border-border overflow-hidden aspect-square relative"
+                                                >
                                                     <img
                                                         src={url}
                                                         alt={label}
                                                         className="w-full h-full object-cover"
                                                     />
-                                                    <Badge variant="secondary" className="absolute bottom-2 right-2">
+                                                    <Badge
+                                                        variant="secondary"
+                                                        className="absolute bottom-2 right-2"
+                                                    >
                                                         {label}
                                                     </Badge>
                                                 </div>
@@ -351,18 +387,24 @@ export function ReportDetailContent({ reportId }: ReportDetailContentProps) {
                                 Get Home Maintenance Leads
                             </h4>
                             <p className="text-sm text-muted-foreground leading-relaxed">
-                                Scandio helps homeowners find trusted home service providers. We're listing and promoting Western Cape providers for free until September 2026.
+                                Scandio helps homeowners find trusted home service providers. We're
+                                listing and promoting Western Cape providers for free until
+                                September 2026.
                             </p>
                         </div>
                         {signupSuccess ? (
                             <p className="text-sm text-muted-foreground text-center">
-                                Thank you for your interest in Scandio. We'll be in touch with more information soon.
+                                Thank you for your interest in Scandio. We'll be in touch with more
+                                information soon.
                             </p>
                         ) : (
                             <form onSubmit={handleSignup} className="flex flex-col gap-6">
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                     <div className="space-y-2">
-                                        <label htmlFor="company" className="text-sm font-medium text-foreground block">
+                                        <label
+                                            htmlFor="company"
+                                            className="text-sm font-medium text-foreground block"
+                                        >
                                             Company Name
                                         </label>
                                         <Input
@@ -374,7 +416,10 @@ export function ReportDetailContent({ reportId }: ReportDetailContentProps) {
                                         />
                                     </div>
                                     <div className="space-y-2">
-                                        <label htmlFor="email" className="text-sm font-medium text-foreground block">
+                                        <label
+                                            htmlFor="email"
+                                            className="text-sm font-medium text-foreground block"
+                                        >
                                             Email Address
                                         </label>
                                         <Input
@@ -389,11 +434,20 @@ export function ReportDetailContent({ reportId }: ReportDetailContentProps) {
                                 </div>
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                     <div className="space-y-2">
-                                        <label htmlFor="team_size" className="text-sm font-medium text-foreground block">
+                                        <label
+                                            htmlFor="team_size"
+                                            className="text-sm font-medium text-foreground block"
+                                        >
                                             Team Size
                                         </label>
-                                        <Select value={teamSize || undefined} onValueChange={setTeamSize}>
-                                            <SelectTrigger id="team_size" className="w-full bg-background text-base sm:text-sm text-[14px] py-0">
+                                        <Select
+                                            value={teamSize || undefined}
+                                            onValueChange={setTeamSize}
+                                        >
+                                            <SelectTrigger
+                                                id="team_size"
+                                                className="w-full bg-background text-base sm:text-sm text-[14px] py-0"
+                                            >
                                                 <SelectValue placeholder="Select Team Size" />
                                             </SelectTrigger>
                                             <SelectContent>
@@ -405,11 +459,20 @@ export function ReportDetailContent({ reportId }: ReportDetailContentProps) {
                                         </Select>
                                     </div>
                                     <div className="space-y-2">
-                                        <label htmlFor="spend_per_month" className="text-sm font-medium text-foreground block">
+                                        <label
+                                            htmlFor="spend_per_month"
+                                            className="text-sm font-medium text-foreground block"
+                                        >
                                             Monthly Marketing Budget
                                         </label>
-                                        <Select value={spendPerMonth || undefined} onValueChange={setSpendPerMonth}>
-                                            <SelectTrigger id="spend_per_month" className="w-full bg-background text-base sm:text-sm text-[14px] py-0">
+                                        <Select
+                                            value={spendPerMonth || undefined}
+                                            onValueChange={setSpendPerMonth}
+                                        >
+                                            <SelectTrigger
+                                                id="spend_per_month"
+                                                className="w-full bg-background text-base sm:text-sm text-[14px] py-0"
+                                            >
                                                 <SelectValue placeholder="Select Budget" />
                                             </SelectTrigger>
                                             <SelectContent>
@@ -422,7 +485,10 @@ export function ReportDetailContent({ reportId }: ReportDetailContentProps) {
                                     </div>
                                 </div>
                                 <div className="space-y-2">
-                                    <label htmlFor="descriptive" className="text-sm font-medium text-foreground block">
+                                    <label
+                                        htmlFor="descriptive"
+                                        className="text-sm font-medium text-foreground block"
+                                    >
                                         Describe Your Business
                                     </label>
                                     <Textarea

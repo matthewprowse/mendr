@@ -136,7 +136,7 @@
             var(--striped-fill),
             var(--striped-fill) 2px,
             color-mix(in oklch, var(--striped-fill) 40%, transparent) 2px,
-            color-mix(in oklch, var(--striped-fill) 40%, transparent) 4px
+            color-mix(in oklch, var(--striped-fill) 40%, transparent) 6px
         );
         -webkit-background-clip: text;
         background-clip: text;

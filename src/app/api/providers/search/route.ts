@@ -7,10 +7,7 @@ export async function POST(req: NextRequest) {
         const { query, lat, lng } = await req.json();
 
         if (!query || typeof query !== 'string' || !query.trim()) {
-            return NextResponse.json(
-                { error: 'Search query is required' },
-                { status: 400 }
-            );
+            return NextResponse.json({ error: 'Search query is required' }, { status: 400 });
         }
 
         const apiKey = process.env.GOOGLE_PLACES_API_KEY;
@@ -46,10 +43,7 @@ export async function POST(req: NextRequest) {
         if (!response.ok) {
             const errorText = await response.text();
             console.error('Google Places search error:', errorText);
-            return NextResponse.json(
-                { error: 'Failed to search providers' },
-                { status: 500 }
-            );
+            return NextResponse.json({ error: 'Failed to search providers' }, { status: 500 });
         }
 
         const data = await response.json();
@@ -68,9 +62,6 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ providers });
     } catch (error: any) {
         console.error('Provider search error:', error);
-        return NextResponse.json(
-            { error: error.message || 'Search failed' },
-            { status: 500 }
-        );
+        return NextResponse.json({ error: error.message || 'Search failed' }, { status: 500 });
     }
 }

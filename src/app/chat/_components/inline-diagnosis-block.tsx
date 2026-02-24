@@ -14,6 +14,7 @@ export function InlineDiagnosisBlock({
     conversationId,
     diagnosis,
     providers,
+    emergingProviders,
     isLoadingProviders,
     userLocation,
     trade,
@@ -26,6 +27,7 @@ export function InlineDiagnosisBlock({
     conversationId?: string;
     diagnosis: DiagnosisData;
     providers?: Provider[];
+    emergingProviders?: Provider[];
     isLoadingProviders?: boolean;
     userLocation: { lat: number; lng: number; address?: string } | null;
     trade?: string;
@@ -106,37 +108,46 @@ export function InlineDiagnosisBlock({
             {canShowProviders && (
                 <div className="flex flex-col gap-3">
                     <div className="flex flex-col gap-2">
-                        {(hasLocation && userLocation?.address) ? (
+                        {hasLocation && userLocation?.address ? (
                             <div className="flex items-center justify-between gap-2">
                                 <span className="text-sm font-medium truncate min-w-0">
                                     {userLocation.address}
                                 </span>
                                 {onAddressSelect && (
-                                    <Popover open={addressPopoverOpen} onOpenChange={setAddressPopoverOpen}>
+                                    <Popover
+                                        open={addressPopoverOpen}
+                                        onOpenChange={setAddressPopoverOpen}
+                                    >
                                         <PopoverTrigger asChild>
-                                            <Button variant="outline">
-                                                Change Location
-                                            </Button>
+                                            <Button variant="outline">Change Location</Button>
                                         </PopoverTrigger>
                                         <PopoverContent className="w-96" align="start">
                                             <div className="flex flex-col gap-3">
-                                                <p className="text-sm font-medium">Search Locations</p>
+                                                <p className="text-sm font-medium">
+                                                    Search Locations (Western Cape only)
+                                                </p>
                                                 <Input
-                                                    placeholder="Enter Address, Places, or Locations"
+                                                    placeholder="Enter address in Western Cape, South Africa"
                                                     className="text-[14px] sm:text-sm"
                                                     value={addressQuery}
                                                     onChange={(e) => {
                                                         setAddressQuery(e.target.value);
                                                         setAddressError(null);
                                                     }}
-                                                    onKeyDown={(e) => e.key === 'Enter' && handleAddressSearch()}
+                                                    onKeyDown={(e) =>
+                                                        e.key === 'Enter' && handleAddressSearch()
+                                                    }
                                                 />
                                                 {addressError && (
-                                                    <p className="text-xs text-destructive">{addressError}</p>
+                                                    <p className="text-xs text-destructive">
+                                                        {addressError}
+                                                    </p>
                                                 )}
                                                 <Button
                                                     onClick={handleAddressSearch}
-                                                    disabled={addressSearching || !addressQuery.trim()}
+                                                    disabled={
+                                                        addressSearching || !addressQuery.trim()
+                                                    }
                                                 >
                                                     {addressSearching ? 'Searching…' : 'Search'}
                                                 </Button>
@@ -152,7 +163,10 @@ export function InlineDiagnosisBlock({
                                         Use my location
                                     </Button>
                                     {onAddressSelect && (
-                                        <Popover open={addressPopoverOpen} onOpenChange={setAddressPopoverOpen}>
+                                        <Popover
+                                            open={addressPopoverOpen}
+                                            onOpenChange={setAddressPopoverOpen}
+                                        >
                                             <PopoverTrigger asChild>
                                                 <Button variant="outline" size="sm">
                                                     Search address
@@ -160,7 +174,9 @@ export function InlineDiagnosisBlock({
                                             </PopoverTrigger>
                                             <PopoverContent className="w-80" align="start">
                                                 <div className="flex flex-col gap-3">
-                                                    <p className="text-sm font-semibold">Search for an address</p>
+                                                    <p className="text-sm font-semibold">
+                                                        Search for an address
+                                                    </p>
                                                     <Input
                                                         placeholder="Enter address or place"
                                                         className="text-[14px] sm:text-sm"
@@ -169,15 +185,22 @@ export function InlineDiagnosisBlock({
                                                             setAddressQuery(e.target.value);
                                                             setAddressError(null);
                                                         }}
-                                                        onKeyDown={(e) => e.key === 'Enter' && handleAddressSearch()}
+                                                        onKeyDown={(e) =>
+                                                            e.key === 'Enter' &&
+                                                            handleAddressSearch()
+                                                        }
                                                     />
                                                     {addressError && (
-                                                        <p className="text-xs text-destructive">{addressError}</p>
+                                                        <p className="text-xs text-destructive">
+                                                            {addressError}
+                                                        </p>
                                                     )}
                                                     <Button
                                                         size="sm"
                                                         onClick={handleAddressSearch}
-                                                        disabled={addressSearching || !addressQuery.trim()}
+                                                        disabled={
+                                                            addressSearching || !addressQuery.trim()
+                                                        }
                                                     >
                                                         {addressSearching ? 'Searching…' : 'Search'}
                                                     </Button>
@@ -189,9 +212,9 @@ export function InlineDiagnosisBlock({
                             )
                         )}
                     </div>
-                    {(isLoadingProviders || !hasLocation) ? (
+                    {isLoadingProviders || !hasLocation ? (
                         <ProvidersSkeleton />
-                    ) : (providers?.length ?? 0) === 0 ? (
+                    ) : (providers?.length ?? 0) === 0 && (emergingProviders?.length ?? 0) === 0 ? (
                         <p className="text-sm text-muted-foreground py-2">
                             No providers found in your area.
                         </p>
@@ -205,7 +228,6 @@ export function InlineDiagnosisBlock({
                                     <>
                                         {favourite && (
                                             <div className="flex flex-col gap-6">
-
                                                 <Separator className="w-full" />
 
                                                 <div className="flex flex-col gap-0.5">
@@ -214,7 +236,9 @@ export function InlineDiagnosisBlock({
                                                     </h2>
                                                     {favourite.favouriteReason && (
                                                         <p className="text-sm text-foreground">
-                                                            {sanitizeAiContent(favourite.favouriteReason)}
+                                                            {sanitizeAiContent(
+                                                                favourite.favouriteReason
+                                                            )}
                                                         </p>
                                                     )}
                                                 </div>
@@ -237,7 +261,9 @@ export function InlineDiagnosisBlock({
                                                         Other Recommended Providers
                                                     </h3>
                                                     <p className="text-sm text-foreground leading-relaxed">
-                                                        Compare these providers based on ratings, reviews, and availability to find the best fit for you.
+                                                        Compare these providers based on ratings,
+                                                        reviews, and availability to find the best
+                                                        fit for you.
                                                     </p>
                                                 </div>
                                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -257,6 +283,35 @@ export function InlineDiagnosisBlock({
                                                 </div>
                                             </>
                                         )}
+                                        {(emergingProviders?.length ?? 0) > 0 && (
+                                            <>
+                                                <Separator className="w-full" />
+                                                <div className="flex flex-col gap-0.5">
+                                                    <h3 className="text-lg font-semibold text-foreground">
+                                                        Emerging Providers
+                                                    </h3>
+                                                    <p className="text-sm text-foreground leading-relaxed">
+                                                        Good reviews but fewer of them — newer
+                                                        businesses worth considering.
+                                                    </p>
+                                                </div>
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                                    {emergingProviders!.map((p, i) => (
+                                                        <ProviderCard
+                                                            key={i}
+                                                            provider={p}
+                                                            index={(providers?.length ?? 0) + i}
+                                                            diagnosis={diagnosis}
+                                                            conversationId={conversationId}
+                                                            openPopoverId={openPopoverId}
+                                                            setOpenPopoverId={setOpenPopoverId}
+                                                            trade={trade}
+                                                            userLocation={userLocation}
+                                                        />
+                                                    ))}
+                                                </div>
+                                            </>
+                                        )}
                                     </>
                                 );
                             })()}
@@ -265,13 +320,18 @@ export function InlineDiagnosisBlock({
                     {(providers?.length ?? 0) > 0 && (
                         <div className="pt-4">
                             <p className="text-sm text-foreground leading-relaxed">
-                                We've generated a report from this conversation, and will be shared with your chosen provider automatically when you send our WhatsApp summary. If you provide additional context or images in the chat, they will be included in the diagnosis.
+                                We've generated a report from this conversation, and will be shared
+                                with your chosen provider automatically when you send our WhatsApp
+                                summary. If you provide additional context or images in the chat,
+                                they will be included in the diagnosis.
                             </p>
                             {conversationId && (
                                 <Button
                                     variant="outline"
                                     className="mt-3"
-                                    onClick={() => window.open(`/report/${conversationId}`, '_blank')}
+                                    onClick={() =>
+                                        window.open(`/report/${conversationId}`, '_blank')
+                                    }
                                 >
                                     Open Report
                                 </Button>

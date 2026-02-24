@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-    title: 'Scandio: Home Maintenance Assistant'
+    title: 'Scandio: Home Maintenance Assistant',
 };
 
 export const viewport: Viewport = {
@@ -33,9 +33,7 @@ export default async function RootLayout({
         <html lang="en">
             <body className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased`}>
                 <TooltipProvider>
-                    <div className="flex flex-col min-h-screen bg-background">
-                        {children}
-                    </div>
+                    <div className="flex flex-col min-h-screen bg-background">{children}</div>
                     <Toaster />
                 </TooltipProvider>
             </body>

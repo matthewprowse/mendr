@@ -35,8 +35,7 @@ export async function GET(request: Request) {
             .eq('user_id', user.id)
             .single();
 
-        const isProfileComplete =
-            profile?.first_name && profile?.surname && profile?.description;
+        const isProfileComplete = profile?.first_name && profile?.surname && profile?.description;
 
         if (!isProfileComplete) {
             return NextResponse.redirect(`${origin}/auth/onboarding`);

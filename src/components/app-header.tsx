@@ -24,10 +24,7 @@ export function AppHeader({ imageSrc, showViewImage = true }: AppHeaderProps) {
                     <span className="font-semibold">Scandio</span>
                 </Link>
                 {imageSrc && showViewImage && (
-                    <Button
-                        variant="secondary"
-                        onClick={() => window.open(imageSrc, '_blank')}
-                    >
+                    <Button variant="secondary" onClick={() => window.open(imageSrc, '_blank')}>
                         View Image
                     </Button>
                 )}
