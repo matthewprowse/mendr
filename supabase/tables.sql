@@ -138,19 +138,31 @@ CREATE TABLE IF NOT EXISTS provider_signups (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     company_name TEXT NOT NULL,
     email TEXT NOT NULL,
+    contact_number TEXT,
+    google_maps_link TEXT,
+    main_trade TEXT,
     descriptive_text TEXT,
     team_size TEXT,
     spend_per_month TEXT,
     price_per_lead TEXT,
     report_conversation_id UUID,
     marketing_consent BOOLEAN DEFAULT FALSE,
+    address TEXT,
+    lat DOUBLE PRECISION,
+    lng DOUBLE PRECISION,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+ALTER TABLE provider_signups ADD COLUMN IF NOT EXISTS contact_number TEXT;
+ALTER TABLE provider_signups ADD COLUMN IF NOT EXISTS google_maps_link TEXT;
+ALTER TABLE provider_signups ADD COLUMN IF NOT EXISTS main_trade TEXT;
 ALTER TABLE provider_signups ADD COLUMN IF NOT EXISTS team_size TEXT;
 ALTER TABLE provider_signups ADD COLUMN IF NOT EXISTS spend_per_month TEXT;
 ALTER TABLE provider_signups ADD COLUMN IF NOT EXISTS price_per_lead TEXT;
 ALTER TABLE provider_signups ADD COLUMN IF NOT EXISTS marketing_consent BOOLEAN DEFAULT FALSE;
+ALTER TABLE provider_signups ADD COLUMN IF NOT EXISTS address TEXT;
+ALTER TABLE provider_signups ADD COLUMN IF NOT EXISTS lat DOUBLE PRECISION;
+ALTER TABLE provider_signups ADD COLUMN IF NOT EXISTS lng DOUBLE PRECISION;
 
 CREATE INDEX IF NOT EXISTS idx_provider_signups_created ON provider_signups(created_at);
 

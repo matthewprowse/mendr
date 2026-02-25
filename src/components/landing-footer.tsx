@@ -3,7 +3,7 @@
 import { StripeBrandText } from '@/components/stripe-brand-text';
 import { Separator } from '@/components/ui/separator';
 import Link from 'next/link';
-import { Instagram, Linkedin } from 'lucide-react';
+import { Linkedin } from 'geist-icons';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 
@@ -27,9 +27,27 @@ type LandingFooterProps = {
 const SocialIcon = ({ icon }: { icon: SocialLink['icon'] }) => {
     switch (icon) {
         case 'instagram':
-            return <Instagram className="size-5" aria-hidden />;
+            return (
+                <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="20"
+                    height="20"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className="size-5"
+                    aria-hidden
+                >
+                    <rect width="20" height="20" x="2" y="2" rx="5" ry="5" />
+                    <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" />
+                    <line x1="17.5" x2="17.51" y1="6.5" y2="6.5" />
+                </svg>
+            );
         case 'linkedin':
-            return <Linkedin className="size-5" aria-hidden />;
+            return <Linkedin size={20} className="size-5" aria-hidden />;
         case 'twitter':
             return (
                 <svg
@@ -157,13 +175,13 @@ export function LandingFooter({
                     <p className="text-sm text-muted-foreground">
                         © {new Date().getFullYear()} Scandio
                     </p>
-                    <div className="flex gap-4 text-muted-foreground">
+                    <div className="flex gap-4 text-muted-foreground/75">
                         {socialLinks.map((social) => (
                             <Link
                                 key={social.href}
                                 href={social.href}
                                 aria-label={social.label}
-                                className="hover:text-primary transition-colors"
+                                className="hover:text-primary transition-all duration-250"
                             >
                                 <SocialIcon icon={social.icon} />
                             </Link>

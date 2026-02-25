@@ -1,6 +1,6 @@
 import Image from 'next/image';
 import Link from 'next/link';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft } from 'geist-icons';
 
 export function AuthHeader() {
     return (
@@ -10,7 +10,7 @@ export function AuthHeader() {
                     href="/"
                     className="flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
                 >
-                    <ArrowLeft className="size-4" />
+                    <ArrowLeft size={16} className="size-4" />
                     Back
                 </Link>
                 <Link href="/" className="flex items-center gap-2">

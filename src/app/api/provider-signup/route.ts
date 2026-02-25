@@ -7,12 +7,18 @@ export async function POST(req: NextRequest) {
         const {
             company_name,
             email,
+            contact_number,
+            google_maps_link,
+            main_trade,
             descriptive_text,
             team_size,
             spend_per_month,
             price_per_lead,
             report_conversation_id,
             marketing_consent,
+            address,
+            lat,
+            lng,
         } = body;
 
         if (!company_name?.trim() || !email?.trim()) {
@@ -26,12 +32,18 @@ export async function POST(req: NextRequest) {
         const { error } = await supabase.from('provider_signups').insert({
             company_name: company_name.trim(),
             email: email.trim(),
+            contact_number: contact_number?.trim() || null,
+            google_maps_link: google_maps_link?.trim() || null,
+            main_trade: main_trade?.trim() || null,
             descriptive_text: descriptive_text?.trim() || null,
             team_size: team_size?.trim() || null,
             spend_per_month: spend_per_month?.trim() || null,
             price_per_lead: price_per_lead?.trim() || null,
             report_conversation_id: report_conversation_id || null,
             marketing_consent: !!marketing_consent,
+            address: address?.trim() || null,
+            lat: lat != null ? Number(lat) : null,
+            lng: lng != null ? Number(lng) : null,
         });
 
         if (error) {

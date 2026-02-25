@@ -13,6 +13,7 @@ type LandingHeaderProps = {
     navLinks: NavLink[];
     logoHref?: string;
     showProBadge?: boolean;
+    showCustomerLink?: boolean;
     ctaHref?: string;
     ctaLabel?: string;
 };
@@ -24,6 +25,7 @@ export function LandingHeader({
     navLinks,
     logoHref = '/',
     showProBadge = false,
+    showCustomerLink = false,
     ctaHref,
     ctaLabel,
 }: LandingHeaderProps) {
@@ -74,14 +76,19 @@ export function LandingHeader({
                                 <Link href={ctaHref}>{ctaLabel}</Link>
                             </Button>
                         )}
+                        {showCustomerLink && (
+                            <Link href="/" className={linkClass}>
+                                For Customers
+                            </Link>
+                        )}
                     </nav>
                     <button
                         type="button"
                         onClick={() => setMobileNavOpen(true)}
                         className="ml-auto flex size-9 items-center justify-center md:hidden"
-                        aria-label="Open menu"
+                        aria-label="Open Mobile Menu"
                     >
-                        <Menu size={20} className="text-foreground" />
+                        <Menu size={16} className="text-foreground" />
                     </button>
                 </div>
             </header>
@@ -116,22 +123,31 @@ export function LandingHeader({
                             type="button"
                             onClick={closeMobileNav}
                             className="flex size-9 items-center justify-center"
-                            aria-label="Close menu"
+                            aria-label="Close Mobile Menu"
                         >
-                            <Cross size={20} className="text-foreground" />
+                            <Cross size={16} className="text-foreground" />
                         </button>
                     </div>
-                    <nav className="flex flex-1 flex-col gap-1 px-4 py-8 sm:px-6">
+                    <nav className="flex flex-1 flex-col gap-4 px-4 py-8 sm:px-6 align-center justify-center">
                         {navLinks.map(({ href, label }) => (
                             <Link
                                 key={href}
                                 href={href}
                                 onClick={closeMobileNav}
-                                className="rounded-lg px-4 py-3 text-lg font-medium text-muted-foreground transition-all duration-[250ms] hover:bg-muted/50 hover:text-foreground"
+                                className="rounded-lg px-4 py-3 text-base text-center font-medium text-muted-foreground transition-all duration-[250ms] hover:bg-muted/50 hover:text-foreground"
                             >
                                 {label}
                             </Link>
                         ))}
+                        {showCustomerLink && (
+                            <Link
+                                href="/"
+                                onClick={closeMobileNav}
+                                className="rounded-lg px-4 py-3 text-base text-center font-medium text-muted-foreground transition-all duration-[250ms] hover:bg-muted/50 hover:text-foreground"
+                            >
+                                For Customers
+                            </Link>
+                        )}
                     </nav>
                     {ctaHref && ctaLabel && (
                         <div className="border-t border-border p-4 sm:p-6">

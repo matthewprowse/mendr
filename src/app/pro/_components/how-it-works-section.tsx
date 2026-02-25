@@ -1,7 +1,7 @@
 import { Placeholder } from '@/components/placeholder';
 
 const DESC =
-    'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.';
+    'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.';
 
 type PlaceholderItem = {
     label: string;
@@ -139,8 +139,7 @@ export function HowItWorksSection() {
                     How Scandio Pro Works
                 </h2>
                 <p className="mx-auto mt-4 max-w-2xl text-muted-foreground">
-                    Pre-diagnosed leads delivered to your dashboard. Accept jobs, show up informed,
-                    get paid. No call-out fees, no dead leads.
+                    Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.
                 </p>
             </div>
 

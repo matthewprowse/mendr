@@ -3,7 +3,7 @@
 import { forwardRef, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { ArrowUp, Paperclip, X } from 'lucide-react';
+import { ArrowUp, Paperclip, Cross } from 'geist-icons';
 import { cn } from '@/lib/utils';
 
 const MAX_ATTACHMENTS = 10;
@@ -131,7 +131,7 @@ export const ChatFooter = forwardRef<
                                             className="absolute h-6 w-6 top-1 right-1 p-0.5 text-black rounded-md"
                                             aria-label="Remove Attachment"
                                         >
-                                            <X className="size-3.5" />
+                                            <Cross size={14} className="size-3.5" />
                                         </Button>
                                     </div>
                                 ))}
@@ -186,6 +186,7 @@ export const ChatFooter = forwardRef<
                                     }
                                 >
                                     <Paperclip
+                                        size={welcomeMode ? 20 : 16}
                                         className={cn(
                                             welcomeMode ? 'size-5' : 'size-4',
                                             'text-muted-foreground'
@@ -203,7 +204,7 @@ export const ChatFooter = forwardRef<
                                     onClick={handleSend}
                                     disabled={isDisabled || isResponding || !canSend}
                                 >
-                                    <ArrowUp className={cn(welcomeMode ? 'size-5' : 'size-4')} />
+                                    <ArrowUp size={welcomeMode ? 20 : 16} className={cn(welcomeMode ? 'size-5' : 'size-4')} />
                                 </Button>
                             </div>
                         </div>

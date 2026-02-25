@@ -141,11 +141,7 @@ export default function LandingPage() {
                             How Scandio Works
                         </h2>
                         <p className="mx-auto mt-4 max-w-3xl text-muted-foreground">
-                            We have transformed the search for home maintenance contractors into a
-                            streamlined, professional process. Scandio analyses your image,
-                            identifies your respective fault and returns a diagnosis and resolution
-                            summary, linking you directly to the best local contractors in the
-                            Western Cape.
+                          Lorem ipsum dolor sit amet, consectetur adipiscing elit. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris.
                         </p>
                     </div>
 

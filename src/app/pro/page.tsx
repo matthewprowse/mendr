@@ -1,13 +1,10 @@
 import type { Metadata } from 'next';
-import Link from 'next/link';
 import { Placeholder } from '@/components/placeholder';
-import { Button } from '@/components/ui/button';
 import { LandingFooter } from '@/components/landing-footer';
 import { LandingHeader } from '@/components/landing-header';
 import { CoverageMap } from '@/app/page/_components/coverage-map';
 import { FeaturesSection } from './_components/features-section';
 import { HowItWorksSection } from './_components/how-it-works-section';
-import { ProSignupSection } from './_components/pro-signup-section';
 import { TestimonialsSection } from './_components/testimonials-section';
 
 export const metadata: Metadata = {
@@ -29,11 +26,13 @@ export default function ProLandingPage() {
             <LandingHeader
                 navLinks={[
                     { href: '#how-it-works', label: 'How It Works' },
-                    { href: '#coverage', label: 'Coverage' },
                     { href: '#features', label: 'Features' },
+                    { href: '#our-value', label: 'Our Value' },
+                    { href: '#coverage', label: 'Coverage' },
                 ]}
                 logoHref="/pro"
                 showProBadge
+                showCustomerLink
             />
 
             <main className="flex-1">
@@ -46,22 +45,11 @@ export default function ProLandingPage() {
                                 <div className="h-9 bg-secondary w-full rounded-md" />
                             </div>
                             <p className="text-base text-muted-foreground">
-                                Stop buying dead leads. Western Cape contractors tired of call-out
-                                fees and vague complaints. We send you homeowners who already know
-                                what&apos;s wrong—and what parts you need—before you drive.
-                                <br />
-                                <br />
-                                Skip the uncertainty, get pre-diagnosed jobs, and connect with
-                                homeowners who are ready to hire.
+                              Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.
+                              <br />
+                              <br />
+                              Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.
                             </p>
-                            <div className="flex flex-col items-center gap-3 lg:items-start">
-                                <Button>
-                                    <Link href="#register">Join Network</Link>
-                                </Button>
-                                <p className="text-xs text-muted-foreground">
-                                    No Credit Card Required
-                                </p>
-                            </div>
                         </div>
                         <div className="flex justify-center">
                             <div className="relative w-full max-w-[348px] overflow-hidden rounded-3xl border border-border/50 bg-secondary/50 hover:bg-secondary/25 transition-all duration-250">
@@ -87,37 +75,6 @@ export default function ProLandingPage() {
                             ))}
                         </div>
                     </div>
-                </section>
-
-                {/* Coverage Map */}
-                <section
-                    id="coverage"
-                    className="mx-auto max-w-7xl flex flex-col gap-12 px-4 py-16 sm:px-6 sm:py-28 lg:px-8"
-                >
-                    <div className="flex flex-col gap-4 text-center">
-                        <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">
-                            Service Coverage
-                        </h2>
-                        <p className="mx-auto max-w-3xl text-muted-foreground">
-                            Lorem ipsum dolor sit amet, consectetur adipiscing elit. Ut enim ad
-                            minim veniam, quis nostrud exercitation ullamco laboris.
-                        </p>
-                    </div>
-                    {process.env.NEXT_PUBLIC_GOOGLE_MAPS_EMBED_KEY ||
-                    process.env.NEXT_PUBLIC_GOOGLE_PLACES_API_KEY ? (
-                        <CoverageMap
-                            apiKey={
-                                process.env.NEXT_PUBLIC_GOOGLE_MAPS_EMBED_KEY ||
-                                process.env.NEXT_PUBLIC_GOOGLE_PLACES_API_KEY ||
-                                ''
-                            }
-                        />
-                    ) : (
-                        <div className="flex min-h-[400px] items-center justify-center rounded-lg border border-border/50 bg-secondary/75 hover:border-border/75 hover:bg-secondary/50 transition-all duration-250 text-sm text-muted-foreground p-4 text-center">
-                            Configure NEXT_PUBLIC_GOOGLE_MAPS_EMBED_KEY or
-                            NEXT_PUBLIC_GOOGLE_PLACES_API_KEY to Show Map.
-                        </div>
-                    )}
                 </section>
 
                 <HowItWorksSection />
@@ -184,12 +141,38 @@ export default function ProLandingPage() {
                     </div>
                 </section>
 
-                <TestimonialsSection />
-
-                {/* Join Network / Signup */}
-                <section className="bg-muted/20">
-                    <ProSignupSection />
+                {/* Coverage Map */}
+                <section
+                    id="coverage"
+                    className="mx-auto max-w-7xl flex flex-col gap-12 px-4 py-16 sm:px-6 sm:py-28 lg:px-8"
+                >
+                    <div className="flex flex-col gap-4 text-center">
+                        <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">
+                            Service Coverage
+                        </h2>
+                        <p className="mx-auto max-w-3xl text-muted-foreground">
+                            Lorem ipsum dolor sit amet, consectetur adipiscing elit. Ut enim ad
+                            minim veniam, quis nostrud exercitation ullamco laboris.
+                        </p>
+                    </div>
+                    {process.env.NEXT_PUBLIC_GOOGLE_MAPS_EMBED_KEY ||
+                    process.env.NEXT_PUBLIC_GOOGLE_PLACES_API_KEY ? (
+                        <CoverageMap
+                            apiKey={
+                                process.env.NEXT_PUBLIC_GOOGLE_MAPS_EMBED_KEY ||
+                                process.env.NEXT_PUBLIC_GOOGLE_PLACES_API_KEY ||
+                                ''
+                            }
+                        />
+                    ) : (
+                        <div className="flex min-h-[400px] items-center justify-center rounded-lg border border-border/50 bg-secondary/75 hover:border-border/75 hover:bg-secondary/50 transition-all duration-250 text-sm text-muted-foreground p-4 text-center">
+                            Configure NEXT_PUBLIC_GOOGLE_MAPS_EMBED_KEY or
+                            NEXT_PUBLIC_GOOGLE_PLACES_API_KEY to Show Map.
+                        </div>
+                    )}
                 </section>
+
+                <TestimonialsSection />
             </main>
 
             <LandingFooter showLargeBrandText />
