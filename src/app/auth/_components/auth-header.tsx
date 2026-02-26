@@ -1,6 +1,5 @@
 import Image from 'next/image';
 import Link from 'next/link';
-import { ArrowLeft } from 'geist-icons';
 
 export function AuthHeader() {
     return (
@@ -8,9 +7,8 @@ export function AuthHeader() {
             <div className="mx-auto flex h-16 max-w-7xl items-center gap-4 px-4 sm:px-6 lg:px-8">
                 <Link
                     href="/"
-                    className="flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
+                    className="text-sm text-muted-foreground transition-colors hover:text-foreground"
                 >
-                    <ArrowLeft size={16} className="size-4" />
                     Back
                 </Link>
                 <Link href="/" className="flex items-center gap-2">

@@ -101,6 +101,46 @@ export function isWhatsAppCapablePhone(phone: string | undefined | null): boolea
     return false;
 }
 
+/** Format unknown error for API responses. Returns user-safe message. */
+export function formatApiError(error: unknown): string {
+    if (error instanceof Error) return error.message;
+    if (typeof error === 'string') return error;
+    return 'Internal error';
+}
+
+/** Extract ZAR amount ranges from text, e.g. "R350–R500", "R1,200 to R2,500", or "R1,200". Returns up to 2 unique ranges for call-out and repair. */
+export function extractRandRanges(text: string): string[] {
+    if (!text?.trim()) return [];
+    const matches = text.match(/R[\d,]+(?:[–\-]\s*R?[\d,]+|\s+to\s+R[\d,]+)?/gi) ?? [];
+    const seen = new Set<string>();
+    return matches.filter((m) => {
+        const norm = m.replace(/\s+/g, ' ').replace(/\sto\s/i, '–').trim();
+        if (seen.has(norm)) return false;
+        seen.add(norm);
+        return true;
+    });
+}
+
+/** Parse repair and replacement ranges from combined fee text. Returns { repair, replacement }. */
+export function parseRepairReplacementRanges(text: string): {
+    repair: string | null;
+    replacement: string | null;
+} {
+    if (!text?.trim()) return { repair: null, replacement: null };
+    const t = text.trim();
+    const repairMatch = t.match(
+        /(?:repair|repairing)(?:[:\s]+|,\s*|\s+for\s+|\s+\()(R[\d,]+(?:[–\-]\s*R?[\d,]+|\s+to\s+R[\d,]+)?)/i
+    );
+    const replacementMatch = t.match(
+        /(?:replacement|replacing)(?:[:\s]+|,\s*|\s+for\s+|\s+\()(R[\d,]+(?:[–\-]\s*R?[\d,]+|\s+to\s+R[\d,]+)?)/i
+    );
+    const ranges = extractRandRanges(t);
+    return {
+        repair: repairMatch?.[1]?.trim() ?? ranges[0] ?? null,
+        replacement: replacementMatch?.[1]?.trim() ?? ranges[1] ?? null,
+    };
+}
+
 /** Strip meta-commentary the AI mistakenly put in message or action_required (e.g. "The user seems frustrated", "I need to...") */
 export function sanitizeAiContent(text: string): string {
     if (!text?.trim()) return text;

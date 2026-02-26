@@ -40,11 +40,11 @@ export function FeaturesChatPlaceholder({
 
 export function FeaturesSection() {
     return (
-        <section id="features" className="bg-muted/50 py-16">
+        <section id="features" className="bg-muted/50 py-16 scroll-mt-16">
             <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
                 <div className="mb-12 text-center">
                     <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">Our Features</h2>
-                    <p className="mx-auto mt-4 max-w-3xl text-muted-foreground">
+                    <p className="mx-auto mt-4 max-w-4xl text-muted-foreground">
                         Lorem ipsum dolor sit amet, consectetur adipiscing elit. Ut enim ad minim
                         veniam, quis nostrud exercitation ullamco laboris.
                     </p>

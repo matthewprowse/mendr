@@ -6,8 +6,11 @@ import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Separator } from '@/components/ui/separator';
 import { sanitizeAiContent } from '@/lib/utils';
+import { toTitleCase } from '@/lib/services';
 import { DiagnosisData, Provider } from './types';
 import { ProviderCard } from './provider-card';
+import { ProvidersMap } from './providers-map';
+import { ServiceTradeLink } from './service-trade-link';
 import { ProvidersSkeleton } from './skeletons';
 
 export function InlineDiagnosisBlock({
@@ -85,7 +88,10 @@ export function InlineDiagnosisBlock({
             {diagnosis.diagnosis && !diagnosis.requires_clarification && (
                 <div className="space-y-6">
                     <div className="mt-3 space-y-2">
-                        <h1 className="text-xl font-semibold">{diagnosis.diagnosis}</h1>
+                        {trade && trade !== 'N/A' && <ServiceTradeLink trade={trade} />}
+                        <h1 className="text-xl font-semibold">
+                            {toTitleCase(diagnosis.diagnosis)}
+                        </h1>
                         {diagnosis.action_required && diagnosis.action_required !== 'N/A' && (
                             <p className="text-sm leading-relaxed whitespace-pre-wrap">
                                 {sanitizeAiContent(diagnosis.action_required)}
@@ -220,6 +226,21 @@ export function InlineDiagnosisBlock({
                         </p>
                     ) : (
                         <div className="flex flex-col gap-6">
+                            {(providers?.length ?? 0) + (emergingProviders?.length ?? 0) > 0 &&
+                                hasLocation &&
+                                (process.env.NEXT_PUBLIC_GOOGLE_MAPS_EMBED_KEY ||
+                                    process.env.NEXT_PUBLIC_GOOGLE_PLACES_API_KEY) && (
+                                    <ProvidersMap
+                                        apiKey={
+                                            process.env.NEXT_PUBLIC_GOOGLE_MAPS_EMBED_KEY ||
+                                            process.env.NEXT_PUBLIC_GOOGLE_PLACES_API_KEY ||
+                                            ''
+                                        }
+                                        providers={providers ?? []}
+                                        emergingProviders={emergingProviders ?? []}
+                                        userLocation={userLocation}
+                                    />
+                                )}
                             {(() => {
                                 const list = providers ?? [];
                                 const favourite = list.find((p) => p.isFavourite);
@@ -291,7 +312,7 @@ export function InlineDiagnosisBlock({
                                                         Emerging Providers
                                                     </h3>
                                                     <p className="text-sm text-foreground leading-relaxed">
-                                                        Good reviews but fewer of them — newer
+                                                        Good reviews but fewer of them, newer
                                                         businesses worth considering.
                                                     </p>
                                                 </div>
@@ -320,7 +341,7 @@ export function InlineDiagnosisBlock({
                     {(providers?.length ?? 0) > 0 && (
                         <div className="pt-4">
                             <p className="text-sm text-foreground leading-relaxed">
-                                We've generated a report from this conversation, and will be shared
+                                We&apos;ve generated a report from this conversation, and will be shared
                                 with your chosen provider automatically when you send our WhatsApp
                                 summary. If you provide additional context or images in the chat,
                                 they will be included in the diagnosis.

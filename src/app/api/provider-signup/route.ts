@@ -1,27 +1,44 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabase-server';
+import { formatApiError } from '@/lib/utils';
+
+/** Maps request body to DB columns. Supports both legacy and current field names. */
+function mapSignupBody(body: Record<string, unknown>) {
+    const phone =
+        (body.phone as string)?.trim() || (body.contact_number as string)?.trim() || null;
+    const maps_link =
+        (body.maps_link as string)?.trim() || (body.google_maps_link as string)?.trim() || null;
+    const description =
+        (body.description as string)?.trim() || (body.descriptive_text as string)?.trim() || null;
+    const marketing_budget =
+        (body.marketing_budget as string)?.trim() || (body.spend_per_month as string)?.trim() || null;
+    const lead_price =
+        (body.lead_price as string)?.trim() || (body.price_per_lead as string)?.trim() || null;
+
+    return {
+        company_name: (body.company_name as string)?.trim(),
+        email: (body.email as string)?.trim(),
+        phone,
+        maps_link,
+        service_id: (body.service_id as string) || null,
+        description,
+        team_size: (body.team_size as string)?.trim() || null,
+        marketing_budget,
+        lead_price,
+        report_conversation_id: (body.report_conversation_id as string) || null,
+        marketing_consent: !!body.marketing_consent,
+        address: (body.address as string)?.trim() || null,
+        lat: body.lat != null ? Number(body.lat) : null,
+        lng: body.lng != null ? Number(body.lng) : null,
+    };
+}
 
 export async function POST(req: NextRequest) {
     try {
         const body = await req.json();
-        const {
-            company_name,
-            email,
-            contact_number,
-            google_maps_link,
-            main_trade,
-            descriptive_text,
-            team_size,
-            spend_per_month,
-            price_per_lead,
-            report_conversation_id,
-            marketing_consent,
-            address,
-            lat,
-            lng,
-        } = body;
+        const mapped = mapSignupBody(body);
 
-        if (!company_name?.trim() || !email?.trim()) {
+        if (!mapped.company_name || !mapped.email) {
             return NextResponse.json(
                 { error: 'Company name and email are required' },
                 { status: 400 }
@@ -30,20 +47,20 @@ export async function POST(req: NextRequest) {
 
         const supabase = await createSupabaseServerClient();
         const { error } = await supabase.from('provider_signups').insert({
-            company_name: company_name.trim(),
-            email: email.trim(),
-            contact_number: contact_number?.trim() || null,
-            google_maps_link: google_maps_link?.trim() || null,
-            main_trade: main_trade?.trim() || null,
-            descriptive_text: descriptive_text?.trim() || null,
-            team_size: team_size?.trim() || null,
-            spend_per_month: spend_per_month?.trim() || null,
-            price_per_lead: price_per_lead?.trim() || null,
-            report_conversation_id: report_conversation_id || null,
-            marketing_consent: !!marketing_consent,
-            address: address?.trim() || null,
-            lat: lat != null ? Number(lat) : null,
-            lng: lng != null ? Number(lng) : null,
+            company_name: mapped.company_name,
+            email: mapped.email,
+            phone: mapped.phone,
+            maps_link: mapped.maps_link,
+            service_id: mapped.service_id,
+            description: mapped.description,
+            team_size: mapped.team_size,
+            marketing_budget: mapped.marketing_budget,
+            lead_price: mapped.lead_price,
+            report_conversation_id: mapped.report_conversation_id,
+            marketing_consent: mapped.marketing_consent,
+            address: mapped.address,
+            lat: mapped.lat,
+            lng: mapped.lng,
         });
 
         if (error) {
@@ -52,8 +69,8 @@ export async function POST(req: NextRequest) {
         }
 
         return NextResponse.json({ success: true });
-    } catch (e: any) {
+    } catch (e: unknown) {
         console.error('Provider signup error:', e);
-        return NextResponse.json({ error: e?.message || 'Internal error' }, { status: 500 });
+        return NextResponse.json({ error: formatApiError(e) }, { status: 500 });
     }
 }

@@ -2,7 +2,9 @@
 
 import { useEffect, useState } from 'react';
 import { sanitizeAiContent } from '@/lib/utils';
+import { toTitleCase } from '@/lib/services';
 import { DiagnosisData } from './types';
+import { ServiceTradeLink } from './service-trade-link';
 
 const WORD_DELAY_MS = 40;
 
@@ -35,8 +37,11 @@ export function DiagnosisReport({ diagnosis }: { diagnosis: DiagnosisData | null
     const isUnrelated = diagnosis?.rejected || diagnosis?.requires_clarification;
     return (
         <div className="space-y-3">
+            {diagnosis.trade && diagnosis.trade !== 'N/A' && (
+                <ServiceTradeLink trade={diagnosis.trade} />
+            )}
             <h2 className="text-2xl font-semibold leading-tight tracking-tight">
-                {diagnosis.diagnosis}
+                {toTitleCase(diagnosis.diagnosis)}
             </h2>
             <p className="text-sm leading-relaxed whitespace-pre-wrap">
                 <RevealText text={sanitizeAiContent(diagnosis.action_required || '')} />

@@ -1,12 +1,17 @@
 'use client';
 
-import { forwardRef, useRef } from 'react';
+import { forwardRef, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { ArrowUp, Paperclip, Cross } from 'geist-icons';
+import {
+    Popover,
+    PopoverContent,
+    PopoverTrigger,
+} from '@/components/ui/popover';
+import { ArrowUp, Paperclip, Cross, FileText } from 'geist-icons';
 import { cn } from '@/lib/utils';
 
-const MAX_ATTACHMENTS = 10;
+const MAX_ATTACHMENTS = 5;
 
 export const ChatFooter = forwardRef<
     HTMLElement,
@@ -22,6 +27,7 @@ export const ChatFooter = forwardRef<
         onRemoveAttachment: (index: number) => void;
         welcomeMode?: boolean;
         inputRef?: React.RefObject<HTMLInputElement | null>;
+        onGoToRecentDiagnosis?: () => void;
     }
 >(
     (
@@ -37,13 +43,16 @@ export const ChatFooter = forwardRef<
             onRemoveAttachment,
             welcomeMode = false,
             inputRef,
+            onGoToRecentDiagnosis,
         },
         ref
     ) => {
         const internalRef = useRef<HTMLInputElement>(null);
         const fileInputRef = inputRef ?? internalRef;
         const isDisabled = (!hasDiagnosis && isDiagnosing) || isResponding;
-        const canSend = welcomeMode ? false : message.trim() || pendingAttachments.length > 0;
+        const canSend =
+            (welcomeMode && message.trim().length > 0) ||
+            (!welcomeMode && (message.trim().length > 0 || pendingAttachments.length > 0));
 
         const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
             const files = Array.from(e.target.files || []);
@@ -98,7 +107,7 @@ export const ChatFooter = forwardRef<
 
         return (
             <footer ref={ref} className="fixed bottom-0 left-0 right-0 z-50 bg-background p-4">
-                <div className="max-w-4xl px-0 md:px-4 mx-auto w-full">
+                <div className="max-w-4xl px-0 md:px-4 mx-auto w-full flex flex-col gap-2">
                     <input
                         ref={fileInputRef}
                         type="file"
@@ -107,23 +116,37 @@ export const ChatFooter = forwardRef<
                         className="hidden"
                         onChange={handleFileChange}
                     />
+                    {!welcomeMode &&
+                        hasDiagnosis &&
+                        onGoToRecentDiagnosis && (
+                            <div className="flex justify-end">
+                                <RecentDiagnosisPopover
+                                    onGoToRecentDiagnosis={onGoToRecentDiagnosis}
+                                />
+                            </div>
+                        )}
                     <div
                         className="relative flex-1 min-w-0 rounded-md border border-input bg-transparent shadow-xs min-h-[4.5rem] max-h-[224px] flex flex-col focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/50 transition-[color,box-shadow] outline-none"
                         onDrop={handleDrop}
                         onDragOver={handleDragOver}
                     >
                         {!welcomeMode && pendingAttachments.length > 0 && (
-                            <div className="px-3 pt-3 pb-1.5 flex flex-nowrap gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden shrink-0">
-                                {pendingAttachments.map((url, i) => (
-                                    <div
-                                        key={i}
-                                        className="relative h-17 w-17 rounded-lg overflow-hidden border border-border shrink-0 group"
-                                    >
-                                        <img
-                                            src={url}
-                                            alt={`Attachment ${i + 1}`}
-                                            className="h-full w-full object-cover"
-                                        />
+                            <div className="px-3 pt-3 pb-1.5 flex flex-wrap gap-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden shrink-0">
+                                {pendingAttachments
+                                    .map((url, i) =>
+                                        typeof url === 'string' ? { url, i } : null
+                                    )
+                                    .filter((x): x is { url: string; i: number } => x !== null)
+                                    .map(({ url, i }) => (
+                                        <div
+                                            key={i}
+                                            className="relative size-16 rounded-lg overflow-hidden border border-border shrink-0 group"
+                                        >
+                                            <img
+                                                src={url}
+                                                alt={`Attachment ${i + 1}`}
+                                                className="h-full w-full object-cover"
+                                            />
                                         <Button
                                             onClick={() => onRemoveAttachment(i)}
                                             size="icon"
@@ -133,8 +156,8 @@ export const ChatFooter = forwardRef<
                                         >
                                             <Cross size={14} className="size-3.5" />
                                         </Button>
-                                    </div>
-                                ))}
+                                        </div>
+                                    ))}
                             </div>
                         )}
                         <div className="relative flex-1 min-w-0 flex">
@@ -152,12 +175,12 @@ export const ChatFooter = forwardRef<
                                     welcomeMode
                                         ? isResponding
                                             ? 'Processing…'
-                                            : 'Upload Images to Analyse'
+                                            : 'Upload one or more photos (button on the right) so we can generate a Scandio Report. You can also type extra context here — text alone improves your diagnosis, but we still need at least one image for a full report.'
                                         : isDisabled
                                           ? 'Processing...'
                                           : "Scandio's AI Assistant"
                                 }
-                                disabled={isDisabled || isResponding || welcomeMode}
+                                disabled={isDisabled || isResponding}
                                 className={cn(
                                     'min-h-[4.5rem] max-h-48 flex-1 resize-none overflow-y-auto text-sm border-0 focus-visible:ring-0 focus-visible:ring-offset-0 rounded-none rounded-b-md pr-20 pb-12',
                                     'field-sizing-fixed [scrollbar-width:none] [&::-webkit-scrollbar]:hidden'
@@ -168,10 +191,7 @@ export const ChatFooter = forwardRef<
                                     type="button"
                                     variant={welcomeMode ? 'secondary' : 'ghost'}
                                     size="icon"
-                                    className={cn(
-                                        'flex-shrink-0 shrink-0',
-                                        welcomeMode ? 'size-9' : 'size-9'
-                                    )}
+                                    className="flex-shrink-0 shrink-0 size-9"
                                     onClick={() => fileInputRef.current?.click()}
                                     disabled={
                                         welcomeMode
@@ -181,30 +201,32 @@ export const ChatFooter = forwardRef<
                                     }
                                     title={
                                         welcomeMode
-                                            ? 'Upload Image'
-                                            : `Add Images (Max ${MAX_ATTACHMENTS})`
+                                            ? 'Upload image'
+                                            : `Add images (Max ${MAX_ATTACHMENTS})`
                                     }
                                 >
                                     <Paperclip
-                                        size={welcomeMode ? 20 : 16}
-                                        className={cn(
-                                            welcomeMode ? 'size-5' : 'size-4',
-                                            'text-muted-foreground'
-                                        )}
+                                        size={18}
+                                        strokeWidth={2}
+                                        className="size-[18px] text-muted-foreground"
                                     />
                                 </Button>
                                 <Button
                                     type="button"
                                     variant={welcomeMode ? 'secondary' : 'default'}
                                     size="icon"
-                                    className={cn(
-                                        'flex-shrink-0 shrink-0',
-                                        welcomeMode ? 'size-9' : 'size-9'
-                                    )}
+                                    className="flex-shrink-0 shrink-0 size-9"
                                     onClick={handleSend}
                                     disabled={isDisabled || isResponding || !canSend}
                                 >
-                                    <ArrowUp size={welcomeMode ? 20 : 16} className={cn(welcomeMode ? 'size-5' : 'size-4')} />
+                                    <ArrowUp
+                                        size={18}
+                                        strokeWidth={2}
+                                        className={cn(
+                                            'size-[18px]',
+                                            welcomeMode ? 'text-muted-foreground' : ''
+                                        )}
+                                    />
                                 </Button>
                             </div>
                         </div>
@@ -215,3 +237,40 @@ export const ChatFooter = forwardRef<
     }
 );
 ChatFooter.displayName = 'ChatFooter';
+
+function RecentDiagnosisPopover({
+    onGoToRecentDiagnosis,
+}: {
+    onGoToRecentDiagnosis: () => void;
+}) {
+    const [open, setOpen] = useState(false);
+    return (
+        <Popover open={open} onOpenChange={setOpen}>
+            <PopoverTrigger asChild>
+                <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+                >
+                    <FileText size={14} className="shrink-0" />
+                    Recent
+                </Button>
+            </PopoverTrigger>
+            <PopoverContent align="end" side="top" className="w-auto p-3">
+                <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    className="w-full"
+                    onClick={() => {
+                        onGoToRecentDiagnosis();
+                        setOpen(false);
+                    }}
+                >
+                    Go to recent diagnosis
+                </Button>
+            </PopoverContent>
+        </Popover>
+    );
+}

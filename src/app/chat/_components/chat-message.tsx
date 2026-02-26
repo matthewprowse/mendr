@@ -9,6 +9,8 @@ import {
 } from 'geist-icons';
 import { Message } from './types';
 import { InlineDiagnosisBlock } from './inline-diagnosis-block';
+import { UnrelatedImageCard } from './unrelated-image-card';
+import { UnservicedCategoryCard } from './unserviced-category-card';
 
 export function ChatMessage({
     message,
@@ -43,8 +45,21 @@ export function ChatMessage({
         message.diagnosis.diagnosis &&
         message.diagnosis.diagnosis !== 'N/A' &&
         !message.diagnosis.requires_clarification &&
+        !message.diagnosis.rejected &&
+        !message.diagnosis.unserviced &&
         (message.hasUpdatedDiagnosis !== false || (message.providers?.length ?? 0) > 0) &&
         !!inlineDiagnosisProps;
+
+    const hasRejectedBlock =
+        message.role === 'assistant' &&
+        message.diagnosis?.rejected &&
+        !!inlineDiagnosisProps?.conversationId;
+
+    const hasUnservicedBlock =
+        message.role === 'assistant' &&
+        message.diagnosis?.unserviced &&
+        !message.diagnosis?.rejected &&
+        !!inlineDiagnosisProps?.conversationId;
 
     return (
         <div
@@ -53,6 +68,22 @@ export function ChatMessage({
                 message.role === 'user' ? 'items-end' : 'items-start'
             )}
         >
+            {/* Unrelated image card */}
+            {hasRejectedBlock && (
+                <UnrelatedImageCard
+                    conversationId={inlineDiagnosisProps!.conversationId}
+                    diagnosisMessage={message.content}
+                />
+            )}
+            {/* Unserviced category card */}
+            {hasUnservicedBlock && message.diagnosis && (
+                <UnservicedCategoryCard
+                    conversationId={inlineDiagnosisProps!.conversationId}
+                    requestedService={message.diagnosis.trade || 'Unknown'}
+                    diagnosis={message.diagnosis.diagnosis}
+                    diagnosisFull={message.diagnosis as unknown as Record<string, unknown>}
+                />
+            )}
             {/* Diagnosis block first so nothing appears between page-level thinking and diagnosis header */}
             {hasDiagnosisBlock && inlineDiagnosisProps && message.diagnosis && (
                 <InlineDiagnosisBlock
@@ -71,22 +102,31 @@ export function ChatMessage({
                 />
             )}
             {message.role === 'user' && message.attachments && message.attachments.length > 0 && (
-                <div className="flex flex-wrap gap-1.5 justify-end">
-                    {message.attachments.map((url, i) => (
-                        <a
-                            key={i}
-                            href={url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="block h-16 w-16 rounded-lg overflow-hidden border border-border/50 hover:opacity-95 shrink-0"
-                        >
-                            <img
-                                src={url}
-                                alt={`Attachment ${i + 1}`}
-                                className="h-full w-full object-cover"
-                            />
-                        </a>
-                    ))}
+                <div className="flex flex-wrap gap-1.5 justify-end max-w-full">
+                    {(message.attachments as unknown[])
+                        .map((a) =>
+                            typeof a === 'string'
+                                ? a
+                                : a && typeof a === 'object' && 'url' in a
+                                  ? (a as { url: string }).url
+                                  : null
+                        )
+                        .filter((url): url is string => !!url && typeof url === 'string')
+                        .map((url, i) => (
+                            <a
+                                key={i}
+                                href={url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="block h-16 w-16 rounded-lg overflow-hidden border border-border/50 hover:opacity-95 shrink-0"
+                            >
+                                <img
+                                    src={url}
+                                    alt={`Attachment ${i + 1}`}
+                                    className="h-full w-full object-cover"
+                                />
+                            </a>
+                        ))}
                 </div>
             )}
             {!(

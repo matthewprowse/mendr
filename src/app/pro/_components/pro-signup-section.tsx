@@ -99,7 +99,10 @@ export function ProSignupSection() {
 
     if (success) {
         return (
-            <section id="register" className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
+            <section
+                id="register"
+                className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8"
+            >
                 <div className="mx-auto max-w-2xl text-center">
                     <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">Join Network</h2>
                     <p className="mt-4 text-muted-foreground">
@@ -117,7 +120,10 @@ export function ProSignupSection() {
                 <div className="mb-8 text-center">
                     <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">Join Network</h2>
                     <p className="mt-4 text-muted-foreground">
-                        Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.
+                        Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod
+                        tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam,
+                        quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo
+                        consequat.
                     </p>
                 </div>
 
@@ -162,7 +168,10 @@ export function ProSignupSection() {
                         <div className="space-y-3">
                             <Label htmlFor="team_size">Team Size</Label>
                             <Select value={teamSize || undefined} onValueChange={setTeamSize}>
-                                <SelectTrigger id="team_size" className="h-9 w-full text-[14px] sm:text-sm leading-none bg-background">
+                                <SelectTrigger
+                                    id="team_size"
+                                    className="h-9 w-full text-[14px] sm:text-sm leading-none bg-background"
+                                >
                                     <SelectValue placeholder="Select Team Size" />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -189,7 +198,10 @@ export function ProSignupSection() {
                     <div className="space-y-3">
                         <Label htmlFor="main_trade">Main Trade</Label>
                         <Select value={mainTrade} onValueChange={setMainTrade}>
-                            <SelectTrigger id="main_trade" className="h-9 w-full text-[14px] sm:text-sm leading-none bg-background">
+                            <SelectTrigger
+                                id="main_trade"
+                                className="h-9 w-full text-[14px] sm:text-sm leading-none bg-background"
+                            >
                                 <SelectValue placeholder="Select Main Trade" />
                             </SelectTrigger>
                             <SelectContent>
@@ -219,7 +231,8 @@ export function ProSignupSection() {
                 </form>
 
                 <p className="mt-8 text-center text-sm text-muted-foreground">
-                    Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.
+                    Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor
+                    incididunt ut labore et dolore magna aliqua.
                 </p>
             </div>
         </section>

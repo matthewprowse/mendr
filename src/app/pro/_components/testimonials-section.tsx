@@ -16,7 +16,7 @@ export function TestimonialsSection() {
             <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
                 <div className="mb-12 text-center align-center justify-center">
                     <div className="h-9 bg-muted-foreground/5 rounded-md w-96 mx-auto" />
-                    <p className="mx-auto mt-4 max-w-3xl text-muted-foreground">
+                    <p className="mx-auto mt-4 max-w-4xl text-muted-foreground">
                         Lorem ipsum dolor sit amet, consectetur adipiscing elit. Ut enim ad minim
                         veniam, quis nostrud exercitation ullamco laboris.
                     </p>

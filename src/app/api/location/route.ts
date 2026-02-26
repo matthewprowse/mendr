@@ -30,7 +30,7 @@ export async function GET(req: NextRequest) {
             lng,
             address: city,
         });
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error('IP location failed:', error);
         const fallbackLat = parseFloat(process.env.DEFAULT_LOCATION_LAT || '-26.2041');
         const fallbackLng = parseFloat(process.env.DEFAULT_LOCATION_LNG || '28.0473');

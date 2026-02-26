@@ -16,6 +16,7 @@ import { Spinner } from '@/components/ui/spinner';
 import { AppHeader } from '@/components/app-header';
 
 import { sanitizeAiContent, tryParseDiagnosisJson, extractMessageFromRaw } from '@/lib/utils';
+import { tradeToServiceLabel } from '@/lib/services';
 import { DiagnosisData, Message, Provider } from './types';
 import { ChatMessage } from './chat-message';
 import { ChatFooter } from './chat-footer';
@@ -23,9 +24,10 @@ import { DiagnosisResponseCard } from './diagnosis-response-card';
 
 export interface ChatPageClientProps {
     conversationId: string;
+    initialTrade?: string;
 }
 
-export function ChatPageClient({ conversationId }: ChatPageClientProps) {
+export function ChatPageClient({ conversationId, initialTrade }: ChatPageClientProps) {
     const router = useRouter();
     const id = conversationId;
 
@@ -142,12 +144,12 @@ export function ChatPageClient({ conversationId }: ChatPageClientProps) {
 
                 if (conv) {
                     if (conv.image_url) setImageSrc(conv.image_url);
-                    if (conv.diagnosis_json) setDiagnosis(conv.diagnosis_json);
-                    if (conv.user_lat && conv.user_lng) {
+                    if (conv.diagnosis) setDiagnosis(conv.diagnosis);
+                    if (conv.customer_lat && conv.customer_lng) {
                         setUserLocation({
-                            lat: conv.user_lat,
-                            lng: conv.user_lng,
-                            address: conv.user_address || '',
+                            lat: conv.customer_lat,
+                            lng: conv.customer_lng,
+                            address: conv.customer_address || '',
                         });
                     }
                 } else {
@@ -161,16 +163,30 @@ export function ChatPageClient({ conversationId }: ChatPageClientProps) {
                 if (getCancelled?.()) return null;
 
                 if (msgs && msgs.length > 0) {
-                    const mappedMsgs = msgs.map((m: any) => ({
-                        role: m.role as 'user' | 'assistant',
-                        content: m.content,
-                        attachments: m.attachments || [],
-                        feedback: m.feedback as 'up' | 'down' | null,
-                        hasUpdatedDiagnosis: m.has_updated_diagnosis,
-                        diagnosis: m.diagnosis_json ?? undefined,
-                        providers: m.providers_json ?? undefined,
-                        emergingProviders: m.emerging_providers_json ?? undefined,
-                    }));
+                    const mappedMsgs = msgs.map((m: any) => {
+                        const rawAtt = m.attachments || [];
+                        const attachments = Array.isArray(rawAtt)
+                            ? rawAtt
+                                  .map((a: unknown) =>
+                                      typeof a === 'string'
+                                          ? a
+                                          : a && typeof a === 'object' && 'url' in a
+                                            ? (a as { url: string }).url
+                                            : null
+                                  )
+                                  .filter((x: unknown): x is string => typeof x === 'string')
+                            : [];
+                        return {
+                            role: m.role as 'user' | 'assistant',
+                            content: m.content,
+                            attachments,
+                            feedback: m.feedback as 'up' | 'down' | null,
+                            hasUpdatedDiagnosis: m.diagnosis_updated,
+                            diagnosis: m.diagnosis ?? undefined,
+                            providers: m.providers ?? undefined,
+                            emergingProviders: m.emerging_providers ?? undefined,
+                        };
+                    });
                     setMessages(mappedMsgs);
                     return { msgs: mappedMsgs, loadedConvWithImage: !!conv?.image_url };
                 }
@@ -201,9 +217,9 @@ export function ChatPageClient({ conversationId }: ChatPageClientProps) {
             role,
             content,
             attachments,
-            has_updated_diagnosis: hasUpdatedDiagnosis,
-            diagnosis_json: diagnosisJson ?? undefined,
-            providers_json: providersJson ?? undefined,
+            diagnosis_updated: hasUpdatedDiagnosis,
+            diagnosis: diagnosisJson ?? undefined,
+            providers: providersJson ?? undefined,
         });
         if (error && typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
             console.warn('[Supabase] message:', error.code, error.message);
@@ -224,11 +240,11 @@ export function ChatPageClient({ conversationId }: ChatPageClientProps) {
             id,
             title: finalDiagnosis?.diagnosis || 'New Diagnosis',
             image_url: imageSrc,
-            user_lat: finalLocation?.lat,
-            user_lng: finalLocation?.lng,
-            user_address: finalLocation?.address,
-            diagnosis_json: finalDiagnosis,
-            device_type: deviceType,
+            customer_lat: finalLocation?.lat,
+            customer_lng: finalLocation?.lng,
+            customer_address: finalLocation?.address,
+            diagnosis: finalDiagnosis,
+            device: deviceType,
             user_agent: navigator.userAgent,
             user_id: null,
             updated_at: new Date().toISOString(),
@@ -260,8 +276,8 @@ export function ChatPageClient({ conversationId }: ChatPageClientProps) {
                     await (supabase as any)
                         .from('messages')
                         .update({
-                            providers_json: providers,
-                            emerging_providers_json: emergingProviders ?? null,
+                            providers: providers,
+                            emerging_providers: emergingProviders ?? null,
                         })
                         .eq('id', targetId);
                 }
@@ -286,7 +302,7 @@ export function ChatPageClient({ conversationId }: ChatPageClientProps) {
                 if (targetId) {
                     await (supabase as any)
                         .from('messages')
-                        .update({ content, diagnosis_json: diagnosis })
+                        .update({ content, diagnosis })
                         .eq('id', targetId);
                 }
             } catch (e) {
@@ -623,6 +639,24 @@ export function ChatPageClient({ conversationId }: ChatPageClientProps) {
         [userLocation, useLocationAndFetchProviders, getCurrentLocation]
     );
 
+    const initialTradeAppliedRef = useRef(false);
+    useEffect(() => {
+        if (!initialTrade?.trim() || !isLoaded || initialTradeAppliedRef.current) return;
+        const canonicalTrade = tradeToServiceLabel(initialTrade);
+        if (!canonicalTrade) return;
+        if (imageSrc || directTradeResult) return;
+        initialTradeAppliedRef.current = true;
+        const diagnosis = `${canonicalTrade} services`;
+        setDirectTradeSelection({ trade: canonicalTrade, diagnosis });
+        handleGetCompaniesNow({ trade: canonicalTrade, diagnosis });
+    }, [
+        initialTrade,
+        isLoaded,
+        imageSrc,
+        directTradeResult,
+        handleGetCompaniesNow,
+    ]);
+
     const startInitialDiagnosis = useCallback(
         async (img: string, userContext?: { trade: string; diagnosis: string }) => {
             if (diagnosisStartedRef.current) return;
@@ -789,6 +823,7 @@ export function ChatPageClient({ conversationId }: ChatPageClientProps) {
                             const canShowProvs =
                                 !parsedJson.rejected &&
                                 !parsedJson.requires_clarification &&
+                                !parsedJson.unserviced &&
                                 parsedJson.trade &&
                                 parsedJson.trade !== 'N/A' &&
                                 conf >= 85;
@@ -797,6 +832,7 @@ export function ChatPageClient({ conversationId }: ChatPageClientProps) {
                                 parsedJson.diagnosis &&
                                 !parsedJson.rejected &&
                                 !parsedJson.requires_clarification &&
+                                !parsedJson.unserviced &&
                                 parsedJson.trade &&
                                 parsedJson.trade !== 'N/A';
                             const assistantContent =
@@ -1012,9 +1048,9 @@ export function ChatPageClient({ conversationId }: ChatPageClientProps) {
                         table: 'conversations',
                         filter: `id=eq.${id}`,
                     },
-                    (payload: { new: { diagnosis_json?: DiagnosisData } }) => {
-                        if (payload.new.diagnosis_json && !cancelled) {
-                            setDiagnosis(payload.new.diagnosis_json);
+                    (payload: { new: { diagnosis?: DiagnosisData } }) => {
+                        if (payload.new.diagnosis && !cancelled) {
+                            setDiagnosis(payload.new.diagnosis);
                         }
                     }
                 )
@@ -1077,10 +1113,6 @@ export function ChatPageClient({ conversationId }: ChatPageClientProps) {
         const attachmentsToSend = options?.diagnosisRejected ? [] : pendingAttachments;
         if (!msgToSend && attachmentsToSend.length === 0) return;
         if (isResponding) return;
-        if (!imageSrc) {
-            toast.error('Please upload an image to diagnose.');
-            return;
-        }
 
         const userMsg = msgToSend || 'Sent images';
         const newMessage: Message = {
@@ -1127,8 +1159,8 @@ export function ChatPageClient({ conversationId }: ChatPageClientProps) {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    image: isFirstMessage ? imageSrc : null,
-                    textQuery: isFirstMessage ? undefined : msgToSend,
+                    image: isFirstMessage ? imageSrc ?? null : null,
+                    textQuery: msgToSend || undefined,
                     attachments: attachmentsToSend.length > 0 ? attachmentsToSend : undefined,
                     history: historyForApi,
                     providers: providersFromMessages,
@@ -1237,11 +1269,13 @@ export function ChatPageClient({ conversationId }: ChatPageClientProps) {
                                 conf >= 85 &&
                                 !parsedJson.requires_clarification &&
                                 !parsedJson.rejected &&
+                                !parsedJson.unserviced &&
                                 parsedJson.trade &&
                                 parsedJson.trade !== 'N/A';
                             const canFetchEarly =
                                 !parsedJson.requires_clarification &&
                                 !parsedJson.rejected &&
+                                !parsedJson.unserviced &&
                                 parsedJson.trade &&
                                 parsedJson.trade !== 'N/A';
 
@@ -1400,6 +1434,7 @@ export function ChatPageClient({ conversationId }: ChatPageClientProps) {
                                     conf >= 85 &&
                                     !(parsed.requires_clarification as boolean) &&
                                     !(parsed.rejected as boolean) &&
+                                    !(parsed.unserviced as boolean) &&
                                     tradeVal &&
                                     tradeVal !== 'N/A';
                                 const msgIdx = messages.length;
@@ -1515,6 +1550,7 @@ export function ChatPageClient({ conversationId }: ChatPageClientProps) {
                 confidence?: number;
                 requires_clarification?: boolean;
                 rejected?: boolean;
+                unserviced?: boolean;
             } | null;
             if (finalParsed?.diagnosis) {
                 let didUpdate = false;
@@ -1560,6 +1596,7 @@ export function ChatPageClient({ conversationId }: ChatPageClientProps) {
                         conf >= 85 &&
                         !finalParsed.requires_clarification &&
                         !finalParsed.rejected &&
+                        !finalParsed.unserviced &&
                         finalParsed.trade &&
                         finalParsed.trade !== 'N/A';
                     const fullDiag: DiagnosisData = {
@@ -1827,6 +1864,7 @@ export function ChatPageClient({ conversationId }: ChatPageClientProps) {
                                     conf >= 85 &&
                                     !parsedJson.requires_clarification &&
                                     !parsedJson.rejected &&
+                                    !parsedJson.unserviced &&
                                     parsedJson.trade &&
                                     parsedJson.trade !== 'N/A';
                                 const msgIdx = index;
@@ -1972,13 +2010,12 @@ export function ChatPageClient({ conversationId }: ChatPageClientProps) {
             <main
                 ref={mainRef}
                 style={{ paddingBottom: footerHeight }}
-                className="flex flex-1 overflow-y-auto"
+                className="flex flex-1 min-h-0 overflow-y-auto"
             >
-                <div className="max-w-4xl mx-auto w-full px-4 py-4 flex flex-col gap-6">
+                <div className="flex-1 max-w-4xl mx-auto w-full px-4 py-4 flex flex-col gap-6 min-w-0">
                     {/* Provider results - when direct trade with providers */}
                     {(directTradeResult || (directTradeSelection && isLoadingDirectProviders)) && (
-                        <div className="rounded-lg border border-border p-4">
-                            <DiagnosisResponseCard
+                        <DiagnosisResponseCard
                                 conversationId={id}
                                 diagnosis={{
                                     thinking: '',
@@ -2021,8 +2058,8 @@ export function ChatPageClient({ conversationId }: ChatPageClientProps) {
                                 trade={(directTradeResult || directTradeSelection)!.trade}
                                 openPopoverId={openPopoverId}
                                 setOpenPopoverId={setOpenPopoverId}
+                                hasImage={false}
                             />
-                        </div>
                     )}
 
                     {/* Diagnosis thinking - tight gap to diagnosis header */}
@@ -2098,11 +2135,16 @@ export function ChatPageClient({ conversationId }: ChatPageClientProps) {
                 isDiagnosing={isDiagnosing}
                 isResponding={isResponding}
                 hasDiagnosis={!!diagnosis || !!directTradeResult}
+                onGoToRecentDiagnosis={() => {
+                    messagesEndRef.current?.scrollIntoView({
+                        behavior: 'smooth',
+                    });
+                }}
                 pendingAttachments={displayImage ? pendingAttachments : []}
                 onAddAttachments={
                     displayImage
                         ? async (files) => {
-                              const remaining = 10 - pendingAttachments.length;
+                              const remaining = 5 - pendingAttachments.length;
                               const toAdd = files.slice(0, remaining);
                               const dataUrls: string[] = [];
                               for (const file of toAdd) {
@@ -2137,7 +2179,7 @@ export function ChatPageClient({ conversationId }: ChatPageClientProps) {
                               }
                               if (dataUrls.length > 0) {
                                   setPendingAttachments((prev) =>
-                                      [...prev, ...dataUrls].slice(0, 10)
+                                      [...prev, ...dataUrls].slice(0, 5)
                                   );
                               }
                           }

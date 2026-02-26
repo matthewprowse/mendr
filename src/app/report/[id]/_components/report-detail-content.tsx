@@ -2,30 +2,24 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
 import { supabase } from '@/lib/supabase';
 import { AppHeader } from '@/components/app-header';
-import { sanitizeAiContent } from '@/lib/utils';
+import { sanitizeAiContent, parseRepairReplacementRanges } from '@/lib/utils';
+import { calculateCalloutFee, CALLOUT_RATE_PER_KM } from '@/lib/pricing';
 import { Spinner } from '@/components/ui/spinner';
 import { Separator } from '@/components/ui/separator';
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { ReportMap } from '../report-map';
 import { toast } from 'sonner';
+import { UnrelatedImageCard } from '@/app/chat/_components/unrelated-image-card';
+import { UnservicedCategoryCard } from '@/app/chat/_components/unserviced-category-card';
+import { ProvidersMap } from '@/app/chat/_components/providers-map';
 
 type ReportData = {
-    diagnosis: any;
+    diagnosis: Record<string, unknown> | null;
     image_url: string | null;
-    user_address: string | null;
-    user_lat: number | null;
-    user_lng: number | null;
+    customer_address: string | null;
+    customer_lat: number | null;
+    customer_lng: number | null;
     messages?: { content: string; role: string; attachments?: string[] }[];
 };
 
@@ -40,16 +34,6 @@ export function ReportDetailContent({ reportId }: ReportDetailContentProps) {
     const [reportData, setReportData] = useState<ReportData | null>(null);
     const [error, setError] = useState<string | null>(null);
 
-    // Signup form
-    const [companyName, setCompanyName] = useState('');
-    const [email, setEmail] = useState('');
-    const [descriptiveText, setDescriptiveText] = useState('');
-    const [teamSize, setTeamSize] = useState('');
-    const [spendPerMonth, setSpendPerMonth] = useState('');
-    const [pricePerLead, setPricePerLead] = useState('');
-    const [signupSubmitting, setSignupSubmitting] = useState(false);
-    const [signupSuccess, setSignupSuccess] = useState(false);
-
     const [directionsLoading, setDirectionsLoading] = useState(false);
     const [providerLocation, setProviderLocation] = useState<{ lat: number; lng: number } | null>(
         null
@@ -57,6 +41,7 @@ export function ReportDetailContent({ reportId }: ReportDetailContentProps) {
     const [directionsAttempted, setDirectionsAttempted] = useState(false);
     const [directions, setDirections] = useState<{
         distance_text: string;
+        distance_meters: number | null;
         duration_text: string;
     } | null>(null);
 
@@ -65,13 +50,45 @@ export function ReportDetailContent({ reportId }: ReportDetailContentProps) {
         setLoading(true);
         setError(null);
         try {
-            const { data: conv, error: convError } = await supabase
+            // Support both 'diagnosis' (new) and 'diagnosis_json' (legacy) column names
+            let conv: Record<string, unknown> | null = null;
+            let convError: unknown = null;
+
+            const { data: d1, error: e1 } = await supabase
                 .from('conversations')
-                .select('diagnosis_json, image_url, user_address, user_lat, user_lng')
+                .select('diagnosis, image_url, customer_address, customer_lat, customer_lng')
                 .eq('id', id)
                 .maybeSingle();
 
-            if (convError) throw convError;
+            if (e1) {
+                const msg =
+                    e1 && typeof e1 === 'object' && 'message' in e1
+                        ? String((e1 as { message: unknown }).message)
+                        : '';
+                if (
+                    typeof msg === 'string' &&
+                    msg.includes('diagnosis') &&
+                    msg.includes('does not exist')
+                ) {
+                    const { data: d2, error: e2 } = await supabase
+                        .from('conversations')
+                        .select(
+                            'diagnosis_json, image_url, customer_address, customer_lat, customer_lng'
+                        )
+                        .eq('id', id)
+                        .maybeSingle();
+                    if (e2) throw e2;
+                    conv = d2 as Record<string, unknown> | null;
+                    if (conv && 'diagnosis_json' in conv) {
+                        conv.diagnosis = conv.diagnosis_json;
+                    }
+                } else {
+                    throw e1;
+                }
+            } else {
+                conv = d1 as Record<string, unknown> | null;
+            }
+
             if (!conv) {
                 setError('Report not found.');
                 return;
@@ -84,15 +101,21 @@ export function ReportDetailContent({ reportId }: ReportDetailContentProps) {
                 .order('created_at', { ascending: true });
 
             setReportData({
-                diagnosis: conv.diagnosis_json,
-                image_url: conv.image_url,
-                user_address: conv.user_address,
-                user_lat: conv.user_lat,
-                user_lng: conv.user_lng,
+                diagnosis: conv.diagnosis as Record<string, unknown> | null,
+                image_url: conv.image_url as string | null,
+                customer_address: conv.customer_address as string | null,
+                customer_lat: conv.customer_lat as number | null,
+                customer_lng: conv.customer_lng as number | null,
                 messages: msgs || [],
             });
-        } catch (e) {
-            console.error('Load report error:', e);
+        } catch (e: unknown) {
+            const errMsg =
+                e && typeof e === 'object' && 'message' in e
+                    ? String((e as { message: unknown }).message)
+                    : e instanceof Error
+                      ? e.message
+                      : 'Unknown error';
+            console.error('Load report error:', errMsg, e);
             setError('Failed to load report.');
         } finally {
             setLoading(false);
@@ -105,8 +128,8 @@ export function ReportDetailContent({ reportId }: ReportDetailContentProps) {
     }, [id, loadReport]);
 
     const fetchDirections = useCallback(async () => {
-        const hasLoc = reportData?.user_lat != null && reportData?.user_lng != null;
-        if (!reportData?.user_address && !hasLoc) return;
+        const hasLoc = reportData?.customer_lat != null && reportData?.customer_lng != null;
+        if (!reportData?.customer_address && !hasLoc) return;
         setDirectionsLoading(true);
         try {
             const pos = await new Promise<GeolocationPosition>((resolve, reject) =>
@@ -117,8 +140,8 @@ export function ReportDetailContent({ reportId }: ReportDetailContentProps) {
             setProviderLocation({ lat, lng });
             const origin = `${lat},${lng}`;
             const destination = hasLoc
-                ? `${reportData!.user_lat},${reportData!.user_lng}`
-                : reportData!.user_address!;
+                ? `${reportData!.customer_lat},${reportData!.customer_lng}`
+                : reportData!.customer_address!;
             const res = await fetch(
                 `/api/directions?origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}`
             );
@@ -126,6 +149,7 @@ export function ReportDetailContent({ reportId }: ReportDetailContentProps) {
             if (data.distance_text && data.duration_text) {
                 setDirections({
                     distance_text: data.distance_text,
+                    distance_meters: data.distance_meters ?? null,
                     duration_text: data.duration_text,
                 });
             }
@@ -139,8 +163,8 @@ export function ReportDetailContent({ reportId }: ReportDetailContentProps) {
     useEffect(() => {
         if (
             reportData &&
-            (reportData.user_address ||
-                (reportData.user_lat != null && reportData.user_lng != null)) &&
+            (reportData.customer_address ||
+                (reportData.customer_lat != null && reportData.customer_lng != null)) &&
             !directionsAttempted
         ) {
             setDirectionsAttempted(true);
@@ -148,55 +172,18 @@ export function ReportDetailContent({ reportId }: ReportDetailContentProps) {
         }
     }, [reportData, directionsAttempted, fetchDirections]);
 
-    const handleSignup = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!companyName.trim() || !email.trim()) return;
-        setSignupSubmitting(true);
-        try {
-            const res = await fetch('/api/provider-signup', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    company_name: companyName.trim(),
-                    email: email.trim(),
-                    descriptive_text: descriptiveText.trim() || undefined,
-                    team_size: teamSize || undefined,
-                    spend_per_month: spendPerMonth || undefined,
-                    price_per_lead: pricePerLead.trim() || undefined,
-                    report_conversation_id: id || undefined,
-                    marketing_consent: false,
-                }),
-            });
-            const data = await res.json();
-            if (!res.ok) throw new Error(data.error || 'Failed');
-            setSignupSuccess(true);
-            toast.success("Thank you! We'll be in touch soon.");
-            setCompanyName('');
-            setEmail('');
-            setDescriptiveText('');
-            setTeamSize('');
-            setSpendPerMonth('');
-            setPricePerLead('');
-        } catch (e) {
-            toast.error('Something went wrong. Please try again.');
-        } finally {
-            setSignupSubmitting(false);
-        }
-    };
-
     const mapsKey =
         process.env.NEXT_PUBLIC_GOOGLE_MAPS_EMBED_KEY ||
         process.env.NEXT_PUBLIC_GOOGLE_PLACES_API_KEY;
-    const hasLocation = reportData?.user_lat != null && reportData?.user_lng != null;
+    const hasLocation = reportData?.customer_lat != null && reportData?.customer_lng != null;
     const destinationForMap = hasLocation
-        ? `${reportData!.user_lat},${reportData!.user_lng}`
-        : reportData?.user_address || '';
-    const showDirectionsMap = providerLocation && hasLocation;
+        ? `${reportData!.customer_lat},${reportData!.customer_lng}`
+        : reportData?.customer_address || '';
     const directionsMapUrl =
         providerLocation && hasLocation
             ? mapsKey
-                ? `https://www.google.com/maps/embed/v1/directions?key=${mapsKey}&origin=${providerLocation.lat},${providerLocation.lng}&destination=${reportData!.user_lat},${reportData!.user_lng}`
-                : `https://www.google.com/maps?output=embed&saddr=${providerLocation.lat},${providerLocation.lng}&daddr=${reportData!.user_lat},${reportData!.user_lng}`
+                ? `https://www.google.com/maps/embed/v1/directions?key=${mapsKey}&origin=${providerLocation.lat},${providerLocation.lng}&destination=${reportData!.customer_lat},${reportData!.customer_lng}`
+                : `https://www.google.com/maps?output=embed&saddr=${providerLocation.lat},${providerLocation.lng}&daddr=${reportData!.customer_lat},${reportData!.customer_lng}`
             : null;
     if (!id) {
         return (
@@ -222,6 +209,8 @@ export function ReportDetailContent({ reportId }: ReportDetailContentProps) {
     }
 
     const diag = reportData.diagnosis;
+    const isRejected = diag?.rejected === true;
+    const isUnserviced = diag?.unserviced === true && !diag?.rejected;
     const allImages: string[] = [];
     if (reportData.image_url) allImages.push(reportData.image_url);
     reportData.messages?.forEach((m) => {
@@ -238,92 +227,209 @@ export function ReportDetailContent({ reportId }: ReportDetailContentProps) {
 
             <main className="flex flex-1 flex-col overflow-y-auto">
                 <div className="max-w-4xl mx-auto w-full px-4 md:px-12 py-4 flex flex-col gap-8">
-                    {/* Map card - directions from you to customer */}
-                    {(reportData.user_address || hasLocation) && destinationForMap && (
-                        <section className="rounded-lg border border-border bg-card overflow-hidden w-full">
-                            {mapsKey ? (
-                                <ReportMap
-                                    apiKey={mapsKey}
-                                    origin={showDirectionsMap ? providerLocation! : undefined}
-                                    destination={
-                                        hasLocation
-                                            ? {
-                                                  lat: reportData!.user_lat!,
-                                                  lng: reportData!.user_lng!,
-                                              }
-                                            : reportData!.user_address!
-                                    }
-                                />
-                            ) : (
-                                <div className="w-full aspect-video min-h-[200px] overflow-hidden">
-                                    <iframe
-                                        title="Directions to job"
-                                        src={
-                                            directionsMapUrl ||
-                                            `https://www.google.com/maps?q=${encodeURIComponent(destinationForMap)}&output=embed`
-                                        }
-                                        className="w-full h-full border-0 block"
-                                        allowFullScreen
-                                        loading="lazy"
-                                        referrerPolicy="no-referrer-when-downgrade"
+                    {/* Unrelated or unserviced notice */}
+                    {isRejected && (
+                        <UnrelatedImageCard
+                            conversationId={id}
+                            diagnosisMessage={reportData.messages?.[0]?.content}
+                            recordFeedback={false}
+                        />
+                    )}
+                    {isUnserviced && (
+                        <UnservicedCategoryCard
+                            conversationId={id}
+                            requestedService={String(diag?.trade ?? 'Unknown')}
+                            diagnosis={typeof diag?.diagnosis === 'string' ? diag.diagnosis : undefined}
+                            diagnosisFull={diag ?? undefined}
+                            recordFeedback={false}
+                        />
+                    )}
+                    {/* Map card - match chat page ProvidersMap styling/behaviour */}
+                    {(reportData.customer_address || hasLocation) && destinationForMap && (
+                        <section className="w-full">
+                            {mapsKey && hasLocation ? (
+                                <>
+                                    <ProvidersMap
+                                        apiKey={mapsKey}
+                                        providers={[
+                                            {
+                                                name: 'Job Location',
+                                                address: reportData.customer_address || '',
+                                                summary: '',
+                                                services: [],
+                                                latitude: reportData.customer_lat as number,
+                                                longitude: reportData.customer_lng as number,
+                                            },
+                                        ]}
+                                        emergingProviders={[]}
+                                        userLocation={providerLocation}
                                     />
+                                    <div className="mt-3 flex items-center justify-between gap-4">
+                                        {reportData.customer_address ? (
+                                            <span className="text-sm text-muted-foreground min-w-0 truncate">
+                                                {reportData.customer_address}
+                                            </span>
+                                        ) : (
+                                            <span />
+                                        )}
+                                        <Button
+                                            variant="secondary"
+                                            onClick={() =>
+                                                window.open(
+                                                    `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(
+                                                        reportData.customer_address || destinationForMap
+                                                    )}`,
+                                                    '_blank'
+                                                )
+                                            }
+                                        >
+                                            Get Directions
+                                        </Button>
+                                    </div>
+                                </>
+                            ) : (
+                                <div className="relative w-full overflow-hidden rounded-lg border border-border bg-card">
+                                    <div className="aspect-[16/10] min-h-[180px] w-full">
+                                        {directionsLoading && (
+                                            <div className="absolute inset-0 z-10 flex items-center justify-center bg-muted/50">
+                                                <div className="h-8 w-8 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent" />
+                                            </div>
+                                        )}
+                                        <iframe
+                                            title="Directions to job"
+                                            src={
+                                                directionsMapUrl ||
+                                                `https://www.google.com/maps?q=${encodeURIComponent(
+                                                    destinationForMap
+                                                )}&output=embed`
+                                            }
+                                            className="w-full h-full border-0 block"
+                                            allowFullScreen
+                                            loading="lazy"
+                                            referrerPolicy="no-referrer-when-downgrade"
+                                        />
+                                    </div>
                                 </div>
                             )}
-                            <div className="p-4 flex items-center justify-between gap-4">
-                                {reportData.user_address ? (
-                                    <span className="text-sm text-muted-foreground min-w-0 truncate">
-                                        {reportData.user_address}
-                                    </span>
-                                ) : (
-                                    <span />
-                                )}
-                                <Button
-                                    variant="secondary"
-                                    onClick={() =>
-                                        window.open(
-                                            `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(
-                                                reportData.user_address || destinationForMap
-                                            )}`,
-                                            '_blank'
-                                        )
-                                    }
-                                >
-                                    Get Directions
-                                </Button>
-                            </div>
                         </section>
                     )}
 
-                    {/* Diagnosis - structured for service provider */}
-                    <section className="space-y-6">
-                        <div className="space-y-1">
-                            <h2 className="text-lg font-semibold text-foreground">Job Summary</h2>
-                            <p className="text-sm text-muted-foreground leading-relaxed">
-                                Overview of the reported issue, required service, and recommended
-                                next steps for the customer.
-                            </p>
-                        </div>
-                        <div className="grid gap-6">
-                            <div>
-                                <p className="text-sm font-medium text-muted-foreground mb-2">
-                                    Job Type
-                                </p>
-                                <p className="text-sm font-medium text-foreground">
-                                    {diag?.diagnosis || 'Not specified'}
+                    {/* Diagnosis - structured for service provider (skip when rejected/unserviced) */}
+                    {!isRejected && !isUnserviced && (
+                        <section className="space-y-6">
+                            <div className="space-y-1">
+                                <h2 className="text-lg font-semibold text-foreground">
+                                    Job Summary
+                                </h2>
+                                <p className="text-sm text-muted-foreground leading-relaxed">
+                                    Overview of the reported issue, required service, and
+                                    recommended next steps for the customer.
                                 </p>
                             </div>
-                            {diag?.action_required && diag.action_required !== 'N/A' && (
+                            <div className="grid gap-6">
                                 <div>
                                     <p className="text-sm font-medium text-muted-foreground mb-2">
-                                        Recommended Action
+                                        Job Type
                                     </p>
-                                    <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">
-                                        {sanitizeAiContent(diag.action_required)}
+                                    <p className="text-sm font-medium text-foreground">
+                                        {typeof diag?.diagnosis === 'string' ? diag.diagnosis : 'Not specified'}
                                     </p>
                                 </div>
-                            )}
-                        </div>
-                    </section>
+                                {typeof diag?.action_required === 'string' && diag.action_required !== 'N/A' && (
+                                    <div>
+                                        <p className="text-sm font-medium text-muted-foreground mb-2">
+                                            Recommended Action
+                                        </p>
+                                        <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">
+                                            {sanitizeAiContent(String(diag.action_required))}
+                                        </p>
+                                    </div>
+                                )}
+                                {(() => {
+                                    const calloutExact =
+                                        directions?.distance_meters != null
+                                            ? calculateCalloutFee(directions.distance_meters)
+                                            : null;
+                                    const fallback = parseRepairReplacementRanges(
+                                        String(diag?.repair_or_replacement_fee ?? '')
+                                    );
+                                    const repairRange =
+                                        diag?.repair_cost_range &&
+                                        String(diag.repair_cost_range) !== 'N/A'
+                                            ? String(diag.repair_cost_range)
+                                            : fallback.repair;
+                                    const replacementRange =
+                                        diag?.replacement_cost_range &&
+                                        String(diag.replacement_cost_range) !== 'N/A'
+                                            ? String(diag.replacement_cost_range)
+                                            : fallback.replacement;
+                                    const equipmentPartsRange =
+                                        diag?.equipment_parts_range &&
+                                        String(diag.equipment_parts_range) !== 'N/A'
+                                            ? String(diag.equipment_parts_range)
+                                            : null;
+
+                                    // Simplified view: Call-out, Labour, Parts
+                                    const labourRange = repairRange || replacementRange || null;
+                                    const hasAny =
+                                        calloutExact || labourRange || equipmentPartsRange;
+                                    if (!hasAny) return null;
+
+                                    const rows: { label: string; value: string }[] = [];
+                                    if (calloutExact && directions?.distance_meters != null) {
+                                        rows.push({
+                                            label: 'Call-Out Fee',
+                                            value: `${calloutExact} (${directions.distance_text} × R${CALLOUT_RATE_PER_KM}/km)`,
+                                        });
+                                    }
+                                    if (labourRange) {
+                                        rows.push({
+                                            label: 'Labour',
+                                            value: labourRange,
+                                        });
+                                    }
+                                    if (equipmentPartsRange) {
+                                        rows.push({
+                                            label: 'Parts',
+                                            value: equipmentPartsRange,
+                                        });
+                                    }
+
+                                    return (
+                                        <div className="space-y-3">
+                                            <p className="text-sm font-medium text-muted-foreground">
+                                                Estimated Price
+                                            </p>
+                                            <div className="overflow-hidden rounded-lg border border-border">
+                                                <table className="w-full text-sm">
+                                                    <tbody>
+                                                        {rows.map((r, i) => (
+                                                            <tr
+                                                                key={i}
+                                                                className="border-b border-border last:border-b-0 bg-card"
+                                                            >
+                                                                <td className="px-4 py-3 text-muted-foreground font-medium">
+                                                                    {r.label}
+                                                                </td>
+                                                                <td className="px-4 py-3 text-foreground text-right font-medium">
+                                                                    {r.value}
+                                                                </td>
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                            <p className="text-xs text-muted-foreground leading-relaxed">
+                                                Call-out based on distance from your location. Labour
+                                                and parts are estimated ranges. Final price may differ
+                                                after on-site inspection.
+                                            </p>
+                                        </div>
+                                    );
+                                })()}
+                            </div>
+                        </section>
+                    )}
 
                     <Separator />
 
@@ -343,7 +449,7 @@ export function ReportDetailContent({ reportId }: ReportDetailContentProps) {
                                             variant="default"
                                             className="absolute bottom-2 right-2"
                                         >
-                                            {diag.trade}
+                                            {String(diag?.trade ?? '')}
                                         </Badge>
                                     </div>
                                 )}
@@ -375,134 +481,6 @@ export function ReportDetailContent({ reportId }: ReportDetailContentProps) {
                             </>
                         ) : (
                             <p className="text-sm text-muted-foreground">No photos</p>
-                        )}
-                    </section>
-
-                    <Separator />
-
-                    {/* Scandio signup - styled like chat page */}
-                    <section className="space-y-6">
-                        <div className="space-y-1">
-                            <h4 className="text-lg font-semibold text-foreground">
-                                Get Home Maintenance Leads
-                            </h4>
-                            <p className="text-sm text-muted-foreground leading-relaxed">
-                                Scandio helps homeowners find trusted home service providers. We're
-                                listing and promoting Western Cape providers for free until
-                                September 2026.
-                            </p>
-                        </div>
-                        {signupSuccess ? (
-                            <p className="text-sm text-muted-foreground text-center">
-                                Thank you for your interest in Scandio. We'll be in touch with more
-                                information soon.
-                            </p>
-                        ) : (
-                            <form onSubmit={handleSignup} className="flex flex-col gap-6">
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                    <div className="space-y-2">
-                                        <label
-                                            htmlFor="company"
-                                            className="text-sm font-medium text-foreground block"
-                                        >
-                                            Company Name
-                                        </label>
-                                        <Input
-                                            id="company"
-                                            value={companyName}
-                                            onChange={(e) => setCompanyName(e.target.value)}
-                                            required
-                                            className="bg-background text-base sm:text-sm"
-                                        />
-                                    </div>
-                                    <div className="space-y-2">
-                                        <label
-                                            htmlFor="email"
-                                            className="text-sm font-medium text-foreground block"
-                                        >
-                                            Email Address
-                                        </label>
-                                        <Input
-                                            id="email"
-                                            type="email"
-                                            value={email}
-                                            onChange={(e) => setEmail(e.target.value)}
-                                            required
-                                            className="bg-background text-base sm:text-sm text-[14px] "
-                                        />
-                                    </div>
-                                </div>
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                    <div className="space-y-2">
-                                        <label
-                                            htmlFor="team_size"
-                                            className="text-sm font-medium text-foreground block"
-                                        >
-                                            Team Size
-                                        </label>
-                                        <Select
-                                            value={teamSize || undefined}
-                                            onValueChange={setTeamSize}
-                                        >
-                                            <SelectTrigger
-                                                id="team_size"
-                                                className="w-full bg-background text-base sm:text-sm text-[14px] py-0"
-                                            >
-                                                <SelectValue placeholder="Select Team Size" />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="1–5">1–5</SelectItem>
-                                                <SelectItem value="6–20">6–20</SelectItem>
-                                                <SelectItem value="21–50">21–50</SelectItem>
-                                                <SelectItem value="50+">50+</SelectItem>
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
-                                    <div className="space-y-2">
-                                        <label
-                                            htmlFor="spend_per_month"
-                                            className="text-sm font-medium text-foreground block"
-                                        >
-                                            Monthly Marketing Budget
-                                        </label>
-                                        <Select
-                                            value={spendPerMonth || undefined}
-                                            onValueChange={setSpendPerMonth}
-                                        >
-                                            <SelectTrigger
-                                                id="spend_per_month"
-                                                className="w-full bg-background text-base sm:text-sm text-[14px] py-0"
-                                            >
-                                                <SelectValue placeholder="Select Budget" />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="R100">R100</SelectItem>
-                                                <SelectItem value="R500">R500</SelectItem>
-                                                <SelectItem value="R1000">R1,000</SelectItem>
-                                                <SelectItem value="R1000+">R1,000+</SelectItem>
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
-                                </div>
-                                <div className="space-y-2">
-                                    <label
-                                        htmlFor="descriptive"
-                                        className="text-sm font-medium text-foreground block"
-                                    >
-                                        Describe Your Business
-                                    </label>
-                                    <Textarea
-                                        id="descriptive"
-                                        value={descriptiveText}
-                                        onChange={(e) => setDescriptiveText(e.target.value)}
-                                        rows={4}
-                                        className="bg-background resize-none text-base sm:text-sm text-[14px]"
-                                    />
-                                </div>
-                                <Button type="submit" disabled={signupSubmitting}>
-                                    {signupSubmitting ? 'Submitting…' : 'Register'}
-                                </Button>
-                            </form>
                         )}
                     </section>
                 </div>

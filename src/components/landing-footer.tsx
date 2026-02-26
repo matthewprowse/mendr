@@ -81,7 +81,7 @@ const DEFAULT_SECTIONS: FooterSection[] = [
         links: [
             { href: '#how-it-works', label: 'How It Works' },
             { href: '#features', label: 'Features' },
-            { href: '#coverage', label: 'Coverage' },
+            { href: '/#all-services', label: 'Services' },
             { href: '/', label: 'Start Diagnosis' },
         ],
     },

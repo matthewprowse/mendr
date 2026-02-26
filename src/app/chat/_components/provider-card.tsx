@@ -13,8 +13,16 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
-import { Provider } from './types';
+import { Provider, type Service } from './types';
 import { toWhatsAppPhone, isWhatsAppCapablePhone } from '@/lib/utils';
+
+function toTitleCase(s: string): string {
+    return s
+        .replace(/_/g, ' ')
+        .split(' ')
+        .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+        .join(' ');
+}
 
 function ServiceBadges({
     services,
@@ -22,7 +30,7 @@ function ServiceBadges({
     isOpen,
     providerName,
 }: {
-    services: any[];
+    services: (Service | string)[];
     trade?: string;
     isOpen?: boolean | null;
     providerName?: string;
@@ -39,11 +47,11 @@ function ServiceBadges({
         }
 
         const base: ExtendedService[] = (services || []).map((s) => {
-            if (typeof s === 'string') return { short: s.slice(0, 15), full: s };
-            return {
-                short: s?.short || s?.full?.slice(0, 15) || 'Service',
-                full: s?.full || s?.short || 'Service',
-            };
+            const full = toTitleCase(
+                typeof s === 'string' ? s : s?.full || s?.short || 'Service'
+            );
+            const short = full.slice(0, 15);
+            return { short, full };
         });
 
         if (isOpen !== undefined && isOpen !== null) {
@@ -189,7 +197,7 @@ function ServiceBadges({
                                         ? providerName.substring(0, 22) + '...'
                                         : providerName
                                     : 'All'}
-                                's Services
+                                &apos;s Services
                             </p>
                             <div className="flex flex-wrap gap-1.5">
                                 {sortedServices
@@ -234,6 +242,26 @@ export function ProviderCard({
 }) {
     const [whatsappDialogOpen, setWhatsappDialogOpen] = useState(false);
     const [whatsappLoading, setWhatsappLoading] = useState(false);
+
+    // Calculate distance if coordinates are available (fallback to Haversine if API driving distance missing)
+    const distance = useMemo(() => {
+        if (!provider) return null;
+        if (provider.distanceText) return provider.distanceText;
+        if (!userLocation || !provider.latitude || !provider.longitude) return null;
+
+        const R = 6371; // Radius of the Earth in km
+        const dLat = ((provider.latitude - userLocation.lat) * Math.PI) / 180;
+        const dLon = ((provider.longitude - userLocation.lng) * Math.PI) / 180;
+        const a =
+            Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+            Math.cos((userLocation.lat * Math.PI) / 180) *
+                Math.cos((provider.latitude * Math.PI) / 180) *
+                Math.sin(dLon / 2) *
+                Math.sin(dLon / 2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        const d = R * c;
+        return d.toFixed(1);
+    }, [provider, userLocation]);
 
     if (!provider) return null;
     const popoverId = `contact-${index}`;
@@ -300,25 +328,6 @@ export function ProviderCard({
             setWhatsappLoading(false);
         }
     };
-
-    // Calculate distance if coordinates are available (fallback to Haversine if API driving distance missing)
-    const distance = useMemo(() => {
-        if (provider.distanceText) return provider.distanceText;
-        if (!userLocation || !provider.latitude || !provider.longitude) return null;
-
-        const R = 6371; // Radius of the Earth in km
-        const dLat = ((provider.latitude - userLocation.lat) * Math.PI) / 180;
-        const dLon = ((provider.longitude - userLocation.lng) * Math.PI) / 180;
-        const a =
-            Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-            Math.cos((userLocation.lat * Math.PI) / 180) *
-                Math.cos((provider.latitude * Math.PI) / 180) *
-                Math.sin(dLon / 2) *
-                Math.sin(dLon / 2);
-        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-        const d = R * c;
-        return d.toFixed(1);
-    }, [userLocation, provider.latitude, provider.longitude]);
 
     return (
         <Card className="flex flex-col h-full border-input shadow-none p-4 rounded-md">
@@ -457,18 +466,19 @@ export function ProviderCard({
                             <DialogDescription>
                                 {waCapable ? (
                                     <>
-                                        We've generated a summary of your diagnosis for{' '}
+                                        We&apos;ve generated a summary of your diagnosis for{' '}
                                         <span className="font-medium">{provider.name}</span>. You
                                         will open WhatsApp to send it.
                                         <blockquote className="mt-2 border-l-2 border-input pl-3 text-muted-foreground text-sm">
                                             We try to ensure all numbers are available on WhatsApp.
-                                            If you're having trouble, please try phoning them
+                                            If you&apos;re having trouble, please try phoning them
                                             directly.
                                         </blockquote>
                                     </>
                                 ) : (
                                     <>
-                                        This provider's number doesn't appear to be a mobile number.
+                                        This provider&apos;s number doesn&apos;t appear to be a
+                                        mobile number.
                                         WhatsApp requires a mobile number to work.
                                     </>
                                 )}

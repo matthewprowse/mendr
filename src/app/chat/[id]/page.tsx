@@ -13,6 +13,7 @@ import { ChatPageClient } from '../_components/chat-page-client';
 
 type PageProps = {
     params: Promise<{ id: string }>;
+    searchParams: Promise<{ trade?: string }>;
 };
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
@@ -23,8 +24,9 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     };
 }
 
-export default async function ChatPage({ params }: PageProps) {
+export default async function ChatPage({ params, searchParams }: PageProps) {
     const { id } = await params;
+    const { trade } = (await searchParams) ?? {};
 
     if (!id || typeof id !== 'string' || id.trim() === '') {
         redirect('/');
@@ -38,7 +40,7 @@ export default async function ChatPage({ params }: PageProps) {
                 </div>
             }
         >
-            <ChatPageClient conversationId={id} />
+            <ChatPageClient conversationId={id} initialTrade={trade || undefined} />
         </Suspense>
     );
 }

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { formatApiError } from '@/lib/utils';
 
 export async function POST(req: NextRequest) {
     const apiKey = process.env.GEMINI_API_KEY;
@@ -45,10 +46,10 @@ STRUCTURE:
             .replace(/^["']|["']$/g, '');
 
         return NextResponse.json({ message: text });
-    } catch (e: any) {
+    } catch (e: unknown) {
         console.error('WhatsApp message generation error:', e);
         return NextResponse.json(
-            { error: e?.message || 'Failed to generate message' },
+            { error: formatApiError(e) || 'Failed to generate message' },
             { status: 500 }
         );
     }

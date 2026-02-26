@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { setOptions, importLibrary } from '@googlemaps/js-api-loader';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
 const CAPE_TOWN = { lat: -33.9249, lng: 18.4241 };
 
@@ -27,8 +29,11 @@ export function CoverageMap({ apiKey }: CoverageMapProps) {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [providers, setProviders] = useState<CoverageProvider[]>([]);
-    const [searchValue, setSearchValue] = useState('');
     const [center, setCenter] = useState(CAPE_TOWN);
+    const [address, setAddress] = useState<string | null>(null);
+    const [addressQuery, setAddressQuery] = useState('');
+    const [addressSearching, setAddressSearching] = useState(false);
+    const [addressPopoverOpen, setAddressPopoverOpen] = useState(false);
     const [locationError, setLocationError] = useState<string | null>(null);
 
     const fetchProviders = useCallback(async (lat: number, lng: number) => {
@@ -113,20 +118,24 @@ export function CoverageMap({ apiKey }: CoverageMapProps) {
         }
     }, [providers]);
 
-    const handleSearch = useCallback(async () => {
-        if (!searchValue.trim()) return;
+    const handleAddressSearch = useCallback(async () => {
+        if (!addressQuery.trim()) return;
         setLocationError(null);
-        setLoading(true);
+        setAddressSearching(true);
         try {
             const res = await fetch('/api/geocode', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ address: searchValue.trim() }),
+                body: JSON.stringify({ address: addressQuery.trim() }),
             });
             const data = await res.json();
-            if (res.ok && data.lat != null && data.lng != null) {
+            if (res.ok && data.lat != null && data.lng != null && data.address) {
                 const newCenter = { lat: data.lat, lng: data.lng };
                 setCenter(newCenter);
+                setAddress(data.address);
+                setAddressPopoverOpen(false);
+                setAddressQuery('');
+                setLoading(true);
                 await fetchProviders(newCenter.lat, newCenter.lng);
             } else if (data.error) {
                 setLocationError(data.error);
@@ -134,9 +143,10 @@ export function CoverageMap({ apiKey }: CoverageMapProps) {
         } catch {
             setLocationError('Could not find that address.');
         } finally {
+            setAddressSearching(false);
             setLoading(false);
         }
-    }, [searchValue, fetchProviders]);
+    }, [addressQuery, fetchProviders]);
 
     const handleGetLocation = useCallback(async () => {
         if (!navigator.geolocation) return;
@@ -156,6 +166,17 @@ export function CoverageMap({ apiKey }: CoverageMapProps) {
                 }
                 setLocationError(null);
                 setCenter({ lat, lng });
+                try {
+                    const res = await fetch('/api/geocode', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ lat, lng }),
+                    });
+                    const data = await res.json();
+                    if (res.ok && data.address) setAddress(data.address);
+                } catch {
+                    setAddress(null);
+                }
                 await fetchProviders(lat, lng);
                 setLoading(false);
             },
@@ -176,25 +197,90 @@ export function CoverageMap({ apiKey }: CoverageMapProps) {
 
     return (
         <div className="space-y-4">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                <input
-                    type="text"
-                    placeholder="Enter address in Western Cape, South Africa"
-                    value={searchValue}
-                    onChange={(e) => setSearchValue(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-                    className="flex h-10 flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                />
-                <div className="flex gap-2">
-                    <Button variant="secondary" size="default" onClick={handleSearch}>
-                        Search
-                    </Button>
-                    <Button variant="secondary" size="default" onClick={handleGetLocation}>
-                        Use Current Location
-                    </Button>
-                </div>
+            <p className="text-sm text-muted-foreground">
+                Coverage shown within a 25km radius of your selected location.
+            </p>
+            <div className="flex flex-col gap-2">
+                {address ? (
+                    <div className="flex items-center justify-between gap-2">
+                        <span className="text-sm font-medium truncate min-w-0">{address}</span>
+                        <Popover open={addressPopoverOpen} onOpenChange={setAddressPopoverOpen}>
+                            <PopoverTrigger asChild>
+                                <Button variant="outline">Change Location</Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-96" align="start">
+                                <div className="flex flex-col gap-3">
+                                    <p className="text-sm font-medium">
+                                        Search Locations (Western Cape only)
+                                    </p>
+                                    <Input
+                                        placeholder="Enter address in Western Cape, South Africa"
+                                        className="text-[14px] sm:text-sm"
+                                        value={addressQuery}
+                                        onChange={(e) => {
+                                            setAddressQuery(e.target.value);
+                                            setLocationError(null);
+                                        }}
+                                        onKeyDown={(e) =>
+                                            e.key === 'Enter' && handleAddressSearch()
+                                        }
+                                    />
+                                    {locationError && (
+                                        <p className="text-xs text-destructive">{locationError}</p>
+                                    )}
+                                    <Button
+                                        onClick={handleAddressSearch}
+                                        disabled={addressSearching || !addressQuery.trim()}
+                                    >
+                                        {addressSearching ? 'Searching…' : 'Search'}
+                                    </Button>
+                                </div>
+                            </PopoverContent>
+                        </Popover>
+                    </div>
+                ) : (
+                    <div className="flex flex-wrap items-center gap-2">
+                        <Button variant="secondary" onClick={handleGetLocation}>
+                            Use My Location
+                        </Button>
+                        <Popover open={addressPopoverOpen} onOpenChange={setAddressPopoverOpen}>
+                            <PopoverTrigger asChild>
+                                <Button variant="outline">Search Address</Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-80" align="start">
+                                <div className="flex flex-col gap-3">
+                                    <p className="text-sm font-semibold">Search for an address</p>
+                                    <Input
+                                        placeholder="Enter address or place"
+                                        className="text-[14px] sm:text-sm"
+                                        value={addressQuery}
+                                        onChange={(e) => {
+                                            setAddressQuery(e.target.value);
+                                            setLocationError(null);
+                                        }}
+                                        onKeyDown={(e) =>
+                                            e.key === 'Enter' && handleAddressSearch()
+                                        }
+                                    />
+                                    {locationError && (
+                                        <p className="text-xs text-destructive">{locationError}</p>
+                                    )}
+                                    <Button
+                                        size="sm"
+                                        onClick={handleAddressSearch}
+                                        disabled={addressSearching || !addressQuery.trim()}
+                                    >
+                                        {addressSearching ? 'Searching…' : 'Search'}
+                                    </Button>
+                                </div>
+                            </PopoverContent>
+                        </Popover>
+                    </div>
+                )}
             </div>
-            {locationError && <p className="text-sm text-destructive">{locationError}</p>}
+            {locationError && !addressPopoverOpen && (
+                <p className="text-sm text-destructive">{locationError}</p>
+            )}
             <div className="relative w-full overflow-hidden rounded-lg border border-border">
                 <div className="aspect-[21/9] min-h-[340px] w-full">
                     {loading && (

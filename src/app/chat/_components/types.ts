@@ -4,9 +4,21 @@ export interface DiagnosisData {
     trade: string;
     action_required: string;
     estimated_cost: string;
+    /** @deprecated Call-out is now calculated from distance on report view. */
+    callout_fee?: string;
+    /** @deprecated Use repair_cost_range and replacement_cost_range. */
+    repair_or_replacement_fee?: string;
+    /** Repair cost range, e.g. 'R800–R1,200'. */
+    repair_cost_range?: string;
+    /** Replacement cost range, e.g. 'R2,000–R5,000'. */
+    replacement_cost_range?: string;
+    /** Equipment and parts cost range, e.g. 'R200–R500'. */
+    equipment_parts_range?: string;
     message?: string;
     rejected?: boolean;
     requires_clarification?: boolean;
+    /** True when the need is home-related but we don't offer that service yet. */
+    unserviced?: boolean;
     /** 0–100. Below 85: ask for more photos/context before showing providers. */
     confidence?: number;
 }

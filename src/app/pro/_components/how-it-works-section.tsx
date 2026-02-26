@@ -132,14 +132,16 @@ export function HowItWorksSection() {
     return (
         <section
             id="how-it-works"
-            className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8"
+            className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8 scroll-mt-16"
         >
             <div className="mb-10 text-center">
                 <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">
                     How Scandio Pro Works
                 </h2>
                 <p className="mx-auto mt-4 max-w-2xl text-muted-foreground">
-                    Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.
+                    Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor
+                    incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis
+                    nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.
                 </p>
             </div>
 

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabase-server';
+import { formatApiError } from '@/lib/utils';
 
 export async function POST(req: NextRequest) {
     try {
@@ -39,8 +40,8 @@ export async function POST(req: NextRequest) {
         }
 
         return NextResponse.json({ success: true });
-    } catch (e: any) {
+    } catch (e: unknown) {
         console.error('Report error:', e);
-        return NextResponse.json({ error: e?.message || 'Internal error' }, { status: 500 });
+        return NextResponse.json({ error: formatApiError(e) }, { status: 500 });
     }
 }

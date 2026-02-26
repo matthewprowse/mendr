@@ -9,14 +9,11 @@ import { TestimonialsSection } from './_components/testimonials-section';
 
 export const metadata: Metadata = {
     title: 'Scandio Pro',
-    description:
-        '',
-    keywords: [
-    ],
+    description: '',
+    keywords: [],
     openGraph: {
         title: 'Scandio Pro',
-        description:
-            '',
+        description: '',
     },
 };
 
@@ -27,12 +24,14 @@ export default function ProLandingPage() {
                 navLinks={[
                     { href: '#how-it-works', label: 'How It Works' },
                     { href: '#features', label: 'Features' },
+                    { href: '/#all-services', label: 'Services' },
                     { href: '#our-value', label: 'Our Value' },
                     { href: '#coverage', label: 'Coverage' },
                 ]}
                 logoHref="/pro"
                 showProBadge
                 showCustomerLink
+                showTrades={false}
             />
 
             <main className="flex-1">
@@ -45,10 +44,14 @@ export default function ProLandingPage() {
                                 <div className="h-9 bg-secondary w-full rounded-md" />
                             </div>
                             <p className="text-base text-muted-foreground">
-                              Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.
-                              <br />
-                              <br />
-                              Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.
+                                Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do
+                                eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim
+                                ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut
+                                aliquip ex ea commodo consequat.
+                                <br />
+                                <br />
+                                Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do
+                                eiusmod tempor incididunt ut labore et dolore magna aliqua.
                             </p>
                         </div>
                         <div className="flex justify-center">
@@ -82,14 +85,14 @@ export default function ProLandingPage() {
                 <FeaturesSection />
 
                 {/* Stats — By the numbers */}
-                <section className="py-16 sm:py-24">
+                <section id="our-value" className="py-16 sm:py-24 scroll-mt-16">
                     <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
                         <div className="mb-12 flex flex-col items-center gap-4">
                             <div className="flex w-full max-w-md flex-col gap-4">
                                 <div className="h-9 w-full rounded-md bg-secondary" />
                                 <div className="h-9 w-full rounded-md bg-secondary" />
                             </div>
-                            <p className="mx-auto max-w-3xl text-center text-muted-foreground">
+                            <p className="mx-auto max-w-4xl text-center text-muted-foreground">
                                 Lorem ipsum dolor sit amet, consectetur adipiscing elit. Ut enim ad
                                 minim veniam, quis nostrud exercitation ullamco laboris.
                             </p>
@@ -144,13 +147,13 @@ export default function ProLandingPage() {
                 {/* Coverage Map */}
                 <section
                     id="coverage"
-                    className="mx-auto max-w-7xl flex flex-col gap-12 px-4 py-16 sm:px-6 sm:py-28 lg:px-8"
+                    className="mx-auto max-w-7xl flex flex-col gap-12 px-4 py-16 sm:px-6 sm:py-28 lg:px-8 scroll-mt-16"
                 >
                     <div className="flex flex-col gap-4 text-center">
                         <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">
                             Service Coverage
                         </h2>
-                        <p className="mx-auto max-w-3xl text-muted-foreground">
+                        <p className="mx-auto max-w-4xl text-muted-foreground">
                             Lorem ipsum dolor sit amet, consectetur adipiscing elit. Ut enim ad
                             minim veniam, quis nostrud exercitation ullamco laboris.
                         </p>

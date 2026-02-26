@@ -15,7 +15,12 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-    title: 'Scandio: Home Maintenance Assistant',
+    title: {
+        default: 'Scandio: Home Maintenance Assistant',
+        template: '%s | Scandio',
+    },
+    description:
+        'AI-powered home maintenance diagnosis and local provider discovery. Upload a photo, get expert insights and find trusted service professionals.',
 };
 
 export const viewport: Viewport = {

@@ -1,9 +1,12 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import { LandingFooter } from '@/components/landing-footer';
 import { LandingHeader } from '@/components/landing-header';
+import { Placeholder } from '@/components/placeholder';
 import { TestimonialsSection } from '@/app/page/_components/testimonials-section';
-import { CoverageMap } from '@/app/page/_components/coverage-map';
 import { StartDiagnosisButton } from '@/app/page/_components/start-diagnosis-button';
+import { getServices } from '@/lib/fetch-services';
+import { Button } from '@/components/ui/button';
 
 export const metadata: Metadata = {
     title: 'Scandio: Home Maintenance Assistant',
@@ -15,22 +18,13 @@ export const metadata: Metadata = {
     },
 };
 
-function Placeholder({
-    label,
-    aspectRatio = 'aspect-video',
-    className = '',
-}: {
-    label: string;
-    aspectRatio?: string;
-    className?: string;
-}) {
-    return (
-        <div
-            className={`flex items-center justify-center rounded-lg border border-border/50 bg-secondary/50 hover:bg-secondary/25 hover:border-border/75 transition-all duration-250 text-center text-sm text-muted-foreground ${aspectRatio} ${className}`}
-        >
-            <span className="max-w-[85%] px-2">{label}</span>
-        </div>
-    );
+const PLACEHOLDER_DESC =
+    'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Ut enim ad minim veniam.';
+
+function getServiceChatHref(label: string): string {
+    const id = crypto.randomUUID();
+    const params = new URLSearchParams({ trade: label });
+    return `/chat/${id}?${params.toString()}`;
 }
 
 function FeaturesChatPlaceholder({
@@ -70,17 +64,20 @@ function FeaturesChatPlaceholder({
     );
 }
 
-export default function LandingPage() {
+export default async function LandingPage() {
+    const services = await getServices();
+
     return (
         <div className="flex min-h-screen flex-col bg-background">
             <LandingHeader
                 navLinks={[
                     { href: '#how-it-works', label: 'How It Works' },
                     { href: '#features', label: 'Features' },
-                    { href: '#coverage', label: 'Coverage' },
+                    { href: '#all-services', label: 'Services' },
                     { href: '/pro', label: 'For Pros' },
                 ]}
                 logoHref="/"
+                showTrades={false}
             />
 
             <main className="flex-1">
@@ -88,10 +85,14 @@ export default function LandingPage() {
                 <section className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-24 lg:px-8 lg:py-32">
                     <div className="grid items-center gap-12 lg:grid-cols-2 lg:gap-16">
                         <div className="flex flex-col items-center space-y-6 text-center lg:items-start lg:text-left">
-                            <h3 className="text-base text-muted-foreground font-medium">Sophisticated Systems, Spimplified Solutions.</h3>
-                            <h1 className="text-4xl font-bold leading-tight tracking-tight sm:text-4xl">Western Cape's New Standard in Home Maintenance</h1>
+                            <h3 className="text-base text-muted-foreground font-medium">
+                                Sophisticated Systems, Spimplified Solutions.
+                            </h3>
+                            <h1 className="text-4xl font-bold leading-tight tracking-tight sm:text-4xl">
+                                Western Cape&apos;s New Standard in Home Maintenance
+                            </h1>
                             <p className="text-base text-muted-foreground">
-                                Your home didn't come with a manual, and home maintenance shouldn't
+                                Your home didn&apos;t come with a manual, and home maintenance shouldn&apos;t
                                 be a guessing game. Scandio diagnoses faults instantly and generates
                                 a secure, professional Scandio Report for you to own and share with
                                 a provider of your choice.
@@ -134,14 +135,18 @@ export default function LandingPage() {
                 {/* How It Works (Alternating Z-Pattern) */}
                 <section
                     id="how-it-works"
-                    className="mx-auto max-w-7xl space-y-12 px-4 py-16 sm:px-6 sm:py-20 lg:px-8"
+                    className="mx-auto max-w-7xl space-y-12 px-4 py-16 sm:px-6 sm:py-20 lg:px-8 scroll-mt-16"
                 >
                     <div className="text-center">
                         <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">
                             How Scandio Works
                         </h2>
-                        <p className="mx-auto mt-4 max-w-3xl text-muted-foreground">
-                          Lorem ipsum dolor sit amet, consectetur adipiscing elit. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris.
+                        <p className="mx-auto mt-4 max-w-4xl text-muted-foreground">
+                            We have transformed the search for home maintenance contractors into a
+                            streamlined, professional process. Scandio analyses your image,
+                            identifies your respective fault and returns a diagnosis and resolution
+                            summary, linking you directly to the best local contractors in the
+                            Western Cape.
                         </p>
                     </div>
 
@@ -210,13 +215,13 @@ export default function LandingPage() {
                 </section>
 
                 {/* Bento Box UI Showcase */}
-                <section id="features" className="bg-muted/50 py-16">
+                <section id="features" className="bg-muted/50 py-16 scroll-mt-16">
                     <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
                         <div className="mb-12 text-center">
                             <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">
                                 Our Features
                             </h2>
-                            <p className="mx-auto mt-4 max-w-3xl text-muted-foreground">
+                            <p className="mx-auto mt-4 max-w-4xl text-muted-foreground">
                                 Lorem ipsum dolor sit amet, consectetur adipiscing elit. Ut enim ad
                                 minim veniam, quis nostrud exercitation ullamco laboris.
                             </p>
@@ -284,35 +289,49 @@ export default function LandingPage() {
                     </div>
                 </section>
 
-                {/* Dedicated Map / Coverage Section */}
+                {/* All Services */}
                 <section
-                    id="coverage"
-                    className="mx-auto max-w-7xl flex flex-col gap-12 px-4 py-16 sm:px-6 sm:py-28 lg:px-8"
+                    id="all-services"
+                    className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8 scroll-mt-16"
                 >
-                    <div className="flex flex-col gap-4 text-center">
+                    <div className="mb-12 text-center">
                         <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">
-                            Service Coverage
+                            Our Services
                         </h2>
-                        <p className="mx-auto max-w-3xl text-muted-foreground">
-                            Lorem ipsum dolor sit amet, consectetur adipiscing elit. Ut enim ad
-                            minim veniam, quis nostrud exercitation ullamco laboris.
+                        <p className="mx-auto mt-4 max-w-4xl text-muted-foreground">
+                            Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod
+                            tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim
+                            veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea
+                            commodo consequat.
                         </p>
                     </div>
-                    {process.env.NEXT_PUBLIC_GOOGLE_MAPS_EMBED_KEY ||
-                    process.env.NEXT_PUBLIC_GOOGLE_PLACES_API_KEY ? (
-                        <CoverageMap
-                            apiKey={
-                                process.env.NEXT_PUBLIC_GOOGLE_MAPS_EMBED_KEY ||
-                                process.env.NEXT_PUBLIC_GOOGLE_PLACES_API_KEY ||
-                                ''
-                            }
-                        />
-                    ) : (
-                        <div className="flex min-h-[400px] items-center justify-center rounded-lg border border-border/50 bg-secondary/75 hover:border-border/75 hover:bg-secondary/50 transition-all duration-250 text-sm text-muted-foreground p-4 text-center">
-                            Configure NEXT_PUBLIC_GOOGLE_MAPS_EMBED_KEY or
-                            NEXT_PUBLIC_GOOGLE_PLACES_API_KEY to Show Map.
-                        </div>
-                    )}
+                    <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                        {services.map(({ id, label }) => (
+                            <div
+                                key={id}
+                                className="flex flex-col overflow-hidden rounded-lg border border-border/50 bg-background transition-all duration-250 hover:border-border hover:bg-background"
+                            >
+                                <Placeholder
+                                    label={label}
+                                    aspectRatio="aspect-[16/9]"
+                                    className="w-full shrink-0 rounded-b-none border-0"
+                                />
+                                <div className="flex flex-1 flex-col gap-1.5 border-t border-border/50 bg-white p-4">
+                                    <h3 className="font-semibold text-foreground">{label}</h3>
+                                    <p className="text-sm text-muted-foreground">
+                                        {PLACEHOLDER_DESC}
+                                    </p>
+                                    <div className="mt-4 flex flex-1 flex-col justify-end">
+                                        <Button asChild variant="secondary" size="sm" className="w-fit">
+                                            <Link href={getServiceChatHref(label)}>
+                                                Start Diagnosis
+                                            </Link>
+                                        </Button>
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
                 </section>
 
                 <TestimonialsSection />

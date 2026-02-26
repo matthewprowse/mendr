@@ -6,8 +6,11 @@ import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Separator } from '@/components/ui/separator';
 import { sanitizeAiContent } from '@/lib/utils';
+import { toTitleCase } from '@/lib/services';
 import { DiagnosisData, Provider } from './types';
 import { ProviderCard } from './provider-card';
+import { ProvidersMap } from './providers-map';
+import { ServiceTradeLink } from './service-trade-link';
 import { ProvidersSkeleton } from './skeletons';
 
 const WORD_DELAY_MS = 40;
@@ -51,6 +54,7 @@ export function DiagnosisResponseCard({
     trade,
     openPopoverId,
     setOpenPopoverId,
+    hasImage = true,
 }: {
     conversationId?: string;
     diagnosis: DiagnosisData;
@@ -66,6 +70,7 @@ export function DiagnosisResponseCard({
     trade: string | undefined;
     openPopoverId: string | null;
     setOpenPopoverId: (id: string | null) => void;
+    hasImage?: boolean;
 }) {
     const [addressPopoverOpen, setAddressPopoverOpen] = useState(false);
     const [addressQuery, setAddressQuery] = useState('');
@@ -112,20 +117,30 @@ export function DiagnosisResponseCard({
     };
 
     return (
-        <div className="w-full">
+        <div className="w-full space-y-6">
             {diagnosis.diagnosis && !diagnosis.requires_clarification && (
                 <>
-                    <div className="space-y-4">
-                        <h3 className="text-xl font-semibold">{diagnosis.diagnosis}</h3>
-                        <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap">
-                            {sanitizeAiContent(diagnosis.action_required || '')}
-                        </p>
-                        {diagnosis.estimated_cost && diagnosis.estimated_cost !== 'N/A' && (
-                            <p className="text-sm font-medium text-foreground leading-relaxed whitespace-pre-wrap">
-                                {sanitizeAiContent(diagnosis.estimated_cost)}
+                    <div className="mt-3 space-y-2">
+                        {trade && trade !== 'N/A' && <ServiceTradeLink trade={trade} />}
+                        <h1 className="text-xl font-semibold">
+                            {toTitleCase(diagnosis.diagnosis)}
+                        </h1>
+                        {diagnosis.action_required && diagnosis.action_required !== 'N/A' && (
+                            <p className="text-sm leading-relaxed whitespace-pre-wrap">
+                                {sanitizeAiContent(diagnosis.action_required)}
                             </p>
                         )}
                     </div>
+                    {diagnosis.estimated_cost && diagnosis.estimated_cost !== 'N/A' && (
+                        <div className="flex flex-col gap-1">
+                            <h3 className="text-md font-semibold text-foreground">
+                                Estimated Repair Cost
+                            </h3>
+                            <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">
+                                {sanitizeAiContent(diagnosis.estimated_cost)}
+                            </p>
+                        </div>
+                    )}
                     {canShowProviders &&
                         diagnosisConfirmed === null &&
                         onConfirmYes &&
@@ -148,22 +163,11 @@ export function DiagnosisResponseCard({
             )}
 
             {canShowProviders && diagnosisConfirmed === true && (
-                <div className="mt-8 flex flex-col gap-4">
-                    <Separator className="w-full mb-3" />
-                    <div>
-                        <h4 className="text-lg font-semibold text-foreground">
-                            Recommended Service Providers
-                        </h4>
-                        <p className="text-sm text-muted-foreground mt-1 leading-relaxed">
-                            We’ve selected top-rated {trade?.toLowerCase() || 'service'} specialists
-                            near you based on reviews and distance. You can use your current
-                            location or search for a different address below.
-                        </p>
-                    </div>
-                    <div className="flex flex-col gap-3 mb-2">
+                <div className="flex flex-col gap-3">
+                    <div className="flex flex-col gap-2">
                         {hasLocation && userLocation?.address ? (
                             <div className="flex items-center justify-between gap-2">
-                                <span className="text-sm text-muted-foreground truncate min-w-0">
+                                <span className="text-sm font-medium truncate min-w-0">
                                     {userLocation.address}
                                 </span>
                                 <Popover
@@ -207,11 +211,7 @@ export function DiagnosisResponseCard({
                                 </Popover>
                             </div>
                         ) : (
-                            <div className="flex flex-col items-start gap-2">
-                                <p className="text-sm text-muted-foreground">
-                                    Use your current location or search for an address to find
-                                    providers nearby.
-                                </p>
+                            onRequestLocation && (
                                 <div className="flex flex-wrap items-center gap-2">
                                     <Button onClick={() => onRequestLocation(trade)}>
                                         Use my location
@@ -258,7 +258,7 @@ export function DiagnosisResponseCard({
                                         </PopoverContent>
                                     </Popover>
                                 </div>
-                            </div>
+                            )
                         )}
                     </div>
                     {hasLocation &&
@@ -270,23 +270,40 @@ export function DiagnosisResponseCard({
                             </p>
                         ) : (
                             <div className="flex flex-col gap-6">
+                                {providers.length + emergingProviders.length > 0 &&
+                                    (process.env.NEXT_PUBLIC_GOOGLE_MAPS_EMBED_KEY ||
+                                        process.env.NEXT_PUBLIC_GOOGLE_PLACES_API_KEY) && (
+                                        <ProvidersMap
+                                            apiKey={
+                                                process.env.NEXT_PUBLIC_GOOGLE_MAPS_EMBED_KEY ||
+                                                process.env.NEXT_PUBLIC_GOOGLE_PLACES_API_KEY ||
+                                                ''
+                                            }
+                                            providers={providers}
+                                            emergingProviders={emergingProviders}
+                                            userLocation={userLocation}
+                                        />
+                                    )}
                                 {(() => {
                                     const favourite = providers.find((p) => p.isFavourite);
                                     const others = providers.filter((p) => !p.isFavourite);
                                     return (
                                         <>
                                             {favourite && (
-                                                <div className="flex flex-col gap-3">
-                                                    <h4 className="text-base font-semibold text-foreground">
-                                                        Scandio&apos;s Pick
-                                                    </h4>
-                                                    {favourite.favouriteReason && (
-                                                        <p className="text-sm text-muted-foreground leading-relaxed">
-                                                            {sanitizeAiContent(
-                                                                favourite.favouriteReason
-                                                            )}
-                                                        </p>
-                                                    )}
+                                                <div className="flex flex-col gap-6">
+                                                    <Separator className="w-full" />
+                                                    <div className="flex flex-col gap-0.5">
+                                                        <h2 className="text-lg font-semibold text-foreground">
+                                                            Scandio&apos;s Pick
+                                                        </h2>
+                                                        {favourite.favouriteReason && (
+                                                            <p className="text-sm text-foreground">
+                                                                {sanitizeAiContent(
+                                                                    favourite.favouriteReason
+                                                                )}
+                                                            </p>
+                                                        )}
+                                                    </div>
                                                     <ProviderCard
                                                         provider={favourite}
                                                         index={0}
@@ -301,9 +318,16 @@ export function DiagnosisResponseCard({
                                             )}
                                             {others.length > 0 && (
                                                 <>
-                                                    <h4 className="text-base font-semibold text-foreground">
-                                                        Other Recommended Providers
-                                                    </h4>
+                                                    <div className="flex flex-col gap-0.5">
+                                                        <h3 className="text-lg font-semibold text-foreground">
+                                                            Other Recommended Providers
+                                                        </h3>
+                                                        <p className="text-sm text-foreground leading-relaxed">
+                                                            Compare these providers based on ratings,
+                                                            reviews, and availability to find the best
+                                                            fit for you.
+                                                        </p>
+                                                    </div>
                                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                                         {others.map((p, i) => (
                                                             <ProviderCard
@@ -324,13 +348,15 @@ export function DiagnosisResponseCard({
                                             {emergingProviders.length > 0 && (
                                                 <>
                                                     <Separator className="w-full" />
-                                                    <h4 className="text-base font-semibold text-foreground">
-                                                        Emerging Providers
-                                                    </h4>
-                                                    <p className="text-sm text-muted-foreground leading-relaxed">
-                                                        Good reviews but fewer of them — newer
-                                                        businesses worth considering.
-                                                    </p>
+                                                    <div className="flex flex-col gap-0.5">
+                                                        <h3 className="text-lg font-semibold text-foreground">
+                                                            Emerging Providers
+                                                        </h3>
+                                                        <p className="text-sm text-foreground leading-relaxed">
+                                                            Good reviews but fewer of them, newer
+                                                            businesses worth considering.
+                                                        </p>
+                                                    </div>
                                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                                         {emergingProviders.map((p, i) => (
                                                             <ProviderCard
@@ -353,15 +379,17 @@ export function DiagnosisResponseCard({
                                 })()}
                             </div>
                         ))}
-                    {hasLocation && (providers.length > 0 || emergingProviders.length > 0) && (
-                        <div className="mt-6 pt-4 border-t border-border">
-                            <p className="text-sm text-muted-foreground leading-relaxed">
-                                Was this diagnosis accurate? Additional photos or details help us
-                                create a clearer report for your chosen provider and can speed up
-                                the job.
-                            </p>
-                        </div>
-                    )}
+                    {hasImage &&
+                        hasLocation &&
+                        (providers.length > 0 || emergingProviders.length > 0) && (
+                            <div className="mt-6 pt-4 border-t border-border">
+                                <p className="text-sm text-muted-foreground leading-relaxed">
+                                    Was this diagnosis accurate? Additional photos or details help
+                                    us create a clearer report for your chosen provider and can
+                                    speed up the job.
+                                </p>
+                            </div>
+                        )}
                 </div>
             )}
         </div>

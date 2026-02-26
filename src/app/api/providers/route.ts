@@ -58,20 +58,32 @@ export async function POST(req: NextRequest) {
         const radius = customRadius || 50000; // Default 50km — wider search for rural/sparse areas
 
         // 1. Fast trade-to-query mapping (no AI call — saves ~1–2s)
+        // Supabase services labels → Google Places search query (must match services.search_query)
         const TRADE_QUERY_MAP: Record<string, string> = {
-            plumber: 'Plumber',
+            electrical: 'Electrician',
             plumbing: 'Plumber',
+            'security & access': 'Garage door repair contractor',
+            'building & construction': 'Builder',
+            'carpentry & woodwork': 'Carpenter',
+            'flooring & tiling': 'Flooring Contractor',
+            'general handyman': 'Handyman',
+            'locksmith services': 'Locksmith',
+            painting: 'Painter',
+            'pool maintenance': 'Pool Service',
+            'rubble & waste removal': 'Waste Removal',
+            welding: 'Welder',
+            plumber: 'Plumber',
             'leaking pipe': 'Plumber',
             electrician: 'Electrician',
-            electrical: 'Electrician',
             'gate technician': 'Gate Repair Service',
             'gate repair': 'Gate Repair Service',
             'gate motor': 'Gate Repair Service',
+            'garage door': 'Garage door repair contractor',
+            'garage doors': 'Garage door repair contractor',
             roofing: 'Roofing Contractor',
             roofer: 'Roofing Contractor',
             guttering: 'Roofing Contractor',
             painter: 'Painter',
-            painting: 'Painter',
             carpenter: 'Carpenter',
             handyman: 'Handyman',
             'air conditioning': 'AC Repair',
@@ -106,7 +118,7 @@ export async function POST(req: NextRequest) {
                 'Content-Type': 'application/json',
                 'X-Goog-Api-Key': apiKey,
                 'X-Goog-FieldMask':
-                    'places.id,places.displayName,places.formattedAddress,places.addressComponents,places.rating,places.userRatingCount,places.nationalPhoneNumber,places.internationalPhoneNumber,places.websiteUri,places.location,places.editorialSummary,places.types,places.reviews,routingSummaries,places.regularOpeningHours,nextPageToken',
+                    'places.id,places.displayName,places.formattedAddress,places.addressComponents,places.rating,places.userRatingCount,places.nationalPhoneNumber,places.internationalPhoneNumber,places.websiteUri,places.location,places.editorialSummary,places.reviewSummary,places.types,places.reviews,routingSummaries,places.regularOpeningHours,nextPageToken',
             },
             body: JSON.stringify({
                 textQuery: searchQuery,
@@ -134,14 +146,36 @@ export async function POST(req: NextRequest) {
         }
 
         const data = await response.json();
-        const places = data.places || [];
-        const routingSummaries = data.routingSummaries || [];
+        const rawPlaces = data.places || [];
+        const rawRouting = data.routingSummaries || [];
+
+        // Filter out retail stores (e.g. Builders Warehouse) — we want contractors/service providers, not shops that sell parts
+        const RETAIL_TYPES = new Set([
+            'hardware_store',
+            'home_goods_store',
+            'home_improvement_store',
+            'building_materials_store',
+            'department_store',
+            'warehouse_store',
+            'discount_store',
+        ]);
+        const filtered: { place: any; routing: any }[] = [];
+        rawPlaces.forEach((p: any, i: number) => {
+            const types = (p.types || []) as string[];
+            const hasRetailType = types.some((t: string) => RETAIL_TYPES.has(t));
+            if (!hasRetailType) filtered.push({ place: p, routing: rawRouting[i] });
+        });
+        const places = filtered.map((f) => f.place);
+        const routingSummaries = filtered.map((f) => f.routing);
+
         if (places.length === 0) {
             return NextResponse.json({ providers: [] });
         }
 
         // 3. Caching Logic: Check which providers are already analyzed
         const placeIds = places.map((p: any) => p.id);
+        const genericFallback = `Local ${trade} professional.`;
+        const normalizePlaceId = (id: string) => (id || '').replace(/^places\//, '');
         let cachedData = [];
         if (supabase) {
             const { data } = await supabase
@@ -151,44 +185,76 @@ export async function POST(req: NextRequest) {
             cachedData = data || [];
         }
 
-        const cachedMap = new Map(cachedData?.map((item) => [item.place_id, item]));
-        const missingPlaces = places.filter((p: any) => !cachedMap.has(p.id));
+        const cachedMap = new Map<string, any>();
+        (cachedData || []).forEach((item: any) => {
+            const pid = item.place_id;
+            if (pid) {
+                cachedMap.set(pid, item);
+                cachedMap.set(normalizePlaceId(pid), item);
+                if (!pid.startsWith('places/')) cachedMap.set(`places/${pid}`, item);
+            }
+        });
+        // Treat cache as "missing" if it only has the generic fallback — re-run AI to get real summary
+        const missingPlaces = places.filter((p: any) => {
+            const cached = cachedMap.get(p.id) || cachedMap.get(normalizePlaceId(p.id));
+            if (!cached) return true;
+            const summary = cached.summary || '';
+            return !summary || summary === genericFallback;
+        });
 
-        // 3. Use fallback for uncached — return fast; enrich in background for next request (saves ~2–4s)
+        // 3. Await AI enrichment for uncached providers so summaries appear in response
         let aiResults: any[] = [];
-        if (missingPlaces.length > 0 && geminiKey && supabase) {
+        if (missingPlaces.length > 0 && geminiKey) {
             const providersContext = missingPlaces.map((place: any) => {
                 const reviews =
                     place.reviews
-                        ?.map((r: any) => ({ text: r.text?.text, rating: r.rating }))
+                        ?.map((r: any) => ({
+                            text: typeof r.text === 'string' ? r.text : r.text?.text,
+                            rating: r.rating,
+                        }))
                         .filter((r: any) => r.text)
-                        .slice(0, 5) || [];
+                        .slice(0, 10) || [];
                 return {
                     place_id: place.id,
                     name: place.displayName?.text || 'Unknown',
                     rating: place.rating,
                     rating_count: place.userRatingCount,
-                    description: place.editorialSummary?.text || 'N/A',
+                    description:
+                        place.reviewSummary?.text?.text ||
+                        place.editorialSummary?.text ||
+                        'N/A',
                     reviews,
                 };
             });
-            void (async () => {
-                try {
-                    const genAI = new GoogleGenerativeAI(geminiKey);
-                    const model = genAI.getGenerativeModel({
-                        model: 'gemini-2.0-flash',
-                        generationConfig: { temperature: 0.1 },
-                    });
-                    const batchPrompt = `Analyse these ${providersContext.length} home service providers. For each: 1) Title Case name. 2) "summary" (max 30 words, British English, from reviews). 3) "services" array: [{"short":"≤15 chars","full":"≤30 chars"}] for trade: ${trade}. Output JSON only: {"results":[{"place_id":"","name":"","summary":"","services":[]}]}. DATA: ${JSON.stringify(providersContext)}`;
-                    const result = await model.generateContent(batchPrompt);
-                    const jsonMatch = result.response.text().match(/\{[\s\S]*\}/);
-                    if (jsonMatch) {
-                        const parsed = JSON.parse(jsonMatch[0]);
-                        const results = parsed.results || [];
+            try {
+                const genAI = new GoogleGenerativeAI(geminiKey);
+                const model = genAI.getGenerativeModel({
+                    model: 'gemini-2.0-flash',
+                    generationConfig: { temperature: 0.1 },
+                });
+                const batchPrompt = `Analyse these ${providersContext.length} home service providers. For each output: 1) Title Case name. 2) "summary": 3–5 SHORT sentences maximum (each under 15 words). Be concise. If reviews exist, synthesise key points — reflect positive/negative feedback proportion. If reviews are empty, use "description" for 1–2 sentences. NEVER exceed 5 sentences or 80 words total. NEVER return empty summary. 3) "services" array: [{"short":"≤15 chars","full":"≤30 chars"}] for trade: ${trade}. Output JSON only: {"results":[{"place_id":"","name":"","summary":"","services":[]}]}. DATA: ${JSON.stringify(providersContext)}`;
+                const result = await model.generateContent(batchPrompt);
+                const jsonMatch = result.response.text().match(/\{[\s\S]*\}/);
+                if (jsonMatch) {
+                    const parsed = JSON.parse(jsonMatch[0]);
+                    aiResults = parsed.results || [];
+                    if (supabase && aiResults.length > 0) {
                         const adminSupabase = await createSupabaseAdminClient();
-                        const toCache = results
+                        const toCache = aiResults
                             .map((r: any) => {
-                                const place = missingPlaces.find((p: any) => p.id === r.place_id);
+                                        const place = missingPlaces.find(
+                                            (p: any) =>
+                                                p.id === r.place_id ||
+                                                normalizePlaceId(p.id) ===
+                                                    normalizePlaceId(r.place_id || '')
+                                        );
+                                const summary =
+                                    (r.summary && r.summary !== genericFallback
+                                        ? r.summary
+                                        : null) ||
+                                    place?.editorialSummary?.text ||
+                                    place?.reviewSummary?.text?.text;
+                                if (!summary || summary === genericFallback) return null;
                                 return place
                                     ? {
                                           place_id: place.id,
@@ -200,10 +266,7 @@ export async function POST(req: NextRequest) {
                                           website: place.websiteUri,
                                           latitude: place.location?.latitude,
                                           longitude: place.location?.longitude,
-                                          summary:
-                                              r.summary ||
-                                              place.editorialSummary?.text ||
-                                              `Local ${trade} professional.`,
+                                          summary,
                                           services: r.services || [],
                                       }
                                     : null;
@@ -212,19 +275,26 @@ export async function POST(req: NextRequest) {
                         if (toCache.length > 0)
                             await adminSupabase.from('cached_providers').upsert(toCache);
                     }
-                } catch (e) {
-                    console.warn('Background provider enrichment failed:', (e as Error).message);
                 }
-            })();
+            } catch (e) {
+                console.warn('Provider enrichment failed:', (e as Error).message);
+            }
         }
 
         // 4. Map results back — use cache, aiResults (if we waited), or fallback for uncached
         const toCache: any[] = [];
         const processedProviders = places.map((place: any, index: number) => {
-            const isCached = cachedMap.has(place.id);
-            const aiData = isCached
-                ? cachedMap.get(place.id)
-                : aiResults.find((r: any) => r.place_id === place.id);
+            const placeIdNorm = normalizePlaceId(place.id);
+            const cached = cachedMap.get(place.id) || cachedMap.get(placeIdNorm);
+            const cachedHasFallbackOnly =
+                cached &&
+                (!cached.summary || cached.summary === genericFallback);
+            const aiResult = aiResults.find(
+                (r: any) =>
+                    normalizePlaceId(r.place_id || '') === placeIdNorm || r.place_id === place.id
+            );
+            const aiData =
+                aiResult || (cached && !cachedHasFallbackOnly ? cached : null);
 
             // Safe address formatting
             const components = place.addressComponents || [];
@@ -272,9 +342,12 @@ export async function POST(req: NextRequest) {
                 weekdayDescriptions: weekdayDescriptions,
                 nextOpenTime: nextOpenTime,
                 summary:
-                    aiData?.summary ||
+                    (aiData?.summary && aiData.summary !== genericFallback
+                        ? aiData.summary
+                        : null) ||
+                    place.reviewSummary?.text?.text ||
                     place.editorialSummary?.text ||
-                    `Local ${trade} professional.`,
+                    genericFallback,
                 services:
                     aiData?.services ||
                     place.types
@@ -290,8 +363,10 @@ export async function POST(req: NextRequest) {
                 distanceText: distanceText,
             };
 
-            // Add to batch cache update if it's new and we have AI data for it
-            if (!isCached && aiData) {
+            // Add to batch cache update when we have a real AI summary (new or replacing fallback-only cache)
+            const hasRealSummary =
+                providerData.summary && providerData.summary !== genericFallback;
+            if (hasRealSummary && aiResult && (cachedHasFallbackOnly || !cached)) {
                 toCache.push(providerData);
             }
 
