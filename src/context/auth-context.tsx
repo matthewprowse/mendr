@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
+import { logScandioEvent } from '@/lib/audit-log';
 
 interface AuthContextType {
     user: User | null;
@@ -50,6 +51,7 @@ export function AuthProvider({
     }, []);
 
     const signOut = async () => {
+        await logScandioEvent(supabase, { action: 'SIGN_OUT', type: 'AUTH' });
         await supabase.auth.signOut();
     };
 

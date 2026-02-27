@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { createSupabaseServerClient, createSupabaseAdminClient } from '@/lib/supabase-server';
+import { isCacheStale, refreshCachedProvider } from '@/lib/refresh-provider-cache';
+import { formatBusinessName } from '@/lib/utils';
 
 export async function POST(req: NextRequest) {
     try {
@@ -118,7 +120,7 @@ export async function POST(req: NextRequest) {
                 'Content-Type': 'application/json',
                 'X-Goog-Api-Key': apiKey,
                 'X-Goog-FieldMask':
-                    'places.id,places.displayName,places.formattedAddress,places.addressComponents,places.rating,places.userRatingCount,places.nationalPhoneNumber,places.internationalPhoneNumber,places.websiteUri,places.location,places.editorialSummary,places.reviewSummary,places.types,places.reviews,routingSummaries,places.regularOpeningHours,nextPageToken',
+                    'places.id,places.displayName,places.formattedAddress,places.addressComponents,places.rating,places.userRatingCount,places.nationalPhoneNumber,places.internationalPhoneNumber,places.websiteUri,places.location,places.editorialSummary,places.reviewSummary,places.types,places.reviews,places.photos,routingSummaries,places.regularOpeningHours,nextPageToken',
             },
             body: JSON.stringify({
                 textQuery: searchQuery,
@@ -172,11 +174,11 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ providers: [] });
         }
 
-        // 3. Caching Logic: Check which providers are already analyzed
+        // 3. Caching Logic: Check which providers are already analysed
         const placeIds = places.map((p: any) => p.id);
         const genericFallback = `Local ${trade} professional.`;
         const normalizePlaceId = (id: string) => (id || '').replace(/^places\//, '');
-        let cachedData = [];
+        let cachedData: any[] = [];
         if (supabase) {
             const { data } = await supabase
                 .from('cached_providers')
@@ -194,6 +196,36 @@ export async function POST(req: NextRequest) {
                 if (!pid.startsWith('places/')) cachedMap.set(`places/${pid}`, item);
             }
         });
+
+        if (supabase) {
+            const stalePlaceIds = placeIds.filter((id: string) => {
+                const cached = cachedMap.get(id) || cachedMap.get(normalizePlaceId(id));
+                return cached && isCacheStale(cached.last_updated);
+            });
+            stalePlaceIds.slice(0, 5).forEach((placeId: string) => {
+                refreshCachedProvider(placeId).catch((e) =>
+                    console.warn('Background cache refresh failed:', (e as Error).message)
+                );
+            });
+        }
+
+        // Provider page id: Scandio profile id or cached_providers.id for /pro/[id]
+        const idByPlaceId = new Map<string, string>();
+        if (supabase && placeIds.length > 0) {
+            const { data: profileRows } = await supabase
+                .from('provider_profiles')
+                .select('id, google_place_id')
+                .in('google_place_id', placeIds);
+            (profileRows || []).forEach((row: { id: string; google_place_id: string }) => {
+                const gpid = row.google_place_id;
+                if (gpid && row.id) {
+                    idByPlaceId.set(gpid, row.id);
+                    idByPlaceId.set(normalizePlaceId(gpid), row.id);
+                    if (!gpid.startsWith('places/')) idByPlaceId.set(`places/${gpid}`, row.id);
+                }
+            });
+        }
+
         // Treat cache as "missing" if it only has the generic fallback — re-run AI to get real summary
         const missingPlaces = places.filter((p: any) => {
             const cached = cachedMap.get(p.id) || cachedMap.get(normalizePlaceId(p.id));
@@ -232,7 +264,7 @@ export async function POST(req: NextRequest) {
                     model: 'gemini-2.0-flash',
                     generationConfig: { temperature: 0.1 },
                 });
-                const batchPrompt = `Analyse these ${providersContext.length} home service providers. For each output: 1) Title Case name. 2) "summary": 3–5 SHORT sentences maximum (each under 15 words). Be concise. If reviews exist, synthesise key points — reflect positive/negative feedback proportion. If reviews are empty, use "description" for 1–2 sentences. NEVER exceed 5 sentences or 80 words total. NEVER return empty summary. 3) "services" array: [{"short":"≤15 chars","full":"≤30 chars"}] for trade: ${trade}. Output JSON only: {"results":[{"place_id":"","name":"","summary":"","services":[]}]}. DATA: ${JSON.stringify(providersContext)}`;
+                const batchPrompt = `Analyse these ${providersContext.length} home service providers. Use British English throughout (e.g. "specialise", "recognise", "organise", "colour"). For each output: 1) Title Case name. 2) "summary": Exactly 2–3 SHORT sentences. CRITICAL: Do NOT start with or include the business/company name (e.g. no "Plum Plumbers are...", "Combat Plumbing is..."). Write in third person about what customers say: e.g. "Consistently praised for prompt, professional service. Staff noted for attention to detail. Highly recommended." Max 3 sentences, under 45 words. NEVER return empty summary. 3) "services" array: [{"short":"≤15 chars","full":"≤30 chars"}] for trade: ${trade}. Output JSON only: {"results":[{"place_id":"","name":"","summary":"","services":[]}]}. DATA: ${JSON.stringify(providersContext)}`;
                 const result = await model.generateContent(batchPrompt);
                 const jsonMatch = result.response.text().match(/\{[\s\S]*\}/);
                 if (jsonMatch) {
@@ -258,6 +290,7 @@ export async function POST(req: NextRequest) {
                                 return place
                                     ? {
                                           place_id: place.id,
+                                          id: crypto.randomUUID(),
                                           name: r.name || place.displayName?.text,
                                           address: place.formattedAddress || '',
                                           rating: place.rating,
@@ -318,18 +351,43 @@ export async function POST(req: NextRequest) {
                 .filter(Boolean)
                 .join(', ');
 
-            // Extract driving distance from routingSummaries (parallel array to places)
+            // Extract driving distance + duration from routingSummaries (parallel array to places)
             let distanceText = '';
-            const meters = routingSummaries[index]?.legs?.[0]?.distanceMeters;
+            let durationText = '';
+            const leg = routingSummaries[index]?.legs?.[0];
+            const meters = leg?.distanceMeters;
             if (meters !== undefined) {
                 distanceText = (meters / 1000).toFixed(1);
+            }
+            // duration is a proto Duration string like "720s"
+            const durationRaw: string | undefined = leg?.duration;
+            if (durationRaw) {
+                const secs = parseInt(durationRaw.replace('s', ''), 10);
+                if (!isNaN(secs)) {
+                    const mins = Math.round(secs / 60);
+                    durationText = mins < 60 ? `${mins} min` : `${Math.floor(mins / 60)} h ${mins % 60} min`;
+                }
             }
 
             const weekdayDescriptions = place.regularOpeningHours?.weekdayDescriptions ?? [];
             const nextOpenTime = place.regularOpeningHours?.nextOpenTime ?? null;
+            const rawReviews = place.reviews ?? [];
+            const reviews = rawReviews.map((r: any) => {
+                const authorName =
+                    (r.authorAttribution?.displayName && String(r.authorAttribution.displayName).trim()) || 'Google user';
+                return {
+                    text: typeof r.text === 'string' ? r.text : r.text?.text ?? '',
+                    rating: r.rating ?? null,
+                    relativePublishTimeDescription: r.relativePublishTimeDescription ?? null,
+                    authorName,
+                };
+            }).filter((r: { text: string }) => r.text?.trim());
+
+            const displayName = aiData?.name || place.displayName?.text || 'Unknown Provider';
+            const idFromProfile = idByPlaceId.get(place.id) ?? idByPlaceId.get(placeIdNorm);
             const providerData = {
                 place_id: place.id,
-                name: aiData?.name || place.displayName?.text || 'Unknown Provider',
+                name: displayName,
                 address: shortAddress || place.formattedAddress || 'Address not available',
                 rating: place.rating,
                 rating_count: place.userRatingCount,
@@ -341,6 +399,7 @@ export async function POST(req: NextRequest) {
                 isOpen: place.regularOpeningHours?.openNow ?? null,
                 weekdayDescriptions: weekdayDescriptions,
                 nextOpenTime: nextOpenTime,
+                reviews,
                 summary:
                     (aiData?.summary && aiData.summary !== genericFallback
                         ? aiData.summary
@@ -360,50 +419,63 @@ export async function POST(req: NextRequest) {
                         .slice(0, 5)
                         .map((t: string) => ({ short: t.slice(0, 15), full: t })) ||
                     [],
+                photos: (place.photos ?? [])
+                    .slice(0, 10)
+                    .map((p: { name?: string }) => (p?.name ? { name: p.name } : null))
+                    .filter(Boolean) as { name: string }[],
                 distanceText: distanceText,
+                durationText: durationText,
             };
-
-            // Add to batch cache update when we have a real AI summary (new or replacing fallback-only cache)
             const hasRealSummary =
                 providerData.summary && providerData.summary !== genericFallback;
-            if (hasRealSummary && aiResult && (cachedHasFallbackOnly || !cached)) {
-                toCache.push(providerData);
-            }
+            const newId = crypto.randomUUID();
+            // Always cache every place we return so /pro/[id] can resolve when user clicks "View account"
+            toCache.push({ ...providerData, id: cached?.id ?? newId });
+            const providerId = idFromProfile ?? cached?.id ?? newId ?? null;
+            (providerData as any).id = providerId;
 
             return {
                 ...providerData,
-                distanceText, // Add driving distance to the final response
-                ratingCount: providerData.rating_count, // Keep frontend compatibility
+                distanceText,
+                durationText,
+                ratingCount: providerData.rating_count,
                 isOpen: providerData.isOpen,
                 weekdayDescriptions: providerData.weekdayDescriptions,
                 nextOpenTime: providerData.nextOpenTime,
+                reviews: providerData.reviews ?? [],
+                id: providerId ?? null,
             };
         });
 
-        // Batch update the cache in the background (don't await it to keep response fast)
+        // Await cache upsert so /pro/[id] resolves when user clicks "View account"
         if (toCache.length > 0 && supabase) {
-            createSupabaseAdminClient()
-                .then((adminSupabase) => {
-                    const dbToCache = toCache.map((p) => ({
-                        place_id: p.place_id,
-                        name: p.name,
-                        address: p.address,
-                        rating: p.rating,
-                        rating_count: p.rating_count,
-                        phone: p.phone,
-                        website: p.website,
-                        latitude: p.latitude,
-                        longitude: p.longitude,
-                        summary: p.summary,
-                        services: p.services,
-                    }));
-
-                    return adminSupabase.from('cached_providers').upsert(dbToCache);
-                })
-                .then(({ error }) => {
-                    if (error) console.error('Background cache update failed:', error);
-                })
-                .catch((e) => console.warn('Supabase cache update skipped:', (e as Error).message));
+            try {
+                const adminSupabase = await createSupabaseAdminClient();
+                const dbToCache = toCache.map((p) => ({
+                    place_id: p.place_id,
+                    id: p.id,
+                    name: p.name,
+                    address: p.address,
+                    rating: p.rating,
+                    rating_count: p.rating_count,
+                    phone: p.phone,
+                    website: p.website,
+                    latitude: p.latitude,
+                    longitude: p.longitude,
+                    summary: p.summary,
+                    services: p.services,
+                    reviews: p.reviews ?? [],
+                    weekday_descriptions: p.weekdayDescriptions ?? [],
+                    photos: (p as { photos?: { name: string }[] }).photos ?? [],
+                    last_updated: new Date().toISOString(),
+                }));
+                const { error } = await adminSupabase
+                    .from('cached_providers')
+                    .upsert(dbToCache, { onConflict: 'place_id' });
+                if (error) console.error('Cache upsert failed:', error);
+            } catch (e) {
+                console.warn('Supabase cache update skipped:', (e as Error).message);
+            }
         }
 
         const withReviews = processedProviders.filter(
@@ -428,8 +500,14 @@ export async function POST(req: NextRequest) {
 
         const establishedCount = established.length;
         const takeCount = Math.min(5, establishedCount);
-        const providers = established.slice(0, takeCount);
-        const emergingProviders = emerging.slice(0, 5);
+        // When no "established" (25+ reviews), show top of sorted so we always show providers when we have any
+        const providers =
+            establishedCount > 0
+                ? established.slice(0, takeCount)
+                : sorted.slice(0, 5);
+        // Avoid duplicating when main list is fallback from sorted (emerging would overlap)
+        const emergingProviders =
+            establishedCount > 0 ? emerging.slice(0, 5) : [];
         const nextPageToken = data.nextPageToken || null;
 
         // Fast heuristic for Scandio's Pick (no AI call — saves ~1–2s): open > 4.5+ & 25+ reviews > best by rating
@@ -452,7 +530,7 @@ export async function POST(req: NextRequest) {
                         : pick.weekdayDescriptions?.[0]
                           ? `They are not currently open (${pick.weekdayDescriptions[0]}).`
                           : 'They are not currently open.';
-                favouriteReason = `We recommend ${pick.name}. ${openLine} With a ${r.toFixed(1)} rating and ${rc} review${rc === 1 ? '' : 's'}, they have a strong track record.`;
+                favouriteReason = `We recommend ${formatBusinessName(pick.name)}. ${openLine} With a ${r.toFixed(1)} rating and ${rc} review${rc === 1 ? '' : 's'}, they have a strong track record.`;
             }
         }
 

@@ -1,7 +1,7 @@
 /**
- * File: 02_rls.sql
- * Description: Basic Row Level Security (RLS) policies for anonymous access.
- * This file is idempotent and can be run multiple times.
+ * File: rls.sql
+ * Description: Row Level Security (RLS) policies for all public and storage tables.
+ * Idempotent: safe to run multiple times. Run after tables.sql.
  */
 
 -- Enable RLS on all tables
@@ -84,3 +84,157 @@ ALTER TABLE legal_documents ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Legal documents public read active" ON legal_documents;
 CREATE POLICY "Legal documents public read active" ON legal_documents
     FOR SELECT USING (is_active = true);
+
+-- 13. Provider profiles (Phase 1/4): Public read for Unified Provider Page
+ALTER TABLE provider_profiles ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Provider profiles public read" ON provider_profiles;
+CREATE POLICY "Provider profiles public read" ON provider_profiles FOR SELECT USING (true);
+
+-- 14. Audit logs: Server/admin only (no anon read; inserts via service role)
+ALTER TABLE audit_logs ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Audit logs no anon read" ON audit_logs;
+CREATE POLICY "Audit logs no anon read" ON audit_logs FOR SELECT USING (false);
+
+-- =============================================================================
+-- Phase 1 (New Standard): profiles, provider_locations, provider_profiles, jobs, audit_logs
+-- =============================================================================
+
+-- Profiles: users can read/update own (id or user_id = auth.uid())
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_tables WHERE schemaname = 'public' AND tablename = 'profiles') THEN
+        ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
+        DROP POLICY IF EXISTS "Profiles select own" ON profiles;
+        DROP POLICY IF EXISTS "Profiles update own" ON profiles;
+        CREATE POLICY "Profiles select own" ON profiles FOR SELECT USING (id = auth.uid() OR user_id = auth.uid());
+        CREATE POLICY "Profiles update own" ON profiles FOR UPDATE USING (id = auth.uid() OR user_id = auth.uid()) WITH CHECK (id = auth.uid() OR user_id = auth.uid());
+        DROP POLICY IF EXISTS "Profiles insert own" ON profiles;
+        CREATE POLICY "Profiles insert own" ON profiles FOR INSERT WITH CHECK (id = auth.uid() OR user_id = auth.uid());
+    END IF;
+END $$;
+
+-- Provider locations: public read active (for discovery); provider CRUD own
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_tables WHERE schemaname = 'public' AND tablename = 'provider_locations') THEN
+        ALTER TABLE provider_locations ENABLE ROW LEVEL SECURITY;
+        DROP POLICY IF EXISTS "Provider locations public read active" ON provider_locations;
+        DROP POLICY IF EXISTS "Provider locations provider full access" ON provider_locations;
+        CREATE POLICY "Provider locations public read active" ON provider_locations FOR SELECT USING (is_active = true);
+        CREATE POLICY "Provider locations provider full access" ON provider_locations FOR ALL USING (provider_id = auth.uid()) WITH CHECK (provider_id = auth.uid());
+    END IF;
+END $$;
+
+-- Provider profiles: public read (for /pro/[slug]); provider full access to own
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_tables WHERE schemaname = 'public' AND tablename = 'provider_profiles') THEN
+        ALTER TABLE provider_profiles ENABLE ROW LEVEL SECURITY;
+        DROP POLICY IF EXISTS "Provider profiles public read" ON provider_profiles;
+        DROP POLICY IF EXISTS "Provider profiles provider full access" ON provider_profiles;
+        CREATE POLICY "Provider profiles public read" ON provider_profiles FOR SELECT USING (true);
+        CREATE POLICY "Provider profiles provider full access" ON provider_profiles FOR ALL USING (id = auth.uid()) WITH CHECK (id = auth.uid());
+    END IF;
+END $$;
+
+-- Jobs: client and provider can read/update their own; insert by client or service
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_tables WHERE schemaname = 'public' AND tablename = 'jobs') THEN
+        ALTER TABLE jobs ENABLE ROW LEVEL SECURITY;
+        DROP POLICY IF EXISTS "Jobs select own" ON jobs;
+        DROP POLICY IF EXISTS "Jobs update own" ON jobs;
+        DROP POLICY IF EXISTS "Jobs insert" ON jobs;
+        CREATE POLICY "Jobs select own" ON jobs FOR SELECT USING (client_id = auth.uid() OR provider_id = auth.uid());
+        CREATE POLICY "Jobs update own" ON jobs FOR UPDATE USING (client_id = auth.uid() OR provider_id = auth.uid()) WITH CHECK (true);
+        CREATE POLICY "Jobs insert" ON jobs FOR INSERT WITH CHECK (client_id = auth.uid() OR provider_id = auth.uid());
+    END IF;
+END $$;
+
+-- Audit logs: Insert from app (anon/authenticated); read only by same user or service role
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_tables WHERE schemaname = 'public' AND tablename = 'audit_logs') THEN
+        ALTER TABLE audit_logs ENABLE ROW LEVEL SECURITY;
+        DROP POLICY IF EXISTS "Audit logs allow insert" ON audit_logs;
+        DROP POLICY IF EXISTS "Audit logs allow select own or service" ON audit_logs;
+        CREATE POLICY "Audit logs allow insert" ON audit_logs FOR INSERT WITH CHECK (true);
+        CREATE POLICY "Audit logs allow select own or service" ON audit_logs
+            FOR SELECT USING (auth.role() = 'service_role' OR user_id = auth.uid());
+    END IF;
+END $$;
+
+-- =============================================================================
+-- 17. Customer Reviews: public read approved; authenticated insert; no public update/delete
+-- =============================================================================
+ALTER TABLE customer_reviews ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Customer reviews public read approved" ON customer_reviews;
+CREATE POLICY "Customer reviews public read approved" ON customer_reviews
+    FOR SELECT USING (status = 'approved');
+
+DROP POLICY IF EXISTS "Customer reviews allow insert" ON customer_reviews;
+CREATE POLICY "Customer reviews allow insert" ON customer_reviews
+    FOR INSERT WITH CHECK (true);
+
+-- Users can update their own pending reviews (e.g. re-upload image) but not change status
+DROP POLICY IF EXISTS "Customer reviews update own pending" ON customer_reviews;
+CREATE POLICY "Customer reviews update own pending" ON customer_reviews
+    FOR UPDATE USING (user_id = auth.uid() AND status = 'pending')
+    WITH CHECK (status = 'pending');
+
+-- =============================================================================
+-- 18. Provider Favourites: authenticated users CRUD their own favourites
+-- =============================================================================
+ALTER TABLE provider_favourites ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Provider favourites select own" ON provider_favourites;
+CREATE POLICY "Provider favourites select own" ON provider_favourites
+    FOR SELECT USING (user_id = auth.uid());
+
+DROP POLICY IF EXISTS "Provider favourites insert own" ON provider_favourites;
+CREATE POLICY "Provider favourites insert own" ON provider_favourites
+    FOR INSERT WITH CHECK (user_id = auth.uid());
+
+DROP POLICY IF EXISTS "Provider favourites delete own" ON provider_favourites;
+CREATE POLICY "Provider favourites delete own" ON provider_favourites
+    FOR DELETE USING (user_id = auth.uid());
+
+-- =============================================================================
+-- Storage (Phase 2): storage.objects — public read, authenticated write
+-- =============================================================================
+DROP POLICY IF EXISTS "Scandio storage public read" ON storage.objects;
+DROP POLICY IF EXISTS "Scandio storage authenticated insert" ON storage.objects;
+DROP POLICY IF EXISTS "Scandio storage authenticated update" ON storage.objects;
+DROP POLICY IF EXISTS "Scandio storage authenticated delete" ON storage.objects;
+
+CREATE POLICY "Scandio storage public read"
+ON storage.objects FOR SELECT
+USING (bucket_id IN ('avatars', 'banners', 'vault', 'showcase', 'reviews', 'gallery'));
+
+CREATE POLICY "Scandio storage authenticated insert"
+ON storage.objects FOR INSERT
+TO authenticated
+WITH CHECK (bucket_id IN ('avatars', 'banners', 'vault', 'showcase', 'reviews', 'gallery'));
+
+-- Allow unauthenticated uploads to reviews and gallery (images are moderated before display)
+CREATE POLICY "Scandio storage anon insert reviews gallery"
+ON storage.objects FOR INSERT
+TO anon
+WITH CHECK (bucket_id IN ('reviews', 'gallery'));
+
+CREATE POLICY "Scandio storage authenticated update"
+ON storage.objects FOR UPDATE
+TO authenticated
+USING (bucket_id IN ('avatars', 'banners', 'vault', 'showcase', 'reviews', 'gallery'))
+WITH CHECK (bucket_id IN ('avatars', 'banners', 'vault', 'showcase', 'reviews', 'gallery'));
+
+CREATE POLICY "Scandio storage authenticated delete"
+ON storage.objects FOR DELETE
+TO authenticated
+USING (bucket_id IN ('avatars', 'banners', 'vault', 'showcase', 'reviews', 'gallery'));
+
+-- Gallery uploads: public read (approved only), public insert
+ALTER TABLE gallery_uploads ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Gallery uploads public read approved" ON gallery_uploads FOR SELECT USING (status = 'approved');
+CREATE POLICY "Gallery uploads allow insert" ON gallery_uploads FOR INSERT WITH CHECK (true);

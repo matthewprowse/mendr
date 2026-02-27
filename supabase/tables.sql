@@ -1,12 +1,32 @@
 /**
  * File: tables.sql
  * Description: Supabase schema for Scandio home services app.
+ * Includes: extensions, enums, tables, indexes, seeds, storage buckets.
  * Idempotent: safe to run multiple times.
+ *
+ * Run order: tables.sql first, then rls.sql (RLS policies).
  *
  * Terminology:
  * - diagnosis: estimated assessment of the issue (what's wrong)
  * - service: canonical category of professional needed (from services table)
  */
+
+-- =============================================================================
+-- 0. Extensions & Enums (shared)
+-- =============================================================================
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+DO $$ BEGIN
+    CREATE TYPE job_status AS ENUM ('lead', 'quoted', 'active', 'completed', 'cancelled');
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$ BEGIN
+    CREATE TYPE log_category AS ENUM ('AUTH', 'DIAGNOSTIC', 'TRANSACTIONAL', 'SYSTEM', 'MARKETING');
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Drop obsolete tables
 DROP TABLE IF EXISTS report_owner_tokens;
@@ -44,7 +64,64 @@ INSERT INTO services (label, search_query, sort_order) VALUES
 ON CONFLICT (label) DO NOTHING;
 
 -- =============================================================================
--- 2. Cached Providers (Google Places enrichment cache)
+-- 2. Profiles (enhanced user profiles; homeowners & providers)
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS profiles (
+    id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+    user_id UUID UNIQUE REFERENCES auth.users(id) ON DELETE CASCADE,
+    first_name TEXT,
+    surname TEXT,
+    description TEXT,
+    username TEXT,
+    avatar_url TEXT,
+    locations JSONB DEFAULT '[]'::jsonb,
+    total_scans_count INTEGER DEFAULT 0,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Backfill: if profiles has user_id but no id, add id and set id = user_id (for FK from provider_profiles etc.)
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'profiles' AND column_name = 'user_id')
+       AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'profiles' AND column_name = 'id') THEN
+        ALTER TABLE profiles ADD COLUMN id UUID REFERENCES auth.users(id) ON DELETE CASCADE;
+        UPDATE profiles SET id = user_id WHERE user_id IS NOT NULL;
+        ALTER TABLE profiles ALTER COLUMN id SET NOT NULL;
+        CREATE UNIQUE INDEX IF NOT EXISTS profiles_id_key ON profiles(id);
+    END IF;
+END $$;
+
+-- Backfill user_id = id for rows where user_id is null (when id already exists)
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'profiles' AND column_name = 'id') THEN
+        UPDATE profiles SET user_id = id WHERE user_id IS NULL AND id IS NOT NULL;
+    END IF;
+END $$;
+
+-- Add New Standard columns (idempotent)
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS first_name TEXT;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS surname TEXT;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS username TEXT;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS avatar_url TEXT;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS locations JSONB DEFAULT '[]'::jsonb;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS total_scans_count INTEGER DEFAULT 0;
+
+-- Unique constraint on username only if column exists (avoid duplicate usernames)
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'profiles' AND column_name = 'username') THEN
+        IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'profiles_username_key') THEN
+            ALTER TABLE profiles ADD CONSTRAINT profiles_username_key UNIQUE (username);
+        END IF;
+    END IF;
+EXCEPTION
+    WHEN duplicate_object THEN NULL; -- constraint already exists
+END $$;
+
+-- =============================================================================
+-- 3. Cached Providers (Google Places enrichment cache)
 -- =============================================================================
 CREATE TABLE IF NOT EXISTS cached_providers (
     place_id TEXT PRIMARY KEY,
@@ -61,8 +138,19 @@ CREATE TABLE IF NOT EXISTS cached_providers (
     last_updated TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Internal id for /pro/[id] URLs (no Google id/slug in URL); reviews and opening hours from Google Places
+ALTER TABLE cached_providers ADD COLUMN IF NOT EXISTS id UUID DEFAULT gen_random_uuid();
+UPDATE cached_providers SET id = gen_random_uuid() WHERE id IS NULL;
+DO $$ BEGIN ALTER TABLE cached_providers ALTER COLUMN id SET NOT NULL; EXCEPTION WHEN OTHERS THEN NULL; END $$;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_cached_providers_id ON cached_providers(id);
+ALTER TABLE cached_providers DROP COLUMN IF EXISTS slug;
+DROP INDEX IF EXISTS idx_cached_providers_slug;
+ALTER TABLE cached_providers ADD COLUMN IF NOT EXISTS reviews JSONB;
+ALTER TABLE cached_providers ADD COLUMN IF NOT EXISTS weekday_descriptions JSONB;
+ALTER TABLE cached_providers ADD COLUMN IF NOT EXISTS photos JSONB;
+
 -- =============================================================================
--- 3. Conversations (homeowner diagnosis sessions)
+-- 4. Conversations (homeowner diagnosis sessions)
 -- =============================================================================
 CREATE TABLE IF NOT EXISTS conversations (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -113,12 +201,13 @@ ALTER TABLE conversations ADD COLUMN IF NOT EXISTS providers JSONB;
 ALTER TABLE conversations ADD COLUMN IF NOT EXISTS device TEXT;
 
 -- Drop removed columns
+ALTER TABLE conversations ADD COLUMN IF NOT EXISTS initial_image_description TEXT;
 ALTER TABLE conversations DROP COLUMN IF EXISTS ip_hash;
 ALTER TABLE conversations DROP COLUMN IF EXISTS locked;
 ALTER TABLE conversations DROP COLUMN IF EXISTS locked_at;
 
 -- =============================================================================
--- 4. Messages (chat turns)
+-- 5. Messages (chat turns)
 -- =============================================================================
 CREATE TABLE IF NOT EXISTS messages (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -155,11 +244,12 @@ ALTER TABLE messages ADD COLUMN IF NOT EXISTS diagnosis_updated BOOLEAN DEFAULT 
 ALTER TABLE messages ADD COLUMN IF NOT EXISTS diagnosis JSONB;
 ALTER TABLE messages ADD COLUMN IF NOT EXISTS providers JSONB;
 ALTER TABLE messages ADD COLUMN IF NOT EXISTS emerging_providers JSONB;
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS attachment_descriptions TEXT[];
 
 CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(conversation_id);
 
 -- =============================================================================
--- 5. Diagnoses (one per diagnosis event, links to service)
+-- 6. Diagnoses (one per diagnosis event, links to service)
 -- =============================================================================
 CREATE TABLE IF NOT EXISTS diagnoses (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -188,7 +278,7 @@ CREATE INDEX IF NOT EXISTS idx_diagnoses_message ON diagnoses(message_id);
 CREATE INDEX IF NOT EXISTS idx_diagnoses_service ON diagnoses(service_id);
 
 -- =============================================================================
--- 6. Scandio Reports (shareable job report)
+-- 7. Scandio Reports (shareable job report)
 -- =============================================================================
 CREATE TABLE IF NOT EXISTS scandio_reports (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -204,7 +294,7 @@ CREATE INDEX IF NOT EXISTS idx_scandio_reports_diagnosis ON scandio_reports(diag
 CREATE UNIQUE INDEX IF NOT EXISTS idx_scandio_reports_token ON scandio_reports(share_token) WHERE share_token IS NOT NULL;
 
 -- =============================================================================
--- 7. Leads (contact click tracking)
+-- 8. Leads (contact click tracking)
 -- =============================================================================
 CREATE TABLE IF NOT EXISTS leads (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -219,7 +309,7 @@ CREATE INDEX IF NOT EXISTS idx_leads_conversation ON leads(conversation_id);
 CREATE INDEX IF NOT EXISTS idx_leads_created ON leads(created_at);
 
 -- =============================================================================
--- 8. Provider Signups (service providers joining the network)
+-- 9. Provider Signups (service providers joining the network)
 -- =============================================================================
 CREATE TABLE IF NOT EXISTS provider_signups (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -274,7 +364,7 @@ CREATE INDEX IF NOT EXISTS idx_provider_signups_created ON provider_signups(crea
 CREATE INDEX IF NOT EXISTS idx_provider_signups_service ON provider_signups(service_id);
 
 -- =============================================================================
--- 9. Provider Reports (report a provider to Scandio)
+-- 10. Provider Reports (report a provider to Scandio)
 -- =============================================================================
 CREATE TABLE IF NOT EXISTS provider_reports (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -291,7 +381,7 @@ CREATE INDEX IF NOT EXISTS idx_provider_reports_created ON provider_reports(crea
 CREATE INDEX IF NOT EXISTS idx_provider_reports_place_id ON provider_reports(provider_place_id);
 
 -- =============================================================================
--- 10. Feedback: Unrelated images (random/off-topic)
+-- 11. Feedback: Unrelated images (random/off-topic)
 -- =============================================================================
 CREATE TABLE IF NOT EXISTS feedback_unrelated (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -305,7 +395,7 @@ CREATE INDEX IF NOT EXISTS idx_feedback_unrelated_conversation ON feedback_unrel
 CREATE INDEX IF NOT EXISTS idx_feedback_unrelated_created ON feedback_unrelated(created_at);
 
 -- =============================================================================
--- 11. Feedback: Unserviced categories (we don't offer this service yet — learn from demand)
+-- 12. Feedback: Unserviced categories (we don't offer this service yet — learn from demand)
 -- =============================================================================
 CREATE TABLE IF NOT EXISTS feedback_unserviced (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -322,7 +412,7 @@ CREATE INDEX IF NOT EXISTS idx_feedback_unserviced_service ON feedback_unservice
 CREATE INDEX IF NOT EXISTS idx_feedback_unserviced_created ON feedback_unserviced(created_at);
 
 -- =============================================================================
--- 12. Legal Documents (Privacy Policy, Terms of Service, Pro Terms)
+-- 13. Legal Documents (Privacy Policy, Terms of Service, Pro Terms)
 -- =============================================================================
 CREATE TABLE IF NOT EXISTS legal_documents (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -334,6 +424,88 @@ CREATE TABLE IF NOT EXISTS legal_documents (
 );
 
 CREATE INDEX IF NOT EXISTS idx_legal_documents_type_active ON legal_documents(type, is_active) WHERE is_active = true;
+
+-- =============================================================================
+-- 14. Provider Infrastructure & Jobs (New Standard Phase 1)
+-- =============================================================================
+
+-- 14.1 Multi-location provider infrastructure
+CREATE TABLE IF NOT EXISTS provider_locations (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    provider_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    nickname TEXT,
+    address TEXT NOT NULL,
+    latitude DECIMAL,
+    longitude DECIMAL,
+    service_radius_km INTEGER DEFAULT 25,
+    is_active BOOLEAN DEFAULT true,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_provider_locations_provider ON provider_locations(provider_id);
+CREATE INDEX IF NOT EXISTS idx_provider_locations_active ON provider_locations(is_active) WHERE is_active = true;
+
+-- 14.2 Provider business data & AI trust metrics
+CREATE TABLE IF NOT EXISTS provider_profiles (
+    id UUID PRIMARY KEY REFERENCES profiles(id) ON DELETE CASCADE,
+    slug TEXT UNIQUE NOT NULL,
+    banner_url TEXT,
+    short_description VARCHAR(160),
+    main_description TEXT,
+    service_categories TEXT[] DEFAULT '{}',
+    google_place_id TEXT,
+    ai_review_summary TEXT,
+    positives TEXT[] DEFAULT '{}',
+    negatives TEXT[] DEFAULT '{}',
+    metrics_punctuality DECIMAL DEFAULT 0,
+    metrics_tidiness DECIMAL DEFAULT 0,
+    metrics_professionalism DECIMAL DEFAULT 0,
+    metrics_cleanup DECIMAL DEFAULT 0,
+    total_jobs_completed INTEGER DEFAULT 0,
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_provider_profiles_slug ON provider_profiles(slug);
+CREATE INDEX IF NOT EXISTS idx_provider_profiles_google_place ON provider_profiles(google_place_id) WHERE google_place_id IS NOT NULL;
+
+-- 14.3 Transactional job engine
+CREATE TABLE IF NOT EXISTS jobs (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    client_id UUID REFERENCES profiles(id) ON DELETE SET NULL,
+    provider_id UUID REFERENCES profiles(id) ON DELETE SET NULL,
+    location_id UUID REFERENCES provider_locations(id) ON DELETE SET NULL,
+    status job_status DEFAULT 'lead',
+    category TEXT NOT NULL,
+    initial_diagnosis_id UUID,
+    current_quote JSONB DEFAULT '{"parts": [], "labour": [], "total": 0}'::jsonb,
+    is_paid BOOLEAN DEFAULT false,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_jobs_client ON jobs(client_id);
+CREATE INDEX IF NOT EXISTS idx_jobs_provider ON jobs(provider_id);
+CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status);
+CREATE INDEX IF NOT EXISTS idx_jobs_created ON jobs(created_at);
+
+-- =============================================================================
+-- 15. Global Audit Log (non-repudiation; Phase 5)
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS audit_logs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+    event_type log_category NOT NULL,
+    action TEXT NOT NULL,
+    entity_type TEXT,
+    entity_id UUID,
+    payload JSONB,
+    metadata JSONB,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_audit_logs_user ON audit_logs(user_id);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_created ON audit_logs(created_at);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_event_action ON audit_logs(event_type, action);
 
 -- Seed initial legal documents (idempotent — only if none exist for each type)
 -- Update existing documents to latest content (run after INSERT for existing DBs)
@@ -505,3 +677,94 @@ $pro$;
     SELECT 'pro_terms_of_service', pro_content, 'v3.0', true
     WHERE NOT EXISTS (SELECT 1 FROM legal_documents WHERE type = 'pro_terms_of_service' LIMIT 1);
 END $$;
+
+-- =============================================================================
+-- 17. Customer Reviews (Scandio-native reviews, manually verified)
+-- Linked to either a cached_provider (place_id) or a provider_profile (slug).
+-- image_urls: array of paths in the 'reviews' storage bucket.
+-- status: 'pending' (awaiting manual verification), 'approved', 'rejected'.
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS customer_reviews (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    -- Target provider — one of these must be set
+    place_id TEXT REFERENCES cached_providers(place_id) ON DELETE CASCADE,
+    provider_profile_slug TEXT REFERENCES provider_profiles(slug) ON DELETE CASCADE,
+    -- Reviewer info (may be anonymous if not logged in; user_id links when logged in)
+    user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+    reviewer_name TEXT NOT NULL,
+    reviewer_email TEXT,
+    -- Review content
+    rating SMALLINT NOT NULL CHECK (rating BETWEEN 1 AND 5),
+    -- Per-category ratings: { punctuality, tidiness, professionalism, quote_accuracy } → 1-5
+    category_ratings JSONB,
+    title TEXT,
+    body TEXT NOT NULL,
+    image_urls TEXT[] DEFAULT '{}',
+    -- Moderation
+    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
+    moderation_note TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_customer_reviews_place_id ON customer_reviews(place_id) WHERE place_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_customer_reviews_slug ON customer_reviews(provider_profile_slug) WHERE provider_profile_slug IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_customer_reviews_user ON customer_reviews(user_id) WHERE user_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_customer_reviews_status ON customer_reviews(status);
+CREATE INDEX IF NOT EXISTS idx_customer_reviews_created ON customer_reviews(created_at);
+
+-- =============================================================================
+-- 18. Provider Favourites (customers save providers they like)
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS provider_favourites (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    -- Target provider — exactly one of these should be set
+    place_id TEXT REFERENCES cached_providers(place_id) ON DELETE CASCADE,
+    provider_profile_slug TEXT REFERENCES provider_profiles(slug) ON DELETE CASCADE,
+    -- Snapshot of provider name at time of favouriting (for display without joins)
+    provider_name TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE (user_id, place_id),
+    UNIQUE (user_id, provider_profile_slug)
+);
+
+CREATE INDEX IF NOT EXISTS idx_provider_favourites_user ON provider_favourites(user_id);
+CREATE INDEX IF NOT EXISTS idx_provider_favourites_place ON provider_favourites(place_id) WHERE place_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_provider_favourites_slug ON provider_favourites(provider_profile_slug) WHERE provider_profile_slug IS NOT NULL;
+
+-- =============================================================================
+-- 16. Storage Buckets (Phase 2 — Supabase Storage)
+-- Buckets: avatars, banners, vault, showcase, reviews. Public read.
+-- Idempotent: safe to run multiple times.
+-- =============================================================================
+INSERT INTO storage.buckets (id, name, public)
+VALUES
+  ('avatars', 'avatars', true),
+  ('banners', 'banners', true),
+  ('vault', 'vault', true),
+  ('showcase', 'showcase', true),
+  ('reviews', 'reviews', true),
+  ('gallery', 'gallery', true)
+ON CONFLICT (id) DO UPDATE SET
+  public = EXCLUDED.public,
+  name = EXCLUDED.name;
+
+-- =============================================================================
+-- 19. Gallery Uploads (customer-submitted gallery photos, manually moderated)
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS gallery_uploads (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    place_id TEXT REFERENCES cached_providers(place_id) ON DELETE CASCADE,
+    provider_profile_slug TEXT REFERENCES provider_profiles(slug) ON DELETE CASCADE,
+    url TEXT NOT NULL,
+    title TEXT,
+    description TEXT,
+    uploader_name TEXT,
+    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_gallery_uploads_place ON gallery_uploads(place_id) WHERE place_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_gallery_uploads_slug ON gallery_uploads(provider_profile_slug) WHERE provider_profile_slug IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_gallery_uploads_status ON gallery_uploads(status);

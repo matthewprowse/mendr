@@ -12,6 +12,7 @@ import {
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { SERVICE_ITEMS, type ServiceLabel } from '@/lib/service-icons';
+import { UserAvatarMenu } from '@/components/user-avatar-menu';
 
 export type NavLink = { href: string; label: string };
 
@@ -136,15 +137,19 @@ export function LandingHeader({
                                 For Customers
                             </Link>
                         )}
+                        <UserAvatarMenu />
                     </nav>
-                    <button
-                        type="button"
-                        onClick={() => setMobileNavOpen(true)}
-                        className="ml-auto flex size-9 items-center justify-center md:hidden"
-                        aria-label="Open Mobile Menu"
-                    >
-                        <Menu size={16} className="text-foreground" />
-                    </button>
+                    <div className="ml-auto flex items-center gap-2 md:hidden">
+                        <UserAvatarMenu />
+                        <button
+                            type="button"
+                            onClick={() => setMobileNavOpen(true)}
+                            className="flex size-9 items-center justify-center"
+                            aria-label="Open Mobile Menu"
+                        >
+                            <Menu size={16} className="text-foreground" />
+                        </button>
+                    </div>
                 </div>
             </header>
 

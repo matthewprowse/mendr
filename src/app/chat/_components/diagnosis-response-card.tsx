@@ -175,7 +175,7 @@ export function DiagnosisResponseCard({
                                     onOpenChange={setAddressPopoverOpen}
                                 >
                                     <PopoverTrigger asChild>
-                                        <Button variant="outline" size="sm" className="shrink-0">
+                                        <Button variant="outline" className="shrink-0">
                                             Change Location
                                         </Button>
                                     </PopoverTrigger>

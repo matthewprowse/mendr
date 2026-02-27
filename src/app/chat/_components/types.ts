@@ -28,6 +28,8 @@ export interface Message {
     content: string;
     feedback?: 'up' | 'down' | null;
     attachments?: string[];
+    /** Stored text descriptions of images (from AI); used for history instead of re-sending image data. */
+    attachment_descriptions?: string[];
     hasUpdatedDiagnosis?: boolean;
     /** When present, this assistant message includes a diagnosis (shown as inline response card). */
     diagnosis?: DiagnosisData;
@@ -63,8 +65,14 @@ export interface Provider {
     isOpen?: boolean | null;
     /** Google Place ID for linking to Maps/reviews */
     place_id?: string;
+    /** Provider page id (UUID): provider_profiles.id or cached_providers.id for /pro/[id] */
+    id?: string | null;
     /** AI-selected favourite: open, 4.5+ rating, 25+ reviews */
     isFavourite?: boolean;
     /** 3-5 sentence explanation of why this provider was selected as the pick */
     favouriteReason?: string;
+    /** Google Places photo resource names for the provider */
+    photos?: Array<{ name: string }>;
+    /** Estimated driving duration, e.g. "12 mins" */
+    durationText?: string;
 }

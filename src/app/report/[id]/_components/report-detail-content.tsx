@@ -327,24 +327,43 @@ export function ReportDetailContent({ reportId }: ReportDetailContentProps) {
                                 </p>
                             </div>
                             <div className="grid gap-6">
+                                {typeof diag?.diagnosis === 'string' && diag.diagnosis !== 'N/A' && (
+                                    <div>
+                                        <p className="text-sm font-medium text-muted-foreground mb-2">
+                                            Diagnosis
+                                        </p>
+                                        <p className="text-sm font-medium text-foreground">
+                                            {diag.diagnosis}
+                                        </p>
+                                        {typeof diag?.message === 'string' && diag.message.trim() !== '' && (
+                                            <p className="text-sm text-muted-foreground mt-1 leading-relaxed">
+                                                {sanitizeAiContent(diag.message)}
+                                            </p>
+                                        )}
+                                    </div>
+                                )}
                                 <div>
                                     <p className="text-sm font-medium text-muted-foreground mb-2">
                                         Job Type
                                     </p>
                                     <p className="text-sm font-medium text-foreground">
-                                        {typeof diag?.diagnosis === 'string' ? diag.diagnosis : 'Not specified'}
+                                        {typeof diag?.trade === 'string' && diag.trade !== 'N/A'
+                                            ? diag.trade
+                                            : 'Not specified'}
                                     </p>
                                 </div>
-                                {typeof diag?.action_required === 'string' && diag.action_required !== 'N/A' && (
-                                    <div>
-                                        <p className="text-sm font-medium text-muted-foreground mb-2">
-                                            Recommended Action
-                                        </p>
-                                        <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">
-                                            {sanitizeAiContent(String(diag.action_required))}
-                                        </p>
-                                    </div>
-                                )}
+                                <div>
+                                    <p className="text-sm font-medium text-muted-foreground mb-2">
+                                        Recommended Action
+                                    </p>
+                                    <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">
+                                        {typeof diag?.action_required === 'string' &&
+                                        diag.action_required !== 'N/A' &&
+                                        diag.action_required.trim() !== ''
+                                            ? sanitizeAiContent(String(diag.action_required))
+                                            : 'Not specified'}
+                                    </p>
+                                </div>
                                 {(() => {
                                     const calloutExact =
                                         directions?.distance_meters != null
@@ -371,9 +390,14 @@ export function ReportDetailContent({ reportId }: ReportDetailContentProps) {
 
                                     // Simplified view: Call-out, Labour, Parts
                                     const labourRange = repairRange || replacementRange || null;
-                                    const hasAny =
+                                    const hasStructured =
                                         calloutExact || labourRange || equipmentPartsRange;
-                                    if (!hasAny) return null;
+                                    const estimatedCostText =
+                                        typeof diag?.estimated_cost === 'string' &&
+                                        diag.estimated_cost !== 'N/A' &&
+                                        diag.estimated_cost.trim() !== ''
+                                            ? sanitizeAiContent(String(diag.estimated_cost))
+                                            : null;
 
                                     const rows: { label: string; value: string }[] = [];
                                     if (calloutExact && directions?.distance_meters != null) {
@@ -400,30 +424,45 @@ export function ReportDetailContent({ reportId }: ReportDetailContentProps) {
                                             <p className="text-sm font-medium text-muted-foreground">
                                                 Estimated Price
                                             </p>
-                                            <div className="overflow-hidden rounded-lg border border-border">
-                                                <table className="w-full text-sm">
-                                                    <tbody>
-                                                        {rows.map((r, i) => (
-                                                            <tr
-                                                                key={i}
-                                                                className="border-b border-border last:border-b-0 bg-card"
-                                                            >
-                                                                <td className="px-4 py-3 text-muted-foreground font-medium">
-                                                                    {r.label}
-                                                                </td>
-                                                                <td className="px-4 py-3 text-foreground text-right font-medium">
-                                                                    {r.value}
-                                                                </td>
-                                                            </tr>
-                                                        ))}
-                                                    </tbody>
-                                                </table>
-                                            </div>
-                                            <p className="text-xs text-muted-foreground leading-relaxed">
-                                                Call-out based on distance from your location. Labour
-                                                and parts are estimated ranges. Final price may differ
-                                                after on-site inspection.
-                                            </p>
+                                            {hasStructured && rows.length > 0 ? (
+                                                <>
+                                                    <div className="overflow-hidden rounded-lg border border-border">
+                                                        <table className="w-full text-sm">
+                                                            <tbody>
+                                                                {rows.map((r, i) => (
+                                                                    <tr
+                                                                        key={i}
+                                                                        className="border-b border-border last:border-b-0 bg-card"
+                                                                    >
+                                                                        <td className="px-4 py-3 text-muted-foreground font-medium">
+                                                                            {r.label}
+                                                                        </td>
+                                                                        <td className="px-4 py-3 text-foreground text-right font-medium">
+                                                                            {r.value}
+                                                                        </td>
+                                                                    </tr>
+                                                                ))}
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
+                                                    <p className="text-xs text-muted-foreground leading-relaxed">
+                                                        Call-out based on distance from your location.
+                                                        Labour and parts are estimated ranges. Final
+                                                        price may differ after on-site inspection.
+                                                    </p>
+                                                </>
+                                            ) : null}
+                                            {estimatedCostText && (
+                                                <p className="text-sm text-foreground leading-relaxed">
+                                                    {estimatedCostText}
+                                                </p>
+                                            )}
+                                            {!hasStructured && !estimatedCostText && (
+                                                <p className="text-sm text-muted-foreground">
+                                                    No price estimate available. Request a quote from
+                                                    a provider after sharing this report.
+                                                </p>
+                                            )}
                                         </div>
                                     );
                                 })()}
@@ -449,7 +488,11 @@ export function ReportDetailContent({ reportId }: ReportDetailContentProps) {
                                             variant="default"
                                             className="absolute bottom-2 right-2"
                                         >
-                                            {String(diag?.trade ?? '')}
+                                            {typeof diag?.trade === 'string' && diag.trade !== 'N/A'
+                                                ? diag.trade
+                                                : typeof diag?.diagnosis === 'string' && diag.diagnosis !== 'N/A'
+                                                  ? diag.diagnosis
+                                                  : 'Job'}
                                         </Badge>
                                     </div>
                                 )}

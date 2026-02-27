@@ -1,4 +1,4 @@
-import { useState, useRef, useMemo, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { StarFill } from 'geist-icons';
 import { Badge } from '@/components/ui/badge';
@@ -14,7 +14,8 @@ import {
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { Provider, type Service } from './types';
-import { toWhatsAppPhone, isWhatsAppCapablePhone } from '@/lib/utils';
+import { toWhatsAppPhone, isWhatsAppCapablePhone, formatBusinessName } from '@/lib/utils';
+import { FavouriteButton } from '@/components/favourite-button';
 
 function toTitleCase(s: string): string {
     return s
@@ -23,6 +24,22 @@ function toTitleCase(s: string): string {
         .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
         .join(' ');
 }
+
+/** Shorten summary and remove leading provider name (2–3 sentences max). */
+function formatCustomerSummary(summary: string, providerName: string): string {
+    if (!summary?.trim()) return summary || '';
+    let text = summary.trim();
+    const name = (providerName || '').trim();
+    if (name) {
+        const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+');
+        text = text.replace(new RegExp(`^${escaped}[\\s.,]+`, 'i'), '').trim();
+    }
+    const sentences = text.split(/(?<=[.!?])\s+/).filter(Boolean);
+    if (sentences.length <= 3) return text;
+    return sentences.slice(0, 3).join(' ').trim();
+}
+
+const VISIBLE_BADGE_COUNT = 3;
 
 function ServiceBadges({
     services,
@@ -36,44 +53,32 @@ function ServiceBadges({
     providerName?: string;
 }) {
     const [open, setOpen] = useState(false);
-    const containerRef = useRef<HTMLDivElement>(null);
 
-    // Normalize services to handle legacy string data or missing properties
     const normalizedServices = useMemo(() => {
         interface ExtendedService {
-            short: string;
             full: string;
             isStatus?: boolean;
         }
 
-        const base: ExtendedService[] = (services || []).map((s) => {
-            const full = toTitleCase(
-                typeof s === 'string' ? s : s?.full || s?.short || 'Service'
-            );
-            const short = full.slice(0, 15);
-            return { short, full };
-        });
+        const base: ExtendedService[] = (services || []).map((s) => ({
+            full: toTitleCase(typeof s === 'string' ? s : s?.full || s?.short || 'Service'),
+        }));
 
         if (isOpen !== undefined && isOpen !== null) {
             base.unshift({
-                short: isOpen ? 'Open' : 'Closed',
-                full: isOpen ? 'Currently Open' : 'Currently Closed',
+                full: isOpen ? 'Open' : 'Closed',
                 isStatus: true,
             });
         }
         return base;
     }, [services, isOpen]);
 
-    const [visibleCount, setVisibleCount] = useState(normalizedServices.length);
-
-    // Filter/Sort services based on trade if provided
     const sortedServices = useMemo(() => {
-        let base = [...normalizedServices];
+        const base = [...normalizedServices];
         if (!trade) return base;
         const normalizedTrade = trade.toLowerCase();
 
         return base.sort((a, b) => {
-            // Always keep status at the front
             if (a.isStatus && !b.isStatus) return -1;
             if (!a.isStatus && b.isStatus) return 1;
 
@@ -85,90 +90,20 @@ function ServiceBadges({
         });
     }, [normalizedServices, trade]);
 
-    useEffect(() => {
-        const calculateVisible = () => {
-            if (!containerRef.current) return;
-            const parent = containerRef.current.closest('.flex-col.gap-2');
-            if (!parent) return;
-
-            const style = window.getComputedStyle(parent);
-            // Safety margin: 12px for padding and potential rounding errors
-            const containerWidth =
-                parent.clientWidth -
-                parseFloat(style.paddingLeft) -
-                parseFloat(style.paddingRight) -
-                12;
-
-            if (containerWidth <= 0) return;
-
-            const moreBadgeWidth = 50;
-            let currentLine = 1;
-            let currentLineWidth = 0;
-            let count = 0;
-            const gap = 8;
-
-            const measureSpan = document.createElement('span');
-            measureSpan.style.visibility = 'hidden';
-            measureSpan.style.position = 'absolute';
-            measureSpan.style.whiteSpace = 'nowrap';
-            measureSpan.style.font = '600 12px sans-serif';
-            document.body.appendChild(measureSpan);
-
-            for (let i = 0; i < sortedServices.length; i++) {
-                measureSpan.innerText = sortedServices[i].short;
-                const badgeWidth = measureSpan.offsetWidth + 16;
-                const remainingItems = sortedServices.length - (i + 1);
-
-                let potentialWidth =
-                    currentLineWidth + (currentLineWidth > 0 ? gap : 0) + badgeWidth;
-                const neededWithMore =
-                    potentialWidth + (remainingItems > 0 ? gap + moreBadgeWidth : 0);
-
-                if (neededWithMore <= containerWidth) {
-                    currentLineWidth = potentialWidth;
-                    count++;
-                } else {
-                    // Truncation check: Can we show at least 75% of this badge AND is it at least 40px?
-                    const availableWidth =
-                        containerWidth -
-                        currentLineWidth -
-                        (currentLineWidth > 0 ? gap : 0) -
-                        (remainingItems > 0 ? gap + moreBadgeWidth : 0);
-                    if (availableWidth >= badgeWidth * 0.75 && availableWidth > 40) {
-                        count++;
-                    }
-                    break;
-                }
-            }
-
-            document.body.removeChild(measureSpan);
-            setVisibleCount(Math.max(1, count));
-        };
-
-        const timer = setTimeout(calculateVisible, 100);
-        window.addEventListener('resize', calculateVisible);
-        return () => {
-            clearTimeout(timer);
-            window.removeEventListener('resize', calculateVisible);
-        };
-    }, [sortedServices, trade]);
-
-    const visibleServices = sortedServices.slice(0, visibleCount);
-    const hiddenServices = sortedServices.slice(visibleCount).filter((s) => !s.isStatus);
+    const visibleServices = sortedServices.slice(0, VISIBLE_BADGE_COUNT);
+    const hiddenServices = sortedServices.slice(VISIBLE_BADGE_COUNT).filter((s) => !s.isStatus);
 
     return (
-        <div
-            ref={containerRef}
-            className="flex flex-row items-center gap-2 w-full min-w-0 overflow-hidden h-7 pr-1"
-        >
+        <div className="flex flex-row items-center gap-2 w-full min-w-0 overflow-hidden h-7">
             {visibleServices.map((service, i) => (
                 <Badge
                     key={i}
                     variant={service.isStatus ? 'default' : 'secondary'}
-                    className="whitespace-nowrap truncate min-w-0 flex-shrink-1 h-6 max-w-[240px] font-medium"
+                    className="min-w-0 h-6 font-medium justify-start"
+                    style={{ flexShrink: i === visibleServices.length - 1 ? 1 : 0 }}
                     title={service.full}
                 >
-                    {service.short}
+                    <span className="truncate">{service.full}</span>
                 </Badge>
             ))}
             {hiddenServices.length > 0 && (
@@ -176,7 +111,7 @@ function ServiceBadges({
                     <PopoverTrigger asChild>
                         <Badge
                             variant="outline"
-                            className="cursor-pointer whitespace-nowrap transition-colors border-dotted border-2 flex-shrink-0 h-6"
+                            className="cursor-pointer whitespace-nowrap transition-colors border-dotted border-2 shrink-0 h-6"
                             onMouseEnter={() => setOpen(true)}
                             onMouseLeave={() => setOpen(false)}
                         >
@@ -265,7 +200,7 @@ export function ProviderCard({
 
     if (!provider) return null;
     const popoverId = `contact-${index}`;
-    const displayName = provider.name.replace(/\band\b/gi, '&');
+    const displayName = formatBusinessName(provider.name);
     const rawPhone = provider.phoneInternational || provider.phone;
     const waPhone = toWhatsAppPhone(rawPhone);
     const waCapable = isWhatsAppCapablePhone(rawPhone);
@@ -352,6 +287,12 @@ export function ProviderCard({
                                     ({provider.ratingCount || 0})
                                 </span>
                             </div>
+                            <FavouriteButton
+                                placeId={provider.place_id}
+                                providerName={displayName}
+                                variant="icon"
+                                className="-mr-1"
+                            />
                         </div>
                     </div>
                     <div className="flex flex-wrap gap-2">
@@ -359,7 +300,7 @@ export function ProviderCard({
                             services={provider.services || []}
                             trade={trade}
                             isOpen={provider.isOpen}
-                            providerName={provider.name}
+                            providerName={displayName}
                         />
                     </div>
                 </div>
@@ -373,23 +314,10 @@ export function ProviderCard({
             <div className="flex flex-col gap-2">
                 <div className="flex items-center justify-between gap-2">
                     <p className="text-sm font-medium">Customer Summary</p>
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        className="shrink-0 text-xs px-2 max-h-7"
-                        onClick={() => {
-                            const url = provider.place_id
-                                ? `https://www.google.com/maps/place/?q=place_id:${encodeURIComponent(provider.place_id)}`
-                                : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([provider.name, provider.address].join(' '))}`;
-                            window.open(url, '_blank');
-                        }}
-                    >
-                        View All
-                    </Button>
                 </div>
                 <blockquote className="border-l-2 border-input pl-3">
                     <p className="text-sm text-muted-foreground leading-relaxed">
-                        {provider.summary}
+                        {formatCustomerSummary(provider.summary || '', provider.name || displayName)}
                     </p>
                 </blockquote>
             </div>
@@ -467,7 +395,7 @@ export function ProviderCard({
                                 {waCapable ? (
                                     <>
                                         We&apos;ve generated a summary of your diagnosis for{' '}
-                                        <span className="font-medium">{provider.name}</span>. You
+                                        <span className="font-medium">{displayName}</span>. You
                                         will open WhatsApp to send it.
                                         <blockquote className="mt-2 border-l-2 border-input pl-3 text-muted-foreground text-sm">
                                             We try to ensure all numbers are available on WhatsApp.
@@ -506,18 +434,17 @@ export function ProviderCard({
                         Website
                     </Button>
                 )}
-                <Button
-                    variant="secondary"
-                    className="flex-1 min-w-0"
-                    onClick={() =>
-                        window.open(
-                            `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(provider.address)}`,
-                            '_blank'
-                        )
-                    }
-                >
-                    Get Directions
-                </Button>
+                {(provider.id ?? provider.place_id) && (
+                    <Button variant="secondary" className="flex-1 min-w-0" asChild>
+                        <a
+                            href={`/pro/${encodeURIComponent(provider.place_id ?? provider.id ?? '')}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                        >
+                            View Account
+                        </a>
+                    </Button>
+                )}
             </div>
         </Card>
     );

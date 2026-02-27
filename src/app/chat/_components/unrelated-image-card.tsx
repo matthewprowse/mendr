@@ -38,7 +38,7 @@ export function UnrelatedImageCard({
     }, [conversationId, messageId, diagnosisMessage, onRecorded, recordFeedback]);
 
     return (
-        <div className="w-full mt-6 space-y-3 animate-in fade-in duration-300">
+        <div className="w-full space-y-4 animate-in fade-in duration-300">
             <h3 className="text-xl font-semibold text-foreground">
                 Not a Home Maintenance Image
             </h3>
@@ -51,7 +51,7 @@ export function UnrelatedImageCard({
                 Upload a new image below using the attachment button, or start fresh from the home
                 page.
             </p>
-            <div className="flex flex-wrap gap-2 pt-1">
+            <div className="flex flex-wrap gap-2 pt-2">
                 <Button variant="outline" size="sm" onClick={() => (window.location.href = '/')}>
                     Start Over
                 </Button>

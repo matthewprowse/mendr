@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { formatApiError } from '@/lib/utils';
 
 export async function POST(req: NextRequest) {
     const apiKey = process.env.GEMINI_API_KEY;
@@ -22,7 +21,7 @@ export async function POST(req: NextRequest) {
         const genAI = new GoogleGenerativeAI(apiKey);
         const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
-        const prompt = `You are writing a WhatsApp message. A homeowner will send this to a service provider. It must sound like a real person wrote it—casual, direct, natural. NO corporate speak, NO "I would appreciate", NO "We've identified". Write like someone texting a contractor.
+        const prompt = `You are writing a WhatsApp message. A homeowner will send this to a service provider. It must sound like a real person wrote it—casual, direct, natural. NO corporate speak, NO "I would appreciate", NO "We've identified". Write like someone texting a contractor. Use British English throughout (e.g. "recognise", "organise", "colour", "specialise").
 
 Context:
 - Provider name: ${provider_name}
@@ -46,10 +45,10 @@ STRUCTURE:
             .replace(/^["']|["']$/g, '');
 
         return NextResponse.json({ message: text });
-    } catch (e: unknown) {
+    } catch (e: any) {
         console.error('WhatsApp message generation error:', e);
         return NextResponse.json(
-            { error: formatApiError(e) || 'Failed to generate message' },
+            { error: e?.message || 'Failed to generate message' },
             { status: 500 }
         );
     }

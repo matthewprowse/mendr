@@ -1,4 +1,5 @@
 import { createSupabaseServerClient } from '@/lib/supabase-server';
+import { getClientMetadata, logScandioEvent } from '@/lib/audit-log';
 import { NextResponse } from 'next/server';
 import type { EmailOtpType } from '@supabase/supabase-js';
 
@@ -24,6 +25,13 @@ export async function GET(request: Request) {
     } else {
         return NextResponse.redirect(`${origin}/auth/sign-in?error=missing_params`);
     }
+
+    const metadata = await getClientMetadata({ headers: request.headers });
+    await logScandioEvent(
+        supabase,
+        { action: 'SIGN_IN_SUCCESS', type: 'AUTH', payload: { method: 'magic_link' } },
+        { metadata }
+    );
 
     const {
         data: { user },

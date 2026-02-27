@@ -74,6 +74,7 @@ export default async function LandingPage() {
                     { href: '#how-it-works', label: 'How It Works' },
                     { href: '#features', label: 'Features' },
                     { href: '#all-services', label: 'Services' },
+                    { href: '/dashboard/history', label: 'History' },
                     { href: '/pro', label: 'For Pros' },
                 ]}
                 logoHref="/"
@@ -321,7 +322,7 @@ export default async function LandingPage() {
                                     <p className="text-sm text-muted-foreground">
                                         {PLACEHOLDER_DESC}
                                     </p>
-                                    <div className="mt-4 flex flex-1 flex-col justify-end">
+                                    <div className="mt-4 flex flex-1 flex-col justify-end gap-2 sm:flex-row sm:flex-wrap sm:items-center">
                                         <Button asChild variant="secondary" size="sm" className="w-fit">
                                             <Link href={getServiceChatHref(label)}>
                                                 Start Diagnosis

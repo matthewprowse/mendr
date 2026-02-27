@@ -12,15 +12,17 @@ import { getImageData, clearImageData } from '@/lib/image-store';
 import { supabase } from '@/lib/supabase';
 import { compressImage } from '@/lib/image-compression';
 import { toast } from 'sonner';
-import { Spinner } from '@/components/ui/spinner';
 import { AppHeader } from '@/components/app-header';
 
 import { sanitizeAiContent, tryParseDiagnosisJson, extractMessageFromRaw } from '@/lib/utils';
 import { tradeToServiceLabel } from '@/lib/services';
+import { logScandioEvent } from '@/lib/audit-log';
+import { useAuth } from '@/context/auth-context';
 import { DiagnosisData, Message, Provider } from './types';
 import { ChatMessage } from './chat-message';
 import { ChatFooter } from './chat-footer';
 import { DiagnosisResponseCard } from './diagnosis-response-card';
+import { ChatPageImageSkeleton, ChatPageTradeSkeleton } from './skeletons';
 
 export interface ChatPageClientProps {
     conversationId: string;
@@ -29,11 +31,13 @@ export interface ChatPageClientProps {
 
 export function ChatPageClient({ conversationId, initialTrade }: ChatPageClientProps) {
     const router = useRouter();
+    const { user } = useAuth();
     const id = conversationId;
 
     // Don't read store during render to avoid hydration mismatch (server has no store; client might).
     // Store is applied in useEffect so first paint matches server.
     const [imageSrc, setImageSrc] = useState<string | null>(null);
+    const [initialImageDescription, setInitialImageDescription] = useState<string | null>(null);
     const [diagnosis, setDiagnosis] = useState<DiagnosisData | null>(null);
     const [messages, setMessages] = useState<Message[]>([]);
     const [isLoaded, setIsLoaded] = useState(false);
@@ -128,9 +132,10 @@ export function ChatPageClient({ conversationId, initialTrade }: ChatPageClientP
                             .order('created_at', { ascending: true }),
                     ]);
 
-                    if (convResult.error) throw convResult.error;
+                if (convResult.error) throw convResult.error;
+                if (msgsResult.error) throw msgsResult.error;
 
-                    return { conv: convResult.data?.[0], msgs: msgsResult.data };
+                return { conv: convResult.data?.[0], msgs: msgsResult.data };
                 })();
 
                 const result = (await Promise.race([fetchPromise, timeout])) as {
@@ -144,6 +149,8 @@ export function ChatPageClient({ conversationId, initialTrade }: ChatPageClientP
 
                 if (conv) {
                     if (conv.image_url) setImageSrc(conv.image_url);
+                    if (conv.initial_image_description)
+                        setInitialImageDescription(conv.initial_image_description);
                     if (conv.diagnosis) setDiagnosis(conv.diagnosis);
                     if (conv.customer_lat && conv.customer_lng) {
                         setUserLocation({
@@ -157,6 +164,7 @@ export function ChatPageClient({ conversationId, initialTrade }: ChatPageClientP
                     await (supabase as any).from('conversations').upsert({
                         id,
                         title: 'New Diagnosis',
+                        user_id: user?.id ?? null,
                         updated_at: new Date().toISOString(),
                     });
                 }
@@ -180,6 +188,7 @@ export function ChatPageClient({ conversationId, initialTrade }: ChatPageClientP
                             role: m.role as 'user' | 'assistant',
                             content: m.content,
                             attachments,
+                            attachment_descriptions: (m.attachment_descriptions as string[] | undefined) ?? undefined,
                             feedback: m.feedback as 'up' | 'down' | null,
                             hasUpdatedDiagnosis: m.diagnosis_updated,
                             diagnosis: m.diagnosis ?? undefined,
@@ -209,26 +218,46 @@ export function ChatPageClient({ conversationId, initialTrade }: ChatPageClientP
         attachments: string[] = [],
         hasUpdatedDiagnosis: boolean = false,
         diagnosisJson?: DiagnosisData | null,
-        providersJson?: Provider[] | null
-    ) => {
-        if (!id) return;
-        const { error } = await (supabase as any).from('messages').insert({
-            conversation_id: id,
-            role,
-            content,
-            attachments,
-            diagnosis_updated: hasUpdatedDiagnosis,
-            diagnosis: diagnosisJson ?? undefined,
-            providers: providersJson ?? undefined,
-        });
+        providersJson?: Provider[] | null,
+        attachment_descriptions?: string[]
+    ): Promise<{ id: string } | undefined> => {
+        if (!id) return undefined;
+        const { data, error } = await (supabase as any)
+            .from('messages')
+            .insert({
+                conversation_id: id,
+                role,
+                content,
+                attachments,
+                diagnosis_updated: hasUpdatedDiagnosis,
+                diagnosis: diagnosisJson ?? undefined,
+                providers: providersJson ?? undefined,
+                attachment_descriptions: attachment_descriptions ?? undefined,
+            })
+            .select('id')
+            .single();
         if (error && typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
             console.warn('[Supabase] message:', error.code, error.message);
         }
+        return data ? { id: data.id } : undefined;
+    };
+
+    const updateMessageAttachmentDescriptions = async (
+        messageId: string,
+        attachment_descriptions: string[]
+    ) => {
+        if (!id) return;
+        await (supabase as any)
+            .from('messages')
+            .update({ attachment_descriptions })
+            .eq('id', messageId)
+            .eq('conversation_id', id);
     };
 
     const saveConversation = async (overrides?: {
         diag?: DiagnosisData;
         loc?: { lat: number; lng: number; address: string };
+        initial_image_description?: string;
     }) => {
         if (!id) return;
 
@@ -246,11 +275,22 @@ export function ChatPageClient({ conversationId, initialTrade }: ChatPageClientP
             diagnosis: finalDiagnosis,
             device: deviceType,
             user_agent: navigator.userAgent,
-            user_id: null,
+            user_id: user?.id ?? null,
             updated_at: new Date().toISOString(),
+            ...(overrides?.initial_image_description !== undefined && {
+                initial_image_description: overrides.initial_image_description,
+            }),
         });
         if (error && typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
             console.warn('[Supabase] conversation:', error.code, error.message);
+        } else if (!error) {
+            void logScandioEvent(supabase as any, {
+                action: 'CONVERSATION_SAVED',
+                type: 'DIAGNOSTIC',
+                entityId: id,
+                entityType: 'conversations',
+                payload: { has_diagnosis: !!finalDiagnosis },
+            });
         }
     };
 
@@ -857,8 +897,18 @@ export function ChatPageClient({ conversationId, initialTrade }: ChatPageClientP
                                         },
                                     ];
                                 });
-                                // Run saves and provider fetch in parallel — don't block on DB
-                                void saveConversation({ diag });
+                                // Ensure conversation exists before saving message (avoids FK violation)
+                                const firstDesc =
+                                    parsedJson.image_descriptions?.[0];
+                                if (firstDesc) {
+                                    setInitialImageDescription(firstDesc);
+                                    await saveConversation({
+                                        diag,
+                                        initial_image_description: firstDesc,
+                                    });
+                                } else {
+                                    await saveConversation({ diag });
+                                }
                                 void saveMessage(
                                     'assistant',
                                     assistantContent,
@@ -917,11 +967,31 @@ export function ChatPageClient({ conversationId, initialTrade }: ChatPageClientP
                                         }
                                         return prev;
                                     });
-                                    await saveConversation({ diag });
+                                    const firstDesc =
+                                        parsedJson.image_descriptions?.[0];
+                                    if (firstDesc) {
+                                        setInitialImageDescription(firstDesc);
+                                        await saveConversation({
+                                            diag,
+                                            initial_image_description: firstDesc,
+                                        });
+                                    } else {
+                                        await saveConversation({ diag });
+                                    }
                                     updateMessageContent(msgIdx, assistantContent, diag);
                                 } else {
                                     initialMessageAddedRef.current = true;
-                                    await saveConversation({ diag });
+                                    const firstDesc =
+                                        parsedJson.image_descriptions?.[0];
+                                    if (firstDesc) {
+                                        setInitialImageDescription(firstDesc);
+                                        await saveConversation({
+                                            diag,
+                                            initial_image_description: firstDesc,
+                                        });
+                                    } else {
+                                        await saveConversation({ diag });
+                                    }
                                     saveMessage(
                                         'assistant',
                                         assistantContent,
@@ -1035,6 +1105,9 @@ export function ChatPageClient({ conversationId, initialTrade }: ChatPageClientP
             }
             if (loadedMsgs && loadedMsgs.length > 0) {
                 setIsDiagnosing(false);
+                // Mark as already diagnosed so we never re-run the initial diagnosis on refresh
+                setHasStartedDiagnosis(true);
+                diagnosisStartedRef.current = true;
             }
             // Subscribe to realtime only after load completes - avoids React Strict Mode
             // and Fast Refresh closing the WebSocket before it connects
@@ -1081,9 +1154,17 @@ export function ChatPageClient({ conversationId, initialTrade }: ChatPageClientP
         );
     }, [id]);
 
+    // Start (or resume) initial diagnosis when we have an image and either no messages yet,
+    // or the last message is from the user with no diagnosis (e.g. user refreshed during analysis).
     useEffect(() => {
         const img = imageSrc;
-        const canStart = img && messages.length === 0 && !diagnosis && !hasStartedDiagnosis;
+        const lastMessage = messages.length > 0 ? messages[messages.length - 1] : null;
+        const lastIsUser = lastMessage?.role === 'user';
+        const hasNoDiagnosis = !diagnosis?.diagnosis;
+        const canStart =
+            img &&
+            !hasStartedDiagnosis &&
+            (messages.length === 0 || (lastIsUser && hasNoDiagnosis));
         const shouldStart = canStart && isLoaded;
         if (shouldStart) {
             const userContext = directTradeResult
@@ -1098,6 +1179,7 @@ export function ChatPageClient({ conversationId, initialTrade }: ChatPageClientP
         isLoaded,
         imageSrc,
         messages.length,
+        messages,
         diagnosis,
         hasStartedDiagnosis,
         directTradeResult,
@@ -1129,7 +1211,7 @@ export function ChatPageClient({ conversationId, initialTrade }: ChatPageClientP
         }
         setIsResponding(true);
 
-        saveMessage('user', userMsg, attachmentsToSend);
+        const userMsgId = (await saveMessage('user', userMsg, attachmentsToSend))?.id;
         setDiagnosis((prev) => (prev ? { ...prev, thinking: '' } : prev));
 
         try {
@@ -1143,8 +1225,14 @@ export function ChatPageClient({ conversationId, initialTrade }: ChatPageClientP
                     ? [{ role: 'assistant' as const, content: initialMsgContent }]
                     : []),
                 ...messages,
-                ...(isFirstMessage ? [newMessage] : []),
-            ].map((m) => ({ role: m.role, content: m.content, attachments: m.attachments ?? [] }));
+                // Always include the new user message so the API has the full current turn
+                newMessage,
+            ].map((m) => ({
+                role: m.role,
+                content: m.content,
+                attachments: [],
+                attachment_descriptions: m.attachment_descriptions ?? [],
+            }));
 
             const providersFromMessages =
                 [...messages].reverse().find((m) => m.providers && m.providers.length > 0)
@@ -1155,14 +1243,30 @@ export function ChatPageClient({ conversationId, initialTrade }: ChatPageClientP
                   ? { trade: directTradeSelection.trade, diagnosis: directTradeSelection.diagnosis }
                   : undefined;
 
+            const primaryImage =
+                isFirstMessage
+                    ? imageSrc ?? null
+                    : attachmentsToSend.length > 0 &&
+                        typeof attachmentsToSend[0] === 'string' &&
+                        attachmentsToSend[0].startsWith('data:')
+                      ? attachmentsToSend[0]
+                      : null;
+            const attachmentsForApi =
+                primaryImage && attachmentsToSend[0] === primaryImage
+                    ? attachmentsToSend.slice(1)
+                    : attachmentsToSend;
             const res = await fetch('/api/diagnose', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    image: isFirstMessage ? imageSrc ?? null : null,
+                    image: primaryImage,
                     textQuery: msgToSend || undefined,
-                    attachments: attachmentsToSend.length > 0 ? attachmentsToSend : undefined,
+                    attachments:
+                        attachmentsForApi.length > 0 ? attachmentsForApi : undefined,
                     history: historyForApi,
+                    ...(initialImageDescription && {
+                        initial_image_description: initialImageDescription,
+                    }),
                     providers: providersFromMessages,
                     previousDiagnosis: diagnosis
                         ? {
@@ -1289,6 +1393,31 @@ export function ChatPageClient({ conversationId, initialTrade }: ChatPageClientP
                                     diag,
                                     undefined
                                 );
+                                if (
+                                    userMsgId &&
+                                    parsedJson.image_descriptions &&
+                                    Array.isArray(parsedJson.image_descriptions) &&
+                                    parsedJson.image_descriptions.length > 0
+                                ) {
+                                    await updateMessageAttachmentDescriptions(
+                                        userMsgId,
+                                        parsedJson.image_descriptions
+                                    );
+                                    setMessages((prev) => {
+                                        const next = [...prev];
+                                        const lastUserIdx = [...next]
+                                            .map((m, i) => (m.role === 'user' ? i : -1))
+                                            .filter((i) => i >= 0)
+                                            .pop();
+                                        if (lastUserIdx !== undefined && lastUserIdx >= 0) {
+                                            next[lastUserIdx] = {
+                                                ...next[lastUserIdx],
+                                                attachment_descriptions: parsedJson.image_descriptions,
+                                            };
+                                        }
+                                        return next;
+                                    });
+                                }
                             }
                             if (canFetchEarly && !providersFetchedForStream) {
                                 providersFetchedForStream = true;
@@ -1372,6 +1501,31 @@ export function ChatPageClient({ conversationId, initialTrade }: ChatPageClientP
                             }
                         } else if (fullText.toLowerCase().includes('</json>')) {
                             saveMessage('assistant', assistantContent, [], false);
+                            if (
+                                userMsgId &&
+                                parsedJson.image_descriptions &&
+                                Array.isArray(parsedJson.image_descriptions) &&
+                                parsedJson.image_descriptions.length > 0
+                            ) {
+                                await updateMessageAttachmentDescriptions(
+                                    userMsgId,
+                                    parsedJson.image_descriptions
+                                );
+                                setMessages((prev) => {
+                                    const next = [...prev];
+                                    const lastUserIdx = [...next]
+                                        .map((m, i) => (m.role === 'user' ? i : -1))
+                                        .filter((i) => i >= 0)
+                                        .pop();
+                                    if (lastUserIdx !== undefined && lastUserIdx >= 0) {
+                                        next[lastUserIdx] = {
+                                            ...next[lastUserIdx],
+                                            attachment_descriptions: parsedJson.image_descriptions,
+                                        };
+                                    }
+                                    return next;
+                                });
+                            }
                         }
                     } catch (e) {
                         const parsed = tryParseDiagnosisJson(fullText) as Record<
@@ -1517,6 +1671,29 @@ export function ChatPageClient({ conversationId, initialTrade }: ChatPageClientP
                                     fullDiag,
                                     undefined
                                 );
+                                if (
+                                    userMsgId &&
+                                    (parsed as { image_descriptions?: string[] }).image_descriptions &&
+                                    Array.isArray((parsed as { image_descriptions?: string[] }).image_descriptions) &&
+                                    (parsed as { image_descriptions: string[] }).image_descriptions.length > 0
+                                ) {
+                                    const descs = (parsed as { image_descriptions: string[] }).image_descriptions;
+                                    await updateMessageAttachmentDescriptions(userMsgId, descs);
+                                    setMessages((prev) => {
+                                        const next = [...prev];
+                                        const lastUserIdx = [...next]
+                                            .map((m, i) => (m.role === 'user' ? i : -1))
+                                            .filter((i) => i >= 0)
+                                            .pop();
+                                        if (lastUserIdx !== undefined && lastUserIdx >= 0) {
+                                            next[lastUserIdx] = {
+                                                ...next[lastUserIdx],
+                                                attachment_descriptions: descs,
+                                            };
+                                        }
+                                        return next;
+                                    });
+                                }
                             }
                         }
                     }
@@ -1727,7 +1904,12 @@ export function ChatPageClient({ conversationId, initialTrade }: ChatPageClientP
                 ...(isFirstRegenTurn
                     ? messageHistory
                     : messageHistory.filter((m) => m !== lastUserMsg)),
-            ].map((m) => ({ role: m.role, content: m.content, attachments: m.attachments ?? [] }));
+            ].map((m) => ({
+                role: m.role,
+                content: m.content,
+                attachments: [],
+                attachment_descriptions: m.attachment_descriptions ?? [],
+            }));
 
             const providersFromRegenerate =
                 [...messageHistory].reverse().find((m) => m.providers && m.providers.length > 0)
@@ -1736,9 +1918,13 @@ export function ChatPageClient({ conversationId, initialTrade }: ChatPageClientP
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    image: isFirstRegenTurn ? imageSrc : null,
+                    image:
+                        isFirstRegenTurn && !initialImageDescription ? imageSrc : null,
                     textQuery: isFirstRegenTurn ? undefined : lastUserMsg.content,
                     history: historyForApi,
+                    ...(initialImageDescription && {
+                        initial_image_description: initialImageDescription,
+                    }),
                     providers: providersFromRegenerate,
                     previousDiagnosis: diagnosis
                         ? {
@@ -1981,23 +2167,23 @@ export function ChatPageClient({ conversationId, initialTrade }: ChatPageClientP
 
     // Use store image immediately so we never block on loading when coming from home page
     const displayImage = imageSrc;
+    // Only show the thinking/analysing indicator when actively running — never on a loaded conversation
     const showThinking =
-        isDiagnosing ||
-        isResponding ||
-        ((displayImage || messages.length > 0) && !diagnosis?.diagnosis);
+        (isDiagnosing || isResponding) ||
+        (isLoaded && !hasStartedDiagnosis && !isDiagnosing && displayImage && messages.length === 0 && !diagnosis?.diagnosis);
 
     if (!id) {
         router.replace('/');
         return null;
     }
 
-    // Only show spinner when we truly have no image (not from state or store)
+    // Show a skeleton while the conversation is loading
     if (!isLoaded && !displayImage) {
         return (
             <div className="flex flex-1 flex-col">
                 <AppHeader />
-                <div className="flex flex-1 items-center justify-center">
-                    <Spinner className="size-8 text-muted-foreground" />
+                <div className="flex-1 max-w-4xl mx-auto w-full px-4 py-4">
+                    {initialTrade ? <ChatPageTradeSkeleton /> : <ChatPageImageSkeleton />}
                 </div>
             </div>
         );
@@ -2005,7 +2191,7 @@ export function ChatPageClient({ conversationId, initialTrade }: ChatPageClientP
 
     return (
         <div className="flex flex-col min-h-screen bg-background">
-            <AppHeader imageSrc={displayImage} />
+            <AppHeader imageSrc={displayImage} showViewImage={false} />
 
             <main
                 ref={mainRef}
@@ -2062,11 +2248,29 @@ export function ChatPageClient({ conversationId, initialTrade }: ChatPageClientP
                             />
                     )}
 
-                    {/* Diagnosis thinking - tight gap to diagnosis header */}
-                    <div className="flex flex-col gap-2">
+                    {/* Image on left (AI side), then thinking below it, then messages */}
+                    <div className="flex flex-col gap-4">
+                        {/* Initial diagnosis image - left-aligned (AI side), larger */}
+                        {displayImage && (
+                            <div className="flex flex-col gap-2 w-full items-start">
+                                <a
+                                    href={displayImage}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="block max-w-[420px] w-full aspect-[16/10] md:aspect-[4/3] rounded-lg overflow-hidden border border-border/50 hover:opacity-95"
+                                >
+                                    <img
+                                        src={displayImage}
+                                        alt="Image being analysed"
+                                        className="w-full h-full object-cover bg-muted/30"
+                                    />
+                                </a>
+                            </div>
+                        )}
+                        {/* Thinking appears below the image with clear spacing */}
                         {(showThinking ||
                             (diagnosis?.thinking && !diagnosis?.requires_clarification)) && (
-                            <blockquote className="border-l-2 border-input pl-3">
+                            <blockquote className="border-l-2 border-input pl-3 w-full">
                                 <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap">
                                     {diagnosis?.thinking
                                         ? thinkingForDisplay(diagnosis.thinking)
@@ -2135,11 +2339,6 @@ export function ChatPageClient({ conversationId, initialTrade }: ChatPageClientP
                 isDiagnosing={isDiagnosing}
                 isResponding={isResponding}
                 hasDiagnosis={!!diagnosis || !!directTradeResult}
-                onGoToRecentDiagnosis={() => {
-                    messagesEndRef.current?.scrollIntoView({
-                        behavior: 'smooth',
-                    });
-                }}
                 pendingAttachments={displayImage ? pendingAttachments : []}
                 onAddAttachments={
                     displayImage

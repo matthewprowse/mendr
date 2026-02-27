@@ -141,6 +141,107 @@ export function parseRepairReplacementRanges(text: string): {
     };
 }
 
+/**
+ * Format a business name for display: remove legal/marketing suffixes (Pty, Ltd, LLC, etc.),
+ * replace " AND " with " & ", and apply title case.
+ */
+// Ordered longest-first so greedy matching prefers longer words
+const WORD_DICT = new Set([
+    'handyman', 'plumber', 'plumbing', 'electrician', 'electrical', 'electric',
+    'painter', 'painting', 'builders', 'builder', 'building', 'construction',
+    'renovations', 'renovation', 'roofing', 'roofer', 'tiling', 'tiler',
+    'carpentry', 'carpenter', 'flooring', 'waterproofing', 'waterproof',
+    'maintenance', 'services', 'service', 'solutions', 'solution',
+    'professionals', 'professional', 'experts', 'expert', 'specialists', 'specialist',
+    'contractors', 'contractor', 'installations', 'installation', 'install',
+    'repairs', 'repair', 'direct', 'connect', 'pro', 'pros', 'home', 'house',
+    'property', 'garden', 'gardening', 'landscaping', 'landscape', 'cleaning',
+    'cleaner', 'cleaners', 'pest', 'control', 'solar', 'energy', 'pool',
+    'pools', 'fencing', 'fence', 'gate', 'gates', 'security', 'alarm', 'alarms',
+    'glass', 'glazing', 'glazier', 'welding', 'welder', 'steel', 'iron', 'metal',
+    'concrete', 'paving', 'paver', 'drains', 'drain', 'drainage', 'gutter', 'gutters',
+    'aircon', 'hvac', 'heating', 'cooling', 'insulation', 'ceiling', 'ceilings',
+    'kitchen', 'bathroom', 'bedrooms', 'bedroom', 'office', 'commercial',
+    'residential', 'industrial', 'cape', 'town', 'west', 'south', 'north', 'east',
+    'central', 'city', 'group', 'team', 'works', 'work', 'fix', 'care', 'easy',
+    'fast', 'quick', 'smart', 'top', 'best', 'premier', 'elite', 'quality',
+    'affordable', 'budget', 'value', 'local', 'national', 'global',
+]);
+
+/**
+ * Greedily split a single all-alpha token into known words using the dictionary.
+ * Falls back to returning the original token if no split is found.
+ */
+function splitConcatenated(token: string): string[] {
+    const lower = token.toLowerCase();
+    const n = lower.length;
+    // dp[i] = array of words that cover lower[0..i-1], or null if no solution
+    const dp: (string[] | null)[] = Array(n + 1).fill(null);
+    dp[0] = [];
+
+    for (let i = 0; i < n; i++) {
+        if (dp[i] === null) continue;
+        for (let j = i + 2; j <= n; j++) {
+            const slice = lower.slice(i, j);
+            if (WORD_DICT.has(slice)) {
+                if (dp[j] === null) {
+                    dp[j] = [...dp[i]!, slice];
+                }
+            }
+        }
+    }
+
+    return dp[n] ?? [token];
+}
+
+export function formatBusinessName(name: string | undefined | null): string {
+    if (!name?.trim()) return '';
+    let s = name.trim();
+    // Remove common legal/marketing suffixes
+    s = s
+        .replace(/,?\s*\(?\s*Pty\.?\s*\)?\s*Ltd\.?\s*$/gi, '')
+        .replace(/,?\s*Pty\.?\s*Ltd\.?\s*$/gi, '')
+        .replace(/,?\s*Ltd\.?\s*$/gi, '')
+        .replace(/,?\s*LLC\.?\s*$/gi, '')
+        .replace(/,?\s*Inc\.?\s*$/gi, '')
+        .replace(/,?\s*Co\.?\s*$/gi, '')
+        .replace(/,?\s*\(?\s*Pty\.?\s*\)?\s*$/gi, '')
+        .replace(/,?\s*Pty\.?\s*$/gi, '')
+        .trim();
+    // Strip domain-style suffixes (e.g. ".co.za", ".com", ".net")
+    s = s.replace(/\.(co\.za|com|net|org|biz|info|co)$/gi, '').trim();
+    // Replace " AND " with " & "
+    s = s.replace(/\s+and\s+/gi, ' & ');
+
+    const titleWord = (w: string) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase();
+
+    s = s
+        .split(/\s+/)
+        .filter(Boolean)
+        .flatMap((word) => {
+            if (word === '&') return [word];
+            // Handle hyphenated compounds: title-case each segment, attempt word-split within each
+            if (word.includes('-')) {
+                return [
+                    word
+                        .split('-')
+                        .flatMap((part) =>
+                            /^[a-z]+$/i.test(part) ? splitConcatenated(part) : [part]
+                        )
+                        .map(titleWord)
+                        .join('-'),
+                ];
+            }
+            // Attempt to split concatenated all-alpha tokens
+            if (/^[a-z]+$/i.test(word)) {
+                return splitConcatenated(word).map(titleWord);
+            }
+            return [titleWord(word)];
+        })
+        .join(' ');
+    return s.trim();
+}
+
 /** Strip meta-commentary the AI mistakenly put in message or action_required (e.g. "The user seems frustrated", "I need to...") */
 export function sanitizeAiContent(text: string): string {
     if (!text?.trim()) return text;

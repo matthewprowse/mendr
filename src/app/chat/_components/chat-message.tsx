@@ -64,7 +64,7 @@ export function ChatMessage({
     return (
         <div
             className={cn(
-                'flex flex-col gap-2 w-full mt-3',
+                'flex flex-col gap-4 w-full mt-3',
                 message.role === 'user' ? 'items-end' : 'items-start'
             )}
         >
@@ -102,7 +102,7 @@ export function ChatMessage({
                 />
             )}
             {message.role === 'user' && message.attachments && message.attachments.length > 0 && (
-                <div className="flex flex-wrap gap-1.5 justify-end max-w-full">
+                <div className="flex flex-wrap gap-2 justify-end max-w-full">
                     {(message.attachments as unknown[])
                         .map((a) =>
                             typeof a === 'string'
@@ -118,12 +118,12 @@ export function ChatMessage({
                                 href={url}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="block h-16 w-16 rounded-lg overflow-hidden border border-border/50 hover:opacity-95 shrink-0"
+                                className="block max-w-[200px] max-h-48 rounded-lg overflow-hidden border border-border/50 hover:opacity-95 shrink-0"
                             >
                                 <img
                                     src={url}
-                                    alt={`Attachment ${i + 1}`}
-                                    className="h-full w-full object-cover"
+                                    alt={`Uploaded image ${i + 1}`}
+                                    className="w-full h-full max-h-48 object-cover"
                                 />
                             </a>
                         ))}

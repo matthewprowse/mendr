@@ -3,12 +3,7 @@
 import { forwardRef, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import {
-    Popover,
-    PopoverContent,
-    PopoverTrigger,
-} from '@/components/ui/popover';
-import { ArrowUp, Paperclip, Cross, FileText } from 'geist-icons';
+import { ArrowUp, Paperclip, Cross } from 'geist-icons';
 import { cn } from '@/lib/utils';
 
 const MAX_ATTACHMENTS = 5;
@@ -27,7 +22,6 @@ export const ChatFooter = forwardRef<
         onRemoveAttachment: (index: number) => void;
         welcomeMode?: boolean;
         inputRef?: React.RefObject<HTMLInputElement | null>;
-        onGoToRecentDiagnosis?: () => void;
     }
 >(
     (
@@ -43,7 +37,6 @@ export const ChatFooter = forwardRef<
             onRemoveAttachment,
             welcomeMode = false,
             inputRef,
-            onGoToRecentDiagnosis,
         },
         ref
     ) => {
@@ -116,15 +109,6 @@ export const ChatFooter = forwardRef<
                         className="hidden"
                         onChange={handleFileChange}
                     />
-                    {!welcomeMode &&
-                        hasDiagnosis &&
-                        onGoToRecentDiagnosis && (
-                            <div className="flex justify-end">
-                                <RecentDiagnosisPopover
-                                    onGoToRecentDiagnosis={onGoToRecentDiagnosis}
-                                />
-                            </div>
-                        )}
                     <div
                         className="relative flex-1 min-w-0 rounded-md border border-input bg-transparent shadow-xs min-h-[4.5rem] max-h-[224px] flex flex-col focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/50 transition-[color,box-shadow] outline-none"
                         onDrop={handleDrop}
@@ -175,7 +159,7 @@ export const ChatFooter = forwardRef<
                                     welcomeMode
                                         ? isResponding
                                             ? 'Processing…'
-                                            : 'Upload one or more photos (button on the right) so we can generate a Scandio Report. You can also type extra context here — text alone improves your diagnosis, but we still need at least one image for a full report.'
+                                            : 'Upload a photo or type what you need. We need at least one image for a full report.'
                                         : isDisabled
                                           ? 'Processing...'
                                           : "Scandio's AI Assistant"
@@ -191,7 +175,7 @@ export const ChatFooter = forwardRef<
                                     type="button"
                                     variant={welcomeMode ? 'secondary' : 'ghost'}
                                     size="icon"
-                                    className="flex-shrink-0 shrink-0 size-9"
+                                    className="flex-shrink-0 shrink-0 size-8"
                                     onClick={() => fileInputRef.current?.click()}
                                     disabled={
                                         welcomeMode
@@ -201,29 +185,29 @@ export const ChatFooter = forwardRef<
                                     }
                                     title={
                                         welcomeMode
-                                            ? 'Upload image'
-                                            : `Add images (Max ${MAX_ATTACHMENTS})`
+                                            ? 'Add Image'
+                                            : `Add Images (Max ${MAX_ATTACHMENTS})`
                                     }
                                 >
                                     <Paperclip
-                                        size={18}
+                                        size={14}
                                         strokeWidth={2}
-                                        className="size-[18px] text-muted-foreground"
+                                        className="size-3.5 text-muted-foreground"
                                     />
                                 </Button>
                                 <Button
                                     type="button"
                                     variant={welcomeMode ? 'secondary' : 'default'}
                                     size="icon"
-                                    className="flex-shrink-0 shrink-0 size-9"
+                                    className="flex-shrink-0 shrink-0 size-8"
                                     onClick={handleSend}
                                     disabled={isDisabled || isResponding || !canSend}
                                 >
                                     <ArrowUp
-                                        size={18}
+                                        size={14}
                                         strokeWidth={2}
                                         className={cn(
-                                            'size-[18px]',
+                                            'size-3.5',
                                             welcomeMode ? 'text-muted-foreground' : ''
                                         )}
                                     />
@@ -237,40 +221,3 @@ export const ChatFooter = forwardRef<
     }
 );
 ChatFooter.displayName = 'ChatFooter';
-
-function RecentDiagnosisPopover({
-    onGoToRecentDiagnosis,
-}: {
-    onGoToRecentDiagnosis: () => void;
-}) {
-    const [open, setOpen] = useState(false);
-    return (
-        <Popover open={open} onOpenChange={setOpen}>
-            <PopoverTrigger asChild>
-                <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
-                >
-                    <FileText size={14} className="shrink-0" />
-                    Recent
-                </Button>
-            </PopoverTrigger>
-            <PopoverContent align="end" side="top" className="w-auto p-3">
-                <Button
-                    type="button"
-                    variant="secondary"
-                    size="sm"
-                    className="w-full"
-                    onClick={() => {
-                        onGoToRecentDiagnosis();
-                        setOpen(false);
-                    }}
-                >
-                    Go to recent diagnosis
-                </Button>
-            </PopoverContent>
-        </Popover>
-    );
-}

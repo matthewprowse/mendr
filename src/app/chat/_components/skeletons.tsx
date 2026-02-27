@@ -2,6 +2,17 @@ import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 
+/** Matches the ProvidersMap container exactly: aspect-[16/10] min-h-[180px]. */
+function MapSkeleton() {
+    return (
+        <div className="w-full overflow-hidden rounded-lg border border-border">
+            <div className="aspect-[16/10] min-h-[180px] w-full">
+                <Skeleton className="h-full w-full rounded-none" />
+            </div>
+        </div>
+    );
+}
+
 /** Skeleton that matches ProviderCard structure exactly for seamless loading transition. */
 function ProviderCardSkeleton() {
     return (
@@ -55,8 +66,11 @@ function ScandiosPickSkeleton() {
     return (
         <div className="flex flex-col gap-6">
             <Separator className="w-full" />
-            <div className="flex flex-col gap-0.5">
+            <div className="flex flex-col gap-1.5">
                 <h2 className="text-lg font-semibold text-foreground">Scandio&apos;s Pick</h2>
+                {/* favouriteReason line */}
+                <Skeleton className="h-3.5 w-[75%]" />
+                <Skeleton className="h-3.5 w-[55%]" />
             </div>
             <ProviderCardSkeleton />
         </div>
@@ -67,14 +81,13 @@ function ScandiosPickSkeleton() {
 function OtherProvidersSkeleton() {
     return (
         <div className="flex flex-col gap-6">
-            <div className="flex flex-col gap-0.5">
+            <div className="flex flex-col gap-1.5">
                 <h3 className="text-lg font-semibold text-foreground">
                     Other Recommended Providers
                 </h3>
-                <p className="text-sm text-foreground leading-relaxed">
-                    Compare these providers based on ratings, reviews, and availability to find the
-                    best fit for you.
-                </p>
+                {/* Subheading description lines */}
+                <Skeleton className="h-3.5 w-full" />
+                <Skeleton className="h-3.5 w-[65%]" />
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <ProviderCardSkeleton />
@@ -87,8 +100,67 @@ function OtherProvidersSkeleton() {
 export function ProvidersSkeleton() {
     return (
         <div className="flex flex-col gap-6">
+            <MapSkeleton />
             <ScandiosPickSkeleton />
             <OtherProvidersSkeleton />
+        </div>
+    );
+}
+
+/**
+ * Full-page skeleton for the image-upload diagnosis flow.
+ * Mirrors: uploaded image → thinking block → diagnosis card → map → provider cards.
+ */
+export function ChatPageImageSkeleton() {
+    return (
+        <div className="flex flex-col gap-6 w-full">
+            {/* Uploaded image placeholder — matches aspect-[16/10] on mobile */}
+            <div className="max-w-[420px] w-full aspect-[16/10] md:aspect-[4/3] rounded-lg overflow-hidden border border-border/50">
+                <Skeleton className="h-full w-full rounded-none" />
+            </div>
+
+            {/* Thinking / analysing block */}
+            <div className="border-l-2 border-input pl-3 flex flex-col gap-2">
+                <Skeleton className="h-3.5 w-[60%]" />
+                <Skeleton className="h-3.5 w-[45%]" />
+            </div>
+
+            {/* Diagnosis title + action */}
+            <div className="flex flex-col gap-3">
+                <Skeleton className="h-5 w-24 rounded-full" />
+                <Skeleton className="h-6 w-[70%]" />
+                <Skeleton className="h-3.5 w-full" />
+                <Skeleton className="h-3.5 w-[85%]" />
+                <Skeleton className="h-3.5 w-[55%]" />
+            </div>
+
+            {/* Estimated cost */}
+            <div className="flex flex-col gap-2">
+                <Skeleton className="h-5 w-40" />
+                <Skeleton className="h-3.5 w-[65%]" />
+            </div>
+
+            <ProvidersSkeleton />
+        </div>
+    );
+}
+
+/**
+ * Full-page skeleton for the direct trade-select flow.
+ * Mirrors: diagnosis title → action → map → provider cards.
+ */
+export function ChatPageTradeSkeleton() {
+    return (
+        <div className="flex flex-col gap-6 w-full">
+            {/* Service badge + title */}
+            <div className="flex flex-col gap-3 mt-3">
+                <Skeleton className="h-5 w-24 rounded-full" />
+                <Skeleton className="h-6 w-[55%]" />
+                <Skeleton className="h-3.5 w-full" />
+                <Skeleton className="h-3.5 w-[80%]" />
+            </div>
+
+            <ProvidersSkeleton />
         </div>
     );
 }
