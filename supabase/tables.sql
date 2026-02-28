@@ -148,6 +148,7 @@ DROP INDEX IF EXISTS idx_cached_providers_slug;
 ALTER TABLE cached_providers ADD COLUMN IF NOT EXISTS reviews JSONB;
 ALTER TABLE cached_providers ADD COLUMN IF NOT EXISTS weekday_descriptions JSONB;
 ALTER TABLE cached_providers ADD COLUMN IF NOT EXISTS photos JSONB;
+ALTER TABLE cached_providers ADD COLUMN IF NOT EXISTS review_highlights JSONB;
 
 -- =============================================================================
 -- 4. Conversations (homeowner diagnosis sessions)

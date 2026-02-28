@@ -3,7 +3,7 @@
 import { forwardRef, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { ArrowUp, Paperclip, Cross } from 'geist-icons';
+import { ArrowUp, Paperclip, Cross } from '@/lib/icons';
 import { cn } from '@/lib/utils';
 
 const MAX_ATTACHMENTS = 5;
@@ -138,7 +138,7 @@ export const ChatFooter = forwardRef<
                                             className="absolute h-6 w-6 top-1 right-1 p-0.5 text-black rounded-md"
                                             aria-label="Remove Attachment"
                                         >
-                                            <Cross size={14} className="size-3.5" />
+                                            <Cross className="size-3.5" />
                                         </Button>
                                         </div>
                                     ))}
@@ -173,9 +173,9 @@ export const ChatFooter = forwardRef<
                             <div className="absolute bottom-2 right-2 flex gap-2 shrink-0">
                                 <Button
                                     type="button"
-                                    variant={welcomeMode ? 'secondary' : 'ghost'}
+                                    variant="ghost"
                                     size="icon"
-                                    className="flex-shrink-0 shrink-0 size-8"
+                                    className="flex-shrink-0 shrink-0 size-9 text-muted-foreground transition-colors hover:text-foreground"
                                     onClick={() => fileInputRef.current?.click()}
                                     disabled={
                                         welcomeMode
@@ -190,26 +190,21 @@ export const ChatFooter = forwardRef<
                                     }
                                 >
                                     <Paperclip
-                                        size={14}
                                         strokeWidth={2}
-                                        className="size-3.5 text-muted-foreground"
+                                        className="size-4"
                                     />
                                 </Button>
                                 <Button
                                     type="button"
-                                    variant={welcomeMode ? 'secondary' : 'default'}
+                                    variant="secondary"
                                     size="icon"
-                                    className="flex-shrink-0 shrink-0 size-8"
+                                    className="flex-shrink-0 shrink-0 size-9 text-muted-foreground transition-colors hover:text-foreground"
                                     onClick={handleSend}
                                     disabled={isDisabled || isResponding || !canSend}
                                 >
                                     <ArrowUp
-                                        size={14}
                                         strokeWidth={2}
-                                        className={cn(
-                                            'size-3.5',
-                                            welcomeMode ? 'text-muted-foreground' : ''
-                                        )}
+                                        className="size-4"
                                     />
                                 </Button>
                             </div>

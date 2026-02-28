@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { cn } from '@/lib/utils';
-import { LoaderCircle } from 'geist-icons';
+import { LoaderCircle } from '@/lib/icons';
 
 const Spinner = React.forwardRef<
     SVGSVGElement,

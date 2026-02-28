@@ -23,15 +23,21 @@ Tasks:
 1. **summary**: Write exactly 2 short sentences summarising overall sentiment and what customers say about this provider.
 2. **positives**: Array of 2–6 short recurring themes from positive feedback (e.g. "Always on time", "Neat work", "Clear communication"). Each item under 40 chars.
 3. **negatives**: Array of 0–4 short recurring themes from negative or mixed feedback (e.g. "Expensive call-out fee", "Sometimes late"). Each item under 40 chars. Omit if no clear negatives.
-4. **metrics**: Score 1–10 (decimal allowed, one decimal place) for each, based only on what reviews explicitly or clearly imply:
-   - punctuality: Arriving on time, keeping appointments
-   - cleanliness: Leaving the job site clean, neat work, overall cleanliness when work is done
-   - professionalism: Communication, courtesy, expertise
-   - value_for_money: Fairness of pricing, perceived value compared to what was delivered
+4. **metrics**: Score 1–10 (decimal allowed, one decimal place) for each metric. Base scores ONLY on what reviewers explicitly state or unmistakably imply. A metric must be null if no reviews mention it at all.
 
-If there is no clear evidence in the reviews for a metric, set that metric to null in the JSON (not 0 or 5). Be strict: only score higher or lower when reviews support it.
+Metric definitions — read carefully:
+   - punctuality: Did the provider arrive on time, meet agreed deadlines, and keep scheduled appointments? Evidence: phrases like "always on time", "arrived early", "ran late", "missed the deadline", "kept us waiting".
+   - cleanliness: Did the provider leave the work area tidy? Evidence: "cleaned up after themselves", "left a mess", "neat finish", "rubbish left behind".
+   - professionalism: Did the provider communicate well, behave courteously, handle problems maturely, and demonstrate expertise? Evidence: "very professional", "rude", "wouldn't return calls", "handled complaints well", "knowledgeable".
+   - value_for_money: Was the pricing fair relative to the quality and completeness of work delivered? Evidence: "great value", "overpriced", "charged for work not done", "worth every cent", "quoted one price then charged more".
 
-Length of **positives** vs **negatives** should roughly track the ratio of clearly positive to clearly negative/mixed reviews: more positive themes when reviews are mostly positive, more negative themes only when there is a meaningful amount of negative feedback.
+Scoring rules:
+- Score strictly: 1–3 = clearly poor, 4–5 = below average, 6–7 = average/acceptable, 8–9 = good, 10 = exceptional.
+- If most mentions are negative for a metric, score it 1–4. Do not default to mid-range (5–6) when evidence is clearly negative.
+- Aggregate across ALL reviews — a single bad review among many good ones should lower the score modestly, not neutralise it entirely.
+- Set null only when the metric is genuinely unmentioned across all reviews.
+
+Length of **positives** vs **negatives** should roughly track the ratio of clearly positive to clearly negative/mixed reviews.
 
 Output format (valid JSON only):
 {"summary":"...","positives":["...","..."],"negatives":["..."],"metrics":{"punctuality":7.5,"cleanliness":8,"professionalism":9,"value_for_money":7}}`;
@@ -118,25 +124,35 @@ export type ReviewCategory = (typeof CATEGORY_ORDER)[number];
 export interface ProPageReviewAnalysis {
     reviewCategories: Partial<Record<ReviewCategory, number[]>>;
     summary: string;
+    /** Short terms reviewers frequently mention (Google-style "What people mention"). */
+    highlights: string[];
 }
 
 const PRO_PAGE_REVIEW_PROMPT = `You are analysing Google reviews for a home services provider (plumber, electrician, handyman, etc.). Use British English throughout (e.g. "recognise", "organise", "colour", "specialise", "analyse").
 
 Tasks:
-1. **reviewCategories**: For each review (index 0 to N-1), assign exactly ONE category. Put each review index in the right category array.
-   Categories: Punctuality (on time, scheduling), Tidiness (clean work, leaving site clean), Professionalism (communication, expertise, courtesy), Quality (work quality, results), Value (pricing, value for money), Other (anything that doesn't fit).
-2. **summary**: Write 5–8 sentences summarising what customers say overall. Cover: common themes (e.g. punctuality, quality, value), what they praise, any criticisms, and overall sentiment. Be specific and detailed where the reviews give detail. Mention the range of services praised if relevant. Do not include the business name.
+1. **reviewCategories**: For each review (index 0 to N-1), assign it to ONE OR MORE relevant categories. A review may appear in multiple category arrays if it meaningfully mentions multiple topics.
+   Categories and what counts as evidence:
+   - Punctuality: arriving on time, meeting deadlines, scheduling, time management (e.g. "on time", "ran late", "missed deadline", "never returned")
+   - Tidiness: cleanliness of work area, leaving the site clean after the job (e.g. "cleaned up", "left a mess", "neat finish")
+   - Professionalism: communication, courtesy, handling of problems, maturity, expertise (e.g. "professional", "rude", "wouldn't return calls", "knowledgeable", "handled it well")
+   - Quality: quality and completeness of the actual work done (e.g. "great results", "shoddy work", "had to redo it", "excellent finish")
+   - Value: fairness of pricing relative to what was delivered (e.g. "great value", "overpriced", "charged for work not done", "quoted one price then charged more")
+   - Other: anything that does not clearly fit the above.
+   Only use "Other" for a review when none of the five categories above apply at all.
+2. **summary**: Write 2–3 short sentences summarising what customers say overall. Cover the main themes (punctuality, quality, value), what they praise, and any criticisms. Do not include the business name.
+3. **highlights**: Extract 8–20 short terms (one or two words each) that reviewers frequently mention — like Google's "What people mention" for a place. Use lowercase. Examples for a plumber: "on time", "fair price", "clean work", "professional", "quick", "reliable". Examples for a winery: "picnic", "platters", "lawns", "atmosphere", "afternoon", "trees", "kids". Only include terms that actually appear or are strongly implied across the reviews. Return as an array of strings.
 
 Output valid JSON only, no markdown:
-{"reviewCategories":{"Punctuality":[0,2],"Tidiness":[1],"Professionalism":[3],...},"summary":"..."}
-Every review index must appear in exactly one category. Use "Other" for unclear.`;
+{"reviewCategories":{"Punctuality":[0,2],"Tidiness":[1],...},"summary":"...","highlights":["on time","fair price",...]}
+A review index may appear in multiple category arrays. Only use "Other" when no other category applies.`;
 
 export async function analyseReviewsForProPage(
     reviews: Array<{ text: string; rating?: number | null }>,
     apiKey: string
 ): Promise<ProPageReviewAnalysis> {
     if (reviews.length === 0) {
-        return { reviewCategories: {}, summary: 'No reviews available yet.' };
+        return { reviewCategories: {}, summary: 'No reviews available yet.', highlights: [] };
     }
 
     const genAI = new GoogleGenerativeAI(apiKey);
@@ -158,6 +174,7 @@ export async function analyseReviewsForProPage(
         return {
             reviewCategories: { Other: reviews.map((_, i) => i) },
             summary: 'Customer reviews highlight their experience with this provider.',
+            highlights: [],
         };
     }
 
@@ -165,6 +182,7 @@ export async function analyseReviewsForProPage(
         const parsed = JSON.parse(jsonMatch[0]) as {
             reviewCategories?: Record<string, number[]>;
             summary?: string;
+            highlights?: string[];
         };
         const reviewCategories: ProPageReviewAnalysis['reviewCategories'] = {};
         if (parsed.reviewCategories && typeof parsed.reviewCategories === 'object') {
@@ -185,11 +203,15 @@ export async function analyseReviewsForProPage(
             typeof parsed.summary === 'string' && parsed.summary.trim()
                 ? parsed.summary.trim()
                 : 'Customer reviews highlight their experience with this provider.';
-        return { reviewCategories, summary };
+        const highlights = Array.isArray(parsed.highlights)
+            ? parsed.highlights.filter((h) => typeof h === 'string' && h.trim()).map((h) => h.trim().toLowerCase()).slice(0, 20)
+            : [];
+        return { reviewCategories, summary, highlights };
     } catch {
         return {
             reviewCategories: { Other: reviews.map((_, i) => i) },
             summary: 'Customer reviews highlight their experience with this provider.',
+            highlights: [],
         };
     }
 }

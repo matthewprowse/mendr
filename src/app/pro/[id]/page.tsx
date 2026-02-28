@@ -112,7 +112,7 @@ export default async function ProviderIdPage({ params }: PageProps) {
     }
 
     // 2. Try cached provider (Google place): by place_id first (stable), then by id (UUID)
-    const cacheSelect = 'place_id, name, address, rating, rating_count, phone, website, summary, services, latitude, longitude, reviews, weekday_descriptions, photos, last_updated';
+    const cacheSelect = 'place_id, name, address, rating, rating_count, phone, website, summary, services, latitude, longitude, reviews, weekday_descriptions, photos, review_highlights, last_updated';
     const looksLikeUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(decoded);
     let { data: cached } = await supabase
         .from('cached_providers')
@@ -196,6 +196,7 @@ export default async function ProviderIdPage({ params }: PageProps) {
     const geminiKey = process.env.GEMINI_API_KEY;
     let reviewsSummary: string | null = null;
     let reviewCategories: Partial<Record<ReviewCategory, number[]>> = {};
+    let reviewHighlights: string[] = [];
     let aboutCompany: string | null = null;
 
     if (reviewsToUse.length > 0 && geminiKey) {
@@ -206,6 +207,13 @@ export default async function ProviderIdPage({ params }: PageProps) {
             );
             reviewsSummary = analysis.summary;
             reviewCategories = analysis.reviewCategories;
+            reviewHighlights = analysis.highlights ?? [];
+            if (reviewHighlights.length > 0) {
+                await supabase
+                    .from('cached_providers')
+                    .update({ review_highlights: reviewHighlights })
+                    .eq('place_id', cached.place_id);
+            }
         } catch (e) {
             console.warn('Pro page: review analysis failed', (e as Error).message);
         }
@@ -252,6 +260,7 @@ export default async function ProviderIdPage({ params }: PageProps) {
         photos: (cached.photos as Array<{ name: string }>) ?? [],
         reviewsSummary: reviewsSummary ?? undefined,
         reviewCategories: Object.keys(reviewCategories).length ? reviewCategories : undefined,
+        reviewHighlights: (cached.review_highlights as string[] | null) ?? (reviewHighlights.length ? reviewHighlights : undefined),
         aboutCompany: aboutCompany ?? undefined,
         social: {} as { instagram?: string; facebook?: string },
     };
@@ -266,7 +275,6 @@ export default async function ProviderIdPage({ params }: PageProps) {
                     place_id: placeProvider.place_id,
                     latitude: placeProvider.latitude,
                     longitude: placeProvider.longitude,
-                    address: placeProvider.address,
                 }}
                 mapsUrl={mapsUrl}
                 weekdayDescriptions={weekdayDescriptionsToUse}

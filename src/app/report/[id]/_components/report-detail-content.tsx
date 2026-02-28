@@ -20,7 +20,7 @@ type ReportData = {
     customer_address: string | null;
     customer_lat: number | null;
     customer_lng: number | null;
-    messages?: { content: string; role: string; attachments?: string[] }[];
+    messages?: { content: string; role: string; attachments?: string[]; diagnosis?: Record<string, unknown> | null }[];
 };
 
 export interface ReportDetailContentProps {
@@ -94,14 +94,39 @@ export function ReportDetailContent({ reportId }: ReportDetailContentProps) {
                 return;
             }
 
-            const { data: msgs } = await supabase
+            const { data: msgsRaw } = await (supabase as any)
                 .from('messages')
-                .select('content, role, attachments')
+                .select('content, role, attachments, diagnosis')
                 .eq('conversation_id', id)
                 .order('created_at', { ascending: true });
 
+            const msgs = (msgsRaw ?? []) as Array<{
+                content: string;
+                role: string;
+                attachments?: string[];
+                diagnosis?: Record<string, unknown> | null;
+            }>;
+
+            // If the conversation-level diagnosis is missing, fall back to the most
+            // recent assistant message that carries a diagnosis object.
+            let resolvedDiagnosis = conv.diagnosis as Record<string, unknown> | null;
+            if (!resolvedDiagnosis) {
+                const lastWithDiag = [...msgs]
+                    .reverse()
+                    .find(
+                        (m) =>
+                            m.role === 'assistant' &&
+                            m.diagnosis &&
+                            typeof m.diagnosis === 'object' &&
+                            (m.diagnosis as Record<string, unknown>).diagnosis
+                    );
+                if (lastWithDiag?.diagnosis) {
+                    resolvedDiagnosis = lastWithDiag.diagnosis as Record<string, unknown>;
+                }
+            }
+
             setReportData({
-                diagnosis: conv.diagnosis as Record<string, unknown> | null,
+                diagnosis: resolvedDiagnosis,
                 image_url: conv.image_url as string | null,
                 customer_address: conv.customer_address as string | null,
                 customer_lat: conv.customer_lat as number | null,
@@ -244,11 +269,11 @@ export function ReportDetailContent({ reportId }: ReportDetailContentProps) {
                             recordFeedback={false}
                         />
                     )}
-                    {/* Map card - match chat page ProvidersMap styling/behaviour */}
+                    {/* Map - no card; distance/duration in bottom right when directions available */}
                     {(reportData.customer_address || hasLocation) && destinationForMap && (
                         <section className="w-full">
                             {mapsKey && hasLocation ? (
-                                <>
+                                <div className="relative w-full overflow-hidden rounded-xl border border-border bg-background">
                                     <ProvidersMap
                                         apiKey={mapsKey}
                                         providers={[
@@ -263,17 +288,17 @@ export function ReportDetailContent({ reportId }: ReportDetailContentProps) {
                                         ]}
                                         emergingProviders={[]}
                                         userLocation={providerLocation}
+                                        hideFloatingCard
                                     />
-                                    <div className="mt-3 flex items-center justify-between gap-4">
-                                        {reportData.customer_address ? (
-                                            <span className="text-sm text-muted-foreground min-w-0 truncate">
-                                                {reportData.customer_address}
-                                            </span>
-                                        ) : (
-                                            <span />
-                                        )}
+                                    <div className="relative z-[110] mt-2 flex items-center justify-between gap-3 rounded-lg border border-border bg-card px-3 py-2">
+                                        <span className="text-sm text-muted-foreground">
+                                            {directions?.distance_text && directions?.duration_text
+                                                ? `${directions.distance_text} · ${directions.duration_text} drive`
+                                                : directions?.distance_text || directions?.duration_text || '\u00a0'}
+                                        </span>
                                         <Button
                                             variant="secondary"
+                                            size="sm"
                                             onClick={() =>
                                                 window.open(
                                                     `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(
@@ -286,7 +311,7 @@ export function ReportDetailContent({ reportId }: ReportDetailContentProps) {
                                             Get Directions
                                         </Button>
                                     </div>
-                                </>
+                                </div>
                             ) : (
                                 <div className="relative w-full overflow-hidden rounded-lg border border-border bg-card">
                                     <div className="aspect-[16/10] min-h-[180px] w-full">
@@ -323,7 +348,7 @@ export function ReportDetailContent({ reportId }: ReportDetailContentProps) {
                                 </h2>
                                 <p className="text-sm text-muted-foreground leading-relaxed">
                                     Overview of the reported issue, required service, and
-                                    recommended next steps for the customer.
+                                    recommended next steps.
                                 </p>
                             </div>
                             <div className="grid gap-6">
@@ -346,11 +371,11 @@ export function ReportDetailContent({ reportId }: ReportDetailContentProps) {
                                     <p className="text-sm font-medium text-muted-foreground mb-2">
                                         Job Type
                                     </p>
-                                    <p className="text-sm font-medium text-foreground">
+                                    <Badge variant="secondary" className="text-sm font-medium">
                                         {typeof diag?.trade === 'string' && diag.trade !== 'N/A'
                                             ? diag.trade
                                             : 'Not specified'}
-                                    </p>
+                                    </Badge>
                                 </div>
                                 <div>
                                     <p className="text-sm font-medium text-muted-foreground mb-2">
@@ -426,18 +451,18 @@ export function ReportDetailContent({ reportId }: ReportDetailContentProps) {
                                             </p>
                                             {hasStructured && rows.length > 0 ? (
                                                 <>
-                                                    <div className="overflow-hidden rounded-lg border border-border">
+                                                    <div className="rounded-lg border border-border">
                                                         <table className="w-full text-sm">
                                                             <tbody>
                                                                 {rows.map((r, i) => (
                                                                     <tr
                                                                         key={i}
-                                                                        className="border-b border-border last:border-b-0 bg-card"
+                                                                        className="border-b border-border last:border-b-0"
                                                                     >
-                                                                        <td className="px-4 py-3 text-muted-foreground font-medium">
+                                                                        <td className="px-3 py-2.5 text-muted-foreground">
                                                                             {r.label}
                                                                         </td>
-                                                                        <td className="px-4 py-3 text-foreground text-right font-medium">
+                                                                        <td className="px-3 py-2.5 text-right text-foreground">
                                                                             {r.value}
                                                                         </td>
                                                                     </tr>
@@ -445,10 +470,10 @@ export function ReportDetailContent({ reportId }: ReportDetailContentProps) {
                                                             </tbody>
                                                         </table>
                                                     </div>
-                                                    <p className="text-xs text-muted-foreground leading-relaxed">
-                                                        Call-out based on distance from your location.
-                                                        Labour and parts are estimated ranges. Final
-                                                        price may differ after on-site inspection.
+                                                    <p className="text-xs text-muted-foreground leading-relaxed mt-2">
+                                                        Call-out based on distance. Labour and parts
+                                                        are estimated ranges. Final price may differ
+                                                        after on-site inspection.
                                                     </p>
                                                 </>
                                             ) : null}
@@ -459,8 +484,8 @@ export function ReportDetailContent({ reportId }: ReportDetailContentProps) {
                                             )}
                                             {!hasStructured && !estimatedCostText && (
                                                 <p className="text-sm text-muted-foreground">
-                                                    No price estimate available. Request a quote from
-                                                    a provider after sharing this report.
+                                                    No price estimate available. Quote can be
+                                                    provided after on-site inspection.
                                                 </p>
                                             )}
                                         </div>
@@ -474,51 +499,39 @@ export function ReportDetailContent({ reportId }: ReportDetailContentProps) {
 
                     {/* Images - main first, then additional */}
                     <section className="space-y-4">
-                        <h2 className="text-lg font-semibold text-foreground">Photos</h2>
+                        <div className="flex items-center justify-between gap-2">
+                            <h2 className="text-lg font-semibold text-foreground">Photos</h2>
+                            {allImages.length > 0 && (
+                                <Badge variant="secondary" className="text-xs font-medium">
+                                    {allImages.length} Photo{allImages.length !== 1 ? 's' : ''}
+                                </Badge>
+                            )}
+                        </div>
                         {allImages.length > 0 ? (
                             <>
                                 {mainImage && (
-                                    <div className="rounded-lg border border-border overflow-hidden relative">
+                                    <div className="rounded-lg border border-border overflow-hidden">
                                         <img
                                             src={mainImage}
-                                            alt="Main"
-                                            className="w-full object-cover max-h-[400px]"
+                                            alt=""
+                                            className="w-full object-cover max-h-[480px]"
                                         />
-                                        <Badge
-                                            variant="default"
-                                            className="absolute bottom-2 right-2"
-                                        >
-                                            {typeof diag?.trade === 'string' && diag.trade !== 'N/A'
-                                                ? diag.trade
-                                                : typeof diag?.diagnosis === 'string' && diag.diagnosis !== 'N/A'
-                                                  ? diag.diagnosis
-                                                  : 'Job'}
-                                        </Badge>
                                     </div>
                                 )}
                                 {additionalImages.length > 0 && (
                                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                                        {additionalImages.map((url, i) => {
-                                            const label = `Additional ${i + 1}`;
-                                            return (
-                                                <div
-                                                    key={i}
-                                                    className="rounded-lg border border-border overflow-hidden aspect-square relative"
-                                                >
-                                                    <img
-                                                        src={url}
-                                                        alt={label}
-                                                        className="w-full h-full object-cover"
-                                                    />
-                                                    <Badge
-                                                        variant="secondary"
-                                                        className="absolute bottom-2 right-2"
-                                                    >
-                                                        {label}
-                                                    </Badge>
-                                                </div>
-                                            );
-                                        })}
+                                        {additionalImages.map((url, i) => (
+                                            <div
+                                                key={i}
+                                                className="rounded-lg border border-border overflow-hidden aspect-square"
+                                            >
+                                                <img
+                                                    src={url}
+                                                    alt=""
+                                                    className="w-full h-full object-cover"
+                                                />
+                                            </div>
+                                        ))}
                                     </div>
                                 )}
                             </>

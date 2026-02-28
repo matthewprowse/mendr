@@ -24,7 +24,7 @@ export default function OnboardingPage() {
                 data: { user },
             } = await supabase.auth.getUser();
             if (!user) {
-                router.replace('/auth/sign-in');
+                router.replace('/auth/login');
                 return;
             }
             const { data: profile } = await supabase
@@ -56,7 +56,7 @@ export default function OnboardingPage() {
             data: { user },
         } = await supabase.auth.getUser();
         if (!user) {
-            router.replace('/auth/sign-in');
+            router.replace('/auth/login');
             return;
         }
 

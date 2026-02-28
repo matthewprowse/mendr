@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 
-function SignInContent() {
+function LogInContent() {
     const [email, setEmail] = useState('');
     const [loading, setLoading] = useState(false);
     const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(
@@ -50,7 +50,7 @@ function SignInContent() {
 
         setMessage({
             type: 'success',
-            text: 'Check your email for the sign-in link.',
+            text: 'Check your email for the log-in link.',
         });
     };
 
@@ -60,9 +60,9 @@ function SignInContent() {
             <main className="flex flex-1 flex-col items-center justify-center px-4 py-12 sm:px-6 lg:px-8">
                 <div className="w-full max-w-sm space-y-6">
                     <div className="space-y-2 text-center">
-                        <h1 className="text-2xl font-semibold tracking-tight">Sign in</h1>
+                        <h1 className="text-2xl font-semibold tracking-tight">Log in</h1>
                         <p className="text-sm text-muted-foreground">
-                            We&apos;ll send you an email with a sign-in link.
+                            We&apos;ll send you an email with a log-in link.
                         </p>
                     </div>
 
@@ -103,7 +103,7 @@ function SignInContent() {
     );
 }
 
-export default function SignInPage() {
+export default function LogInPage() {
     return (
         <Suspense
             fallback={
@@ -115,7 +115,7 @@ export default function SignInPage() {
                 </div>
             }
         >
-            <SignInContent />
+            <LogInContent />
         </Suspense>
     );
 }

@@ -16,9 +16,9 @@ import { supabase } from '@/lib/supabase';
 interface AuthPromptDialogProps {
     open: boolean;
     onOpenChange: (open: boolean) => void;
-    /** Shown inside the dialog to explain why sign-in is needed. */
+    /** Shown inside the dialog to explain why log-in is needed. */
     reason?: string;
-    /** Current page path — after sign-in the user is returned here. */
+    /** Current page path — after log-in the user is returned here. */
     returnTo?: string;
 }
 
@@ -33,7 +33,7 @@ type Step = 'prompt' | 'email' | 'sent';
 export function AuthPromptDialog({
     open,
     onOpenChange,
-    reason = 'You need to be signed in to do that.',
+    reason = 'You need to be logged in to do that.',
     returnTo,
 }: AuthPromptDialogProps) {
     const [step, setStep] = useState<Step>('prompt');
@@ -82,19 +82,19 @@ export function AuthPromptDialog({
                 {step === 'prompt' && (
                     <>
                         <DialogHeader>
-                            <DialogTitle>Sign in to continue</DialogTitle>
+                            <DialogTitle>Login or Register to Continue</DialogTitle>
                             <DialogDescription>{reason}</DialogDescription>
                         </DialogHeader>
                         <p className="text-sm text-muted-foreground">
-                            Signing in is free and takes seconds — we&apos;ll send you a link by
+                            Logging in is free and takes seconds — we&apos;ll send you a link by
                             email.
                         </p>
                         <div className="flex flex-col gap-2 pt-1">
                             <Button className="w-full" onClick={() => setStep('email')}>
-                                Sign in with Email
+                                Continue with Email Address
                             </Button>
                             <Button variant="ghost" className="w-full" onClick={() => handleClose(false)}>
-                                Maybe later
+                                Maybe Later
                             </Button>
                         </div>
                     </>
@@ -103,9 +103,9 @@ export function AuthPromptDialog({
                 {step === 'email' && (
                     <>
                         <DialogHeader>
-                            <DialogTitle>Sign in</DialogTitle>
+                            <DialogTitle>Log in</DialogTitle>
                             <DialogDescription>
-                                We&apos;ll email you a sign-in link — no password needed.
+                                We&apos;ll email you a log-in link — no password needed.
                             </DialogDescription>
                         </DialogHeader>
                         <form onSubmit={handleSendLink} className="flex flex-col gap-4">
@@ -148,9 +148,9 @@ export function AuthPromptDialog({
                         <DialogHeader>
                             <DialogTitle>Check your email</DialogTitle>
                             <DialogDescription>
-                                We&apos;ve sent a sign-in link to{' '}
+                                We&apos;ve sent a log-in link to{' '}
                                 <span className="font-medium text-foreground">{email}</span>. Click
-                                the link to sign in and you&apos;ll be brought back here
+                                the link to log in and you&apos;ll be brought back here
                                 automatically.
                             </DialogDescription>
                         </DialogHeader>

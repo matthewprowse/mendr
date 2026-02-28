@@ -1,12 +1,7 @@
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
-import {
-    ThumbUp as ThumbsUp,
-    ThumbDown as ThumbsDown,
-    Copy,
-    RotateCounterClockwise as RotateCcw,
-} from 'geist-icons';
+import { ThumbsUp, ThumbsDown, Copy, RotateCcw } from '@/lib/icons';
 import { Message } from './types';
 import { InlineDiagnosisBlock } from './inline-diagnosis-block';
 import { UnrelatedImageCard } from './unrelated-image-card';
@@ -37,6 +32,8 @@ export function ChatMessage({
         setOpenPopoverId: (id: string | null) => void;
         onRequestLocation?: (trade?: string) => void;
         onAddressSelect?: (loc: { lat: number; lng: number; address: string }) => void;
+        providerRadiusKm?: number;
+        onRadiusChange?: (km: number) => void;
     };
 }) {
     const hasDiagnosisBlock =
@@ -61,11 +58,83 @@ export function ChatMessage({
         !message.diagnosis?.rejected &&
         !!inlineDiagnosisProps?.conversationId;
 
+    const isUser = message.role === 'user';
+    const userContentBlock = (
+        <>
+            {!(
+                isUser &&
+                (message.content === '' || message.content === 'Sent images') &&
+                (message.attachments?.length ?? 0) > 0
+            ) && (
+                <div
+                    className={cn(
+                        'text-sm leading-relaxed flex flex-col gap-2',
+                        isUser
+                            ? 'bg-secondary text-secondary-foreground rounded-md px-3 py-1.5 max-w-[75%]'
+                            : 'text-foreground w-full',
+                        hasDiagnosisBlock && 'hidden'
+                    )}
+                >
+                    {message.content === '' && isLast && isResponding ? (
+                        <div className="flex items-center py-1">
+                            <Spinner className="size-4 text-muted-foreground" />
+                        </div>
+                    ) : (
+                        (() => {
+                            if (hasDiagnosisBlock) return null;
+                            let content = message.content;
+                            const thinking = message.diagnosis?.thinking?.trim();
+                            if (content && thinking && thinking.length > 15) {
+                                if (content.trim() === thinking.trim()) content = '';
+                                else if (content.includes(thinking))
+                                    content = content
+                                        .replace(thinking, '')
+                                        .replace(/\n{3,}/g, '\n\n')
+                                        .trim();
+                            }
+                            return content && content !== 'Sent images' ? (
+                                <span>{content}</span>
+                            ) : null;
+                        })()
+                    )}
+                </div>
+            )}
+            {isUser && message.attachments && message.attachments.length > 0 && (
+                <div className="flex flex-wrap gap-2 justify-end">
+                    {(message.attachments as unknown[])
+                        .map((a) =>
+                            typeof a === 'string'
+                                ? a
+                                : a && typeof a === 'object' && 'url' in a
+                                  ? (a as { url: string }).url
+                                  : null
+                        )
+                        .filter((url): url is string => !!url && typeof url === 'string')
+                        .map((url, i) => (
+                            <a
+                                key={i}
+                                href={url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="block max-w-[200px] max-h-48 rounded-lg overflow-hidden border border-border/50 hover:opacity-95 shrink-0"
+                            >
+                                <img
+                                    src={url}
+                                    alt={`Uploaded image ${i + 1}`}
+                                    className="w-full h-full max-h-48 object-cover"
+                                />
+                            </a>
+                        ))}
+                </div>
+            )}
+        </>
+    );
+
     return (
         <div
             className={cn(
                 'flex flex-col gap-4 w-full mt-3',
-                message.role === 'user' ? 'items-end' : 'items-start'
+                isUser ? 'items-end' : 'items-start'
             )}
         >
             {/* Unrelated image card */}
@@ -99,73 +168,17 @@ export function ChatMessage({
                     setOpenPopoverId={inlineDiagnosisProps.setOpenPopoverId}
                     onRequestLocation={inlineDiagnosisProps.onRequestLocation}
                     onAddressSelect={inlineDiagnosisProps.onAddressSelect}
+                    providerRadiusKm={inlineDiagnosisProps.providerRadiusKm}
+                    onRadiusChange={inlineDiagnosisProps.onRadiusChange}
                 />
             )}
-            {message.role === 'user' && message.attachments && message.attachments.length > 0 && (
-                <div className="flex flex-wrap gap-2 justify-end max-w-full">
-                    {(message.attachments as unknown[])
-                        .map((a) =>
-                            typeof a === 'string'
-                                ? a
-                                : a && typeof a === 'object' && 'url' in a
-                                  ? (a as { url: string }).url
-                                  : null
-                        )
-                        .filter((url): url is string => !!url && typeof url === 'string')
-                        .map((url, i) => (
-                            <a
-                                key={i}
-                                href={url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="block max-w-[200px] max-h-48 rounded-lg overflow-hidden border border-border/50 hover:opacity-95 shrink-0"
-                            >
-                                <img
-                                    src={url}
-                                    alt={`Uploaded image ${i + 1}`}
-                                    className="w-full h-full max-h-48 object-cover"
-                                />
-                            </a>
-                        ))}
+            {/* User messages: wrap text + attachments in one block aligned right */}
+            {isUser ? (
+                <div className="flex flex-col gap-2 items-end max-w-[85%]">
+                    {userContentBlock}
                 </div>
-            )}
-            {!(
-                message.role === 'user' &&
-                (message.content === '' || message.content === 'Sent images') &&
-                (message.attachments?.length ?? 0) > 0
-            ) && (
-                <div
-                    className={cn(
-                        'text-sm leading-relaxed flex flex-col gap-2',
-                        message.role === 'user'
-                            ? 'bg-secondary text-secondary-foreground rounded-md px-3 py-1.5 max-w-[75%]'
-                            : 'text-foreground w-full',
-                        hasDiagnosisBlock && 'hidden'
-                    )}
-                >
-                    {message.content === '' && isLast && isResponding ? (
-                        <div className="flex items-center py-1">
-                            <Spinner className="size-4 text-muted-foreground" />
-                        </div>
-                    ) : (
-                        (() => {
-                            if (hasDiagnosisBlock) return null;
-                            let content = message.content;
-                            const thinking = message.diagnosis?.thinking?.trim();
-                            if (content && thinking && thinking.length > 15) {
-                                if (content.trim() === thinking.trim()) content = '';
-                                else if (content.includes(thinking))
-                                    content = content
-                                        .replace(thinking, '')
-                                        .replace(/\n{3,}/g, '\n\n')
-                                        .trim();
-                            }
-                            return content && content !== 'Sent images' ? (
-                                <span>{content}</span>
-                            ) : null;
-                        })()
-                    )}
-                </div>
+            ) : (
+                userContentBlock
             )}
             {message.role === 'assistant' && (
                 <div className="flex items-center gap-1 -ml-2 mt-1">

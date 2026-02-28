@@ -69,6 +69,7 @@ export function ChatPageClient({ conversationId, initialTrade }: ChatPageClientP
         emergingProviders?: Provider[];
     } | null>(null);
     const [isLoadingDirectProviders, setIsLoadingDirectProviders] = useState(false);
+    const [providerRadiusKm, setProviderRadiusKm] = useState(25);
     const [footerHeight, setFooterHeight] = useState(104);
     // --- Refs ---
     const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -362,7 +363,7 @@ export function ChatPageClient({ conversationId, initialTrade }: ChatPageClientP
             msgContent: string,
             hasUpdatedDiag: boolean,
             diag: DiagnosisData,
-            opts?: { pageToken?: string; searchQuery?: string }
+            opts?: { pageToken?: string; searchQuery?: string; radiusKm?: number }
         ) => {
             const validCoords =
                 typeof lat === 'number' && typeof lng === 'number' && !isNaN(lat) && !isNaN(lng);
@@ -374,7 +375,8 @@ export function ChatPageClient({ conversationId, initialTrade }: ChatPageClientP
 
             setIsLoadingProvidersForMessage(messageIndex);
             try {
-                const body: Record<string, unknown> = { lat, lng, trade };
+                const radiusKm = opts?.radiusKm ?? providerRadiusKm;
+                const body: Record<string, unknown> = { lat, lng, trade, radius: radiusKm * 1000 };
                 if (opts?.pageToken) body.pageToken = opts.pageToken;
                 if (opts?.searchQuery) body.searchQuery = opts.searchQuery;
 
@@ -417,20 +419,21 @@ export function ChatPageClient({ conversationId, initialTrade }: ChatPageClientP
                 setIsLoadingProvidersForMessage(null);
             }
         },
-        [updateMessageProviders]
+        [updateMessageProviders, providerRadiusKm]
     );
 
     const fetchDirectProviders = useCallback(
-        async (trade: string, lat: number, lng: number, diagnosis: string) => {
+        async (trade: string, lat: number, lng: number, diagnosis: string, radiusKm?: number) => {
             const validCoords =
                 typeof lat === 'number' && typeof lng === 'number' && !isNaN(lat) && !isNaN(lng);
             if (!trade || trade === 'N/A' || !validCoords) return;
             setIsLoadingDirectProviders(true);
             try {
+                const radius = (radiusKm ?? providerRadiusKm) * 1000;
                 const res = await fetch('/api/providers', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ lat, lng, trade }),
+                    body: JSON.stringify({ lat, lng, trade, radius }),
                 });
                 const data = await res.json();
                 if (res.ok && data.providers) {
@@ -454,7 +457,7 @@ export function ChatPageClient({ conversationId, initialTrade }: ChatPageClientP
                 setIsLoadingDirectProviders(false);
             }
         },
-        []
+        [providerRadiusKm]
     );
 
     const useLocationAndFetchProviders = useCallback(
@@ -2181,7 +2184,7 @@ export function ChatPageClient({ conversationId, initialTrade }: ChatPageClientP
     if (!isLoaded && !displayImage) {
         return (
             <div className="flex flex-1 flex-col">
-                <AppHeader />
+                <AppHeader showBack />
                 <div className="flex-1 max-w-4xl mx-auto w-full px-4 py-4">
                     {initialTrade ? <ChatPageTradeSkeleton /> : <ChatPageImageSkeleton />}
                 </div>
@@ -2191,7 +2194,7 @@ export function ChatPageClient({ conversationId, initialTrade }: ChatPageClientP
 
     return (
         <div className="flex flex-col min-h-screen bg-background">
-            <AppHeader imageSrc={displayImage} showViewImage={false} />
+            <AppHeader imageSrc={displayImage} showViewImage={false} showBack />
 
             <main
                 ref={mainRef}
@@ -2199,8 +2202,14 @@ export function ChatPageClient({ conversationId, initialTrade }: ChatPageClientP
                 className="flex flex-1 min-h-0 overflow-y-auto"
             >
                 <div className="flex-1 max-w-4xl mx-auto w-full px-4 py-4 flex flex-col gap-6 min-w-0">
-                    {/* Provider results - when direct trade with providers */}
-                    {(directTradeResult || (directTradeSelection && isLoadingDirectProviders)) && (
+                    {/* Provider results - when direct trade with providers; hide if a message already shows diagnosis+providers (avoid duplicate) */}
+                    {(directTradeResult || (directTradeSelection && isLoadingDirectProviders)) &&
+                        !messages.some(
+                            (m) =>
+                                m.role === 'assistant' &&
+                                m.diagnosis &&
+                                (m.providers?.length ?? 0) > 0
+                        ) && (
                         <DiagnosisResponseCard
                                 conversationId={id}
                                 diagnosis={{
@@ -2245,6 +2254,20 @@ export function ChatPageClient({ conversationId, initialTrade }: ChatPageClientP
                                 openPopoverId={openPopoverId}
                                 setOpenPopoverId={setOpenPopoverId}
                                 hasImage={false}
+                                providerRadiusKm={providerRadiusKm}
+                                onRadiusChange={(km) => {
+                                    setProviderRadiusKm(km);
+                                    const dt = directTradeResult || directTradeSelection;
+                                    if (dt && userLocation) {
+                                        fetchDirectProviders(
+                                            dt.trade,
+                                            userLocation.lat,
+                                            userLocation.lng,
+                                            dt.diagnosis,
+                                            km
+                                        );
+                                    }
+                                }}
                             />
                     )}
 
@@ -2319,6 +2342,21 @@ export function ChatPageClient({ conversationId, initialTrade }: ChatPageClientP
                                                           msg.hasUpdatedDiagnosis ?? false,
                                                           msg.diagnosis!
                                                       );
+                                                  },
+                                                  providerRadiusKm,
+                                                  onRadiusChange: (km) => {
+                                                      setProviderRadiusKm(km);
+                                                      if (userLocation)
+                                                          fetchProvidersForMessage(
+                                                              i,
+                                                              msg.diagnosis!.trade ?? '',
+                                                              userLocation.lat,
+                                                              userLocation.lng,
+                                                              msg.content ?? '',
+                                                              msg.hasUpdatedDiagnosis ?? false,
+                                                              msg.diagnosis!,
+                                                              { radiusKm: km }
+                                                          );
                                                   },
                                               }
                                             : undefined

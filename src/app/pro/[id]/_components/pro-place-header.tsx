@@ -1,12 +1,10 @@
 'use client';
 
-import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { ArrowLeft } from '@/lib/icons';
 import { Button } from '@/components/ui/button';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { FavouriteButton } from '@/components/favourite-button';
 import { formatBusinessName } from '@/lib/utils';
-import { MoreHorizontal } from 'geist-icons';
 
 export type ProPlaceHeaderProvider = {
     name: string;
@@ -15,7 +13,6 @@ export type ProPlaceHeaderProvider = {
     place_id: string;
     latitude: number | null;
     longitude: number | null;
-    address: string | null;
     /** Slug for registered provider_profiles — used for favouriting */
     providerProfileSlug?: string | null;
 };
@@ -158,53 +155,10 @@ export function ProPlaceHeader({
 }) {
     const displayName = formatBusinessName(provider.name);
     const router = useRouter();
-    const [menuOpen, setMenuOpen] = useState(false);
-    const [reportOpen, setReportOpen] = useState(false);
-    const [reportSubject, setReportSubject] = useState('');
-    const [reportBody, setReportBody] = useState('');
-    const [reportStep, setReportStep] = useState<'form' | 'submitting' | 'success' | 'error'>('form');
-    const [reportErr, setReportErr] = useState<string | null>(null);
-
-    const handleReport = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!reportSubject.trim() || !reportBody.trim()) return;
-        setReportStep('submitting');
-        setReportErr(null);
-        try {
-            const res = await fetch('/api/report-provider', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    provider_place_id: provider.place_id,
-                    provider_name: provider.name,
-                    provider_address: provider.address ?? null,
-                    subject: reportSubject.trim(),
-                    body: reportBody.trim(),
-                }),
-            });
-            if (!res.ok) {
-                const d = await res.json().catch(() => ({}));
-                throw new Error(d.error || 'Failed to submit report');
-            }
-            setReportStep('success');
-        } catch (err) {
-            setReportErr(err instanceof Error ? err.message : 'Something went wrong');
-            setReportStep('error');
-        }
-    };
-
-    const resetReport = () => {
-        setReportSubject('');
-        setReportBody('');
-        setReportStep('form');
-        setReportErr(null);
-        setReportOpen(false);
-    };
 
     return (
-        <>
         <header className="sticky top-0 z-50 bg-background">
-            <div className="mx-auto flex h-14 max-w-4xl items-center px-4 sm:px-6 lg:px-8">
+            <div className="mx-auto flex h-16 max-w-7xl items-center px-4 sm:px-6 lg:px-8">
 
                 {/* Left — back button */}
                 <div className="flex shrink-0 items-center">
@@ -215,146 +169,27 @@ export function ProPlaceHeader({
                         aria-label="Go back"
                         onClick={() => router.back()}
                     >
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <line x1="19" y1="12" x2="5" y2="12"/>
-                            <polyline points="12 19 5 12 12 5"/>
-                        </svg>
+                        <ArrowLeft className="size-4" />
                     </Button>
                 </div>
 
-                {/* Centre — provider name */}
+                {/* Centre — Scandio: company name */}
                 <div className="min-w-0 flex-1 flex items-center justify-center px-3">
-                    <p className="truncate font-semibold text-foreground" title={displayName}>
-                        {displayName}
+                    <p className="truncate font-semibold text-foreground" title={`Scandio: ${displayName}`}>
+                        Scandio: {displayName}
                     </p>
                 </div>
 
-                {/* Right — heart + ellipsis */}
-                <div className="flex shrink-0 items-center gap-1">
+                {/* Right — heart */}
+                <div className="flex shrink-0 items-center">
                     <FavouriteButton
                         placeId={provider.place_id}
                         providerProfileSlug={provider.providerProfileSlug}
                         providerName={displayName}
                         variant="icon"
                     />
-                    <Popover open={menuOpen} onOpenChange={setMenuOpen}>
-                        <PopoverTrigger asChild>
-                            <Button
-                                variant="ghost"
-                                size="icon"
-                                className="text-muted-foreground hover:text-foreground"
-                                aria-label="More options"
-                            >
-                                <MoreHorizontal size={18} />
-                            </Button>
-                        </PopoverTrigger>
-                        <PopoverContent align="end" sideOffset={4} className="w-52 p-2">
-                            <button
-                                type="button"
-                                className="w-full rounded-md px-3 py-2 text-left text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                                onClick={() => { setMenuOpen(false); setReportOpen(true); }}
-                            >
-                                Report provider
-                            </button>
-                            <button
-                                type="button"
-                                className="w-full rounded-md px-3 py-2 text-left text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                                onClick={() => { setMenuOpen(false); }}
-                            >
-                                Don&apos;t show in my results
-                            </button>
-                        </PopoverContent>
-                    </Popover>
                 </div>
             </div>
         </header>
-
-        {/* Report dialog */}
-        {reportOpen && (
-            <div className="fixed inset-0 z-[60] flex items-end justify-center sm:items-center p-4 bg-black/40" onClick={resetReport}>
-                <div
-                    className="w-full max-w-md rounded-xl border border-border bg-background p-5 shadow-lg"
-                    onClick={(e) => e.stopPropagation()}
-                >
-                    {reportStep === 'success' ? (
-                        <div className="space-y-4 text-center">
-                            <p className="text-base font-semibold text-foreground">Report submitted</p>
-                            <p className="text-sm text-muted-foreground">
-                                Thank you — we&apos;ll review your report for{' '}
-                                <span className="font-medium text-foreground">{displayName}</span>.
-                            </p>
-                            <Button className="w-full" onClick={resetReport}>Done</Button>
-                        </div>
-                    ) : (
-                        <form onSubmit={handleReport} className="space-y-4">
-                            <div>
-                                <p className="text-base font-semibold text-foreground">Report provider</p>
-                                <p className="mt-0.5 text-sm text-muted-foreground">
-                                    Help us keep the directory accurate and trustworthy.
-                                </p>
-                            </div>
-                            <div className="space-y-1.5">
-                                <label className="text-sm font-medium text-foreground" htmlFor="report-subject">
-                                    Reason <span className="text-destructive">*</span>
-                                </label>
-                                <select
-                                    id="report-subject"
-                                    required
-                                    value={reportSubject}
-                                    onChange={(e) => setReportSubject(e.target.value)}
-                                    disabled={reportStep === 'submitting'}
-                                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
-                                >
-                                    <option value="">Select a reason…</option>
-                                    <option value="Scam or fraud">Scam or fraud</option>
-                                    <option value="Incorrect listing">Incorrect listing</option>
-                                    <option value="Out of business">Out of business</option>
-                                    <option value="Offensive content">Offensive content</option>
-                                    <option value="Duplicate listing">Duplicate listing</option>
-                                    <option value="Other">Other</option>
-                                </select>
-                            </div>
-                            <div className="space-y-1.5">
-                                <label className="text-sm font-medium text-foreground" htmlFor="report-body">
-                                    Details <span className="text-destructive">*</span>
-                                </label>
-                                <textarea
-                                    id="report-body"
-                                    required
-                                    rows={3}
-                                    placeholder="Tell us what happened…"
-                                    value={reportBody}
-                                    onChange={(e) => setReportBody(e.target.value)}
-                                    disabled={reportStep === 'submitting'}
-                                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50 resize-none"
-                                />
-                            </div>
-                            {reportStep === 'error' && reportErr && (
-                                <p className="text-sm text-destructive">{reportErr}</p>
-                            )}
-                            <div className="flex gap-2">
-                                <Button
-                                    type="button"
-                                    variant="outline"
-                                    className="flex-1"
-                                    onClick={resetReport}
-                                    disabled={reportStep === 'submitting'}
-                                >
-                                    Cancel
-                                </Button>
-                                <Button
-                                    type="submit"
-                                    className="flex-1"
-                                    disabled={reportStep === 'submitting' || !reportSubject || !reportBody.trim()}
-                                >
-                                    {reportStep === 'submitting' ? 'Submitting…' : 'Submit report'}
-                                </Button>
-                            </div>
-                        </form>
-                    )}
-                </div>
-            </div>
-        )}
-        </>
     );
 }

@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { ClockRewind, SettingsGear, Logout, User } from 'geist-icons';
+import { Separator } from '@/components/ui/separator';
 import { useAuth } from '@/context/auth-context';
 
 export function UserAvatarMenu() {
@@ -41,61 +41,57 @@ export function UserAvatarMenu() {
                     className="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     aria-label="Account menu"
                 >
-                    <Avatar className="cursor-pointer hover:opacity-80 transition-opacity">
-                        <AvatarFallback className="bg-foreground text-background text-xs font-semibold">
-                            {initials ?? <User size={14} />}
+                    <Avatar className="h-9 w-9 cursor-pointer hover:opacity-80 transition-opacity">
+                        <AvatarFallback className="h-9 w-9 bg-secondary text-secondary-foreground text-xs font-semibold">
+                            {initials ?? ''}
                         </AvatarFallback>
                     </Avatar>
                 </button>
             </PopoverTrigger>
-            <PopoverContent align="end" sideOffset={8} className="w-52 p-2">
-                {user?.email && (
-                    <>
-                        <div className="px-2 py-1.5">
-                            <p className="text-xs text-muted-foreground truncate">{user.email}</p>
-                        </div>
-                        <div className="my-1 h-px bg-border" />
-                    </>
-                )}
-                <Link href="/dashboard/history" onClick={() => setOpen(false)}>
+            <PopoverContent
+                align="end"
+                sideOffset={8}
+                side="bottom"
+                className="w-56 p-3 rounded-md shadow-xl border-input"
+            >
+                <div className="flex flex-col gap-1">
+                    {user?.email && (
+                        <>
+                            <p className="text-xs text-muted-foreground font-semibold mb-1 truncate">
+                                {user.email}
+                            </p>
+                            <Separator className="my-2" />
+                        </>
+                    )}
+
                     <Button
                         variant="ghost"
-                        className="w-full justify-start h-9 gap-2.5 text-sm font-normal"
+                        className="justify-start w-full"
+                        asChild
                     >
-                        <ClockRewind size={15} className="text-muted-foreground" />
-                        History
+                        <Link href="/auth/login" onClick={() => setOpen(false)}>
+                            Settings
+                        </Link>
                     </Button>
-                </Link>
-                <Link href="/auth/sign-in" onClick={() => setOpen(false)}>
-                    <Button
-                        variant="ghost"
-                        className="w-full justify-start h-9 gap-2.5 text-sm font-normal"
-                    >
-                        <SettingsGear size={15} className="text-muted-foreground" />
-                        Settings
-                    </Button>
-                </Link>
-                <div className="my-1 h-px bg-border" />
-                {user ? (
-                    <Button
-                        variant="ghost"
-                        className="w-full justify-start h-9 gap-2.5 text-sm font-normal text-destructive hover:text-destructive"
-                        onClick={handleSignOut}
-                    >
-                        <Logout size={15} />
-                        Log out
-                    </Button>
-                ) : (
-                    <Link href="/auth/sign-in" onClick={() => setOpen(false)}>
+
+                    <Separator className="my-2" />
+
+                    {user ? (
                         <Button
                             variant="ghost"
-                            className="w-full justify-start h-9 gap-2.5 text-sm font-normal"
+                            className="justify-start w-full text-destructive hover:text-destructive hover:bg-destructive/10"
+                            onClick={handleSignOut}
                         >
-                            <User size={15} className="text-muted-foreground" />
-                            Sign in
+                            Log out
                         </Button>
-                    </Link>
-                )}
+                    ) : (
+                        <Button variant="ghost" className="justify-start w-full" asChild>
+                            <Link href="/auth/login" onClick={() => setOpen(false)}>
+                                Login
+                            </Link>
+                        </Button>
+                    )}
+                </div>
             </PopoverContent>
         </Popover>
     );

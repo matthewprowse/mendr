@@ -55,6 +55,8 @@ export function DiagnosisResponseCard({
     openPopoverId,
     setOpenPopoverId,
     hasImage = true,
+    providerRadiusKm = 25,
+    onRadiusChange,
 }: {
     conversationId?: string;
     diagnosis: DiagnosisData;
@@ -71,6 +73,8 @@ export function DiagnosisResponseCard({
     openPopoverId: string | null;
     setOpenPopoverId: (id: string | null) => void;
     hasImage?: boolean;
+    providerRadiusKm?: number;
+    onRadiusChange?: (km: number) => void;
 }) {
     const [addressPopoverOpen, setAddressPopoverOpen] = useState(false);
     const [addressQuery, setAddressQuery] = useState('');
@@ -166,52 +170,71 @@ export function DiagnosisResponseCard({
                 <div className="flex flex-col gap-3">
                     <div className="flex flex-col gap-2">
                         {hasLocation && userLocation?.address ? (
-                            <div className="flex items-center justify-between gap-2">
-                                <span className="text-sm font-medium truncate min-w-0">
-                                    {userLocation.address}
-                                </span>
-                                <Popover
-                                    open={addressPopoverOpen}
-                                    onOpenChange={setAddressPopoverOpen}
-                                >
-                                    <PopoverTrigger asChild>
-                                        <Button variant="outline" className="shrink-0">
-                                            Change Location
-                                        </Button>
-                                    </PopoverTrigger>
-                                    <PopoverContent className="w-96" align="start">
-                                        <div className="flex flex-col gap-3">
-                                            <p className="text-sm font-medium">
-                                                Search Address (Western Cape only)
-                                            </p>
-                                            <Input
-                                                placeholder="Enter address in Western Cape, South Africa"
-                                                value={addressQuery}
-                                                onChange={(e) => {
-                                                    setAddressQuery(e.target.value);
-                                                    setAddressError(null);
-                                                }}
-                                                onKeyDown={(e) =>
-                                                    e.key === 'Enter' && handleAddressSearch()
-                                                }
-                                            />
-                                            {addressError && (
-                                                <p className="text-xs text-destructive">
-                                                    {addressError}
-                                                </p>
-                                            )}
-                                            <Button
-                                                onClick={handleAddressSearch}
-                                                disabled={addressSearching || !addressQuery.trim()}
-                                            >
-                                                {addressSearching ? 'Searching…' : 'Search'}
+                            <>
+                                <div className="flex items-center gap-2 min-w-0">
+                                    <span className="text-sm font-medium truncate min-w-0">
+                                        {userLocation.address}
+                                    </span>
+                                    <Popover
+                                        open={addressPopoverOpen}
+                                        onOpenChange={setAddressPopoverOpen}
+                                    >
+                                        <PopoverTrigger asChild>
+                                            <Button variant="outline" size="sm" className="shrink-0">
+                                                Change Location
                                             </Button>
-                                        </div>
-                                    </PopoverContent>
-                                </Popover>
-                            </div>
-                        ) : (
-                            onRequestLocation && (
+                                        </PopoverTrigger>
+                                        <PopoverContent className="w-96" align="start">
+                                            <div className="flex flex-col gap-3">
+                                                <p className="text-sm font-medium">
+                                                    Search Address (Western Cape only)
+                                                </p>
+                                                <Input
+                                                    placeholder="Enter address in Western Cape, South Africa"
+                                                    value={addressQuery}
+                                                    onChange={(e) => {
+                                                        setAddressQuery(e.target.value);
+                                                        setAddressError(null);
+                                                    }}
+                                                    onKeyDown={(e) =>
+                                                        e.key === 'Enter' && handleAddressSearch()
+                                                    }
+                                                />
+                                                {addressError && (
+                                                    <p className="text-xs text-destructive">
+                                                        {addressError}
+                                                    </p>
+                                                )}
+                                                <Button
+                                                    onClick={handleAddressSearch}
+                                                    disabled={addressSearching || !addressQuery.trim()}
+                                                >
+                                                    {addressSearching ? 'Searching…' : 'Search'}
+                                                </Button>
+                                            </div>
+                                        </PopoverContent>
+                                    </Popover>
+                                </div>
+                                {onRadiusChange && (
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                        <span className="text-xs text-muted-foreground">Search within</span>
+                                        {[10, 25, 50].map((km) => (
+                                            <Button
+                                                key={km}
+                                                variant={providerRadiusKm === km ? 'secondary' : 'ghost'}
+                                                size="sm"
+                                                className="h-7 px-2 text-xs"
+                                                onClick={() => onRadiusChange(km)}
+                                                disabled={isLoadingProviders}
+                                            >
+                                                {km} km
+                                            </Button>
+                                        ))}
+                                    </div>
+                                )}
+                            </>
+                        ) : null}
+                        {!hasLocation && onRequestLocation && (
                                 <div className="flex flex-wrap items-center gap-2">
                                     <Button onClick={() => onRequestLocation(trade)}>
                                         Use my location
@@ -225,9 +248,9 @@ export function DiagnosisResponseCard({
                                         </PopoverTrigger>
                                         <PopoverContent className="w-80" align="start">
                                             <div className="flex flex-col gap-3">
-                                                <p className="text-sm font-medium">
-                                                    Search Address (Western Cape only)
-                                                </p>
+                                            <p className="text-sm font-medium">
+                                                Search Address (Western Cape only)
+                                            </p>
                                                 <Input
                                                     placeholder="Enter address in Western Cape, South Africa"
                                                     value={addressQuery}
@@ -258,7 +281,6 @@ export function DiagnosisResponseCard({
                                         </PopoverContent>
                                     </Popover>
                                 </div>
-                            )
                         )}
                     </div>
                     {hasLocation &&

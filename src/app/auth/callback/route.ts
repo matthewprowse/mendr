@@ -15,15 +15,15 @@ export async function GET(request: Request) {
     if (code) {
         const { error } = await supabase.auth.exchangeCodeForSession(code);
         if (error) {
-            return NextResponse.redirect(`${origin}/auth/sign-in?error=auth_callback_error`);
+            return NextResponse.redirect(`${origin}/auth/login?error=auth_callback_error`);
         }
     } else if (token_hash && type) {
         const { error } = await supabase.auth.verifyOtp({ token_hash, type });
         if (error) {
-            return NextResponse.redirect(`${origin}/auth/sign-in?error=auth_callback_error`);
+            return NextResponse.redirect(`${origin}/auth/login?error=auth_callback_error`);
         }
     } else {
-        return NextResponse.redirect(`${origin}/auth/sign-in?error=missing_params`);
+        return NextResponse.redirect(`${origin}/auth/login?error=missing_params`);
     }
 
     const metadata = await getClientMetadata({ headers: request.headers });

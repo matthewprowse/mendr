@@ -2,7 +2,9 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { setOptions, importLibrary } from '@googlemaps/js-api-loader';
-import { formatBusinessName, toWhatsAppPhone, isWhatsAppCapablePhone } from '@/lib/utils';
+import { ArrowLeft, ArrowRight, StarFill } from '@/lib/icons';
+import { formatBusinessName } from '@/lib/utils';
+import { Skeleton } from '@/components/ui/skeleton';
 import type { Provider } from './types';
 
 type ProvidersMapProps = {
@@ -11,6 +13,8 @@ type ProvidersMapProps = {
     emergingProviders?: Provider[];
     userLocation: { lat: number; lng: number; address?: string } | null;
     conversationId?: string;
+    /** When true, hide the floating card and mobile strip (e.g. report page shows its own distance overlay). */
+    hideFloatingCard?: boolean;
 };
 
 function getDistanceText(
@@ -32,9 +36,15 @@ function getDistanceText(
     return `${(R * c).toFixed(1)} km`;
 }
 
+function formatDuration(text: string): string {
+    return text.replace(/\bmins?\b/gi, 'Minutes').replace(/\bhrs?\b/gi, 'Hours');
+}
+
 // Standard teardrop/pin SVG path for provider markers
 const PIN_PATH =
     'M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z';
+
+let mapsOptionsSet = false;
 
 export function ProvidersMap({
     apiKey,
@@ -42,10 +52,11 @@ export function ProvidersMap({
     emergingProviders = [],
     userLocation,
     conversationId,
+    hideFloatingCard = false,
 }: ProvidersMapProps) {
     const containerRef = useRef<HTMLDivElement>(null);
     const mapRef = useRef<google.maps.Map | null>(null);
-    const markersRef = useRef<google.maps.Marker[]>([]);
+    const markersRef = useRef<google.maps.marker.AdvancedMarkerElement[]>([]);
     const directionsRendererRef = useRef<google.maps.DirectionsRenderer | null>(null);
     const directionsServiceRef = useRef<google.maps.DirectionsService | null>(null);
 
@@ -94,7 +105,6 @@ export function ProvidersMap({
                 (result, status) => {
                     if (status === google.maps.DirectionsStatus.OK && result) {
                         renderer.setDirections(result);
-                        // Extract live travel duration from the first leg
                         const duration = result.routes?.[0]?.legs?.[0]?.duration?.text ?? '';
                         setLiveDuration(duration);
                     } else {
@@ -108,48 +118,49 @@ export function ProvidersMap({
                 }
             );
         },
-        [] // stable — reads everything from refs
+        []
     );
+
+    const makeMarkerContent = (color: string, scale: number): Element => {
+        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+        svg.setAttribute('viewBox', '0 0 24 24');
+        svg.setAttribute('width', `${24 * scale}`);
+        svg.setAttribute('height', `${24 * scale}`);
+        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        path.setAttribute('d', PIN_PATH);
+        path.setAttribute('fill', color);
+        path.setAttribute('stroke', '#ffffff');
+        path.setAttribute('stroke-width', scale >= 1.5 ? '0.8' : '0.5');
+        svg.appendChild(path);
+        return svg;
+    };
 
     const updateMarkerIcons = useCallback((index: number) => {
         const hasUserMarker = userLocationRef.current != null;
         markersRef.current.forEach((marker, i) => {
-            if (hasUserMarker && i === 0) return; // skip user location marker
+            if (hasUserMarker && i === 0) return;
             const providerIndex = hasUserMarker ? i - 1 : i;
             const isActive = providerIndex === index;
-            if (isActive) {
-                // Standard Google Maps destination pin for the active provider
-                marker.setIcon({
-                    path: PIN_PATH,
-                    fillColor: '#EA4335',
-                    fillOpacity: 1,
-                    strokeColor: '#ffffff',
-                    strokeWeight: 1.5,
-                    scale: 1.8,
-                    anchor: new google.maps.Point(12, 22),
-                });
-            } else {
-                marker.setIcon({
-                    path: PIN_PATH,
-                    fillColor: '#64748b',
-                    fillOpacity: 1,
-                    strokeColor: '#ffffff',
-                    strokeWeight: 1,
-                    scale: 1.2,
-                    anchor: new google.maps.Point(12, 22),
-                });
-            }
-            marker.setZIndex(isActive ? 10 : 1);
+            marker.content = makeMarkerContent(
+                isActive ? '#EA4335' : '#64748b',
+                isActive ? 1.8 : 1.2
+            );
+            marker.zIndex = isActive ? 10 : 1;
         });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     // Initialise map once
     useEffect(() => {
         if (!apiKey || !containerRef.current) return;
 
-        setOptions({ key: apiKey, v: 'weekly' });
+        if (!mapsOptionsSet) {
+            setOptions({ key: apiKey, v: 'weekly' });
+            mapsOptionsSet = true;
+        }
 
-        Promise.all([importLibrary('maps'), importLibrary('routes')])
+        Promise.all([importLibrary('maps'), importLibrary('routes'), importLibrary('marker')])
             .then(() => {
                 if (!containerRef.current) return;
                 const center = userLocation
@@ -165,6 +176,7 @@ export function ProvidersMap({
                     scaleControl: false,
                     streetViewControl: false,
                     fullscreenControl: false,
+                    mapId: 'providers-map',
                 });
 
                 mapRef.current = map;
@@ -199,51 +211,37 @@ export function ProvidersMap({
         const map = mapRef.current;
         if (!map) return;
 
-        markersRef.current.forEach((m) => m.setMap(null));
+        markersRef.current.forEach((m) => { m.map = null; });
         markersRef.current = [];
 
         const bounds = new google.maps.LatLngBounds();
 
         if (userLocation) {
             bounds.extend({ lat: userLocation.lat, lng: userLocation.lng });
-            markersRef.current.push(
-                new google.maps.Marker({
-                    map,
-                    position: { lat: userLocation.lat, lng: userLocation.lng },
-                    title: 'Your location',
-                    zIndex: 20,
-                    icon: {
-                        path: google.maps.SymbolPath.CIRCLE,
-                        scale: 10,
-                        fillColor: '#3b82f6',
-                        fillOpacity: 1,
-                        strokeColor: '#fff',
-                        strokeWeight: 2,
-                    },
-                })
-            );
+            const userDot = document.createElement('div');
+            userDot.style.cssText =
+                'width:20px;height:20px;border-radius:50%;background:#3b82f6;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.3)';
+            const userMarker = new google.maps.marker.AdvancedMarkerElement({
+                map,
+                position: { lat: userLocation.lat, lng: userLocation.lng },
+                title: 'Your location',
+                content: userDot,
+                zIndex: 20,
+            });
+            markersRef.current.push(userMarker);
         }
 
         validProviders.forEach((provider, i) => {
             const pos = { lat: provider.latitude!, lng: provider.longitude! };
             bounds.extend(pos);
             const isFirst = i === 0;
-            const marker = new google.maps.Marker({
+            const marker = new google.maps.marker.AdvancedMarkerElement({
                 map,
                 position: pos,
                 title: provider.name,
-                icon: {
-                    path: PIN_PATH,
-                    fillColor: isFirst ? '#EA4335' : '#64748b',
-                    fillOpacity: 1,
-                    strokeColor: '#ffffff',
-                    strokeWeight: isFirst ? 1.5 : 1,
-                    scale: isFirst ? 1.8 : 1.2,
-                    anchor: new google.maps.Point(12, 22),
-                },
+                content: makeMarkerContent(isFirst ? '#EA4335' : '#64748b', isFirst ? 1.8 : 1.2),
                 zIndex: isFirst ? 10 : 1,
             });
-            // Clicking a pin jumps the card to that provider
             marker.addListener('click', () => setActiveIndex(i));
             markersRef.current.push(marker);
         });
@@ -296,28 +294,6 @@ export function ProvidersMap({
             ? `${base}/pro/${encodeURIComponent(activeProvider.place_id ?? activeProvider.id ?? '')}`
             : '';
 
-    const directionsUrl = activeProvider
-        ? userLocation
-            ? `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(`${userLocation.lat},${userLocation.lng}`)}&destination=${encodeURIComponent(`${activeProvider.latitude},${activeProvider.longitude}`)}&travelmode=driving`
-            : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${activeProvider.latitude},${activeProvider.longitude}`)}`
-        : '';
-
-    const rawPhone = activeProvider?.phoneInternational ?? activeProvider?.phone;
-    const waPhone = rawPhone ? toWhatsAppPhone(rawPhone) : null;
-    const waCapable = rawPhone ? isWhatsAppCapablePhone(rawPhone) : false;
-    const phoneUrl = activeProvider?.phone ? `tel:${activeProvider.phone}` : null;
-
-    // First photo for the banner
-    const bannerPhoto = activeProvider?.photos?.[0];
-    const bannerUrl = bannerPhoto
-        ? `/api/place-photo?name=${encodeURIComponent(bannerPhoto.name)}&maxWidthPx=480`
-        : null;
-
-    // Second photo for the avatar (or first if only one)
-    const avatarPhoto = activeProvider?.photos?.[1] ?? activeProvider?.photos?.[0];
-    const avatarUrl = avatarPhoto
-        ? `/api/place-photo?name=${encodeURIComponent(avatarPhoto.name)}&maxWidthPx=80`
-        : null;
 
     if (error) {
         return (
@@ -327,123 +303,100 @@ export function ProvidersMap({
         );
     }
 
-    // Nav controls — shared between mobile and desktop
-    const navControls = total > 1 ? (
-        <div className="flex items-center justify-between border-t border-border pt-3 mt-1">
-            <button
-                onClick={() => goTo(activeIndex - 1)}
-                className="flex h-7 w-7 items-center justify-center rounded-md border border-input bg-background text-foreground hover:bg-muted transition-colors"
-                aria-label="Previous provider"
-            >
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <line x1="19" y1="12" x2="5" y2="12"/>
-                    <polyline points="12 19 5 12 12 5"/>
-                </svg>
-            </button>
-            <div className="flex items-center gap-1.5">
-                {Array.from({ length: total }).map((_, i) => (
-                    <button
-                        key={i}
-                        onClick={() => goTo(i)}
-                        aria-label={`Go to provider ${i + 1}`}
-                        className={`h-1.5 w-1.5 rounded-full transition-colors duration-200 ${
-                            i === activeIndex
-                                ? 'bg-foreground'
-                                : 'bg-muted-foreground/30 hover:bg-muted-foreground/50'
-                        }`}
-                    />
-                ))}
-            </div>
-            <button
-                onClick={() => goTo(activeIndex + 1)}
-                className="flex h-7 w-7 items-center justify-center rounded-md border border-input bg-background text-foreground hover:bg-muted transition-colors"
-                aria-label="Next provider"
-            >
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <line x1="5" y1="12" x2="19" y2="12"/>
-                    <polyline points="12 5 19 12 12 19"/>
-                </svg>
-            </button>
-        </div>
-    ) : null;
-
-    // Shared provider info content (used in both mobile strip and desktop overlay)
-    const providerInfoContent = activeProvider ? (
-        <div className="flex flex-col gap-3">
-            {/* Name + rating row */}
-            <div className="flex flex-col gap-0.5 min-w-0">
-                {providerUrl ? (
-                    <a
-                        href={providerUrl}
-                        rel="noopener noreferrer"
-                        className="text-sm font-semibold leading-snug text-foreground hover:underline truncate"
-                        title={displayName}
-                    >
-                        {displayName}
-                    </a>
-                ) : (
-                    <span className="text-sm font-semibold leading-snug text-foreground truncate" title={displayName}>
-                        {displayName}
-                    </span>
-                )}
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    {activeProvider.rating != null && (
-                        <span className="flex items-center gap-0.5">
-                            <span className="text-yellow-500">★</span>
-                            <span className="font-medium text-foreground">{activeProvider.rating.toFixed(1)}</span>
-                            {activeProvider.ratingCount != null && (
-                                <span>({activeProvider.ratingCount})</span>
-                            )}
+    const providerInfoBlock = activeProvider && (
+        <>
+            <div className="flex items-start justify-between gap-2 min-w-0">
+                <div className="flex-1 min-w-0">
+                    {providerUrl ? (
+                        <a
+                            href={providerUrl}
+                            rel="noopener noreferrer"
+                            className="font-semibold text-base leading-snug text-foreground hover:underline truncate block"
+                            title={displayName}
+                        >
+                            {displayName}
+                        </a>
+                    ) : (
+                        <span className="font-semibold text-base leading-snug text-foreground truncate block" title={displayName}>
+                            {displayName}
                         </span>
                     )}
-                    {(distanceText || liveDuration || durationText) && (
-                        <>
-                            {activeProvider.rating != null && <span>·</span>}
-                            <span>{distanceText}</span>
-                            {(liveDuration || durationText) && distanceText && <span>·</span>}
-                            {(liveDuration || durationText) && <span>{liveDuration || durationText}</span>}
-                        </>
-                    )}
+
+                    <div className="flex items-center gap-1.5 flex-wrap mt-1 text-xs">
+                        {activeProvider.rating != null && (
+                            <span className="flex items-center gap-0.5">
+                                <StarFill className="size-4 text-yellow-500 fill-yellow-500 shrink-0" />
+                                <span className="font-medium text-foreground">{activeProvider.rating.toFixed(1)}</span>
+                                {activeProvider.ratingCount != null && (
+                                    <span className="text-muted-foreground">({activeProvider.ratingCount} Reviews)</span>
+                                )}
+                            </span>
+                        )}
+                        {(distanceText || liveDuration || durationText) && (
+                            <>
+                                {activeProvider.rating != null && <span className="text-muted-foreground">·</span>}
+                                {distanceText && <span className="text-muted-foreground">{distanceText}</span>}
+                                {(liveDuration || durationText) && distanceText && <span className="text-muted-foreground">·</span>}
+                                {(liveDuration || durationText) && (
+                                    <span className="text-muted-foreground">
+                                        {formatDuration(liveDuration || durationText)}
+                                    </span>
+                                )}
+                            </>
+                        )}
+                    </div>
                 </div>
+
+                {total > 1 && (
+                    <div className="flex items-center gap-1 shrink-0 mt-0.5">
+                        <button
+                            onClick={() => goTo(activeIndex - 1)}
+                            className="flex size-7 items-center justify-center rounded-md bg-secondary text-secondary-foreground transition-colors hover:bg-secondary/80 hover:text-foreground"
+                            aria-label="Previous provider"
+                        >
+                            <ArrowLeft className="size-3.5" />
+                        </button>
+                        <button
+                            onClick={() => goTo(activeIndex + 1)}
+                            className="flex size-7 items-center justify-center rounded-md bg-secondary text-secondary-foreground transition-colors hover:bg-secondary/80 hover:text-foreground"
+                            aria-label="Next provider"
+                        >
+                            <ArrowRight className="size-3.5" />
+                        </button>
+                    </div>
+                )}
             </div>
 
-            {/* Action buttons */}
-            <div className="flex gap-2">
-                {(waCapable && waPhone) ? (
-                    <a
-                        href={`https://wa.me/${waPhone}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex-1 inline-flex items-center justify-center rounded-md bg-foreground px-3 h-8 text-xs font-semibold text-background hover:bg-foreground/90 transition-colors"
-                    >
-                        Contact
-                    </a>
-                ) : phoneUrl ? (
-                    <a
-                        href={phoneUrl}
-                        className="flex-1 inline-flex items-center justify-center rounded-md bg-foreground px-3 h-8 text-xs font-semibold text-background hover:bg-foreground/90 transition-colors"
-                    >
-                        Contact
-                    </a>
-                ) : null}
+            <div className="flex items-center justify-between gap-2 text-sm">
+                {total > 1 ? (
+                    <div className="flex items-center gap-1.5">
+                        {validProviders.map((_, i) => (
+                            <button
+                                key={i}
+                                onClick={() => goTo(i)}
+                                aria-label={`Go to provider ${i + 1}`}
+                                className={`size-1.5 rounded-full transition-colors ${i === activeIndex ? 'bg-foreground' : 'bg-muted-foreground/40 hover:bg-muted-foreground/60'}`}
+                            />
+                        ))}
+                    </div>
+                ) : <div />}
+
                 {providerUrl && (
                     <a
                         href={providerUrl}
                         rel="noopener noreferrer"
-                        className="flex-1 inline-flex items-center justify-center rounded-md border border-input bg-background px-3 h-8 text-xs font-medium text-foreground hover:bg-muted transition-colors"
+                        className="inline-flex items-center justify-center rounded-md bg-secondary text-secondary-foreground px-3 h-8 text-sm font-medium hover:bg-secondary/80 transition-colors shrink-0"
                     >
-                        View Profile
+                        View Account
                     </a>
                 )}
             </div>
-
-            {navControls}
-        </div>
-    ) : null;
+        </>
+    );
 
     return (
-        <div className="w-full overflow-hidden rounded-lg border border-border bg-background">
-            {/* Map + desktop overlay in a single relative container */}
+        <div className="w-full overflow-hidden rounded-xl border border-border bg-background">
+            {/* Map */}
             <div className="relative aspect-[4/3] sm:aspect-auto sm:h-[460px]">
                 {loading && (
                     <div className="absolute inset-0 z-10 flex items-center justify-center bg-muted/50">
@@ -452,20 +405,46 @@ export function ProvidersMap({
                 )}
                 <div ref={containerRef} className="h-full w-full" />
 
-                {/* Desktop-only overlay card — bottom right */}
-                {!loading && activeProvider && (
-                    <div className="hidden sm:block absolute bottom-3 right-3 z-10 w-60">
-                        <div className="rounded-lg border border-border bg-background/95 backdrop-blur-sm shadow-md p-3">
-                            {providerInfoContent}
+                {/* Desktop only: skeleton for floating card while map loads */}
+                {!hideFloatingCard && loading && (
+                    <div className="hidden sm:flex absolute bottom-3 right-3 left-1/2 z-10 min-w-0 justify-end">
+                        <div className="w-full max-w-full rounded-xl border border-border bg-card overflow-hidden shadow-sm">
+                            <div className="p-3 flex flex-col gap-2">
+                                <div className="flex flex-col gap-1.5">
+                                    <Skeleton className="h-4 w-[80%]" />
+                                    <Skeleton className="h-3 w-[60%]" />
+                                </div>
+                                <Skeleton className="h-8 w-24 rounded-md" />
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Desktop only: floating card (no banner) */}
+                {!hideFloatingCard && !loading && activeProvider && (
+                    <div className="hidden sm:flex absolute bottom-3 right-3 left-1/2 z-10 min-w-0 justify-end">
+                        <div className="w-full max-w-full rounded-xl border border-border bg-card text-card-foreground shadow-sm overflow-hidden">
+                            <div className="p-3 flex flex-col gap-2">
+                                {providerInfoBlock}
+                            </div>
                         </div>
                     </div>
                 )}
             </div>
 
-            {/* Mobile-only info strip — below the map */}
-            {!loading && activeProvider && (
-                <div className="sm:hidden border-t border-border bg-background p-3">
-                    {providerInfoContent}
+            {/* Mobile only: skeleton for provider strip while loading */}
+            {!hideFloatingCard && loading && (
+                <div className="sm:hidden border-t border-border bg-card p-3 flex flex-col gap-2">
+                    <Skeleton className="h-4 w-[85%]" />
+                    <Skeleton className="h-3 w-[60%]" />
+                    <Skeleton className="h-8 w-28 rounded-md mt-1" />
+                </div>
+            )}
+
+            {/* Mobile only: provider info below the map, no banner */}
+            {!hideFloatingCard && !loading && activeProvider && (
+                <div className="sm:hidden border-t border-border bg-card text-card-foreground p-3 flex flex-col gap-2">
+                    {providerInfoBlock}
                 </div>
             )}
         </div>

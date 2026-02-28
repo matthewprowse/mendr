@@ -5,7 +5,7 @@ import NextImage from 'next/image';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Buildings } from 'geist-icons';
+import { Buildings } from '@/lib/icons';
 import { PerformanceRadar } from './performance-radar';
 
 type Provider = {
@@ -41,9 +41,9 @@ export function ProviderPageClient({ provider }: { provider: Provider }) {
 
     const metrics = [
         { label: 'Punctuality', value: Number(provider.metrics_punctuality) || 0 },
-        { label: 'Tidiness', value: Number(provider.metrics_tidiness) || 0 },
+        { label: 'Cleanliness', value: Number(provider.metrics_tidiness) || 0 },
         { label: 'Professionalism', value: Number(provider.metrics_professionalism) || 0 },
-        { label: 'Cleanup', value: Number(provider.metrics_cleanup) || 0 },
+        { label: 'Value for Money', value: Number(provider.metrics_cleanup) || 0 },
     ];
 
     return (

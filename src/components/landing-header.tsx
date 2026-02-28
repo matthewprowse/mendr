@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { ChevronDown, Cross, Menu } from 'geist-icons';
+import { ChevronDown, Cross, Menu } from '@/lib/icons';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -92,7 +92,7 @@ export function LandingHeader({
                                             aria-label="Services"
                                         >
                                             Services
-                                            <ChevronDown size={14} className="opacity-70" />
+                                            <ChevronDown className="size-3.5 opacity-70" />
                                         </button>
                                     </DropdownMenuTrigger>
                                     <DropdownMenuContent
@@ -119,7 +119,7 @@ export function LandingHeader({
                                     aria-hidden
                                 >
                                     Services
-                                    <ChevronDown size={14} className="opacity-70" />
+                                    <ChevronDown className="size-3.5 opacity-70" />
                                 </span>
                             ))}
                         {navLinks.map(({ href, label }) => (
@@ -147,7 +147,7 @@ export function LandingHeader({
                             className="flex size-9 items-center justify-center"
                             aria-label="Open Mobile Menu"
                         >
-                            <Menu size={16} className="text-foreground" />
+                            <Menu className="size-4 text-foreground" />
                         </button>
                     </div>
                 </div>
@@ -185,7 +185,7 @@ export function LandingHeader({
                             className="flex size-9 items-center justify-center"
                             aria-label="Close Mobile Menu"
                         >
-                            <Cross size={16} className="text-foreground" />
+                            <Cross className="size-4 text-foreground" />
                         </button>
                     </div>
                     <nav className="flex flex-1 flex-col gap-4 overflow-y-auto px-4 py-8 sm:px-6">

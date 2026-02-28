@@ -97,14 +97,6 @@ export async function POST(req: NextRequest) {
             'water damage': 'Water Damage Restoration',
             builder: 'Builder',
             contractor: 'Building Contractor',
-            'domestic worker': 'Domestic Worker',
-            'domestic workers': 'Domestic Worker',
-            cleaner: 'Cleaning Service',
-            cleaning: 'Cleaning Service',
-            housekeeping: 'Cleaning Service',
-            housekeeper: 'Cleaning Service',
-            gardener: 'Gardener',
-            gardening: 'Gardening Service',
         };
         let searchQuery = providedSearchQuery;
         if (!searchQuery) {
@@ -264,7 +256,17 @@ export async function POST(req: NextRequest) {
                     model: 'gemini-2.0-flash',
                     generationConfig: { temperature: 0.1 },
                 });
-                const batchPrompt = `Analyse these ${providersContext.length} home service providers. Use British English throughout (e.g. "specialise", "recognise", "organise", "colour"). For each output: 1) Title Case name. 2) "summary": Exactly 2–3 SHORT sentences. CRITICAL: Do NOT start with or include the business/company name (e.g. no "Plum Plumbers are...", "Combat Plumbing is..."). Write in third person about what customers say: e.g. "Consistently praised for prompt, professional service. Staff noted for attention to detail. Highly recommended." Max 3 sentences, under 45 words. NEVER return empty summary. 3) "services" array: [{"short":"≤15 chars","full":"≤30 chars"}] for trade: ${trade}. Output JSON only: {"results":[{"place_id":"","name":"","summary":"","services":[]}]}. DATA: ${JSON.stringify(providersContext)}`;
+                const batchPrompt = `Analyse these ${providersContext.length} home service providers. Use British English throughout (e.g. "specialise", "recognise", "organise", "colour").
+
+For each provider output JSON with:
+1) "name": THE CLEAN BUSINESS NAME ONLY. Understand what the actual trading name is and return nothing else.
+   - Strip everything that is not the core business name: marketing tags (e.g. "New", "Repairs", "24/7", "Open"), pipe- or dash-separated service lists (e.g. " - New | Repairs | Automations" or " | Garage Doors | Gates"), location suffixes ("Cape Town", "Western Cape"), legal suffixes ("Pty Ltd", "Ltd", "LLC").
+   - Examples: "Al Garage Door Solutions - New | Repairs | Automations" → "Al Garage Door Solutions". "Planet Automations" → "Planet Automations" (keep as-is). "Joe's Plumbing Pty Ltd - Cape Town" → "Joe's Plumbing". "Brano Cape Garage Doors" → "Brano Cape Garage Doors".
+   - Output Title Case. No trailing spaces, pipes, or dashes.
+2) "summary": Exactly 2–3 SHORT sentences. CRITICAL: Do NOT start with or include the business/company name (e.g. no "Plum Plumbers are...", "Combat Plumbing is..."). Write in third person about what customers say: e.g. "Consistently praised for prompt, professional service. Staff noted for attention to detail. Highly recommended." Max 3 sentences, under 45 words. NEVER return empty summary.
+3) "services" array: [{"short":"≤15 chars","full":"≤30 chars"}] for trade: ${trade}.
+
+Output JSON only: {"results":[{"place_id":"","name":"","summary":"","services":[]}]}. DATA: ${JSON.stringify(providersContext)}`;
                 const result = await model.generateContent(batchPrompt);
                 const jsonMatch = result.response.text().match(/\{[\s\S]*\}/);
                 if (jsonMatch) {
@@ -359,6 +361,10 @@ export async function POST(req: NextRequest) {
             if (meters !== undefined) {
                 distanceText = (meters / 1000).toFixed(1);
             }
+            // Respect radius: exclude providers beyond the requested search radius (driving distance)
+            if (typeof meters === 'number' && meters > radius) {
+                return null;
+            }
             // duration is a proto Duration string like "720s"
             const durationRaw: string | undefined = leg?.duration;
             if (durationRaw) {
@@ -445,7 +451,7 @@ export async function POST(req: NextRequest) {
                 reviews: providerData.reviews ?? [],
                 id: providerId ?? null,
             };
-        });
+        }).filter(Boolean);
 
         // Await cache upsert so /pro/[id] resolves when user clicks "View account"
         if (toCache.length > 0 && supabase) {

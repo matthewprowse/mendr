@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
-import { StarFill } from 'geist-icons';
+import { StarFill } from '@/lib/icons';
 import { Badge } from '@/components/ui/badge';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import {
@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
+import { toast } from 'sonner';
 import { Provider, type Service } from './types';
 import { toWhatsAppPhone, isWhatsAppCapablePhone, formatBusinessName } from '@/lib/utils';
 import { FavouriteButton } from '@/components/favourite-button';
@@ -177,6 +178,7 @@ export function ProviderCard({
 }) {
     const [whatsappDialogOpen, setWhatsappDialogOpen] = useState(false);
     const [whatsappLoading, setWhatsappLoading] = useState(false);
+    const [contactPopoverOpen, setContactPopoverOpen] = useState(false);
 
     // Calculate distance if coordinates are available (fallback to Haversine if API driving distance missing)
     const distance = useMemo(() => {
@@ -222,6 +224,7 @@ export function ProviderCard({
 
     const handleSendWhatsAppSummary = () => {
         if (!waCapable) return;
+        setContactPopoverOpen(false);
         setOpenPopoverId(null);
         setWhatsappDialogOpen(true);
     };
@@ -242,25 +245,28 @@ export function ProviderCard({
                     trade: diagnosis.trade,
                     action_required: diagnosis.action_required,
                     estimated_cost: diagnosis.estimated_cost,
+                    report_url: reportUrl || '',
                 }),
             });
 
             const msgData = await msgRes.json();
 
-            let fullMessage = msgData.message || '';
-            if (reportUrl) {
-                fullMessage += `\n\nView the full diagnosis report: ${reportUrl}`;
+            if (!msgRes.ok || !msgData.message) {
+                throw new Error(msgData.error || 'Could not generate message');
             }
 
-            if (fullMessage) {
-                logLead('whatsapp');
-                const text = encodeURIComponent(fullMessage);
-                window.open(`https://wa.me/${waPhone}?text=${text}`, '_blank');
-            }
-            setWhatsappDialogOpen(false);
-        } catch (_e) {
-        } finally {
+            const fullMessage = msgData.message as string;
+
+            logLead('whatsapp');
+            const text = encodeURIComponent(fullMessage);
             setWhatsappLoading(false);
+            setWhatsappDialogOpen(false);
+            window.open(`https://wa.me/${waPhone}?text=${text}`, '_blank');
+        } catch (e: unknown) {
+            setWhatsappLoading(false);
+            setWhatsappDialogOpen(false);
+            const msg = e instanceof Error ? e.message : 'Could not generate WhatsApp message.';
+            toast.error(msg);
         }
     };
 
@@ -309,7 +315,12 @@ export function ProviderCard({
                 <span className="truncate min-w-0" title={provider.address}>
                     {provider.address}
                 </span>
-                {distance && <span className="flex-none whitespace-nowrap"> • {distance} km</span>}
+                {distance && (
+                    <span className="flex-none whitespace-nowrap">
+                        {' '}
+                        • {String(distance).endsWith('km') ? distance : `${distance} km`}
+                    </span>
+                )}
             </div>
             <div className="flex flex-col gap-2">
                 <div className="flex items-center justify-between gap-2">
@@ -323,8 +334,8 @@ export function ProviderCard({
             </div>
             <div className="flex flex-wrap items-center gap-2 mt-auto">
                 <Popover
-                    open={openPopoverId === popoverId}
-                    onOpenChange={(open) => setOpenPopoverId(open ? popoverId : null)}
+                    open={contactPopoverOpen}
+                    onOpenChange={setContactPopoverOpen}
                 >
                     <PopoverTrigger asChild>
                         <Button variant="default" className="flex-1 min-w-0">
@@ -391,7 +402,8 @@ export function ProviderCard({
                     <DialogContent>
                         <DialogHeader>
                             <DialogTitle>Send WhatsApp Summary</DialogTitle>
-                            <DialogDescription>
+                            <DialogDescription asChild>
+                                <div>
                                 {waCapable ? (
                                     <>
                                         We&apos;ve generated a summary of your diagnosis for{' '}
@@ -410,6 +422,7 @@ export function ProviderCard({
                                         WhatsApp requires a mobile number to work.
                                     </>
                                 )}
+                                </div>
                             </DialogDescription>
                         </DialogHeader>
                         <DialogFooter>

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { Heart, HeartFill } from '@/lib/icons';
 import { Button } from '@/components/ui/button';
 import { AuthPromptDialog } from '@/components/auth-prompt-dialog';
 import { useAuth } from '@/context/auth-context';
@@ -96,18 +97,11 @@ export function FavouriteButton({
                 aria-label={label}
                 aria-pressed={isFavourited}
             >
-                <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    viewBox="0 0 24 24"
-                    fill={isFavourited ? 'currentColor' : 'none'}
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    className="h-4 w-4"
-                >
-                    <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
-                </svg>
+                {isFavourited ? (
+                    <HeartFill className="size-4" />
+                ) : (
+                    <Heart className="size-4" />
+                )}
                 {variant === 'default' && <span className="ml-1.5">{label}</span>}
             </Button>
 

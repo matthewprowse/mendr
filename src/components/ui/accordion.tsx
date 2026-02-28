@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { ChevronDown } from 'geist-icons';
+import { ChevronDown } from '@/lib/icons';
 import { Accordion as AccordionPrimitive } from 'radix-ui';
 
 import { cn } from '@/lib/utils';
@@ -40,7 +40,6 @@ function AccordionTrigger({
             >
                 {children}
                 <ChevronDown
-                    size={16}
                     className="text-muted-foreground pointer-events-none size-4 shrink-0 translate-y-0.5 transition-transform duration-200"
                 />
             </AccordionPrimitive.Trigger>

@@ -12,6 +12,7 @@ import { ProviderCard } from './provider-card';
 import { ProvidersMap } from './providers-map';
 import { ServiceTradeLink } from './service-trade-link';
 import { ProvidersSkeleton } from './skeletons';
+import { ReportCard } from './report-card';
 
 export function InlineDiagnosisBlock({
     conversationId,
@@ -26,6 +27,8 @@ export function InlineDiagnosisBlock({
     setOpenPopoverId,
     onRequestLocation,
     onAddressSelect,
+    providerRadiusKm = 25,
+    onRadiusChange,
 }: {
     conversationId?: string;
     diagnosis: DiagnosisData;
@@ -39,6 +42,8 @@ export function InlineDiagnosisBlock({
     setOpenPopoverId: (id: string | null) => void;
     onRequestLocation?: (trade?: string) => void;
     onAddressSelect?: (loc: { lat: number; lng: number; address: string }) => void;
+    providerRadiusKm?: number;
+    onRadiusChange?: (km: number) => void;
 }) {
     const [addressPopoverOpen, setAddressPopoverOpen] = useState(false);
     const [addressQuery, setAddressQuery] = useState('');
@@ -115,53 +120,74 @@ export function InlineDiagnosisBlock({
                 <div className="flex flex-col gap-3">
                     <div className="flex flex-col gap-2">
                         {hasLocation && userLocation?.address ? (
-                            <div className="flex items-center justify-between gap-2">
-                                <span className="text-sm font-medium truncate min-w-0">
-                                    {userLocation.address}
-                                </span>
-                                {onAddressSelect && (
-                                    <Popover
-                                        open={addressPopoverOpen}
-                                        onOpenChange={setAddressPopoverOpen}
-                                    >
-                                        <PopoverTrigger asChild>
-                                            <Button variant="outline">Change Location</Button>
-                                        </PopoverTrigger>
-                                        <PopoverContent className="w-96" align="start">
-                                            <div className="flex flex-col gap-3">
-                                                <p className="text-sm font-medium">
-                                                    Search Locations (Western Cape only)
-                                                </p>
-                                                <Input
-                                                    placeholder="Enter address in Western Cape, South Africa"
-                                                    className="text-[14px] sm:text-sm"
-                                                    value={addressQuery}
-                                                    onChange={(e) => {
-                                                        setAddressQuery(e.target.value);
-                                                        setAddressError(null);
-                                                    }}
-                                                    onKeyDown={(e) =>
-                                                        e.key === 'Enter' && handleAddressSearch()
-                                                    }
-                                                />
-                                                {addressError && (
-                                                    <p className="text-xs text-destructive">
-                                                        {addressError}
-                                                    </p>
-                                                )}
-                                                <Button
-                                                    onClick={handleAddressSearch}
-                                                    disabled={
-                                                        addressSearching || !addressQuery.trim()
-                                                    }
-                                                >
-                                                    {addressSearching ? 'Searching…' : 'Search'}
+                            <>
+                                <div className="flex items-center gap-2 min-w-0">
+                                    <span className="text-sm font-medium truncate min-w-0">
+                                        {userLocation.address}
+                                    </span>
+                                    {onAddressSelect && (
+                                        <Popover
+                                            open={addressPopoverOpen}
+                                            onOpenChange={setAddressPopoverOpen}
+                                        >
+                                            <PopoverTrigger asChild>
+                                                <Button variant="outline" size="sm" className="shrink-0">
+                                                    Change Location
                                                 </Button>
-                                            </div>
-                                        </PopoverContent>
-                                    </Popover>
+                                            </PopoverTrigger>
+                                            <PopoverContent className="w-96" align="start">
+                                                <div className="flex flex-col gap-3">
+                                                    <p className="text-sm font-medium">
+                                                        Search Locations (Western Cape only)
+                                                    </p>
+                                                    <Input
+                                                        placeholder="Enter address in Western Cape, South Africa"
+                                                        className="text-[14px] sm:text-sm"
+                                                        value={addressQuery}
+                                                        onChange={(e) => {
+                                                            setAddressQuery(e.target.value);
+                                                            setAddressError(null);
+                                                        }}
+                                                        onKeyDown={(e) =>
+                                                            e.key === 'Enter' && handleAddressSearch()
+                                                        }
+                                                    />
+                                                    {addressError && (
+                                                        <p className="text-xs text-destructive">
+                                                            {addressError}
+                                                        </p>
+                                                    )}
+                                                    <Button
+                                                        onClick={handleAddressSearch}
+                                                        disabled={
+                                                            addressSearching || !addressQuery.trim()
+                                                        }
+                                                    >
+                                                        {addressSearching ? 'Searching…' : 'Search'}
+                                                    </Button>
+                                                </div>
+                                            </PopoverContent>
+                                        </Popover>
+                                    )}
+                                </div>
+                                {onRadiusChange && (
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                        <span className="text-xs text-muted-foreground">Search within</span>
+                                        {[10, 25, 50].map((km) => (
+                                            <Button
+                                                key={km}
+                                                variant={providerRadiusKm === km ? 'secondary' : 'ghost'}
+                                                size="sm"
+                                                className="h-7 px-2 text-xs"
+                                                onClick={() => onRadiusChange(km)}
+                                                disabled={isLoadingProviders}
+                                            >
+                                                {km} km
+                                            </Button>
+                                        ))}
+                                    </div>
                                 )}
-                            </div>
+                            </>
                         ) : (
                             onRequestLocation && (
                                 <div className="flex flex-wrap items-center gap-2">
@@ -338,25 +364,9 @@ export function InlineDiagnosisBlock({
                             })()}
                         </div>
                     )}
-                    {(providers?.length ?? 0) > 0 && (
-                        <div className="pt-4">
-                            <p className="text-sm text-foreground leading-relaxed">
-                                We&apos;ve generated a report from this conversation, and will be shared
-                                with your chosen provider automatically when you send our WhatsApp
-                                summary. If you provide additional context or images in the chat,
-                                they will be included in the diagnosis.
-                            </p>
-                            {conversationId && (
-                                <Button
-                                    variant="outline"
-                                    className="mt-3"
-                                    onClick={() =>
-                                        window.open(`/report/${conversationId}`, '_blank')
-                                    }
-                                >
-                                    Open Report
-                                </Button>
-                            )}
+                    {(providers?.length ?? 0) > 0 && conversationId && (
+                        <div className="pt-2">
+                            <ReportCard conversationId={conversationId} />
                         </div>
                     )}
                 </div>

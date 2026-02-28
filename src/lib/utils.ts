@@ -194,9 +194,57 @@ function splitConcatenated(token: string): string[] {
     return dp[n] ?? [token];
 }
 
+// Location words/phrases that are stripped from the end of business names
+const LOCATION_SUFFIXES = [
+    // Full phrases first (longest match wins — order matters)
+    'western cape', 'south africa', 'cape town', 'cape peninsula', 'cape winelands',
+    'garden route', 'greater cape town',
+    // Single location words
+    'johannesburg', 'pretoria', 'durban', 'stellenbosch', 'paarl', 'george',
+    'bellville', 'tygervalley', 'brackenfell', 'mitchells plain', 'khayelitsha',
+    'somerset west', 'gordons bay', 'strand', 'hermanus', 'worcester',
+    'northern suburbs', 'southern suburbs', 'atlantic seaboard',
+    'gauteng', 'kwazulu', 'natal', 'limpopo', 'mpumalanga',
+];
+
+// Trailing noise words stripped from the end of a name (after location stripping).
+// Do not include 'automations' or 'automation' — they are often part of the business name (e.g. Planet Automations).
+const TRAILING_NOISE = [
+    'new', 'technologies', 'technology',
+    'digital', 'online', 'nationwide', 'sa',
+];
+
+// Words that commonly appear in marketing tag lists after " - " or " | " (e.g. "Al Garage Door Solutions - New | Repairs | Automations")
+const TAG_SUFFIX_WORDS = new Set([
+    'new', 'repairs', 'repair', 'sales', 'installations', 'installation', 'upgrades', 'upgrade',
+    'automations', 'automation',
+    'maintenance', 'open', 'emergency', 'same', 'day', 'quality', 'service', 'professional',
+    'residential', 'commercial', 'free', 'quote', 'quotes', 'best', 'price', 'prices',
+    'guaranteed', 'licensed', 'insured', 'bonded', 'available', 'now', 'call', 'us',
+    '24', 'hours', '24/7', '247', 'same-day', 'sameday',
+]);
+
+function stripTagSuffix(s: string): string {
+    let t = s.replace(/\s*\|?\s*[-–—]?\s*$/g, '').trim();
+    const dashPipe = /\s+[-|–—]\s+/;
+    const idx = t.search(dashPipe);
+    if (idx === -1) return t;
+    const afterDelim = t.slice(idx).replace(/^\s*[-|–—]\s*/, '');
+    const tokens = afterDelim
+        .split(/\s*\|\s*/)
+        .flatMap((part) => part.split(/\s+/))
+        .map((x) => x.toLowerCase().replace(/[^a-z0-9\/]/g, ''))
+        .filter(Boolean);
+    const allTags = tokens.length > 0 && tokens.every((tok) => TAG_SUFFIX_WORDS.has(tok) || /^\d+\/?\d*$/.test(tok));
+    if (allTags) return t.slice(0, idx).trim();
+    return t;
+}
+
 export function formatBusinessName(name: string | undefined | null): string {
     if (!name?.trim()) return '';
     let s = name.trim();
+    // Strip " - New | Repairs |" style tag/marketing suffixes first
+    s = stripTagSuffix(s);
     // Remove common legal/marketing suffixes
     s = s
         .replace(/,?\s*\(?\s*Pty\.?\s*\)?\s*Ltd\.?\s*$/gi, '')
@@ -212,6 +260,27 @@ export function formatBusinessName(name: string | undefined | null): string {
     s = s.replace(/\.(co\.za|com|net|org|biz|info|co)$/gi, '').trim();
     // Replace " AND " with " & "
     s = s.replace(/\s+and\s+/gi, ' & ');
+    // Strip trailing location suffixes — longest first, case-insensitive
+    // Keep stripping until no more match (handles "Repairs Cape Town Western Cape")
+    let changed = true;
+    while (changed) {
+        changed = false;
+        for (const loc of LOCATION_SUFFIXES) {
+            const re = new RegExp(`,?\\s*[-–—]?\\s*${loc.replace(/\s+/g, '\\s+')}\\s*$`, 'i');
+            const stripped = s.replace(re, '').trim();
+            if (stripped && stripped !== s) {
+                s = stripped;
+                changed = true;
+                break; // restart after each match
+            }
+        }
+    }
+    // Strip trailing noise words (only when they don't constitute the full name)
+    for (const noise of TRAILING_NOISE) {
+        const re = new RegExp(`\\s+${noise}\\s*$`, 'i');
+        const stripped = s.replace(re, '').trim();
+        if (stripped.length > 0) s = stripped;
+    }
 
     const titleWord = (w: string) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase();
 
@@ -239,7 +308,8 @@ export function formatBusinessName(name: string | undefined | null): string {
             return [titleWord(word)];
         })
         .join(' ');
-    return s.trim();
+    // Remove any trailing delimiter junk left after stripping (e.g. " - " or " | ")
+    return s.replace(/\s*[-|–—]\s*$/, '').trim();
 }
 
 /** Strip meta-commentary the AI mistakenly put in message or action_required (e.g. "The user seems frustrated", "I need to...") */

@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import { cva, type VariantProps } from 'class-variance-authority';
-import { SidebarLeft } from 'geist-icons';
+import { SidebarLeft } from '@/lib/icons';
 import { Slot } from 'radix-ui';
 
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -261,7 +261,7 @@ function SidebarTrigger({ className, onClick, ...props }: React.ComponentProps<t
             }}
             {...props}
         >
-            <SidebarLeft size={20} className="size-5" />
+            <SidebarLeft className="size-5" />
             <span className="sr-only">Toggle Sidebar</span>
         </Button>
     );

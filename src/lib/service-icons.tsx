@@ -1,6 +1,6 @@
 /**
  * Icon mapping for services/trades in the navigation and chat.
- * Uses geist-icons for consistency with the rest of the app.
+ * Uses central icons from @/lib/icons for consistency.
  */
 
 import {
@@ -15,7 +15,7 @@ import {
     Pencil,
     Trash,
     Sun,
-} from 'geist-icons';
+} from '@/lib/icons';
 
 const iconMap = {
     Electrical: Lightning,

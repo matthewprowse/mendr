@@ -74,7 +74,7 @@ export default async function LandingPage() {
                     { href: '#how-it-works', label: 'How It Works' },
                     { href: '#features', label: 'Features' },
                     { href: '#all-services', label: 'Services' },
-                    { href: '/dashboard/history', label: 'History' },
+
                     { href: '/pro', label: 'For Pros' },
                 ]}
                 logoHref="/"

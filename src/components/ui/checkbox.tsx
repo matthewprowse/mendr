@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { Check } from 'geist-icons';
+import { Check } from '@/lib/icons';
 import { Checkbox as CheckboxPrimitive } from 'radix-ui';
 
 import { cn } from '@/lib/utils';
@@ -20,7 +20,7 @@ function Checkbox({ className, ...props }: React.ComponentProps<typeof CheckboxP
                 data-slot="checkbox-indicator"
                 className="grid place-content-center text-current transition-none"
             >
-                <Check size={14} className="size-3.5" />
+                <Check className="size-3.5" />
             </CheckboxPrimitive.Indicator>
         </CheckboxPrimitive.Root>
     );

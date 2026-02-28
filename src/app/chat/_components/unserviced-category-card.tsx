@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
-import { Wrench } from 'geist-icons';
+import { Wrench } from '@/lib/icons';
 import { sanitizeAiContent } from '@/lib/utils';
 
 type UnservicedCategoryCardProps = {

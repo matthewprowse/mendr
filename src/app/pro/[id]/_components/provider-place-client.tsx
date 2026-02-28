@@ -22,23 +22,16 @@ import {
     DropdownMenuRadioItem,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { StarFill } from 'geist-icons';
+import { Cross, SortDescending, StarFill } from '@/lib/icons';
 import { formatBusinessName } from '@/lib/utils';
 import type { ReviewCategory } from '@/lib/ai-review-metrics';
-import { ProviderLocationMap } from './provider-location-map';
+import { ProvidersMap } from '@/app/chat/_components/providers-map';
 import { WriteReviewDialog } from '@/components/write-review-dialog';
 import { ContactPopover } from '@/components/contact-popover';
 import { getOpenStatus } from './pro-place-header';
 import { supabase } from '@/lib/supabase';
 
 const REVIEW_TRUNCATE_LEN = 280;
-const FOUR_CATEGORIES: ReviewCategory[] = ['Punctuality', 'Tidiness', 'Professionalism', 'Quality'];
-const DISPLAY_CATEGORIES: { key: ReviewCategory; label: string }[] = [
-    { key: 'Punctuality', label: 'Punctuality' },
-    { key: 'Tidiness', label: 'Cleanliness' },
-    { key: 'Professionalism', label: 'Professionalism' },
-    { key: 'Quality', label: 'Quote Accuracy' },
-];
 
 export type PlaceProvider = {
     place_id: string;
@@ -63,16 +56,10 @@ export type PlaceProvider = {
     photos?: Array<{ name: string }> | null;
     reviewsSummary?: string | null;
     reviewCategories?: Partial<Record<ReviewCategory, number[]>> | null;
+    reviewHighlights?: string[] | null;
     aboutCompany?: string | null;
     social?: { instagram?: string; facebook?: string } | null;
 };
-
-function getCategoriesForReview(
-    reviewIndex: number,
-    reviewCategories: Partial<Record<ReviewCategory, number[]>>
-): ReviewCategory[] {
-    return FOUR_CATEGORIES.filter((cat) => reviewCategories[cat]?.includes(reviewIndex));
-}
 
 function StarRating({ rating, max = 5 }: { rating: number; max?: number }) {
     const normalized = Math.round((rating / max) * 5);
@@ -120,7 +107,10 @@ function isClosedHours(hours: string): boolean {
 }
 
 function formatHoursDisplay(hours: string): string {
-    return hours.replace(/\bAM\b/g, 'am').replace(/\bPM\b/g, 'pm');
+    return hours
+        .replace(/\bAM\b/g, 'am')
+        .replace(/\bPM\b/g, 'pm')
+        .replace(/\s*[-–—]\s*/g, ' – '); // Normalise to en-dash with spaces (app style)
 }
 
 export function ProviderPlaceClient({
@@ -143,10 +133,10 @@ export function ProviderPlaceClient({
     const photos = provider.photos ?? [];
 
     const [expandedReviewIndex, setExpandedReviewIndex] = useState<number | null>(null);
-    const [filterCategory, setFilterCategory] = useState<ReviewCategory | 'All'>('All');
     const [sortOption, setSortOption] = useState<SortOption>('date_desc');
     const [writeReviewOpen, setWriteReviewOpen] = useState(false);
     const [galleryUploadOpen, setGalleryUploadOpen] = useState(false);
+    const [userLocationForMap, setUserLocationForMap] = useState<{ lat: number; lng: number } | null>(null);
     const [scandioReviews, setScandioReviews] = useState<Array<{
         id: string;
         reviewer_name: string;
@@ -167,43 +157,29 @@ export function ProviderPlaceClient({
             .catch(() => {});
     }, [provider.place_id]);
 
-    const categorySummary = useMemo(() => {
-        const out: Array<{ key: ReviewCategory; label: string; avgRating: number; weight: number }> = [];
-        for (const { key, label } of DISPLAY_CATEGORIES) {
-            const indices = reviewCategories[key];
-            if (!indices?.length) continue;
-            let sum = 0;
-            let count = 0;
-            for (const i of indices) {
-                const r = reviews[i];
-                if (r?.rating != null) {
-                    sum += Number(r.rating);
-                    count++;
-                }
-            }
-            if (count) out.push({ key, label, avgRating: sum / count, weight: indices.length });
-        }
-        return out;
-    }, [reviewCategories, reviews]);
+    const hasCoords = provider.latitude != null && provider.longitude != null;
 
-    const filteredAndSortedReviews = useMemo(() => {
-        let result = reviews.map((r, i) => ({ review: r, index: i }));
+    // User location for map (same as chat page)
+    useEffect(() => {
+        if (!hasCoords) return;
+        if (typeof navigator === 'undefined' || !navigator.geolocation) return;
+        navigator.geolocation.getCurrentPosition(
+            (pos) => setUserLocationForMap({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+            () => {},
+            { timeout: 6000 }
+        );
+    }, [hasCoords]);
 
-        if (filterCategory !== 'All') {
-            const indices = reviewCategories[filterCategory] ?? [];
-            result = result.filter(({ index }) => indices.includes(index));
-        }
-
+    const sortedReviews = useMemo(() => {
+        const result = reviews.map((r, i) => ({ review: r, index: i }));
         result.sort((a, b) => {
             if (sortOption === 'rating_desc') return (b.review.rating ?? 0) - (a.review.rating ?? 0);
             if (sortOption === 'rating_asc') return (a.review.rating ?? 0) - (b.review.rating ?? 0);
             return 0;
         });
-
         return result;
-    }, [reviews, reviewCategories, filterCategory, sortOption]);
+    }, [reviews, sortOption]);
 
-    const hasCoords = provider.latitude != null && provider.longitude != null;
     const directionsUrl =
         hasCoords
             ? `https://www.google.com/maps/dir/?api=1&destination=${provider.latitude},${provider.longitude}&destination_place_id=${(provider.place_id || '').replace(/^places\//, '')}`
@@ -222,91 +198,59 @@ export function ProviderPlaceClient({
         <>
         {/* ── Page content, padded at bottom so sticky footer doesn't overlap ── */}
         <div className="space-y-6 pb-24">
-            {/* ── Banner ── */}
-            <div className="relative h-56 w-full overflow-hidden rounded-md bg-gradient-to-br from-muted via-muted/80 to-muted sm:h-72">
-
-                {/* Open/closed badge — top right */}
-                {openStatus && (
-                    <div className="absolute right-3 top-3 z-10">
-                        <div className="rounded-md border border-border bg-background px-3 py-2">
-                            <p className="text-sm font-semibold text-foreground">
-                                {openStatus.open ? 'Open' : 'Closed'}
-                            </p>
-                            {openStatus.label.includes('·') && (
-                                <p className="mt-0.5 text-xs text-muted-foreground leading-tight">
-                                    {openStatus.label.split('·').slice(1).join('·').trim()}
-                                </p>
+            {/* ── Top row: avatar above name (left) | Open/Closed badge (far right) ── */}
+            <div className="flex flex-wrap items-start justify-between gap-4">
+                <div className="min-w-0 flex-1">
+                    <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full border-2 border-border bg-muted text-lg font-semibold text-muted-foreground sm:h-16 sm:w-16 sm:text-xl">
+                        {displayName
+                            .split(/\s+/)
+                            .filter((w) => w !== '&')
+                            .map((w) => w[0])
+                            .join('')
+                            .slice(0, 2)
+                            .toUpperCase() || '—'}
+                    </div>
+                    <h1 className="mt-2 truncate text-xl font-bold tracking-tight text-foreground sm:text-2xl">
+                        Scandio: {displayName}
+                    </h1>
+                    {(rating != null || reviewCount > 0) && (
+                        <div className="mt-1 flex items-center gap-2 text-sm text-muted-foreground">
+                            {rating != null && (
+                                <span className="flex items-center gap-1.5 font-medium">
+                                    <StarFill className="size-4 text-yellow-500 fill-yellow-500" />
+                                    <span className="text-foreground">{rating}</span>
+                                </span>
+                            )}
+                            {reviewCount > 0 && (
+                                <span>({reviewCount} review{reviewCount === 1 ? '' : 's'})</span>
                             )}
                         </div>
+                    )}
+                </div>
+                {openStatus && (
+                    <div className="flex flex-col items-end shrink-0 gap-1 text-right">
+                        <Badge variant="secondary">
+                            {openStatus.open ? 'Open' : 'Closed'}
+                        </Badge>
+                        {openStatus.label.includes('·') && (
+                            <span className="text-xs text-muted-foreground leading-tight">
+                                {openStatus.label.split('·').slice(1).join('·').trim()}
+                            </span>
+                        )}
                     </div>
                 )}
-
-                {/* Name + rating — bottom left */}
-                <div className="absolute bottom-3 left-3 right-3">
-                    <div className="flex items-end gap-3">
-                        <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full border-2 border-background bg-muted shadow-sm sm:h-16 sm:w-16">
-                            <span className="text-lg font-semibold text-muted-foreground sm:text-xl">
-                                {displayName
-                                    .split(/\s+/)
-                                    .filter((w) => w !== '&')
-                                    .map((w) => w[0])
-                                    .join('')
-                                    .slice(0, 2)
-                                    .toUpperCase()}
-                            </span>
-                        </div>
-                        <div className="min-w-0 flex-1">
-                            <h1 className="truncate text-xl font-bold tracking-tight text-foreground sm:text-2xl">
-                                {displayName}
-                            </h1>
-                            {(rating || reviewCount > 0) && (
-                                <div className="mt-1 flex items-center gap-2 text-sm text-muted-foreground">
-                                    {rating != null && (
-                                        <span className="flex items-center gap-1.5 font-medium">
-                                            <StarFill className="h-4 w-4 text-yellow-500 fill-yellow-500" />
-                                            <span className="text-foreground">{rating}</span>
-                                        </span>
-                                    )}
-                                    {reviewCount > 0 && (
-                                        <span>({reviewCount} review{reviewCount === 1 ? '' : 's'})</span>
-                                    )}
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                </div>
             </div>
 
-            {/* ── Overview (above tabs) ── */}
-            {(provider.summary || aboutCompany || services.length > 0) && (
-                <div className="space-y-4">
-                    {provider.summary && (
-                        <p className="text-sm leading-relaxed text-foreground">
-                            {provider.summary}
-                        </p>
-                    )}
-                    {!provider.summary && !reviewsSummary && (
-                        <p className="text-sm text-muted-foreground">
-                            No summary available yet. This provider appears in search results; more
-                            details will appear after we analyse their listing and reviews.
-                        </p>
-                    )}
-                    {aboutCompany && (
-                        <p className="text-sm leading-relaxed text-foreground">
-                            {aboutCompany}
-                        </p>
-                    )}
-                    {services.length > 0 && (
-                        <div className="flex flex-wrap gap-2">
-                            {services.map((s, i) => (
-                                <Badge key={i} variant="secondary" className="text-sm">
-                                    {typeof s === 'string'
-                                        ? s
-                                        : (s?.full ?? s?.short ?? 'Service')}
-                                </Badge>
-                            ))}
-                        </div>
-                    )}
+            {/* ── Services badges only above tabs (summary moved into Summary tab) ── */}
+            {services.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                    {services.map((s, i) => (
+                        <Badge key={i} variant="secondary" className="text-sm">
+                            {typeof s === 'string'
+                                ? s
+                                : (s?.full ?? s?.short ?? 'Service')}
+                        </Badge>
+                    ))}
                 </div>
             )}
 
@@ -319,6 +263,28 @@ export function ProviderPlaceClient({
 
                 {/* ── SUMMARY TAB ── */}
                 <TabsContent value="summary" className="mt-6 space-y-6">
+
+                    {/* Summary text */}
+                    {(provider.summary || aboutCompany) && (
+                        <div className="space-y-2">
+                            <h2 className="text-sm font-semibold text-foreground">Summary</h2>
+                            {provider.summary && (
+                                <p className="text-sm leading-relaxed text-foreground">
+                                    {provider.summary}
+                                </p>
+                            )}
+                            {aboutCompany && (
+                                <p className="text-sm leading-relaxed text-foreground">
+                                    {aboutCompany}
+                                </p>
+                            )}
+                        </div>
+                    )}
+                    {!provider.summary && !aboutCompany && (
+                        <p className="text-sm text-muted-foreground">
+                            No summary available yet. This provider appears in search results.
+                        </p>
+                    )}
 
                     {/* Operating Hours */}
                     {weekdayDescriptions.length > 0 && (
@@ -350,21 +316,38 @@ export function ProviderPlaceClient({
                         </div>
                     )}
 
-                    {/* Location */}
-                    {(provider.address || hasCoords) && (
+                    {/* Location — same design as chat page (ProvidersMap) */}
+                    {hasCoords && mapsApiKey && (
                         <div className="space-y-3">
                             <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Location</p>
-                            {hasCoords && mapsApiKey && (
-                                <ProviderLocationMap
-                                    apiKey={mapsApiKey}
-                                    providerLat={provider.latitude!}
-                                    providerLng={provider.longitude!}
-                                    providerName={displayName}
-                                    directionsUrl={directionsUrl}
-                                    providerAddress={provider.address}
-                                    providerPlaceId={provider.place_id}
-                                />
-                            )}
+                            <ProvidersMap
+                                apiKey={mapsApiKey}
+                                providers={[{
+                                    name: provider.name,
+                                    address: provider.address ?? '',
+                                    summary: provider.summary ?? '',
+                                    services: (provider.services ?? []).map((s) =>
+                                        typeof s === 'string' ? { short: s, full: s } : { short: s?.short ?? '', full: s?.full ?? s?.short ?? '' }
+                                    ),
+                                    latitude: provider.latitude!,
+                                    longitude: provider.longitude!,
+                                    rating: provider.rating ?? undefined,
+                                    ratingCount: provider.rating_count ?? undefined,
+                                    place_id: provider.place_id,
+                                    id: provider.place_id,
+                                    photos: provider.photos ?? [],
+                                }]}
+                                emergingProviders={[]}
+                                userLocation={userLocationForMap}
+                                hideFloatingCard
+                            />
+                            <div className="flex items-center justify-end">
+                                <Button variant="secondary" size="sm" asChild>
+                                    <a href={directionsUrl} target="_blank" rel="noopener noreferrer">
+                                        Get Directions
+                                    </a>
+                                </Button>
+                            </div>
                         </div>
                     )}
 
@@ -406,32 +389,38 @@ export function ProviderPlaceClient({
                 <TabsContent value="reviews" className="mt-6 space-y-6">
                     <div className="space-y-6">
 
-                        {/* ── Write a review CTA ── */}
-                        <div className="flex items-center justify-between gap-3">
-                            <div>
-                                <h2 className="text-base font-semibold leading-none">Reviews</h2>
-                                <p className="mt-1 text-sm text-muted-foreground">
-                                    Customer reviews from Google and Scandio users.
-                                </p>
+                        {/* Short AI review summary (2–3 sentences) */}
+                        {reviewsSummary && (() => {
+                            const sentences = reviewsSummary.split(/(?<=[.!?])\s+/).filter(Boolean);
+                            const short = sentences.slice(0, 3).join(' ');
+                            return (
+                                <blockquote className="border-l-2 border-border pl-3">
+                                    <p className="text-sm leading-relaxed text-muted-foreground italic">
+                                        {short}{sentences.length > 3 ? '…' : ''}
+                                    </p>
+                                </blockquote>
+                            );
+                        })()}
+
+                        {/* Google Reviews header: title + count badge (far right) + Add review (secondary) */}
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                            <div className="flex items-center gap-2 min-w-0">
+                                <h2 className="text-base font-semibold leading-none">Google Reviews</h2>
+                                {reviews.length > 0 && (
+                                    <Badge variant="secondary" className="text-xs font-medium shrink-0">
+                                        {reviews.length} review{reviews.length !== 1 ? 's' : ''}
+                                    </Badge>
+                                )}
                             </div>
                             <Button
-                                variant="outline"
+                                variant="secondary"
                                 size="sm"
                                 className="shrink-0"
                                 onClick={() => setWriteReviewOpen(true)}
                             >
-                                Write a review
+                                Add review
                             </Button>
                         </div>
-
-                        {/* AI review summary — shown at top of the reviews tab */}
-                        {reviewsSummary && (
-                            <blockquote className="border-l-2 border-border pl-3">
-                                <p className="text-sm leading-relaxed text-muted-foreground italic">
-                                    {reviewsSummary}
-                                </p>
-                            </blockquote>
-                        )}
 
                         <WriteReviewDialog
                             open={writeReviewOpen}
@@ -448,7 +437,14 @@ export function ProviderPlaceClient({
                                 </h3>
                                 <ul className="space-y-5">
                                     {scandioReviews.map((r) => {
-                                        const initial = r.reviewer_name
+                                        const toTitleCasePart = (w: string) =>
+                                            w.split('-').map((p) => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase()).join('-');
+                                        const formattedReviewerName = r.reviewer_name
+                                            .split(/\s+/)
+                                            .filter(Boolean)
+                                            .map(toTitleCasePart)
+                                            .join(' ');
+                                        const initial = formattedReviewerName
                                             .split(/\s+/)
                                             .map((w) => w[0])
                                             .join('')
@@ -464,7 +460,7 @@ export function ProviderPlaceClient({
                                                     <div className="min-w-0 flex-1 space-y-2">
                                                         <div className="flex flex-wrap items-center justify-between gap-1">
                                                             <span className="text-xs font-semibold text-foreground">
-                                                                {r.reviewer_name}
+                                                                {formattedReviewerName}
                                                             </span>
                                                             <span className="shrink-0 text-xs text-muted-foreground">
                                                                 {new Date(r.created_at).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' })}
@@ -515,137 +511,48 @@ export function ProviderPlaceClient({
                             </div>
                         )}
 
-                        {/* ── Google reviews ── */}
-                        {reviews.length > 0 && (
-                            <h3 className="text-sm font-semibold text-foreground">
-                                Google reviews ({reviews.length})
-                            </h3>
-                        )}
+                        {/* Review highlights (Google-style: what people mention) */}
+                        {provider.reviewHighlights?.length ? (
+                            <div className="flex flex-wrap gap-2">
+                                {provider.reviewHighlights.map((term, i) => (
+                                    <Badge key={i} variant="secondary" className="text-sm font-normal">
+                                        {term}
+                                    </Badge>
+                                ))}
+                            </div>
+                        ) : null}
+
                         {reviews.length > 0 ? (
                             <>
-                                {/* Category grid — 2 per row on desktop, 1 on mobile */}
-                                {categorySummary.length > 0 && (
-                                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                                        {categorySummary.map(({ key, label, avgRating, weight }) => (
-                                            <button
-                                                key={key}
-                                                type="button"
-                                                onClick={() =>
-                                                    setFilterCategory(
-                                                        filterCategory === key ? 'All' : key
-                                                    )
-                                                }
-                                                className={`flex items-center justify-between rounded-xl border px-4 py-3 text-left transition-colors ${
-                                                    filterCategory === key
-                                                        ? 'border-foreground bg-muted'
-                                                        : 'border-border bg-muted/20 hover:bg-muted/40'
-                                                }`}
+                                <div className="flex justify-end">
+                                    <DropdownMenu>
+                                        <DropdownMenuTrigger asChild>
+                                            <Button size="sm" variant="outline" className="gap-1.5 text-xs">
+                                                Sort
+                                                <SortDescending className="size-3" />
+                                            </Button>
+                                        </DropdownMenuTrigger>
+                                        <DropdownMenuContent align="end" className="w-48">
+                                            <DropdownMenuRadioGroup
+                                                value={sortOption}
+                                                onValueChange={(v) => setSortOption(v as SortOption)}
                                             >
-                                                <div className="space-y-1">
-                                                    <p className="text-sm font-semibold text-foreground">
-                                                        {label}
-                                                    </p>
-                                                    <StarRating rating={avgRating} max={5} />
-                                                </div>
-                                                <div className="text-right">
-                                                    <p className="text-lg font-bold text-foreground">
-                                                        {avgRating.toFixed(1)}
-                                                    </p>
-                                                    <p className="text-xs text-muted-foreground">
-                                                        {weight} review{weight === 1 ? '' : 's'}
-                                                    </p>
-                                                </div>
-                                            </button>
-                                        ))}
-                                    </div>
-                                )}
-
-                                {/* Filter + Sort row */}
-                                <div className="flex flex-wrap items-center gap-2">
-                                    <div className="flex flex-wrap gap-1.5">
-                                        <button
-                                            type="button"
-                                            onClick={() => setFilterCategory('All')}
-                                            className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
-                                                filterCategory === 'All'
-                                                    ? 'border-foreground bg-foreground text-background'
-                                                    : 'border-border text-muted-foreground hover:border-foreground/40'
-                                            }`}
-                                        >
-                                            All
-                                        </button>
-                                        {DISPLAY_CATEGORIES.map(({ key, label }) => (
-                                            <button
-                                                key={key}
-                                                type="button"
-                                                onClick={() =>
-                                                    setFilterCategory(
-                                                        filterCategory === key ? 'All' : key
-                                                    )
-                                                }
-                                                className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
-                                                    filterCategory === key
-                                                        ? 'border-foreground bg-foreground text-background'
-                                                        : 'border-border text-muted-foreground hover:border-foreground/40'
-                                                }`}
-                                            >
-                                                {label}
-                                            </button>
-                                        ))}
-                                    </div>
-                                    <div className="ml-auto">
-                                        <DropdownMenu>
-                                            <DropdownMenuTrigger asChild>
-                                                <Button size="sm" variant="outline" className="gap-1.5 text-xs">
-                                                    Sort
-                                                    <svg
-                                                        xmlns="http://www.w3.org/2000/svg"
-                                                        viewBox="0 0 16 16"
-                                                        fill="currentColor"
-                                                        className="h-3 w-3"
-                                                    >
-                                                        <path
-                                                            fillRule="evenodd"
-                                                            d="M5.22 10.22a.75.75 0 0 1 1.06 0L8 11.94l1.72-1.72a.75.75 0 1 1 1.06 1.06l-2.25 2.25a.75.75 0 0 1-1.06 0l-2.25-2.25a.75.75 0 0 1 0-1.06ZM10.78 5.78a.75.75 0 0 1-1.06 0L8 4.06 6.28 5.78a.75.75 0 0 1-1.06-1.06l2.25-2.25a.75.75 0 0 1 1.06 0l2.25 2.25a.75.75 0 0 1 0 1.06Z"
-                                                            clipRule="evenodd"
-                                                        />
-                                                    </svg>
-                                                </Button>
-                                            </DropdownMenuTrigger>
-                                            <DropdownMenuContent align="end" className="w-48">
-                                                <DropdownMenuRadioGroup
-                                                    value={sortOption}
-                                                    onValueChange={(v) =>
-                                                        setSortOption(v as SortOption)
-                                                    }
-                                                >
-                                                    <DropdownMenuRadioItem value="date_desc">
-                                                        Newest first
-                                                    </DropdownMenuRadioItem>
-                                                    <DropdownMenuRadioItem value="date_asc">
-                                                        Oldest first
-                                                    </DropdownMenuRadioItem>
-                                                    <DropdownMenuRadioItem value="rating_desc">
-                                                        Highest rating
-                                                    </DropdownMenuRadioItem>
-                                                    <DropdownMenuRadioItem value="rating_asc">
-                                                        Lowest rating
-                                                    </DropdownMenuRadioItem>
-                                                </DropdownMenuRadioGroup>
-                                            </DropdownMenuContent>
-                                        </DropdownMenu>
-                                    </div>
+                                                <DropdownMenuRadioItem value="date_desc">Newest first</DropdownMenuRadioItem>
+                                                <DropdownMenuRadioItem value="date_asc">Oldest first</DropdownMenuRadioItem>
+                                                <DropdownMenuRadioItem value="rating_desc">Highest rating</DropdownMenuRadioItem>
+                                                <DropdownMenuRadioItem value="rating_asc">Lowest rating</DropdownMenuRadioItem>
+                                            </DropdownMenuRadioGroup>
+                                        </DropdownMenuContent>
+                                    </DropdownMenu>
                                 </div>
-
                                 {/* Review list */}
-                                {filteredAndSortedReviews.length === 0 ? (
+                                {sortedReviews.length === 0 ? (
                                     <p className="text-sm text-muted-foreground">
-                                        No reviews in this category.
+                                        No reviews yet.
                                     </p>
                                 ) : (
                                     <ul className="space-y-5">
-                                        {filteredAndSortedReviews.map(({ review: r, index: i }) => {
-                                            const cats = getCategoriesForReview(i, reviewCategories);
+                                        {sortedReviews.map(({ review: r, index: i }) => {
                                             const isExpanded = expandedReviewIndex === i;
                                             const text = r.text ?? '';
                                             const truncated =
@@ -660,8 +567,8 @@ export function ProviderPlaceClient({
                                             const rawAuthor = (r.authorName ?? '').trim();
                                             const FALLBACK_FIRST = 'Google';
                                             const FALLBACK_LAST = 'User';
-                                            const toTitleCaseWord = (w: string) =>
-                                                w.charAt(0).toUpperCase() + w.slice(1).toLowerCase();
+                            const toTitleCaseWord = (w: string) =>
+                                w.split('-').map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase()).join('-');
                                             let formattedAuthor: string;
                                             if (!rawAuthor || rawAuthor.toLowerCase() === 'google user') {
                                                 formattedAuthor = `${FALLBACK_FIRST} ${FALLBACK_LAST.charAt(0)}.`;
@@ -722,26 +629,6 @@ export function ProviderPlaceClient({
                                                                     </span>
                                                                 </div>
                                                             )}
-
-                                                            {/* All 4 category rows — rating when assigned, dash when not */}
-                                                            <div className="grid grid-cols-2 gap-x-4 gap-y-0.5">
-                                                                {DISPLAY_CATEGORIES.map(({ key, label }) => {
-                                                                    const assigned = cats.includes(key);
-                                                                    const catRating = assigned && r.rating != null
-                                                                        ? Number(r.rating).toFixed(1)
-                                                                        : null;
-                                                                    return (
-                                                                        <div key={key} className="flex items-center justify-between gap-1">
-                                                                            <span className="text-xs text-muted-foreground">
-                                                                                {label}
-                                                                            </span>
-                                                                            <span className={`text-xs font-medium ${catRating ? 'text-foreground' : 'text-muted-foreground/40'}`}>
-                                                                                {catRating ?? '—'}
-                                                                            </span>
-                                                                        </div>
-                                                                    );
-                                                                })}
-                                                            </div>
 
                                                             {/* Review text as blockquote */}
                                                             <blockquote className="border-l-2 border-border pl-3">
@@ -851,36 +738,28 @@ export function ProviderPlaceClient({
             placeId={provider.place_id}
         />
 
-        {/* ── Sticky footer: Contact (primary) · Website (secondary) · Get Directions (ghost) ── */}
-        {(provider.website || provider.phone || hasCoords) && (
-            <div className="fixed bottom-0 left-0 right-0 z-40 border-t border-border bg-background/95 backdrop-blur-sm">
-                <div className="mx-auto flex max-w-4xl items-center gap-2 px-4 py-3 sm:px-6 lg:px-8">
-                    {/* Contact — primary, far left */}
+        {/* ── Sticky footer: Contact and Website only (Get Directions is on the location card below the map) ── */}
+        {(provider.website || provider.phone) && (
+            <div className="fixed bottom-0 left-0 right-0 z-40 border-t border-border bg-card">
+                <div className="mx-auto flex max-w-4xl items-center justify-center gap-3 px-4 py-3 sm:px-6 lg:px-8">
                     {provider.phone && (
                         <ContactPopover
                             providerName={provider.name}
                             displayName={displayName}
                             phone={provider.phone}
                             side="top"
-                            align="start"
+                            align="center"
                             label="Contact"
-                            className="flex-1"
+                            className="min-w-[120px]"
                         />
                     )}
-                    {/* Website — secondary, middle */}
                     {provider.website && (
-                        <Button asChild variant="secondary" className="flex-1">
+                        <Button asChild variant="secondary" className="min-w-[120px]">
                             <a href={provider.website} target="_blank" rel="noopener noreferrer">
                                 Website
                             </a>
                         </Button>
                     )}
-                    {/* Get Directions — ghost, far right */}
-                    <Button asChild variant="ghost" className="flex-1">
-                        <a href={directionsUrl} target="_blank" rel="noopener noreferrer">
-                            Get Directions
-                        </a>
-                    </Button>
                 </div>
             </div>
         )}
@@ -1092,9 +971,7 @@ function UploadGalleryDialog({
                                                     className="absolute right-0.5 top-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-background/80 text-foreground hover:bg-background"
                                                     aria-label="Remove"
                                                 >
-                                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="h-3 w-3">
-                                                        <path d="M5.28 4.22a.75.75 0 0 0-1.06 1.06L6.94 8l-2.72 2.72a.75.75 0 1 0 1.06 1.06L8 9.06l2.72 2.72a.75.75 0 1 0 1.06-1.06L9.06 8l2.72-2.72a.75.75 0 0 0-1.06-1.06L8 6.94 5.28 4.22Z" />
-                                                    </svg>
+                                                    <Cross className="size-3" />
                                                 </button>
                                             </div>
                                         ))}
@@ -1205,9 +1082,7 @@ function MasonryGallery({ photos }: { photos: Array<{ name: string }> }) {
                         className="absolute right-4 top-4 rounded-full bg-white/10 p-2 text-white transition-colors hover:bg-white/20"
                         onClick={() => setLightbox(null)}
                     >
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="h-5 w-5">
-                            <path d="M5.28 4.22a.75.75 0 0 0-1.06 1.06L6.94 8l-2.72 2.72a.75.75 0 1 0 1.06 1.06L8 9.06l2.72 2.72a.75.75 0 1 0 1.06-1.06L9.06 8l2.72-2.72a.75.75 0 0 0-1.06-1.06L8 6.94 5.28 4.22Z" />
-                        </svg>
+                        <Cross className="size-5" />
                     </button>
                     <div
                         className="relative max-h-[90vh] max-w-3xl w-full"
