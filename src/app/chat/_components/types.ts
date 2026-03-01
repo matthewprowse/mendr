@@ -37,6 +37,8 @@ export interface Message {
     providers?: Provider[];
     /** Emerging providers (<25 reviews but good rating), shown in separate section below. */
     emergingProviders?: Provider[];
+    /** Nearby providers we don't recommend (low rating/few reviews) but shown for sparse areas; includes reviewConcerns. */
+    nearbyOnlyProviders?: Provider[];
     /** Pagination: next page token from Google Places for "load more providers". */
     providerNextPageToken?: string | null;
     /** Search query used for this message's provider fetch (required when using pageToken). */
@@ -75,4 +77,6 @@ export interface Provider {
     photos?: Array<{ name: string }>;
     /** Estimated driving duration, e.g. "12 mins" */
     durationText?: string;
+    /** For nearby-only / non-recommended providers: key things to look out for from reviews (why reviews are low). */
+    reviewConcerns?: string;
 }

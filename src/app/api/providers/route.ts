@@ -129,7 +129,7 @@ export async function POST(req: NextRequest) {
                         radius: radius,
                     },
                 },
-                pageSize: 10,
+                pageSize: 20,
             }),
         });
 
@@ -505,16 +505,105 @@ Output JSON only: {"results":[{"place_id":"","name":"","summary":"","services":[
         );
 
         const establishedCount = established.length;
-        const takeCount = Math.min(5, establishedCount);
+        const takeCount = Math.min(6, establishedCount);
         // When no "established" (25+ reviews), show top of sorted so we always show providers when we have any
         const providers =
             establishedCount > 0
                 ? established.slice(0, takeCount)
-                : sorted.slice(0, 5);
+                : sorted.slice(0, 6);
         // Avoid duplicating when main list is fallback from sorted (emerging would overlap)
         const emergingProviders =
-            establishedCount > 0 ? emerging.slice(0, 5) : [];
+            establishedCount > 0 ? emerging.slice(0, 6) : [];
         const nextPageToken = data.nextPageToken || null;
+
+        // Nearby-only: providers in the area that we don't recommend (not in main or emerging) — show so user has options in sparse areas
+        const normalizeIdForSet = (p: any) => (p.place_id || p.id || '').toString().replace(/^places\//, '');
+        const providerPlaceIds = new Set<string>();
+        [...providers, ...emergingProviders].forEach((p: any) => {
+            const id = (p.place_id || p.id || '').toString();
+            if (id) providerPlaceIds.add(id.replace(/^places\//, ''));
+        });
+        const nearbyOnlyRaw = sorted
+            .filter((p: any) => !providerPlaceIds.has(normalizeIdForSet(p)))
+            .slice(0, 6);
+
+        // Use cached review_concerns when available; only call Gemini for uncached (saves API cost)
+        let nearbyOnlyProviders: any[] = nearbyOnlyRaw.map((p: any) => {
+            const cached = cachedMap.get(p.place_id) || cachedMap.get(normalizeIdForSet(p));
+            const reviewConcerns = (cached as any)?.review_concerns ?? null;
+            return { ...p, reviewConcerns };
+        });
+        const needsReviewConcerns = nearbyOnlyProviders.filter((p: any) => !p.reviewConcerns);
+        if (needsReviewConcerns.length > 0 && geminiKey) {
+            try {
+                const genAI = new GoogleGenerativeAI(geminiKey);
+                const model = genAI.getGenerativeModel({
+                    model: 'gemini-2.0-flash',
+                    generationConfig: { temperature: 0.2 },
+                });
+                const context = needsReviewConcerns.map((p: any) => ({
+                    place_id: p.place_id || p.id,
+                    name: p.name,
+                    rating: p.rating,
+                    rating_count: p.ratingCount ?? p.rating_count ?? 0,
+                    reviews: (p.reviews || [])
+                        .slice(0, 8)
+                        .map((r: any) => ({ text: r.text || r.body, rating: r.rating })),
+                }));
+                const prompt = `For each of these home service providers, customers have left reviews. Many have lower ratings or fewer reviews. For each provider output 1–2 short, professional sentences summarising notable feedback from reviews (e.g. recurring customer concerns, reasons ratings may be lower, or "Limited review history" if very few reviews). Use British English. Be factual, neutral and helpful.
+
+Output JSON only: {"results":[{"place_id":"<same as input>","review_concerns":"..."}]}. DATA: ${JSON.stringify(context)}`;
+                const result = await model.generateContent(prompt);
+                const jsonMatch = result.response.text().match(/\{[\s\S]*\}/);
+                if (jsonMatch) {
+                    const parsed = JSON.parse(jsonMatch[0]);
+                    const concernsMap = new Map(
+                        (parsed.results || []).map((r: any) => [
+                            (r.place_id || '').toString().replace(/^places\//, ''),
+                            r.review_concerns || r.reviewConcerns || 'Limited review history.',
+                        ])
+                    );
+                    const cachedByPlaceId = new Map(nearbyOnlyRaw.map((p: any) => [normalizeIdForSet(p), (cachedMap.get(p.place_id) || cachedMap.get(normalizeIdForSet(p)) as any)?.review_concerns]));
+                    nearbyOnlyProviders = nearbyOnlyRaw.map((p: any) => ({
+                        ...p,
+                        reviewConcerns: cachedByPlaceId.get(normalizeIdForSet(p)) || concernsMap.get(normalizeIdForSet(p)) || 'Limited review history.',
+                    }));
+                    // Persist review_concerns to cache so we don't call Gemini again for these places
+                    if (supabase && concernsMap.size > 0) {
+                        try {
+                            const adminSupabase = await createSupabaseAdminClient();
+                            for (const p of needsReviewConcerns) {
+                                const placeIdNorm = normalizeIdForSet(p);
+                                const review_concerns = concernsMap.get(placeIdNorm) || 'Limited review history.';
+                                const placeId = p.place_id || p.id;
+                                await adminSupabase
+                                    .from('cached_providers')
+                                    .update({ review_concerns, last_updated: new Date().toISOString() })
+                                    .eq('place_id', placeId);
+                            }
+                        } catch (e) {
+                            console.warn('Cache upsert for review_concerns failed:', (e as Error).message);
+                        }
+                    }
+                }
+            } catch (e) {
+                console.warn('Review concerns generation failed:', (e as Error).message);
+                nearbyOnlyProviders = nearbyOnlyRaw.map((p: any) => ({
+                    ...p,
+                    reviewConcerns: (p.rating != null && p.rating < 4.0)
+                        ? 'Lower rating than our recommended providers; check reviews before booking.'
+                        : 'Limited review history; consider checking reviews and asking for references.',
+                }));
+            }
+        } else {
+            // Fallback when no Gemini: use generic message for those still missing
+            nearbyOnlyProviders = nearbyOnlyProviders.map((p: any) => ({
+                ...p,
+                reviewConcerns: p.reviewConcerns || ((p.rating != null && p.rating < 4.0)
+                    ? 'Lower rating than our recommended providers; check reviews before booking.'
+                    : 'Limited review history; consider checking reviews and asking for references.'),
+            }));
+        }
 
         // Fast heuristic for Scandio's Pick (no AI call — saves ~1–2s): open > 4.5+ & 25+ reviews > best by rating
         let recommendedProviderIndex = 0;
@@ -550,6 +639,7 @@ Output JSON only: {"results":[{"place_id":"","name":"","summary":"","services":[
         return NextResponse.json({
             providers: providersWithFavourite,
             emergingProviders,
+            nearbyOnlyProviders,
             nextPageToken,
             searchQuery,
             recommendedProviderIndex,

@@ -331,6 +331,16 @@ export function ProviderCard({
                         {formatCustomerSummary(provider.summary || '', provider.name || displayName)}
                     </p>
                 </blockquote>
+                {provider.reviewConcerns && (
+                    <div className="flex flex-col gap-1 pt-4">
+                        <p className="text-sm font-medium text-foreground">
+                            Notable Feedback From Reviews
+                        </p>
+                        <p className="text-sm text-muted-foreground leading-relaxed border-l-2 border-border pl-3">
+                            {provider.reviewConcerns}
+                        </p>
+                    </div>
+                )}
             </div>
             <div className="flex flex-wrap items-center gap-2 mt-auto">
                 <Popover

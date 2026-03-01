@@ -11,6 +11,7 @@ type ProvidersMapProps = {
     apiKey: string;
     providers: Provider[];
     emergingProviders?: Provider[];
+    nearbyOnlyProviders?: Provider[];
     userLocation: { lat: number; lng: number; address?: string } | null;
     conversationId?: string;
     /** When true, hide the floating card and mobile strip (e.g. report page shows its own distance overlay). */
@@ -50,6 +51,7 @@ export function ProvidersMap({
     apiKey,
     providers,
     emergingProviders = [],
+    nearbyOnlyProviders = [],
     userLocation,
     conversationId,
     hideFloatingCard = false,
@@ -65,7 +67,7 @@ export function ProvidersMap({
     const [activeIndex, setActiveIndex] = useState(0);
     const [liveDuration, setLiveDuration] = useState<string>('');
 
-    const allProviders = [...(providers ?? []), ...(emergingProviders ?? [])];
+    const allProviders = [...(providers ?? []), ...(emergingProviders ?? []), ...(nearbyOnlyProviders ?? [])];
     const validProviders = allProviders.filter((p) => p.latitude != null && p.longitude != null);
     const total = validProviders.length;
 
@@ -160,8 +162,15 @@ export function ProvidersMap({
             mapsOptionsSet = true;
         }
 
+        const mapLoadTimeout = setTimeout(() => {
+            setError('Map is taking too long to load.');
+            setLoading(false);
+        }, 15000);
+
         Promise.all([importLibrary('maps'), importLibrary('routes'), importLibrary('marker')])
             .then(() => {
+                clearTimeout(mapLoadTimeout);
+                setError(null);
                 if (!containerRef.current) return;
                 const center = userLocation
                     ? { lat: userLocation.lat, lng: userLocation.lng }
@@ -193,6 +202,7 @@ export function ProvidersMap({
                 setLoading(false);
             })
             .catch(() => {
+                clearTimeout(mapLoadTimeout);
                 setError('Could not load map.');
                 setLoading(false);
             });

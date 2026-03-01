@@ -175,7 +175,7 @@ export const ChatFooter = forwardRef<
                                     type="button"
                                     variant="ghost"
                                     size="icon"
-                                    className="flex-shrink-0 shrink-0 size-9 text-muted-foreground transition-colors hover:text-foreground"
+                                    className="flex-shrink-0 shrink-0 size-9 group"
                                     onClick={() => fileInputRef.current?.click()}
                                     disabled={
                                         welcomeMode
@@ -191,7 +191,7 @@ export const ChatFooter = forwardRef<
                                 >
                                     <Paperclip
                                         strokeWidth={2}
-                                        className="size-4"
+                                        className="size-4 transition-colors text-muted-foreground group-hover:text-black dark:group-hover:text-white"
                                     />
                                 </Button>
                                 <Button

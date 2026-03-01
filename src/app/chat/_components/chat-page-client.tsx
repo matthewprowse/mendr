@@ -67,6 +67,7 @@ export function ChatPageClient({ conversationId, initialTrade }: ChatPageClientP
         diagnosis: string;
         providers: Provider[];
         emergingProviders?: Provider[];
+        nearbyOnlyProviders?: Provider[];
     } | null>(null);
     const [isLoadingDirectProviders, setIsLoadingDirectProviders] = useState(false);
     const [providerRadiusKm, setProviderRadiusKm] = useState(25);
@@ -195,6 +196,7 @@ export function ChatPageClient({ conversationId, initialTrade }: ChatPageClientP
                             diagnosis: m.diagnosis ?? undefined,
                             providers: m.providers ?? undefined,
                             emergingProviders: m.emerging_providers ?? undefined,
+                            nearbyOnlyProviders: (m as { nearby_only_providers?: Provider[] }).nearby_only_providers ?? undefined,
                         };
                     });
                     setMessages(mappedMsgs);
@@ -304,7 +306,12 @@ export function ChatPageClient({ conversationId, initialTrade }: ChatPageClientP
     }, [messages, scrollToBottom]);
 
     const updateMessageProviders = useCallback(
-        async (messageIndex: number, providers: Provider[], emergingProviders?: Provider[]) => {
+        async (
+            messageIndex: number,
+            providers: Provider[],
+            emergingProviders?: Provider[],
+            nearbyOnlyProviders?: Provider[]
+        ) => {
             if (!id) return;
             try {
                 const { data: all } = await (supabase as any)
@@ -314,13 +321,12 @@ export function ChatPageClient({ conversationId, initialTrade }: ChatPageClientP
                     .order('created_at', { ascending: true });
                 const targetId = all?.[messageIndex]?.id;
                 if (targetId) {
-                    await (supabase as any)
-                        .from('messages')
-                        .update({
-                            providers: providers,
-                            emerging_providers: emergingProviders ?? null,
-                        })
-                        .eq('id', targetId);
+                    const payload: Record<string, unknown> = {
+                        providers,
+                        emerging_providers: emergingProviders ?? null,
+                    };
+                    if (nearbyOnlyProviders != null) payload.nearby_only_providers = nearbyOnlyProviders;
+                    await (supabase as any).from('messages').update(payload).eq('id', targetId);
                 }
             } catch (e) {
                 if (process.env.NODE_ENV === 'development')
@@ -380,15 +386,20 @@ export function ChatPageClient({ conversationId, initialTrade }: ChatPageClientP
                 if (opts?.pageToken) body.pageToken = opts.pageToken;
                 if (opts?.searchQuery) body.searchQuery = opts.searchQuery;
 
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 90000);
                 const res = await fetch('/api/providers', {
+                    signal: controller.signal,
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(body),
                 });
+                clearTimeout(timeoutId);
                 const data = await res.json();
                 if (res.ok && data.providers) {
                     const finalProviders = data.providers as Provider[];
                     const finalEmerging = (data.emergingProviders ?? []) as Provider[];
+                    const finalNearbyOnly = (data.nearbyOnlyProviders ?? []) as Provider[];
 
                     setMessages((prev) => {
                         const next = [...prev];
@@ -398,6 +409,7 @@ export function ChatPageClient({ conversationId, initialTrade }: ChatPageClientP
                                 ...msg,
                                 providers: finalProviders,
                                 emergingProviders: finalEmerging,
+                                nearbyOnlyProviders: finalNearbyOnly,
                                 providerNextPageToken: data.nextPageToken ?? null,
                                 providerSearchQuery:
                                     data.searchQuery ?? msg.providerSearchQuery ?? trade,
@@ -405,7 +417,7 @@ export function ChatPageClient({ conversationId, initialTrade }: ChatPageClientP
                         }
                         return next;
                     });
-                    updateMessageProviders(messageIndex, finalProviders, finalEmerging);
+                    updateMessageProviders(messageIndex, finalProviders, finalEmerging, finalNearbyOnly);
                 } else {
                     console.error('API Error:', data.error || 'Unknown error');
                     toast.error(
@@ -414,7 +426,12 @@ export function ChatPageClient({ conversationId, initialTrade }: ChatPageClientP
                 }
             } catch (err) {
                 console.error('Failed to fetch providers:', err);
-                toast.error("Couldn't load providers. Check your connection and try again.");
+                const isTimeout = err instanceof Error && err.name === 'AbortError';
+                toast.error(
+                    isTimeout
+                        ? "Providers are taking too long. Try again or use a smaller search radius."
+                        : "Couldn't load providers. Check your connection and try again."
+                );
             } finally {
                 setIsLoadingProvidersForMessage(null);
             }
@@ -430,16 +447,27 @@ export function ChatPageClient({ conversationId, initialTrade }: ChatPageClientP
             setIsLoadingDirectProviders(true);
             try {
                 const radius = (radiusKm ?? providerRadiusKm) * 1000;
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 90000);
                 const res = await fetch('/api/providers', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ lat, lng, trade, radius }),
+                    signal: controller.signal,
                 });
+                clearTimeout(timeoutId);
                 const data = await res.json();
                 if (res.ok && data.providers) {
                     const providers = data.providers as Provider[];
                     const emergingProviders = (data.emergingProviders ?? []) as Provider[];
-                    setDirectTradeResult({ trade, diagnosis, providers, emergingProviders });
+                    const nearbyOnlyProviders = (data.nearbyOnlyProviders ?? []) as Provider[];
+                    setDirectTradeResult({
+                        trade,
+                        diagnosis,
+                        providers,
+                        emergingProviders,
+                        nearbyOnlyProviders,
+                    });
                     setDirectTradeSelection(null);
                 } else {
                     setDirectTradeResult({
@@ -447,11 +475,20 @@ export function ChatPageClient({ conversationId, initialTrade }: ChatPageClientP
                         diagnosis,
                         providers: [],
                         emergingProviders: [],
+                        nearbyOnlyProviders: [],
                     });
                     setDirectTradeSelection(null);
                 }
-            } catch {
-                setDirectTradeResult({ trade, diagnosis, providers: [], emergingProviders: [] });
+            } catch (err) {
+                const isTimeout = err instanceof Error && err.name === 'AbortError';
+                if (isTimeout) toast.error("Providers are taking too long. Try again or use a smaller search radius.");
+                setDirectTradeResult({
+                    trade,
+                    diagnosis,
+                    providers: [],
+                    emergingProviders: [],
+                    nearbyOnlyProviders: [],
+                });
                 setDirectTradeSelection(null);
             } finally {
                 setIsLoadingDirectProviders(false);
@@ -2223,6 +2260,7 @@ export function ChatPageClient({ conversationId, initialTrade }: ChatPageClientP
                                 }}
                                 providers={directTradeResult?.providers ?? []}
                                 emergingProviders={directTradeResult?.emergingProviders ?? []}
+                                nearbyOnlyProviders={directTradeResult?.nearbyOnlyProviders ?? []}
                                 isLoadingProviders={isLoadingDirectProviders}
                                 userLocation={userLocation}
                                 onRequestLocation={() =>

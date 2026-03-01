@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
+import { Share } from '@/lib/icons';
 
 interface ReportCardProps {
     conversationId: string;
@@ -62,13 +63,16 @@ export function ReportCard({ conversationId }: ReportCardProps) {
                     Share it with your provider before they arrive so they can bring the right parts and quote you accurately.
                 </p>
             </div>
-            <div className="flex gap-2">
+            <div className="flex items-center gap-2">
                 <Button
                     variant="default"
-                    size="sm"
+                    size="icon"
+                    className="size-9 shrink-0"
                     onClick={handleShareReport}
+                    title={copied ? 'Copied' : 'Share report'}
+                    aria-label={copied ? 'Copied' : 'Share report'}
                 >
-                    {copied ? 'Copied' : 'Share Report'}
+                    <Share className="size-4" />
                 </Button>
                 <Button
                     variant="outline"

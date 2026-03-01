@@ -149,6 +149,40 @@ ALTER TABLE cached_providers ADD COLUMN IF NOT EXISTS reviews JSONB;
 ALTER TABLE cached_providers ADD COLUMN IF NOT EXISTS weekday_descriptions JSONB;
 ALTER TABLE cached_providers ADD COLUMN IF NOT EXISTS photos JSONB;
 ALTER TABLE cached_providers ADD COLUMN IF NOT EXISTS review_highlights JSONB;
+-- AI-generated "notable feedback from reviews" for nearby-only / low-rated providers (reduces Gemini calls)
+ALTER TABLE cached_providers ADD COLUMN IF NOT EXISTS review_concerns TEXT;
+
+-- =============================================================================
+-- 3b. API response caches (reduce Google/Gemini API usage)
+-- =============================================================================
+-- Geocode: address or lat,lng -> lat, lng, formatted_address (30-day TTL)
+CREATE TABLE IF NOT EXISTS geocode_cache (
+    query_key TEXT PRIMARY KEY,
+    lat DOUBLE PRECISION NOT NULL,
+    lng DOUBLE PRECISION NOT NULL,
+    address TEXT NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_geocode_cache_created_at ON geocode_cache(created_at);
+
+-- Directions: origin|destination -> distance_text, distance_meters, duration_text, duration_seconds (7-day TTL)
+CREATE TABLE IF NOT EXISTS directions_cache (
+    query_key TEXT PRIMARY KEY,
+    distance_text TEXT,
+    distance_meters INT,
+    duration_text TEXT,
+    duration_seconds INT,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_directions_cache_created_at ON directions_cache(created_at);
+
+-- Place photo: media resource name + maxWidth -> photo_uri (7-day TTL)
+CREATE TABLE IF NOT EXISTS place_photo_cache (
+    query_key TEXT PRIMARY KEY,
+    photo_uri TEXT NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_place_photo_cache_created_at ON place_photo_cache(created_at);
 
 -- =============================================================================
 -- 4. Conversations (homeowner diagnosis sessions)

@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { Suspense } from 'react';
 import { LandingFooter } from '@/components/landing-footer';
 import { LandingHeader } from '@/components/landing-header';
 import { Placeholder } from '@/components/placeholder';
@@ -64,9 +65,61 @@ function FeaturesChatPlaceholder({
     );
 }
 
-export default async function LandingPage() {
+/** Renders the services grid; used inside Suspense so the rest of the page can show immediately. */
+async function ServicesSection() {
     const services = await getServices();
+    return (
+        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            {services.map(({ id, label }) => (
+                <div
+                    key={id}
+                    className="flex flex-col overflow-hidden rounded-lg border border-border/50 bg-background transition-all duration-250 hover:border-border hover:bg-background"
+                >
+                    <Placeholder
+                        label={label}
+                        aspectRatio="aspect-[16/9]"
+                        className="w-full shrink-0 rounded-b-none border-0"
+                    />
+                    <div className="flex flex-1 flex-col gap-1.5 border-t border-border/50 bg-white p-4">
+                        <h3 className="font-semibold text-foreground">{label}</h3>
+                        <p className="text-sm text-muted-foreground">
+                            {PLACEHOLDER_DESC}
+                        </p>
+                        <div className="mt-4 flex flex-1 flex-col justify-end gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+                            <Button asChild variant="secondary" size="sm" className="w-fit">
+                                <Link href={getServiceChatHref(label)}>
+                                    Start Diagnosis
+                                </Link>
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+            ))}
+        </div>
+    );
+}
 
+function ServicesSectionFallback() {
+    return (
+        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            {[1, 2, 3].map((i) => (
+                <div
+                    key={i}
+                    className="flex flex-col overflow-hidden rounded-lg border border-border/50 bg-muted/50 animate-pulse"
+                >
+                    <div className="aspect-video w-full bg-muted" />
+                    <div className="flex flex-1 flex-col gap-1.5 border-t border-border/50 p-4">
+                        <div className="h-5 w-2/3 rounded bg-muted" />
+                        <div className="h-4 w-full rounded bg-muted" />
+                        <div className="mt-4 h-9 w-24 rounded bg-muted" />
+                    </div>
+                </div>
+            ))}
+        </div>
+    );
+}
+
+export default function LandingPage() {
     return (
         <div className="flex min-h-screen flex-col bg-background">
             <LandingHeader
@@ -290,7 +343,7 @@ export default async function LandingPage() {
                     </div>
                 </section>
 
-                {/* All Services */}
+                {/* All Services — streamed so the page shell shows immediately */}
                 <section
                     id="all-services"
                     className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8 scroll-mt-16"
@@ -306,33 +359,9 @@ export default async function LandingPage() {
                             commodo consequat.
                         </p>
                     </div>
-                    <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-                        {services.map(({ id, label }) => (
-                            <div
-                                key={id}
-                                className="flex flex-col overflow-hidden rounded-lg border border-border/50 bg-background transition-all duration-250 hover:border-border hover:bg-background"
-                            >
-                                <Placeholder
-                                    label={label}
-                                    aspectRatio="aspect-[16/9]"
-                                    className="w-full shrink-0 rounded-b-none border-0"
-                                />
-                                <div className="flex flex-1 flex-col gap-1.5 border-t border-border/50 bg-white p-4">
-                                    <h3 className="font-semibold text-foreground">{label}</h3>
-                                    <p className="text-sm text-muted-foreground">
-                                        {PLACEHOLDER_DESC}
-                                    </p>
-                                    <div className="mt-4 flex flex-1 flex-col justify-end gap-2 sm:flex-row sm:flex-wrap sm:items-center">
-                                        <Button asChild variant="secondary" size="sm" className="w-fit">
-                                            <Link href={getServiceChatHref(label)}>
-                                                Start Diagnosis
-                                            </Link>
-                                        </Button>
-                                    </div>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
+                    <Suspense fallback={<ServicesSectionFallback />}>
+                        <ServicesSection />
+                    </Suspense>
                 </section>
 
                 <TestimonialsSection />

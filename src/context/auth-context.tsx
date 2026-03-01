@@ -26,14 +26,23 @@ export function AuthProvider({
     const [isLoading, setIsLoading] = useState(!initialUser);
 
     useEffect(() => {
-        // Check for active session
+        const AUTH_TIMEOUT_MS = 5000;
         const initSession = async () => {
-            const {
-                data: { session },
-            } = await supabase.auth.getSession();
-            setSession(session);
-            setUser(session?.user ?? null);
-            setIsLoading(false);
+            try {
+                const sessionPromise = supabase.auth.getSession();
+                const timeout = new Promise<never>((_, reject) =>
+                    setTimeout(() => reject(new Error('Auth timeout')), AUTH_TIMEOUT_MS)
+                );
+                const result = await Promise.race([sessionPromise, timeout]);
+                const session = result?.data?.session ?? null;
+                setSession(session);
+                setUser(session?.user ?? null);
+            } catch {
+                setSession(null);
+                setUser(null);
+            } finally {
+                setIsLoading(false);
+            }
         };
 
         initSession();

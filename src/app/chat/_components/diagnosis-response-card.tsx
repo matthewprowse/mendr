@@ -44,6 +44,7 @@ export function DiagnosisResponseCard({
     diagnosis,
     providers,
     emergingProviders = [],
+    nearbyOnlyProviders = [],
     isLoadingProviders,
     userLocation,
     onRequestLocation,
@@ -62,6 +63,7 @@ export function DiagnosisResponseCard({
     diagnosis: DiagnosisData;
     providers: Provider[];
     emergingProviders?: Provider[];
+    nearbyOnlyProviders?: Provider[];
     isLoadingProviders: boolean;
     userLocation: { lat: number; lng: number; address?: string } | null;
     onRequestLocation: (trade?: string) => void;
@@ -286,13 +288,13 @@ export function DiagnosisResponseCard({
                     {hasLocation &&
                         (isLoadingProviders ? (
                             <ProvidersSkeleton />
-                        ) : providers.length === 0 && emergingProviders.length === 0 ? (
+                        ) : providers.length === 0 && emergingProviders.length === 0 && (nearbyOnlyProviders?.length ?? 0) === 0 ? (
                             <p className="text-sm text-muted-foreground py-2">
                                 No providers found in your area.
                             </p>
                         ) : (
                             <div className="flex flex-col gap-6">
-                                {providers.length + emergingProviders.length > 0 &&
+                                {(providers.length + emergingProviders.length + (nearbyOnlyProviders?.length ?? 0)) > 0 &&
                                     (process.env.NEXT_PUBLIC_GOOGLE_MAPS_EMBED_KEY ||
                                         process.env.NEXT_PUBLIC_GOOGLE_PLACES_API_KEY) && (
                                         <ProvidersMap
@@ -303,6 +305,7 @@ export function DiagnosisResponseCard({
                                             }
                                             providers={providers}
                                             emergingProviders={emergingProviders}
+                                            nearbyOnlyProviders={nearbyOnlyProviders}
                                             userLocation={userLocation}
                                         />
                                     )}
@@ -396,6 +399,36 @@ export function DiagnosisResponseCard({
                                                     </div>
                                                 </>
                                             )}
+                                            {(nearbyOnlyProviders?.length ?? 0) > 0 && (
+                                                <>
+                                                    <Separator className="w-full" />
+                                                    <div className="flex flex-col gap-0.5">
+                                                        <h3 className="text-lg font-semibold text-foreground">
+                                                            Other Providers in Area
+                                                        </h3>
+                                                        <p className="text-sm text-foreground leading-relaxed">
+                                                            These providers are in your area but do not meet our
+                                                            usual recommendation criteria. Below is a summary
+                                                            and notable feedback from customer reviews.
+                                                        </p>
+                                                    </div>
+                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                                        {nearbyOnlyProviders!.map((p, i) => (
+                                                            <ProviderCard
+                                                                key={i}
+                                                                provider={p}
+                                                                index={providers.length + (emergingProviders?.length ?? 0) + i}
+                                                                diagnosis={diagnosis}
+                                                                conversationId={conversationId}
+                                                                openPopoverId={openPopoverId}
+                                                                setOpenPopoverId={setOpenPopoverId}
+                                                                trade={trade}
+                                                                userLocation={userLocation}
+                                                            />
+                                                        ))}
+                                                    </div>
+                                                </>
+                                            )}
                                         </>
                                     );
                                 })()}
@@ -403,7 +436,7 @@ export function DiagnosisResponseCard({
                         ))}
                     {hasImage &&
                         hasLocation &&
-                        (providers.length > 0 || emergingProviders.length > 0) && (
+                        (providers.length > 0 || emergingProviders.length > 0 || (nearbyOnlyProviders?.length ?? 0) > 0) && (
                             <div className="mt-6 pt-4 border-t border-border">
                                 <p className="text-sm text-muted-foreground leading-relaxed">
                                     Was this diagnosis accurate? Additional photos or details help

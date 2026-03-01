@@ -160,6 +160,7 @@ export function ChatMessage({
                     diagnosis={message.diagnosis}
                     providers={message.providers}
                     emergingProviders={message.emergingProviders}
+                    nearbyOnlyProviders={message.nearbyOnlyProviders}
                     isLoadingProviders={inlineDiagnosisProps.isLoadingProviders}
                     userLocation={inlineDiagnosisProps.userLocation}
                     trade={message.diagnosis!.trade}

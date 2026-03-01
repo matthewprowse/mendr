@@ -20,6 +20,19 @@ CREATE POLICY "Public Read Cached Providers"
 ON cached_providers FOR SELECT 
 USING (true);
 
+-- 2b. API caches: public read (writes use service role / admin)
+ALTER TABLE geocode_cache ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Public Read Geocode Cache" ON geocode_cache;
+CREATE POLICY "Public Read Geocode Cache" ON geocode_cache FOR SELECT USING (true);
+
+ALTER TABLE directions_cache ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Public Read Directions Cache" ON directions_cache;
+CREATE POLICY "Public Read Directions Cache" ON directions_cache FOR SELECT USING (true);
+
+ALTER TABLE place_photo_cache ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Public Read Place Photo Cache" ON place_photo_cache;
+CREATE POLICY "Public Read Place Photo Cache" ON place_photo_cache FOR SELECT USING (true);
+
 -- 3. Conversations: Allow anonymous create, read, update (by id)
 DROP POLICY IF EXISTS "Public All Access Conversations" ON conversations;
 DROP POLICY IF EXISTS "Conversations allow select" ON conversations;
