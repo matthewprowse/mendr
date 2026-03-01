@@ -74,7 +74,6 @@ export const ChatFooter = forwardRef<
                 }
             }
             if (imageFiles.length > 0) {
-                e.preventDefault();
                 const remaining = welcomeMode ? 1 : MAX_ATTACHMENTS - pendingAttachments.length;
                 const toAdd = imageFiles.slice(0, Math.max(0, remaining));
                 if (toAdd.length > 0) onAddAttachments(toAdd);
@@ -99,7 +98,10 @@ export const ChatFooter = forwardRef<
         };
 
         return (
-            <footer ref={ref} className="fixed bottom-0 left-0 right-0 z-50 bg-background p-4">
+            <footer
+                ref={ref}
+                className="sticky bottom-0 left-0 right-0 z-40 bg-background/95 backdrop-blur px-4 py-3"
+            >
                 <div className="max-w-4xl px-0 md:px-4 mx-auto w-full flex flex-col gap-2">
                     <input
                         ref={fileInputRef}
@@ -175,7 +177,7 @@ export const ChatFooter = forwardRef<
                                     type="button"
                                     variant="ghost"
                                     size="icon"
-                                    className="flex-shrink-0 shrink-0 size-9 group"
+                                    className="size-9 shrink-0 text-muted-foreground hover:text-foreground"
                                     onClick={() => fileInputRef.current?.click()}
                                     disabled={
                                         welcomeMode
@@ -189,10 +191,7 @@ export const ChatFooter = forwardRef<
                                             : `Add Images (Max ${MAX_ATTACHMENTS})`
                                     }
                                 >
-                                    <Paperclip
-                                        strokeWidth={2}
-                                        className="size-4 transition-colors text-muted-foreground group-hover:text-black dark:group-hover:text-white"
-                                    />
+                                    <Paperclip strokeWidth={2} className="size-4" />
                                 </Button>
                                 <Button
                                     type="button"

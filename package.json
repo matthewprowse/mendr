@@ -11,7 +11,8 @@
         "lint": "eslint .",
         "format": "prettier --write \"src/**/*.{ts,tsx,js,jsx,json,css,md}\"",
         "format:check": "prettier --check \"src/**/*.{ts,tsx,js,jsx,json,css,md}\"",
-        "scrape-providers": "npx tsx scripts/scrape-providers.ts"
+        "scrape-providers": "npx tsx scripts/scrape-providers.ts",
+        "sync-provider-reviews": "npx tsx scripts/sync-provider-reviews.ts"
     },
     "dependencies": {
         "@google/generative-ai": "^0.24.1",
@@ -33,6 +34,7 @@
         "zod": "^4.3.6"
     },
     "devDependencies": {
+        "dotenv": "^16.4.5",
         "@tailwindcss/postcss": "^4",
         "@types/node": "^20",
         "@types/react": "^19",

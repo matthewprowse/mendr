@@ -59,8 +59,7 @@ export async function POST(req: NextRequest) {
 
         const radius = customRadius || 50000; // Default 50km — wider search for rural/sparse areas
 
-        // 1. Fast trade-to-query mapping (no AI call — saves ~1–2s)
-        // Supabase services labels → Google Places search query (must match services.search_query)
+        // 1. Trade → Places search query (used for API call and response; set once so cache path has it)
         const TRADE_QUERY_MAP: Record<string, string> = {
             electrical: 'Electrician',
             plumbing: 'Plumber',
@@ -98,13 +97,72 @@ export async function POST(req: NextRequest) {
             builder: 'Builder',
             contractor: 'Building Contractor',
         };
-        let searchQuery = providedSearchQuery;
-        if (!searchQuery) {
-            const normalizedTrade = trade.toLowerCase().trim();
-            searchQuery = TRADE_QUERY_MAP[normalizedTrade] || trade;
+        const searchQuery = providedSearchQuery || TRADE_QUERY_MAP[String(trade).toLowerCase().trim()] || trade;
+
+        const normalizePlaceId = (id: string) => (id || '').replace(/^places\//, '');
+        const SEARCH_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+
+        // Search cache: (lat, lng, trade, radius) -> place_ids + routing. Saves Places Text Search calls (~$0.03/call).
+        let places: any[] = [];
+        let routingSummaries: any[] = [];
+        let data: { nextPageToken?: string | null; places?: any[]; routingSummaries?: any[] } = { nextPageToken: null };
+        let cachedData: any[] = [];
+
+        if (!pageToken && supabase) {
+            const latR = Math.round(Number(lat) * 1000) / 1000;
+            const lngR = Math.round(Number(lng) * 1000) / 1000;
+            const tradeNorm = String(trade).toLowerCase().trim();
+            const searchCacheKey = `search_${latR}_${lngR}_${tradeNorm}_${radius}`;
+            const { data: searchRow } = await supabase
+                .from('provider_search_cache')
+                .select('place_ids, routing_summaries, next_page_token, created_at')
+                .eq('query_key', searchCacheKey)
+                .single();
+            if (searchRow?.place_ids && Array.isArray(searchRow.place_ids) && searchRow.place_ids.length > 0) {
+                const createdAt = searchRow.created_at ? new Date(searchRow.created_at).getTime() : 0;
+                if (Date.now() - createdAt < SEARCH_CACHE_TTL_MS) {
+                    const placeIdsFromCache = searchRow.place_ids as string[];
+                    const { data: providerRows } = await supabase
+                        .from('cached_providers')
+                        .select('*')
+                        .in('place_id', placeIdsFromCache);
+                    const rowsByPlaceId = new Map((providerRows || []).map((r: any) => [normalizePlaceId(r.place_id), r]));
+                    const orderedRows = placeIdsFromCache
+                        .map((id) => rowsByPlaceId.get(normalizePlaceId(id)))
+                        .filter(Boolean);
+                    if (orderedRows.length > 0) {
+                        const routingFromCache = (searchRow.routing_summaries || []) as any[];
+                        places = orderedRows.map((row: any) => ({
+                            id: row.place_id,
+                            displayName: { text: row.name },
+                            formattedAddress: row.address || '',
+                            addressComponents: [],
+                            rating: row.rating,
+                            userRatingCount: row.rating_count ?? 0,
+                            nationalPhoneNumber: row.phone,
+                            internationalPhoneNumber: null,
+                            websiteUri: row.website,
+                            location: row.latitude != null && row.longitude != null ? { latitude: row.latitude, longitude: row.longitude } : null,
+                            reviewSummary: row.summary ? { text: { text: row.summary } } : null,
+                            editorialSummary: null,
+                            types: [],
+                            reviews: row.reviews || [],
+                            photos: Array.isArray(row.photos) ? row.photos.map((p: any) => ({ name: p?.name || p })) : [],
+                            regularOpeningHours: {
+                                weekdayDescriptions: row.weekday_descriptions || [],
+                                nextOpenTime: null,
+                            },
+                        }));
+                        routingSummaries = routingFromCache.length === places.length ? routingFromCache : places.map(() => ({}));
+                        data = { nextPageToken: searchRow.next_page_token ?? null };
+                        cachedData = orderedRows;
+                    }
+                }
+            }
         }
 
-        // 2. Fetch providers from Google Places API
+        if (places.length === 0) {
+            // 2. Fetch providers from Google Places API
         const url = `https://places.googleapis.com/v1/places:searchText`;
         const response = await fetch(url, {
             method: 'POST',
@@ -139,44 +197,72 @@ export async function POST(req: NextRequest) {
             throw new Error(`Google Places API error (${response.status}): ${errorText}`);
         }
 
-        const data = await response.json();
-        const rawPlaces = data.places || [];
-        const rawRouting = data.routingSummaries || [];
+            data = await response.json();
+            const rawPlaces = data.places || [];
+            const rawRouting = data.routingSummaries || [];
 
-        // Filter out retail stores (e.g. Builders Warehouse) — we want contractors/service providers, not shops that sell parts
-        const RETAIL_TYPES = new Set([
-            'hardware_store',
-            'home_goods_store',
-            'home_improvement_store',
-            'building_materials_store',
-            'department_store',
-            'warehouse_store',
-            'discount_store',
-        ]);
-        const filtered: { place: any; routing: any }[] = [];
-        rawPlaces.forEach((p: any, i: number) => {
-            const types = (p.types || []) as string[];
-            const hasRetailType = types.some((t: string) => RETAIL_TYPES.has(t));
-            if (!hasRetailType) filtered.push({ place: p, routing: rawRouting[i] });
-        });
-        const places = filtered.map((f) => f.place);
-        const routingSummaries = filtered.map((f) => f.routing);
+            // Filter out retail stores (e.g. Builders Warehouse) — we want contractors/service providers, not shops that sell parts
+            const RETAIL_TYPES = new Set([
+                'hardware_store',
+                'home_goods_store',
+                'home_improvement_store',
+                'building_materials_store',
+                'department_store',
+                'warehouse_store',
+                'discount_store',
+            ]);
+            const filtered: { place: any; routing: any }[] = [];
+            rawPlaces.forEach((p: any, i: number) => {
+                const types = (p.types || []) as string[];
+                const hasRetailType = types.some((t: string) => RETAIL_TYPES.has(t));
+                if (!hasRetailType) filtered.push({ place: p, routing: rawRouting[i] });
+            });
+            places = filtered.map((f) => f.place);
+            routingSummaries = filtered.map((f) => f.routing);
+
+            // Persist search result in background so we don't block the response
+            if (supabase && !pageToken && places.length > 0) {
+                const latR = Math.round(Number(lat) * 1000) / 1000;
+                const lngR = Math.round(Number(lng) * 1000) / 1000;
+                const tradeNorm = String(trade).toLowerCase().trim();
+                const searchCacheKey = `search_${latR}_${lngR}_${tradeNorm}_${radius}`;
+                const placeIdsToCache = places.map((p: any) => p.id);
+                const nextToken = data.nextPageToken ?? null;
+                createSupabaseAdminClient().then((adminSupabase) =>
+                    adminSupabase.from('provider_search_cache').upsert({
+                        query_key: searchCacheKey,
+                        place_ids: placeIdsToCache,
+                        routing_summaries: routingSummaries,
+                        next_page_token: nextToken,
+                        created_at: new Date().toISOString(),
+                    }, { onConflict: 'query_key' })
+                ).catch((e) => console.warn('Provider search cache write skipped:', (e as Error).message));
+            }
+        }
 
         if (places.length === 0) {
             return NextResponse.json({ providers: [] });
         }
 
-        // 3. Caching Logic: Check which providers are already analysed
+        // 3. Caching Logic: Check which providers are already analysed (parallel DB queries)
         const placeIds = places.map((p: any) => p.id);
         const genericFallback = `Local ${trade} professional.`;
-        const normalizePlaceId = (id: string) => (id || '').replace(/^places\//, '');
-        let cachedData: any[] = [];
-        if (supabase) {
+        let profileRows: { id: string; google_place_id: string }[] = [];
+        if (cachedData.length === 0 && supabase) {
+            const [cachedRes, profileRes] = await Promise.all([
+                supabase.from('cached_providers').select('*').in('place_id', placeIds),
+                placeIds.length > 0
+                    ? supabase.from('provider_profiles').select('id, google_place_id').in('google_place_id', placeIds)
+                    : Promise.resolve({ data: [] as { id: string; google_place_id: string }[] }),
+            ]);
+            cachedData = cachedRes.data || [];
+            profileRows = (profileRes.data || []) as { id: string; google_place_id: string }[];
+        } else if (supabase && placeIds.length > 0) {
             const { data } = await supabase
-                .from('cached_providers')
-                .select('*')
-                .in('place_id', placeIds);
-            cachedData = data || [];
+                .from('provider_profiles')
+                .select('id, google_place_id')
+                .in('google_place_id', placeIds);
+            profileRows = (data || []) as { id: string; google_place_id: string }[];
         }
 
         const cachedMap = new Map<string, any>();
@@ -203,20 +289,14 @@ export async function POST(req: NextRequest) {
 
         // Provider page id: Scandio profile id or cached_providers.id for /pro/[id]
         const idByPlaceId = new Map<string, string>();
-        if (supabase && placeIds.length > 0) {
-            const { data: profileRows } = await supabase
-                .from('provider_profiles')
-                .select('id, google_place_id')
-                .in('google_place_id', placeIds);
-            (profileRows || []).forEach((row: { id: string; google_place_id: string }) => {
-                const gpid = row.google_place_id;
-                if (gpid && row.id) {
-                    idByPlaceId.set(gpid, row.id);
-                    idByPlaceId.set(normalizePlaceId(gpid), row.id);
-                    if (!gpid.startsWith('places/')) idByPlaceId.set(`places/${gpid}`, row.id);
-                }
-            });
-        }
+        profileRows.forEach((row: { id: string; google_place_id: string }) => {
+            const gpid = row.google_place_id;
+            if (gpid && row.id) {
+                idByPlaceId.set(gpid, row.id);
+                idByPlaceId.set(normalizePlaceId(gpid), row.id);
+                if (!gpid.startsWith('places/')) idByPlaceId.set(`places/${gpid}`, row.id);
+            }
+        });
 
         // Treat cache as "missing" if it only has the generic fallback — re-run AI to get real summary
         const missingPlaces = places.filter((p: any) => {
@@ -263,7 +343,7 @@ For each provider output JSON with:
    - Strip everything that is not the core business name: marketing tags (e.g. "New", "Repairs", "24/7", "Open"), pipe- or dash-separated service lists (e.g. " - New | Repairs | Automations" or " | Garage Doors | Gates"), location suffixes ("Cape Town", "Western Cape"), legal suffixes ("Pty Ltd", "Ltd", "LLC").
    - Examples: "Al Garage Door Solutions - New | Repairs | Automations" → "Al Garage Door Solutions". "Planet Automations" → "Planet Automations" (keep as-is). "Joe's Plumbing Pty Ltd - Cape Town" → "Joe's Plumbing". "Brano Cape Garage Doors" → "Brano Cape Garage Doors".
    - Output Title Case. No trailing spaces, pipes, or dashes.
-2) "summary": Exactly 2–3 SHORT sentences. CRITICAL: Do NOT start with or include the business/company name (e.g. no "Plum Plumbers are...", "Combat Plumbing is..."). Write in third person about what customers say: e.g. "Consistently praised for prompt, professional service. Staff noted for attention to detail. Highly recommended." Max 3 sentences, under 45 words. NEVER return empty summary.
+2) "summary": A fuller customer-focused description: 4–6 sentences. CRITICAL: Do NOT start with or include the business/company name (e.g. no "Plum Plumbers are...", "Combat Plumbing is..."). Write in third person about what customers say: e.g. "Consistently praised for prompt, professional service. Staff noted for attention to detail. Highly recommended." Under 80 words. NEVER return empty summary.
 3) "services" array: [{"short":"≤15 chars","full":"≤30 chars"}] for trade: ${trade}.
 
 Output JSON only: {"results":[{"place_id":"","name":"","summary":"","services":[]}]}. DATA: ${JSON.stringify(providersContext)}`;
@@ -448,7 +528,7 @@ Output JSON only: {"results":[{"place_id":"","name":"","summary":"","services":[
                 isOpen: providerData.isOpen,
                 weekdayDescriptions: providerData.weekdayDescriptions,
                 nextOpenTime: providerData.nextOpenTime,
-                reviews: providerData.reviews ?? [],
+                reviews: (providerData.reviews ?? []).slice(0, 50),
                 id: providerId ?? null,
             };
         }).filter(Boolean);

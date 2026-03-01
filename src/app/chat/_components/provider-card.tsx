@@ -14,6 +14,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { toast } from 'sonner';
+import Link from 'next/link';
 import { Provider, type Service } from './types';
 import { toWhatsAppPhone, isWhatsAppCapablePhone, formatBusinessName } from '@/lib/utils';
 import { FavouriteButton } from '@/components/favourite-button';
@@ -272,8 +273,8 @@ export function ProviderCard({
 
     return (
         <Card className="flex flex-col h-full border-input shadow-none p-4 rounded-md">
-            <CardHeader className="flex flex-col gap-3 p-0">
-                <div className="flex flex-col gap-2 w-full min-w-0">
+            <CardHeader className="flex flex-col gap-1.5 p-0">
+                <div className="flex flex-col gap-1 w-full min-w-0">
                     <div className="flex justify-between items-center gap-2 w-full min-w-0">
                         <div className="min-w-0 flex-1">
                             <CardTitle
@@ -339,6 +340,16 @@ export function ProviderCard({
                         <p className="text-sm text-muted-foreground leading-relaxed border-l-2 border-border pl-3">
                             {provider.reviewConcerns}
                         </p>
+                    </div>
+                )}
+                {(provider.reviews?.length ?? 0) > 0 && (provider.id ?? provider.place_id) && (
+                    <div className="pt-2">
+                        <Link
+                            href={`/pro/${provider.id ?? encodeURIComponent(provider.place_id ?? '')}`}
+                            className="text-sm text-muted-foreground hover:text-foreground underline"
+                        >
+                            View {Math.min(provider.reviews?.length ?? 0, 50)} review{(provider.reviews?.length ?? 0) !== 1 ? 's' : ''}
+                        </Link>
                     </div>
                 )}
             </div>

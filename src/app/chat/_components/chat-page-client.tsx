@@ -71,22 +71,11 @@ export function ChatPageClient({ conversationId, initialTrade }: ChatPageClientP
     } | null>(null);
     const [isLoadingDirectProviders, setIsLoadingDirectProviders] = useState(false);
     const [providerRadiusKm, setProviderRadiusKm] = useState(25);
-    const [footerHeight, setFooterHeight] = useState(104);
     // --- Refs ---
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const mainRef = useRef<HTMLElement>(null);
-    const footerRef = useRef<HTMLElement>(null);
     const welcomeFileInputRef = useRef<HTMLInputElement>(null);
 
-    useEffect(() => {
-        const el = footerRef.current;
-        if (!el) return;
-        const updateHeight = () => setFooterHeight(el.getBoundingClientRect().height);
-        updateHeight();
-        const ro = new ResizeObserver(updateHeight);
-        ro.observe(el);
-        return () => ro.disconnect();
-    }, []);
     const startInitialDiagnosisAbortRef = useRef<AbortController | null>(null);
 
     const handleWelcomeUpload = async (file: File) => {
@@ -186,9 +175,16 @@ export function ChatPageClient({ conversationId, initialTrade }: ChatPageClientP
                                   )
                                   .filter((x: unknown): x is string => typeof x === 'string')
                             : [];
+                        const rawContent = m.content;
+                        const content =
+                            typeof rawContent === 'string'
+                                ? rawContent
+                                : rawContent != null
+                                  ? String(rawContent)
+                                  : '';
                         return {
                             role: m.role as 'user' | 'assistant',
-                            content: m.content,
+                            content: content === '[object Object]' ? '' : content,
                             attachments,
                             attachment_descriptions: (m.attachment_descriptions as string[] | undefined) ?? undefined,
                             feedback: m.feedback as 'up' | 'down' | null,
@@ -510,45 +506,95 @@ export function ChatPageClient({ conversationId, initialTrade }: ChatPageClientP
                 diagnosis?: DiagnosisData;
             }
         ) => {
-            const geocodeRes = await fetch('/api/geocode', {
+            const radius = (providerRadiusKm ?? 25) * 1000;
+            const trade =
+                opts?.directTrade?.trade ?? opts?.trade ?? null;
+            const shouldFetchProviders = Boolean(
+                trade && trade !== 'N/A' && (opts?.directTrade || (opts?.messageIndex != null && opts?.trade))
+            );
+
+            // Run geocode and provider fetch in parallel so we don't wait for geocode before starting providers
+            const geocodePromise = fetch('/api/geocode', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ lat, lng }),
-            });
-            const geoData = await geocodeRes.json();
+            }).then(async (r) => ({ res: r, data: await r.json().catch(() => ({})) }));
+
+            const providerController = shouldFetchProviders ? new AbortController() : null;
+            if (providerController) {
+                setTimeout(() => providerController.abort(), 90000);
+            }
+            const providerPromise = shouldFetchProviders
+                ? fetch('/api/providers', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ lat, lng, trade, radius }),
+                      signal: providerController!.signal,
+                  }).then(async (r) => ({ res: r, data: await r.json().catch(() => ({})) }))
+                : Promise.resolve(null);
+
+            const [geocodeResult, providerResult] = await Promise.all([geocodePromise, providerPromise]);
 
             try {
-                if (!geocodeRes.ok) {
-                    toast.error(geoData.error || 'Location must be in Western Cape, South Africa');
+                if (!geocodeResult!.res.ok) {
+                    toast.error(
+                        (geocodeResult!.data as { error?: string }).error ||
+                            'Location must be in Western Cape, South Africa'
+                    );
                     return;
                 }
-                const address = geoData.address || 'Current Location';
+                const address = (geocodeResult!.data as { address?: string }).address || 'Current Location';
                 const loc = { lat, lng, address };
                 setUserLocation(loc);
                 saveConversation({ loc });
                 clearLocation();
-                if (opts?.directTrade) {
-                    fetchDirectProviders(
-                        opts.directTrade.trade,
-                        lat,
-                        lng,
-                        opts.directTrade.diagnosis
-                    );
-                } else if (opts?.messageIndex != null && opts?.trade) {
-                    const msg = messages[opts.messageIndex];
-                    const msgContent = msg?.content ?? opts.msgContent ?? '';
-                    const diag = msg?.diagnosis ?? opts.diagnosis;
-                    if (diag && (msg?.role === 'assistant' || opts.msgContent != null)) {
-                        fetchProvidersForMessage(
-                            opts.messageIndex,
-                            opts.trade,
-                            lat,
-                            lng,
-                            msgContent,
-                            msg?.hasUpdatedDiagnosis ?? opts.hasUpdatedDiagnosis ?? false,
-                            diag
-                        );
+
+                if (providerResult && providerResult.res.ok && providerResult.data.providers != null) {
+                    const finalProviders = providerResult.data.providers as Provider[];
+                    const finalEmerging = (providerResult.data.emergingProviders ?? []) as Provider[];
+                    const finalNearbyOnly = (providerResult.data.nearbyOnlyProviders ?? []) as Provider[];
+                    if (opts?.directTrade) {
+                        setDirectTradeResult({
+                            trade: opts.directTrade.trade,
+                            diagnosis: opts.directTrade.diagnosis,
+                            providers: finalProviders,
+                            emergingProviders: finalEmerging,
+                            nearbyOnlyProviders: finalNearbyOnly,
+                        });
+                        setDirectTradeSelection(null);
+                    } else if (opts?.messageIndex != null && opts?.trade) {
+                        const msg = messages[opts.messageIndex];
+                        const msgContent = msg?.content ?? opts.msgContent ?? '';
+                        const diag = msg?.diagnosis ?? opts.diagnosis;
+                        if (diag && (msg?.role === 'assistant' || opts.msgContent != null)) {
+                            setMessages((prev) => {
+                                const next = [...prev];
+                                const m = next[opts.messageIndex!];
+                                if (m && m.role === 'assistant') {
+                                    next[opts.messageIndex!] = {
+                                        ...m,
+                                        providers: finalProviders,
+                                        emergingProviders: finalEmerging,
+                                        nearbyOnlyProviders: finalNearbyOnly,
+                                        providerNextPageToken:
+                                            providerResult.data.nextPageToken ?? null,
+                                        providerSearchQuery:
+                                            providerResult.data.searchQuery ?? m.providerSearchQuery ?? opts.trade,
+                                    };
+                                }
+                                return next;
+                            });
+                            updateMessageProviders(
+                                opts.messageIndex,
+                                finalProviders,
+                                finalEmerging,
+                                finalNearbyOnly
+                            );
+                        }
                     }
+                } else if (providerResult && !providerResult.res.ok) {
+                    const err = (providerResult.data as { error?: string }).error;
+                    toast.error(err || "Couldn't load providers. Try 'Use my location' again.");
                 }
             } catch (e) {
                 console.error('Error getting location:', e);
@@ -557,7 +603,7 @@ export function ChatPageClient({ conversationId, initialTrade }: ChatPageClientP
                 );
             }
         },
-        [saveConversation, messages, fetchProvidersForMessage, fetchDirectProviders]
+        [saveConversation, messages, updateMessageProviders, providerRadiusKm]
     );
 
     const cleanThinkingText = useCallback(
@@ -937,6 +983,8 @@ export function ChatPageClient({ conversationId, initialTrade }: ChatPageClientP
                                         },
                                     ];
                                 });
+                                // Show provider skeleton immediately (before any await) so we never flash "No providers"
+                                setIsLoadingProvidersForMessage(newMsgIndex);
                                 // Ensure conversation exists before saving message (avoids FK violation)
                                 const firstDesc =
                                     parsedJson.image_descriptions?.[0];
@@ -2235,10 +2283,10 @@ export function ChatPageClient({ conversationId, initialTrade }: ChatPageClientP
 
             <main
                 ref={mainRef}
-                style={{ paddingBottom: footerHeight }}
-                className="flex flex-1 min-h-0 overflow-y-auto"
+                className="flex flex-1 min-h-0 flex-col"
             >
-                <div className="flex-1 max-w-4xl mx-auto w-full px-4 py-4 flex flex-col gap-6 min-w-0">
+                <div className="flex-1 min-h-0 overflow-y-auto">
+                <div className="max-w-4xl mx-auto w-full px-4 py-4 flex flex-col gap-6 min-w-0">
                     {/* Provider results - when direct trade with providers; hide if a message already shows diagnosis+providers (avoid duplicate) */}
                     {(directTradeResult || (directTradeSelection && isLoadingDirectProviders)) &&
                         !messages.some(
@@ -2348,7 +2396,7 @@ export function ChatPageClient({ conversationId, initialTrade }: ChatPageClientP
                                     isLast={i === messages.length - 1}
                                     isResponding={isResponding}
                                     onFeedback={(type) => handleMessageFeedback(i, type)}
-                                    onCopy={() => handleCopy(msg.content)}
+                                    onCopy={() => handleCopy(typeof msg.content === 'string' ? msg.content : '')}
                                     onRegenerate={() => handleRegenerate(i)}
                                     inlineDiagnosisProps={
                                         msg.role === 'assistant' && msg.diagnosis
@@ -2405,18 +2453,17 @@ export function ChatPageClient({ conversationId, initialTrade }: ChatPageClientP
                         </div>
                     </div>
                 </div>
-            </main>
+                </div>
 
-            <ChatFooter
-                ref={footerRef}
-                message={message}
-                setMessage={setMessage}
-                handleSend={handleSend}
-                isDiagnosing={isDiagnosing}
-                isResponding={isResponding}
-                hasDiagnosis={!!diagnosis || !!directTradeResult}
-                pendingAttachments={displayImage ? pendingAttachments : []}
-                onAddAttachments={
+                <ChatFooter
+                    message={message}
+                    setMessage={setMessage}
+                    handleSend={handleSend}
+                    isDiagnosing={isDiagnosing}
+                    isResponding={isResponding}
+                    hasDiagnosis={!!diagnosis || !!directTradeResult}
+                    pendingAttachments={displayImage ? pendingAttachments : []}
+                    onAddAttachments={
                     displayImage
                         ? async (files) => {
                               const remaining = 5 - pendingAttachments.length;
@@ -2465,14 +2512,15 @@ export function ChatPageClient({ conversationId, initialTrade }: ChatPageClientP
                               if (file) handleWelcomeUpload(file);
                           }
                 }
-                onRemoveAttachment={
+                    onRemoveAttachment={
                     displayImage
                         ? (i) => setPendingAttachments((prev) => prev.filter((_, j) => j !== i))
                         : () => {}
                 }
-                welcomeMode={!displayImage}
-                inputRef={welcomeFileInputRef}
-            />
+                    welcomeMode={!displayImage}
+                    inputRef={welcomeFileInputRef}
+                />
+            </main>
         </div>
     );
 }

@@ -1,10 +1,11 @@
 'use client';
 
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { setOptions, importLibrary } from '@googlemaps/js-api-loader';
 import { ArrowLeft, ArrowRight, StarFill } from '@/lib/icons';
 import { formatBusinessName } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Badge } from '@/components/ui/badge';
 import type { Provider } from './types';
 
 type ProvidersMapProps = {
@@ -35,6 +36,27 @@ function getDistanceText(
             Math.sin(dLon / 2);
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     return `${(R * c).toFixed(1)} km`;
+}
+
+/** Numeric distance in km for sorting (closest first). */
+function getDistanceKm(
+    provider: Provider,
+    userLocation: { lat: number; lng: number } | null
+): number {
+    if (!userLocation || provider.latitude == null || provider.longitude == null) return Infinity;
+    const num = parseFloat(String(provider.distanceText ?? '').trim());
+    if (!Number.isNaN(num)) return num;
+    const R = 6371;
+    const dLat = ((provider.latitude - userLocation.lat) * Math.PI) / 180;
+    const dLon = ((provider.longitude - userLocation.lng) * Math.PI) / 180;
+    const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos((userLocation.lat * Math.PI) / 180) *
+            Math.cos((provider.latitude * Math.PI) / 180) *
+            Math.sin(dLon / 2) *
+            Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
 }
 
 function formatDuration(text: string): string {
@@ -70,6 +92,31 @@ export function ProvidersMap({
     const allProviders = [...(providers ?? []), ...(emergingProviders ?? []), ...(nearbyOnlyProviders ?? [])];
     const validProviders = allProviders.filter((p) => p.latitude != null && p.longitude != null);
     const total = validProviders.length;
+
+    // Indices for "Closest", "Best Rated", "Most Reviewed", "Scandio's Pick"
+    const tagIndices = useMemo(() => {
+        if (validProviders.length === 0) {
+            return { closest: 0, bestRated: 0, mostReviewed: 0, ourPick: 0 };
+        }
+        const withDist = validProviders.map((p, i) => ({
+            i,
+            km: getDistanceKm(p, userLocation),
+            rating: p.rating ?? 0,
+            ratingCount: p.ratingCount ?? 0,
+            isFavourite: p.isFavourite === true,
+        }));
+        const closest = withDist.reduce((best, cur) => (cur.km < best.km ? cur : best)).i;
+        const bestRated = withDist.reduce((best, cur) => {
+            if (cur.rating !== best.rating) return cur.rating > best.rating ? cur : best;
+            return cur.ratingCount > best.ratingCount ? cur : best;
+        }).i;
+        const mostReviewed = withDist.reduce((best, cur) =>
+            cur.ratingCount > best.ratingCount ? cur : best
+        ).i;
+        const ourPickIdx = validProviders.findIndex((p) => p.isFavourite === true);
+        const ourPick = ourPickIdx >= 0 ? ourPickIdx : 0;
+        return { closest, bestRated, mostReviewed, ourPick };
+    }, [validProviders, userLocation?.lat, userLocation?.lng]);
 
     // Keep a stable ref to the current validProviders list so closures (markers, callbacks) always see the latest
     const validProvidersRef = useRef(validProviders);
@@ -404,10 +451,49 @@ export function ProvidersMap({
         </>
     );
 
+    const hasOurPick = validProviders.some((p) => p.isFavourite === true);
+    const tagButtons = [
+        { key: 'closest' as const, label: 'Closest', index: tagIndices.closest },
+        { key: 'bestRated' as const, label: 'Best Rated', index: tagIndices.bestRated },
+        { key: 'mostReviewed' as const, label: 'Most Reviewed', index: tagIndices.mostReviewed },
+        ...(hasOurPick
+            ? [{ key: 'ourPick' as const, label: "Scandio's Pick", index: tagIndices.ourPick }]
+            : []),
+    ];
+
     return (
         <div className="w-full overflow-hidden rounded-xl border border-border bg-background">
             {/* Map */}
             <div className="relative aspect-[4/3] sm:aspect-auto sm:h-[460px]">
+                {/* Tags as badge cards – top left of map (match chat badge styling) */}
+                {!hideFloatingCard && !loading && validProviders.length > 0 && (
+                    <div className="absolute top-3 left-3 z-10 flex flex-wrap gap-2">
+                        {tagButtons.map(({ key, label, index }) => {
+                            const isActive = activeIndex === index;
+                            return (
+                                <button
+                                    key={key}
+                                    type="button"
+                                    onClick={() => setActiveIndex(index)}
+                                    aria-pressed={isActive}
+                                >
+                                    <Badge
+                                        variant="secondary"
+                                        className={[
+                                            'cursor-pointer px-3 py-1.5 text-xs sm:text-[13px] font-medium',
+                                            'shadow-sm',
+                                            isActive
+                                                ? 'bg-foreground text-background'
+                                                : 'bg-card/95 text-muted-foreground hover:bg-card hover:text-foreground',
+                                        ].join(' ')}
+                                    >
+                                        {label}
+                                    </Badge>
+                                </button>
+                            );
+                        })}
+                    </div>
+                )}
                 {loading && (
                     <div className="absolute inset-0 z-10 flex items-center justify-center bg-muted/50">
                         <div className="h-8 w-8 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent" />

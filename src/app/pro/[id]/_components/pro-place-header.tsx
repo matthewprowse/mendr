@@ -1,6 +1,8 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+import NextImage from 'next/image';
 import { ArrowLeft } from '@/lib/icons';
 import { Button } from '@/components/ui/button';
 import { FavouriteButton } from '@/components/favourite-button';
@@ -153,15 +155,13 @@ export function ProPlaceHeader({
     mapsUrl: string;
     weekdayDescriptions?: string[] | null;
 }) {
-    const displayName = formatBusinessName(provider.name);
     const router = useRouter();
 
     return (
         <header className="sticky top-0 z-50 bg-background">
-            <div className="mx-auto flex h-16 max-w-7xl items-center px-4 sm:px-6 lg:px-8">
-
-                {/* Left — back button */}
-                <div className="flex shrink-0 items-center">
+            <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
+                {/* Left — back + logo + Scandio (match Chat AppHeader) */}
+                <div className="flex items-center gap-1">
                     <Button
                         variant="ghost"
                         size="icon"
@@ -171,21 +171,24 @@ export function ProPlaceHeader({
                     >
                         <ArrowLeft className="size-4" />
                     </Button>
+                    <Link href="/" className="flex items-center gap-2">
+                        <NextImage
+                            src="/logo.svg"
+                            alt="Scandio"
+                            width={36}
+                            height={36}
+                            className="h-9 w-9 shrink-0 rounded-lg"
+                        />
+                        <span className="font-semibold">Scandio</span>
+                    </Link>
                 </div>
 
-                {/* Centre — Scandio: company name */}
-                <div className="min-w-0 flex-1 flex items-center justify-center px-3">
-                    <p className="truncate font-semibold text-foreground" title={`Scandio: ${displayName}`}>
-                        Scandio: {displayName}
-                    </p>
-                </div>
-
-                {/* Right — heart */}
-                <div className="flex shrink-0 items-center">
+                {/* Right — heart only (no Join Pro Network, no avatar) */}
+                <div className="flex items-center gap-2">
                     <FavouriteButton
                         placeId={provider.place_id}
                         providerProfileSlug={provider.providerProfileSlug}
-                        providerName={displayName}
+                        providerName={formatBusinessName(provider.name)}
                         variant="icon"
                     />
                 </div>

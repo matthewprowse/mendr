@@ -184,6 +184,24 @@ CREATE TABLE IF NOT EXISTS place_photo_cache (
 );
 CREATE INDEX IF NOT EXISTS idx_place_photo_cache_created_at ON place_photo_cache(created_at);
 
+-- Provider search: (lat,lng,trade,radius) -> list of place_ids + routing (7-day TTL). Saves Places Text Search calls.
+CREATE TABLE IF NOT EXISTS provider_search_cache (
+    query_key TEXT PRIMARY KEY,
+    place_ids JSONB NOT NULL DEFAULT '[]'::jsonb,
+    routing_summaries JSONB NOT NULL DEFAULT '[]'::jsonb,
+    next_page_token TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_provider_search_cache_created_at ON provider_search_cache(created_at);
+
+-- Scraper progress: (area_key, trade) so the scrape-providers script can resume after stop.
+CREATE TABLE IF NOT EXISTS scrape_task_done (
+    area_key TEXT NOT NULL,
+    trade TEXT NOT NULL,
+    completed_at TIMESTAMPTZ DEFAULT NOW(),
+    PRIMARY KEY (area_key, trade)
+);
+
 -- =============================================================================
 -- 4. Conversations (homeowner diagnosis sessions)
 -- =============================================================================

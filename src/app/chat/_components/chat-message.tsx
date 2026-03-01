@@ -72,7 +72,7 @@ export function ChatMessage({
                         isUser
                             ? 'bg-secondary text-secondary-foreground rounded-md px-3 py-1.5 max-w-[75%]'
                             : 'text-foreground w-full',
-                        hasDiagnosisBlock && 'hidden'
+                        (hasDiagnosisBlock || hasRejectedBlock || hasUnservicedBlock) && 'hidden'
                     )}
                 >
                     {message.content === '' && isLast && isResponding ? (
@@ -81,8 +81,13 @@ export function ChatMessage({
                         </div>
                     ) : (
                         (() => {
-                            if (hasDiagnosisBlock) return null;
-                            let content = message.content;
+                            if (hasDiagnosisBlock || hasRejectedBlock || hasUnservicedBlock)
+                                return null;
+                            let content =
+                                typeof message.content === 'string'
+                                    ? message.content
+                                    : '';
+                            if (content === '[object Object]') content = '';
                             const thinking = message.diagnosis?.thinking?.trim();
                             if (content && thinking && thinking.length > 15) {
                                 if (content.trim() === thinking.trim()) content = '';

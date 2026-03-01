@@ -108,8 +108,8 @@ function isClosedHours(hours: string): boolean {
 
 function formatHoursDisplay(hours: string): string {
     return hours
-        .replace(/\bAM\b/g, 'am')
-        .replace(/\bPM\b/g, 'pm')
+        .replace(/\bam\b/gi, 'AM')
+        .replace(/\bpm\b/gi, 'PM')
         .replace(/\s*[-–—]\s*/g, ' – '); // Normalise to en-dash with spaces (app style)
 }
 
@@ -198,157 +198,173 @@ export function ProviderPlaceClient({
         <>
         {/* ── Page content, padded at bottom so sticky footer doesn't overlap ── */}
         <div className="space-y-6 pb-24">
-            {/* ── Top row: avatar above name (left) | Open/Closed badge (far right) ── */}
-            <div className="flex flex-wrap items-start justify-between gap-4">
-                <div className="min-w-0 flex-1">
-                    <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full border-2 border-border bg-muted text-lg font-semibold text-muted-foreground sm:h-16 sm:w-16 sm:text-xl">
-                        {displayName
-                            .split(/\s+/)
-                            .filter((w) => w !== '&')
-                            .map((w) => w[0])
-                            .join('')
-                            .slice(0, 2)
-                            .toUpperCase() || '—'}
-                    </div>
-                    <h1 className="mt-2 truncate text-xl font-bold tracking-tight text-foreground sm:text-2xl">
-                        Scandio: {displayName}
+            {/* ── Hero: diagnosis-style typography with compact provider info ── */}
+            <div className="space-y-4">
+                {/* Row 1: Name (left) | Reviews (right) */}
+                <div className="flex flex-wrap items-baseline justify-between gap-3">
+                    <h1 className="truncate text-xl font-semibold text-foreground sm:text-[22px] min-w-0">
+                        {displayName}
                     </h1>
                     {(rating != null || reviewCount > 0) && (
-                        <div className="mt-1 flex items-center gap-2 text-sm text-muted-foreground">
+                        <div className="flex items-center gap-1.5 shrink-0 text-sm text-muted-foreground">
                             {rating != null && (
-                                <span className="flex items-center gap-1.5 font-medium">
+                                <span className="flex items-center gap-1 font-medium text-foreground">
                                     <StarFill className="size-4 text-yellow-500 fill-yellow-500" />
-                                    <span className="text-foreground">{rating}</span>
+                                    <span>{rating}</span>
                                 </span>
                             )}
                             {reviewCount > 0 && (
-                                <span>({reviewCount} review{reviewCount === 1 ? '' : 's'})</span>
+                                <span>({reviewCount} Review{reviewCount === 1 ? '' : 's'})</span>
                             )}
                         </div>
                     )}
                 </div>
-                {openStatus && (
-                    <div className="flex flex-col items-end shrink-0 gap-1 text-right">
-                        <Badge variant="secondary">
-                            {openStatus.open ? 'Open' : 'Closed'}
-                        </Badge>
-                        {openStatus.label.includes('·') && (
-                            <span className="text-xs text-muted-foreground leading-tight">
-                                {openStatus.label.split('·').slice(1).join('·').trim()}
-                            </span>
+
+                {/* Row 2: Open/Closed badge only + trade badge (left) | Short address (right) */}
+                <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
+                    <div className="flex flex-wrap items-center gap-2 min-w-0">
+                        {openStatus && (
+                            <Badge
+                                variant="secondary"
+                                className="h-6 px-2 py-0.5 text-sm font-medium"
+                            >
+                                {openStatus.open ? 'Open' : 'Closed'}
+                            </Badge>
+                        )}
+                        {services.length > 0 && (
+                            <Badge
+                                variant="secondary"
+                                className="h-6 px-2 py-0.5 text-sm font-medium"
+                            >
+                                {typeof services[0] === 'string'
+                                    ? services[0]
+                                    : (services[0]?.full ?? services[0]?.short ?? 'Service')}
+                            </Badge>
                         )}
                     </div>
+                    {provider.address && (
+                        <p
+                            className="truncate max-w-[180px] sm:max-w-[220px] text-right text-sm text-muted-foreground"
+                            title={provider.address}
+                        >
+                            {provider.address}
+                        </p>
+                    )}
+                </div>
+
+                {/* Summary — full description */}
+                {provider.summary && (
+                    <p className="text-sm leading-relaxed text-foreground">
+                        {provider.summary}
+                    </p>
                 )}
+
+                {/* Operating Hours — full day names; today expanded, others collapsed */}
+                {weekdayDescriptions.length > 0 && (() => {
+                    const todayIdx = weekdayDescriptions.findIndex((line) => isToday(parseDay(line)));
+                    const todayLine = todayIdx >= 0 ? weekdayDescriptions[todayIdx] : null;
+                    const otherLines = weekdayDescriptions.filter((_, i) => i !== todayIdx);
+                    return (
+                        <div className="space-y-2">
+                            <p className="text-sm font-medium text-muted-foreground">
+                                Operating Hours
+                            </p>
+                            <ul className="space-y-1">
+                                {todayLine && (
+                                    <li className="flex items-baseline justify-between gap-4 text-sm">
+                                        <span className="font-medium text-foreground">
+                                            {parseDay(todayLine)}
+                                        </span>
+                                        <span className={`text-right font-medium text-foreground ${isClosedHours(parseHours(todayLine)) ? 'text-muted-foreground' : ''}`}>
+                                            {formatHoursDisplay(parseHours(todayLine))}
+                                        </span>
+                                    </li>
+                                )}
+                                {otherLines.length > 0 && (
+                                    <li>
+                                        <details className="group">
+                                            <summary className="flex items-center justify-between gap-4 cursor-pointer list-none text-sm text-muted-foreground hover:text-foreground py-0.5 [&::-webkit-details-marker]:hidden">
+                                                <span>Other Days</span>
+                                                <span className="group-open:rotate-180 transition-transform">▼</span>
+                                            </summary>
+                                            <ul className="mt-1 space-y-1 pl-4 border-l border-border ml-1">
+                                                {otherLines.map((line, i) => {
+                                                    const dayName = parseDay(line);
+                                                    const hours = formatHoursDisplay(parseHours(line));
+                                                    const closed = isClosedHours(hours);
+                                                    return (
+                                                        <li key={i} className="flex items-baseline justify-between gap-4 text-sm">
+                                                            <span className="text-muted-foreground">{dayName}</span>
+                                                            <span className={`text-right ${closed ? 'text-muted-foreground/50' : 'text-muted-foreground'}`}>{hours}</span>
+                                                        </li>
+                                                    );
+                                                })}
+                                            </ul>
+                                        </details>
+                                    </li>
+                                )}
+                            </ul>
+                        </div>
+                    );
+                })()}
             </div>
 
-            {/* ── Services badges only above tabs (summary moved into Summary tab) ── */}
-            {services.length > 0 && (
-                <div className="flex flex-wrap gap-2">
-                    {services.map((s, i) => (
-                        <Badge key={i} variant="secondary" className="text-sm">
-                            {typeof s === 'string'
-                                ? s
-                                : (s?.full ?? s?.short ?? 'Service')}
-                        </Badge>
-                    ))}
-                </div>
-            )}
-
-            <Tabs defaultValue="summary" className="w-full">
+            <Tabs defaultValue="about" className="w-full">
                 <TabsList className="w-full rounded-lg bg-muted p-1">
-                    <TabsTrigger value="summary" className="flex-1">Summary</TabsTrigger>
+                    <TabsTrigger value="about" className="flex-1">About</TabsTrigger>
                     <TabsTrigger value="reviews" className="flex-1">Reviews</TabsTrigger>
                     <TabsTrigger value="gallery" className="flex-1">Gallery</TabsTrigger>
                 </TabsList>
 
-                {/* ── SUMMARY TAB ── */}
-                <TabsContent value="summary" className="mt-6 space-y-6">
+                {/* ── ABOUT TAB (location + extras; summary/company already in hero) ── */}
+                <TabsContent value="about" className="mt-6 space-y-6">
 
-                    {/* Summary text */}
-                    {(provider.summary || aboutCompany) && (
-                        <div className="space-y-2">
-                            <h2 className="text-sm font-semibold text-foreground">Summary</h2>
-                            {provider.summary && (
-                                <p className="text-sm leading-relaxed text-foreground">
-                                    {provider.summary}
-                                </p>
-                            )}
-                            {aboutCompany && (
-                                <p className="text-sm leading-relaxed text-foreground">
-                                    {aboutCompany}
-                                </p>
-                            )}
-                        </div>
-                    )}
                     {!provider.summary && !aboutCompany && (
                         <p className="text-sm text-muted-foreground">
                             No summary available yet. This provider appears in search results.
                         </p>
                     )}
 
-                    {/* Operating Hours */}
-                    {weekdayDescriptions.length > 0 && (
-                        <div className="space-y-2">
-                            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                                Operating Hours
-                            </p>
-                            <ul className="space-y-1">
-                                {weekdayDescriptions.map((line, i) => {
-                                    const dayName = parseDay(line);
-                                    const hours = formatHoursDisplay(parseHours(line));
-                                    const today = isToday(dayName);
-                                    const closed = isClosedHours(hours);
-                                    return (
-                                        <li key={i} className="flex items-baseline justify-between gap-4 text-sm">
-                                            <span className={`flex items-center gap-1.5 font-medium ${today ? 'text-foreground' : 'text-muted-foreground'}`}>
-                                                {today && (
-                                                    <span className="inline-block h-1.5 w-1.5 rounded-full bg-green-500" />
-                                                )}
-                                                {DAY_SHORT[dayName] ?? dayName}
-                                            </span>
-                                            <span className={`text-right ${closed ? 'text-muted-foreground/50' : today ? 'font-medium text-foreground' : 'text-muted-foreground'}`}>
-                                                {hours}
-                                            </span>
-                                        </li>
-                                    );
-                                })}
-                            </ul>
-                        </div>
-                    )}
-
-                    {/* Location — same design as chat page (ProvidersMap) */}
+                    {/* Map with Get directions as card overlay */}
                     {hasCoords && mapsApiKey && (
-                        <div className="space-y-3">
-                            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Location</p>
-                            <ProvidersMap
-                                apiKey={mapsApiKey}
-                                providers={[{
-                                    name: provider.name,
-                                    address: provider.address ?? '',
-                                    summary: provider.summary ?? '',
-                                    services: (provider.services ?? []).map((s) =>
-                                        typeof s === 'string' ? { short: s, full: s } : { short: s?.short ?? '', full: s?.full ?? s?.short ?? '' }
-                                    ),
-                                    latitude: provider.latitude!,
-                                    longitude: provider.longitude!,
-                                    rating: provider.rating ?? undefined,
-                                    ratingCount: provider.rating_count ?? undefined,
-                                    place_id: provider.place_id,
-                                    id: provider.place_id,
-                                    photos: provider.photos ?? [],
-                                }]}
-                                emergingProviders={[]}
-                                userLocation={userLocationForMap}
-                                hideFloatingCard
-                            />
-                            <div className="flex items-center justify-end">
-                                <Button variant="secondary" size="sm" asChild>
-                                    <a href={directionsUrl} target="_blank" rel="noopener noreferrer">
-                                        Get Directions
-                                    </a>
-                                </Button>
+                        <div className="relative">
+                                <ProvidersMap
+                                    apiKey={mapsApiKey}
+                                    providers={[{
+                                        name: provider.name,
+                                        address: provider.address ?? '',
+                                        summary: provider.summary ?? '',
+                                        services: (provider.services ?? []).map((s) =>
+                                            typeof s === 'string' ? { short: s, full: s } : { short: s?.short ?? '', full: s?.full ?? s?.short ?? '' }
+                                        ),
+                                        latitude: provider.latitude!,
+                                        longitude: provider.longitude!,
+                                        rating: provider.rating ?? undefined,
+                                        ratingCount: provider.rating_count ?? undefined,
+                                        place_id: provider.place_id,
+                                        id: provider.place_id,
+                                        photos: provider.photos ?? [],
+                                    }]}
+                                    emergingProviders={[]}
+                                    userLocation={userLocationForMap}
+                                    hideFloatingCard
+                                />
+                                {/* Get directions card overlay */}
+                                <div className="absolute bottom-3 left-3 right-3 sm:left-auto sm:right-3 sm:w-48 z-10">
+                                    <div className="rounded-lg border border-border bg-card/95 backdrop-blur shadow-sm p-3">
+                                        {provider.address && (
+                                            <p className="text-xs text-muted-foreground truncate mb-2" title={provider.address}>
+                                                {provider.address}
+                                            </p>
+                                        )}
+                                        <Button variant="secondary" size="sm" className="w-full" asChild>
+                                            <a href={directionsUrl} target="_blank" rel="noopener noreferrer">
+                                                Get directions
+                                            </a>
+                                        </Button>
+                                    </div>
+                                </div>
                             </div>
-                        </div>
                     )}
 
                     {/* Social */}
@@ -923,12 +939,11 @@ function UploadGalleryDialog({
                                 />
                             </div>
 
-                            {/* Description */}
                             <div className="space-y-1.5">
-                                <Label htmlFor="gal-desc">Description</Label>
                                 <Textarea
                                     id="gal-desc"
                                     placeholder="Describe what's shown in the photo(s)…"
+                                    aria-label="Photo description"
                                     rows={3}
                                     value={imageDesc}
                                     onChange={(e) => setImageDesc(e.target.value)}

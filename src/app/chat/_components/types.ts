@@ -79,4 +79,6 @@ export interface Provider {
     durationText?: string;
     /** For nearby-only / non-recommended providers: key things to look out for from reviews (why reviews are low). */
     reviewConcerns?: string;
+    /** Cached Google reviews (up to 50); used for display and linking to pro page. */
+    reviews?: Array<{ text?: string; rating?: number | null; authorName?: string | null; relativePublishTimeDescription?: string | null }>;
 }

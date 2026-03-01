@@ -1,34 +1,19 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { ArrowLeft } from '@/lib/icons';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
 
-const TRADES = [
-    'plumber',
-    'electrician',
-    'handyman',
-    'painter',
-    'carpenter',
-    'roofer',
-    'locksmith',
-    'pool',
-    'builder',
-    'garage door',
-    'gate repair',
-    'air conditioning',
-    'flooring & tiling',
-    'welding',
-];
-
+type Service = { id: string; label: string; search_query: string; sort_order: number };
 type Area = { name: string; lat: number; lng: number; radiusKm: number };
 
 export function ScrapePageClient() {
+    const [services, setServices] = useState<Service[]>([]);
     const [areas, setAreas] = useState<Area[]>([]);
-    const [selectedTrades, setSelectedTrades] = useState<Set<string>>(new Set(TRADES));
+    const [selectedTrades, setSelectedTrades] = useState<Set<string>>(new Set());
     const [name, setName] = useState('');
     const [lat, setLat] = useState('');
     const [lng, setLng] = useState('');
@@ -37,6 +22,20 @@ export function ScrapePageClient() {
     const [geocoding, setGeocoding] = useState(false);
     const [running, setRunning] = useState(false);
     const [result, setResult] = useState<{ results: { area: string; trade: string; ok: boolean; count: number; error?: string }[]; totalCached: number } | null>(null);
+
+    // Trades come from Supabase only (GET /api/services)
+    useEffect(() => {
+        fetch('/api/services')
+            .then((res) => res.json())
+            .then((data) => {
+                const list = data?.services ?? [];
+                setServices(list);
+                if (list.length > 0) {
+                    setSelectedTrades(new Set(list.map((s: Service) => s.search_query)));
+                }
+            })
+            .catch(() => toast.error('Could not load trades from Supabase'));
+    }, []);
 
     const handleGeocode = async () => {
         const q = addressQuery.trim();
@@ -192,22 +191,26 @@ export function ScrapePageClient() {
                     )}
                 </section>
 
-                {/* Trades */}
+                {/* Trades (from Supabase services table) */}
                 <section className="space-y-2">
                     <h2 className="text-sm font-semibold">Trades ({selectedTrades.size} selected)</h2>
-                    <div className="flex flex-wrap gap-2">
-                        {TRADES.map((trade) => (
-                            <label key={trade} className="flex items-center gap-2 rounded-md border border-border px-3 py-1.5 text-sm cursor-pointer hover:bg-muted/50">
-                                <input
-                                    type="checkbox"
-                                    checked={selectedTrades.has(trade)}
-                                    onChange={() => toggleTrade(trade)}
-                                    className="rounded border-input"
-                                />
-                                <span>{trade}</span>
-                            </label>
-                        ))}
-                    </div>
+                    {services.length === 0 ? (
+                        <p className="text-sm text-muted-foreground">Loading trades from Supabase…</p>
+                    ) : (
+                        <div className="flex flex-wrap gap-2">
+                            {services.map((s) => (
+                                <label key={s.id} className="flex items-center gap-2 rounded-md border border-border px-3 py-1.5 text-sm cursor-pointer hover:bg-muted/50">
+                                    <input
+                                        type="checkbox"
+                                        checked={selectedTrades.has(s.search_query)}
+                                        onChange={() => toggleTrade(s.search_query)}
+                                        className="rounded border-input"
+                                    />
+                                    <span>{s.label}</span>
+                                </label>
+                            ))}
+                        </div>
+                    )}
                 </section>
 
                 {/* Run */}

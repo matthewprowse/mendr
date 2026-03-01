@@ -49,7 +49,7 @@ export default async function ProviderIdPage({ params }: PageProps) {
         supabase = await createSupabaseServerClient();
     } catch (e) {
         console.error('Pro page: Supabase client failed', e);
-        throw e;
+        notFound();
     }
 
     // 1. Try Scandio provider profile by id
@@ -182,12 +182,12 @@ export default async function ProviderIdPage({ params }: PageProps) {
         if (refreshed) cached = refreshed;
     }
     // Use freshly fetched reviews/hours when cache still has none (e.g. DB write failed or re-read was stale)
-    const reviewsFromCache = (cached.reviews as Array<{ text: string; rating: number | null; relativePublishTimeDescription?: string | null; authorName?: string | null }>) ?? [];
-    const reviewsFromFresh = freshData?.reviews ?? [];
+    const reviewsFromCache = Array.isArray(cached.reviews)
+        ? (cached.reviews as Array<{ text: string; rating: number | null; relativePublishTimeDescription?: string | null; authorName?: string | null }>).map((r) => ({ ...r, authorName: r.authorName ?? 'Google user' }))
+        : [];
+    const reviewsFromFresh = Array.isArray(freshData?.reviews) ? freshData!.reviews : [];
     const reviewsToUse =
-        (Array.isArray(cached.reviews) && cached.reviews.length > 0)
-            ? reviewsFromCache.map((r) => ({ ...r, authorName: r.authorName ?? 'Google user' }))
-            : reviewsFromFresh;
+        reviewsFromCache.length > 0 ? reviewsFromCache : reviewsFromFresh;
     const weekdayDescriptionsToUse =
         (Array.isArray(cached.weekday_descriptions) && cached.weekday_descriptions.length > 0)
             ? (cached.weekday_descriptions as string[])
@@ -255,7 +255,7 @@ export default async function ProviderIdPage({ params }: PageProps) {
         services: (cached.services as Array<{ short?: string; full?: string }>) ?? [],
         latitude: cached.latitude ?? null,
         longitude: cached.longitude ?? null,
-        reviews: reviewsToUse,
+        reviews: Array.isArray(reviewsToUse) ? reviewsToUse.slice(0, 50) : [],
         weekday_descriptions: weekdayDescriptionsToUse,
         photos: (cached.photos as Array<{ name: string }>) ?? [],
         reviewsSummary: reviewsSummary ?? undefined,

@@ -54,33 +54,28 @@ export function ReportCard({ conversationId }: ReportCardProps) {
     };
 
     return (
-        <div className="flex flex-col gap-3">
-            <div className="flex flex-col gap-1">
+        <div className="flex flex-col overflow-hidden rounded-md border border-input bg-card shadow-none p-4">
+            <div className="flex flex-1 flex-col gap-1">
                 <p className="text-sm font-semibold text-foreground">
-                    Your Diagnosis Report is Ready
+                    Scan your report
                 </p>
-                <p className="text-sm text-muted-foreground leading-relaxed">
-                    Share it with your provider before they arrive so they can bring the right parts and quote you accurately.
+                <p className="text-sm text-muted-foreground">
+                    Send the link to your provider before they come. They can quote accurately and show up with the right parts. Sharing your Scandio Report helps them prepare the right materials and give you a clearer quote.
                 </p>
             </div>
-            <div className="flex items-center gap-2">
-                <Button
-                    variant="default"
-                    size="icon"
-                    className="size-9 shrink-0"
+            <div className="flex h-9 items-center gap-2 border-t border-border pt-4 mt-5">
+                <Button onClick={handleOpenReport} variant="secondary" size="sm" className="h-9">
+                    Open Report
+                </Button>
+                <button
+                    type="button"
                     onClick={handleShareReport}
+                    className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:text-foreground"
                     title={copied ? 'Copied' : 'Share report'}
                     aria-label={copied ? 'Copied' : 'Share report'}
                 >
                     <Share className="size-4" />
-                </Button>
-                <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleOpenReport}
-                >
-                    Open Report
-                </Button>
+                </button>
             </div>
         </div>
     );

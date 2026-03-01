@@ -246,13 +246,27 @@ export function InlineDiagnosisBlock({
                             )
                         )}
                     </div>
-                    {isLoadingProviders || !hasLocation ? (
-                        <ProvidersSkeleton />
-                    ) : (providers?.length ?? 0) === 0 && (emergingProviders?.length ?? 0) === 0 && (nearbyOnlyProviders?.length ?? 0) === 0 ? (
-                        <p className="text-sm text-muted-foreground py-2">
-                            No providers found in your area.
-                        </p>
-                    ) : (
+                    {(() => {
+                        // Don't show "No providers" until we've actually received a fetch result (avoids flash)
+                        const hasResult = providers !== undefined || emergingProviders !== undefined || nearbyOnlyProviders !== undefined;
+                        const allEmpty = (providers?.length ?? 0) === 0 && (emergingProviders?.length ?? 0) === 0 && (nearbyOnlyProviders?.length ?? 0) === 0;
+                        const showSkeleton = !hasLocation || isLoadingProviders || (hasLocation && !hasResult);
+                        if (showSkeleton) return (
+                            <div className="flex flex-col gap-3">
+                                {hasLocation && (isLoadingProviders || !hasResult) && (
+                                    <p className="text-sm text-muted-foreground">
+                                        Finding providers…
+                                    </p>
+                                )}
+                                <ProvidersSkeleton />
+                            </div>
+                        );
+                        if (hasResult && allEmpty) return (
+                            <p className="text-sm text-muted-foreground py-2">
+                                No providers found in your area.
+                            </p>
+                        );
+                        return (
                         <div className="flex flex-col gap-6">
                             {((providers?.length ?? 0) + (emergingProviders?.length ?? 0) + (nearbyOnlyProviders?.length ?? 0)) > 0 &&
                                 hasLocation &&
@@ -396,7 +410,8 @@ export function InlineDiagnosisBlock({
                                 );
                             })()}
                         </div>
-                    )}
+                        );
+                    })()}
                     {(providers?.length ?? 0) > 0 && conversationId && (
                         <div className="pt-2">
                             <ReportCard conversationId={conversationId} />
