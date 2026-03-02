@@ -62,6 +62,7 @@ export default function OnboardingPage() {
 
         const { error: upsertError } = await supabase.from('profiles').upsert(
             {
+                id: user.id,
                 user_id: user.id,
                 first_name: firstName.trim(),
                 surname: surname.trim(),

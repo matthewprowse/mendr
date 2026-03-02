@@ -6,6 +6,7 @@ import { ProSignupSection } from './_components/pro-signup-section';
 import { HowItWorksSection } from './_components/how-it-works-section';
 import { FeaturesSection } from './_components/features-section';
 import { TestimonialsSection } from './_components/testimonials-section';
+import { Button } from '@/components/ui/button';
 
 export const metadata: Metadata = {
     title: 'For Pros | Scandio',
@@ -52,18 +53,9 @@ export default function ProPage() {
                                 accurately.
                             </p>
                             <div className="flex flex-wrap items-center justify-center gap-4 lg:justify-start">
-                                <Link
-                                    href="#signup"
-                                    className="inline-flex items-center justify-center rounded-md bg-primary px-6 py-3 text-sm font-medium text-primary-foreground shadow transition-colors hover:bg-primary/90"
-                                >
-                                    Join the Scandio Network
-                                </Link>
-                                <Link
-                                    href="/"
-                                    className="inline-flex items-center justify-center rounded-md border border-input bg-background px-6 py-3 text-sm font-medium shadow-sm transition-colors hover:bg-accent hover:text-accent-foreground"
-                                >
-                                    I&apos;m a homeowner
-                                </Link>
+                                <Button asChild className="text-sm">
+                                    <Link href="#signup">Join Scandio Network</Link>
+                                </Button>
                             </div>
                         </div>
                         <div className="flex justify-center">

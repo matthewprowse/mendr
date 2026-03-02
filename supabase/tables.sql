@@ -120,6 +120,32 @@ EXCEPTION
     WHEN duplicate_object THEN NULL; -- constraint already exists
 END $$;
 
+-- Ensure user_id has a named unique constraint (required for ON CONFLICT user_id in PostgREST)
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'profiles'
+          AND column_name = 'user_id'
+    ) THEN
+        IF NOT EXISTS (
+            SELECT 1
+            FROM pg_constraint
+            WHERE conrelid = 'public.profiles'::regclass
+              AND contype = 'u'
+              AND conname = 'profiles_user_id_key'
+        ) THEN
+            BEGIN
+                ALTER TABLE profiles ADD CONSTRAINT profiles_user_id_key UNIQUE (user_id);
+            EXCEPTION
+                WHEN duplicate_object THEN NULL;
+            END;
+        END IF;
+    END IF;
+END $$;
+
 -- =============================================================================
 -- 3. Cached Providers (Google Places enrichment cache)
 -- =============================================================================
@@ -599,6 +625,11 @@ CREATE TABLE IF NOT EXISTS jobs (
     initial_diagnosis_id UUID,
     current_quote JSONB DEFAULT '{"parts": [], "labour": [], "total": 0}'::jsonb,
     is_paid BOOLEAN DEFAULT false,
+    -- Optional CRM metadata for off-platform work
+    lead_source TEXT,
+    external_ref TEXT,
+    customer_name TEXT,
+    customer_contact TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -607,6 +638,22 @@ CREATE INDEX IF NOT EXISTS idx_jobs_client ON jobs(client_id);
 CREATE INDEX IF NOT EXISTS idx_jobs_provider ON jobs(provider_id);
 CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status);
 CREATE INDEX IF NOT EXISTS idx_jobs_created ON jobs(created_at);
+
+-- =============================================================================
+-- 14.3b CRM Customers (provider-owned customer book for off-platform work)
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS crm_customers (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    provider_id UUID NOT NULL REFERENCES provider_profiles(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    email TEXT,
+    phone TEXT,
+    address TEXT,
+    notes TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_crm_customers_provider ON crm_customers(provider_id);
+CREATE INDEX IF NOT EXISTS idx_crm_customers_name ON crm_customers(provider_id, name);
 
 -- =============================================================================
 -- 14.4 Phase 2: Pro–Customer messaging (job threads)
@@ -714,6 +761,64 @@ CREATE INDEX IF NOT EXISTS idx_job_messages_created ON job_messages(created_at);
 -- =============================================================================
 -- 15. Global Audit Log (non-repudiation; Phase 5)
 -- =============================================================================
+-- 14.5 Quotes and Invoices (standalone CRM documents; can be linked to jobs or off-platform work)
+DO $$ BEGIN
+    CREATE TYPE quote_status AS ENUM ('draft', 'sent', 'accepted', 'declined');
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
+DO $$ BEGIN
+    CREATE TYPE invoice_status AS ENUM ('draft', 'sent', 'paid', 'void');
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
+
+CREATE TABLE IF NOT EXISTS quotes (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    provider_id UUID NOT NULL REFERENCES provider_profiles(id) ON DELETE CASCADE,
+    job_id UUID REFERENCES jobs(id) ON DELETE SET NULL,
+    client_id UUID REFERENCES profiles(id) ON DELETE SET NULL,
+    customer_name TEXT,
+    customer_contact TEXT,
+    title TEXT,
+    notes TEXT,
+    line_items JSONB DEFAULT '[]'::jsonb,
+    subtotal NUMERIC(12,2) DEFAULT 0,
+    tax NUMERIC(12,2) DEFAULT 0,
+    total NUMERIC(12,2) DEFAULT 0,
+    status quote_status DEFAULT 'draft',
+    source TEXT,
+    issued_at TIMESTAMPTZ DEFAULT NOW(),
+    valid_until TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_quotes_provider ON quotes(provider_id);
+CREATE INDEX IF NOT EXISTS idx_quotes_job ON quotes(job_id);
+
+CREATE TABLE IF NOT EXISTS invoices (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    provider_id UUID NOT NULL REFERENCES provider_profiles(id) ON DELETE CASCADE,
+    job_id UUID REFERENCES jobs(id) ON DELETE SET NULL,
+    client_id UUID REFERENCES profiles(id) ON DELETE SET NULL,
+    customer_name TEXT,
+    customer_contact TEXT,
+    title TEXT,
+    notes TEXT,
+    line_items JSONB DEFAULT '[]'::jsonb,
+    subtotal NUMERIC(12,2) DEFAULT 0,
+    tax NUMERIC(12,2) DEFAULT 0,
+    total NUMERIC(12,2) DEFAULT 0,
+    status invoice_status DEFAULT 'draft',
+    source TEXT,
+    issued_at TIMESTAMPTZ DEFAULT NOW(),
+    due_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_invoices_provider ON invoices(provider_id);
+CREATE INDEX IF NOT EXISTS idx_invoices_job ON invoices(job_id);
+
 CREATE TABLE IF NOT EXISTS audit_logs (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
