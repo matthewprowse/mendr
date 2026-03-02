@@ -104,32 +104,42 @@ export function ChatMessage({
                     )}
                 </div>
             )}
-            {isUser && message.attachments && message.attachments.length > 0 && (
+            {isUser && (message.attachments?.length ?? 0) > 0 && (
                 <div className="flex flex-wrap gap-2 justify-end">
-                    {(message.attachments as unknown[])
-                        .map((a) =>
-                            typeof a === 'string'
-                                ? a
-                                : a && typeof a === 'object' && 'url' in a
-                                  ? (a as { url: string }).url
-                                  : null
-                        )
-                        .filter((url): url is string => !!url && typeof url === 'string')
-                        .map((url, i) => (
+                    {(message.attachment_urls && message.attachment_urls.length > 0
+                        ? message.attachment_urls.map((a) => ({ url: a.url, type: (a.type ?? 'image') as 'image' | 'video' }))
+                        : (message.attachments ?? [])
+                            .map((url) => ({ url: typeof url === 'string' ? url : (url as { url?: string })?.url, type: 'image' as const }))
+                            .filter((x): x is { url: string; type: 'image' } => !!x?.url)
+                    ).map((item, i) => (
+                        item.type === 'video' ? (
+                            <div
+                                key={i}
+                                className="block max-w-[280px] rounded-lg overflow-hidden border border-border/50 shrink-0"
+                            >
+                                <video
+                                    src={item.url}
+                                    controls
+                                    playsInline
+                                    className="w-full max-h-48 object-contain bg-muted"
+                                />
+                            </div>
+                        ) : (
                             <a
                                 key={i}
-                                href={url}
+                                href={item.url}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="block max-w-[200px] max-h-48 rounded-lg overflow-hidden border border-border/50 hover:opacity-95 shrink-0"
                             >
                                 <img
-                                    src={url}
+                                    src={item.url}
                                     alt={`Uploaded image ${i + 1}`}
                                     className="w-full h-full max-h-48 object-cover"
                                 />
                             </a>
-                        ))}
+                        )
+                    ))}
                 </div>
             )}
         </>

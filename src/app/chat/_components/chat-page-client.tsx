@@ -17,8 +17,10 @@ import { AppHeader } from '@/components/app-header';
 import { sanitizeAiContent, tryParseDiagnosisJson, extractMessageFromRaw } from '@/lib/utils';
 import { tradeToServiceLabel } from '@/lib/services';
 import { logScandioEvent } from '@/lib/audit-log';
+import { validateDiagnosisFile, getAttachmentType, MEDIA_CONFIG } from '@/lib/media-config';
+import { getVideoDuration } from '@/lib/video-duration';
 import { useAuth } from '@/context/auth-context';
-import { DiagnosisData, Message, Provider } from './types';
+import { AttachmentEntry, DiagnosisData, Message, Provider } from './types';
 import { ChatMessage } from './chat-message';
 import { ChatFooter } from './chat-footer';
 import { DiagnosisResponseCard } from './diagnosis-response-card';
@@ -57,7 +59,7 @@ export function ChatPageClient({ conversationId, initialTrade }: ChatPageClientP
     } | null>(null);
     const [openPopoverId, setOpenPopoverId] = useState<string | null>(null);
     const [message, setMessage] = useState('');
-    const [pendingAttachments, setPendingAttachments] = useState<string[]>([]);
+    const [pendingAttachments, setPendingAttachments] = useState<AttachmentEntry[]>([]);
     const [directTradeSelection, setDirectTradeSelection] = useState<{
         trade: string;
         diagnosis: string;
@@ -164,17 +166,30 @@ export function ChatPageClient({ conversationId, initialTrade }: ChatPageClientP
                 if (msgs && msgs.length > 0) {
                     const mappedMsgs = msgs.map((m: any) => {
                         const rawAtt = m.attachments || [];
-                        const attachments = Array.isArray(rawAtt)
-                            ? rawAtt
-                                  .map((a: unknown) =>
-                                      typeof a === 'string'
-                                          ? a
-                                          : a && typeof a === 'object' && 'url' in a
-                                            ? (a as { url: string }).url
-                                            : null
-                                  )
-                                  .filter((x: unknown): x is string => typeof x === 'string')
+                        const rawUrls = m.attachment_urls as Array<{ url: string; type?: string; filename?: string }> | undefined;
+                        const attachmentUrls: AttachmentEntry[] = Array.isArray(rawUrls) && rawUrls.length > 0
+                            ? rawUrls.map((a) => ({
+                                  url: typeof a.url === 'string' ? a.url : '',
+                                  type: (a.type === 'video' || a.type === 'document' ? a.type : 'image') as 'image' | 'video' | 'document',
+                                  filename: a.filename,
+                              }))
                             : [];
+                        const attachments = attachmentUrls.length > 0
+                            ? attachmentUrls.map((a) => a.url)
+                            : Array.isArray(rawAtt)
+                                ? rawAtt
+                                      .map((a: unknown) =>
+                                          typeof a === 'string'
+                                              ? a
+                                              : a && typeof a === 'object' && 'url' in a
+                                                ? (a as { url: string }).url
+                                                : null
+                                      )
+                                      .filter((x: unknown): x is string => typeof x === 'string')
+                                : [];
+                        if (attachmentUrls.length === 0 && attachments.length > 0) {
+                            attachmentUrls.push(...attachments.map((url) => ({ url, type: 'image' as const })));
+                        }
                         const rawContent = m.content;
                         const content =
                             typeof rawContent === 'string'
@@ -186,6 +201,7 @@ export function ChatPageClient({ conversationId, initialTrade }: ChatPageClientP
                             role: m.role as 'user' | 'assistant',
                             content: content === '[object Object]' ? '' : content,
                             attachments,
+                            attachment_urls: attachmentUrls.length > 0 ? attachmentUrls : undefined,
                             attachment_descriptions: (m.attachment_descriptions as string[] | undefined) ?? undefined,
                             feedback: m.feedback as 'up' | 'down' | null,
                             hasUpdatedDiagnosis: m.diagnosis_updated,
@@ -218,7 +234,8 @@ export function ChatPageClient({ conversationId, initialTrade }: ChatPageClientP
         hasUpdatedDiagnosis: boolean = false,
         diagnosisJson?: DiagnosisData | null,
         providersJson?: Provider[] | null,
-        attachment_descriptions?: string[]
+        attachment_descriptions?: string[],
+        attachment_urls?: AttachmentEntry[]
     ): Promise<{ id: string } | undefined> => {
         if (!id) return undefined;
         const { data, error } = await (supabase as any)
@@ -232,6 +249,7 @@ export function ChatPageClient({ conversationId, initialTrade }: ChatPageClientP
                 diagnosis: diagnosisJson ?? undefined,
                 providers: providersJson ?? undefined,
                 attachment_descriptions: attachment_descriptions ?? undefined,
+                attachment_urls: attachment_urls ?? [],
             })
             .select('id')
             .single();
@@ -1280,15 +1298,17 @@ export function ChatPageClient({ conversationId, initialTrade }: ChatPageClientP
         options?: { diagnosisRejected?: boolean }
     ) => {
         const msgToSend = String(overrideMessage ?? message ?? '').trim();
-        const attachmentsToSend = options?.diagnosisRejected ? [] : pendingAttachments;
+        const attachmentsToSend: AttachmentEntry[] = options?.diagnosisRejected ? [] : pendingAttachments;
         if (!msgToSend && attachmentsToSend.length === 0) return;
         if (isResponding) return;
 
+        const attachmentUrls = attachmentsToSend.map((a) => a.url);
         const userMsg = msgToSend || 'Sent images';
         const newMessage: Message = {
             role: 'user',
             content: userMsg,
-            attachments: attachmentsToSend,
+            attachments: attachmentUrls,
+            attachment_urls: attachmentsToSend.length > 0 ? attachmentsToSend : undefined,
         };
 
         const previousDiagnosis = diagnosis;
@@ -1299,7 +1319,7 @@ export function ChatPageClient({ conversationId, initialTrade }: ChatPageClientP
         }
         setIsResponding(true);
 
-        const userMsgId = (await saveMessage('user', userMsg, attachmentsToSend))?.id;
+        const userMsgId = (await saveMessage('user', userMsg, attachmentUrls, false, undefined, undefined, undefined, attachmentsToSend.length > 0 ? attachmentsToSend : undefined))?.id;
         setDiagnosis((prev) => (prev ? { ...prev, thinking: '' } : prev));
 
         try {
@@ -1331,18 +1351,17 @@ export function ChatPageClient({ conversationId, initialTrade }: ChatPageClientP
                   ? { trade: directTradeSelection.trade, diagnosis: directTradeSelection.diagnosis }
                   : undefined;
 
+            const firstImageUrl = attachmentsToSend.find((a) => a.type === 'image')?.url ?? attachmentsToSend[0]?.url;
             const primaryImage =
                 isFirstMessage
                     ? imageSrc ?? null
-                    : attachmentsToSend.length > 0 &&
-                        typeof attachmentsToSend[0] === 'string' &&
-                        attachmentsToSend[0].startsWith('data:')
-                      ? attachmentsToSend[0]
+                    : firstImageUrl && typeof firstImageUrl === 'string' && firstImageUrl.startsWith('data:')
+                      ? firstImageUrl
                       : null;
             const attachmentsForApi =
-                primaryImage && attachmentsToSend[0] === primaryImage
-                    ? attachmentsToSend.slice(1)
-                    : attachmentsToSend;
+                attachmentUrls.length > 0
+                    ? (primaryImage && attachmentUrls[0] === primaryImage ? attachmentUrls.slice(1) : attachmentUrls)
+                    : [];
             const res = await fetch('/api/diagnose', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -2468,17 +2487,29 @@ export function ChatPageClient({ conversationId, initialTrade }: ChatPageClientP
                         ? async (files) => {
                               const remaining = 5 - pendingAttachments.length;
                               const toAdd = files.slice(0, remaining);
-                              const dataUrls: string[] = [];
+                              const newEntries: AttachmentEntry[] = [];
                               for (const file of toAdd) {
+                                  const err = validateDiagnosisFile(file);
+                                  if (err) {
+                                      toast.error(err);
+                                      continue;
+                                  }
+                                  if (file.type.startsWith('video/')) {
+                                      const duration = await getVideoDuration(file);
+                                      if (duration != null && duration > MEDIA_CONFIG.maxVideoDurationSeconds) {
+                                          toast.error(`Video must be under ${MEDIA_CONFIG.maxVideoDurationSeconds / 60} minutes. This one is ${Math.ceil(duration / 60)} min.`);
+                                          continue;
+                                      }
+                                  }
                                   try {
                                       const url = await new Promise<string>((resolve, reject) => {
                                           const r = new FileReader();
                                           r.onload = () => resolve(r.result as string);
-                                          r.onerror = () =>
-                                              reject(new Error('Failed to read file'));
+                                          r.onerror = () => reject(new Error('Failed to read file'));
                                           r.readAsDataURL(file);
                                       });
-                                      const isImage = file.type.startsWith('image/');
+                                      const type = getAttachmentType(file.type);
+                                      const isImage = type === 'image';
                                       let finalUrl: string;
                                       if (isImage) {
                                           try {
@@ -2489,19 +2520,15 @@ export function ChatPageClient({ conversationId, initialTrade }: ChatPageClientP
                                       } else {
                                           finalUrl = url;
                                       }
-                                      dataUrls.push(finalUrl);
+                                      newEntries.push({ url: finalUrl, type: type === 'document' ? 'image' : type, filename: file.name });
                                   } catch (e) {
                                       console.error('Failed to process attachment:', e);
-                                      toast.error(
-                                          file.type.startsWith('video/')
-                                              ? 'Video uploads are not supported. Please use images.'
-                                              : `Could not process ${file.name}. Please try a different image.`
-                                      );
+                                      toast.error(`Could not process ${file.name}. Try a different file.`);
                                   }
                               }
-                              if (dataUrls.length > 0) {
+                              if (newEntries.length > 0) {
                                   setPendingAttachments((prev) =>
-                                      [...prev, ...dataUrls].slice(0, 5)
+                                      [...prev, ...newEntries].slice(0, 5)
                                   );
                               }
                           }

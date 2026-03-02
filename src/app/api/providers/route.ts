@@ -3,6 +3,7 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import { createSupabaseServerClient, createSupabaseAdminClient } from '@/lib/supabase-server';
 import { isCacheStale, refreshCachedProvider } from '@/lib/refresh-provider-cache';
 import { formatBusinessName } from '@/lib/utils';
+import { getPlanTierInfo } from '@/lib/plan-tiers';
 
 export async function POST(req: NextRequest) {
     try {
@@ -247,22 +248,23 @@ export async function POST(req: NextRequest) {
         // 3. Caching Logic: Check which providers are already analysed (parallel DB queries)
         const placeIds = places.map((p: any) => p.id);
         const genericFallback = `Local ${trade} professional.`;
-        let profileRows: { id: string; google_place_id: string }[] = [];
+        type ProfileRow = { id: string; google_place_id: string; plan_tier?: string | null };
+        let profileRows: ProfileRow[] = [];
         if (cachedData.length === 0 && supabase) {
             const [cachedRes, profileRes] = await Promise.all([
                 supabase.from('cached_providers').select('*').in('place_id', placeIds),
                 placeIds.length > 0
-                    ? supabase.from('provider_profiles').select('id, google_place_id').in('google_place_id', placeIds)
-                    : Promise.resolve({ data: [] as { id: string; google_place_id: string }[] }),
+                    ? supabase.from('provider_profiles').select('id, google_place_id, plan_tier').in('google_place_id', placeIds)
+                    : Promise.resolve({ data: [] as ProfileRow[] }),
             ]);
             cachedData = cachedRes.data || [];
-            profileRows = (profileRes.data || []) as { id: string; google_place_id: string }[];
+            profileRows = (profileRes.data || []) as ProfileRow[];
         } else if (supabase && placeIds.length > 0) {
             const { data } = await supabase
                 .from('provider_profiles')
-                .select('id, google_place_id')
+                .select('id, google_place_id, plan_tier')
                 .in('google_place_id', placeIds);
-            profileRows = (data || []) as { id: string; google_place_id: string }[];
+            profileRows = (data || []) as ProfileRow[];
         }
 
         const cachedMap = new Map<string, any>();
@@ -287,14 +289,20 @@ export async function POST(req: NextRequest) {
             });
         }
 
-        // Provider page id: Scandio profile id or cached_providers.id for /pro/[id]
+        // Provider page id and plan_tier: Scandio profile id or cached_providers.id for /pro/[id]
         const idByPlaceId = new Map<string, string>();
-        profileRows.forEach((row: { id: string; google_place_id: string }) => {
+        const planTierByPlaceId = new Map<string, string>();
+        profileRows.forEach((row: ProfileRow) => {
             const gpid = row.google_place_id;
             if (gpid && row.id) {
                 idByPlaceId.set(gpid, row.id);
                 idByPlaceId.set(normalizePlaceId(gpid), row.id);
                 if (!gpid.startsWith('places/')) idByPlaceId.set(`places/${gpid}`, row.id);
+                if (row.plan_tier) {
+                    planTierByPlaceId.set(gpid, row.plan_tier);
+                    planTierByPlaceId.set(normalizePlaceId(gpid), row.plan_tier);
+                    if (!gpid.startsWith('places/')) planTierByPlaceId.set(`places/${gpid}`, row.plan_tier);
+                }
             }
         });
 
@@ -471,6 +479,8 @@ Output JSON only: {"results":[{"place_id":"","name":"","summary":"","services":[
 
             const displayName = aiData?.name || place.displayName?.text || 'Unknown Provider';
             const idFromProfile = idByPlaceId.get(place.id) ?? idByPlaceId.get(placeIdNorm);
+            const planTier = planTierByPlaceId.get(place.id) ?? planTierByPlaceId.get(placeIdNorm);
+            const tierInfo = planTier ? getPlanTierInfo(planTier) : null;
             const providerData = {
                 place_id: place.id,
                 name: displayName,
@@ -530,6 +540,11 @@ Output JSON only: {"results":[{"place_id":"","name":"","summary":"","services":[
                 nextOpenTime: providerData.nextOpenTime,
                 reviews: (providerData.reviews ?? []).slice(0, 50),
                 id: providerId ?? null,
+                ...(tierInfo && {
+                    plan_tier: tierInfo.key,
+                    badge_earned: tierInfo.badgeEarned,
+                    badge_copy: tierInfo.badgeCopy,
+                }),
             };
         }).filter(Boolean);
 

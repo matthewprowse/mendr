@@ -30,27 +30,48 @@ export default function ProPage() {
             />
 
             <main className="flex-1">
-                <section className="border-b border-border/50 bg-muted/30 py-16 sm:py-24">
-                    <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 text-center">
-                        <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">
-                            For service professionals
-                        </h1>
-                        <p className="mx-auto mt-4 max-w-2xl text-lg text-muted-foreground">
-                            Get pre-diagnosed leads from homeowners in your area. Join the Scandio network and grow your business.
-                        </p>
-                        <div className="mt-8 flex flex-wrap items-center justify-center gap-4">
-                            <Link
-                                href="#signup"
-                                className="inline-flex items-center justify-center rounded-md bg-primary px-6 py-3 text-sm font-medium text-primary-foreground shadow transition-colors hover:bg-primary/90"
-                            >
-                                Join as a Pro
-                            </Link>
-                            <Link
-                                href="/"
-                                className="inline-flex items-center justify-center rounded-md border border-input bg-background px-6 py-3 text-sm font-medium shadow-sm transition-colors hover:bg-accent hover:text-accent-foreground"
-                            >
-                                I&apos;m a homeowner
-                            </Link>
+                {/* Hero: same as customer landing page */}
+                <section className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-24 lg:px-8 lg:py-32">
+                    <div className="grid items-center gap-12 lg:grid-cols-2 lg:gap-16">
+                        <div className="flex flex-col items-center space-y-6 text-center lg:items-start lg:text-left">
+                            <h3 className="text-base text-muted-foreground font-medium">
+                                Sophisticated Systems, Spimplified Solutions.
+                            </h3>
+                            <h1 className="text-4xl font-bold leading-tight tracking-tight sm:text-4xl">
+                                Western Cape&apos;s New Standard in Home Maintenance
+                            </h1>
+                            <p className="text-base text-muted-foreground">
+                                Your home didn&apos;t come with a manual, and home maintenance shouldn&apos;t
+                                be a guessing game. Scandio diagnoses faults instantly and generates
+                                a secure, professional Scandio Report for you to own and share with
+                                a provider of your choice.
+                                <br />
+                                <br />
+                                Skip the uncertainty, gain instant clarity on costs, and connect
+                                with local specialists to resolve your repairs faster and more
+                                accurately.
+                            </p>
+                            <div className="flex flex-wrap items-center justify-center gap-4 lg:justify-start">
+                                <Link
+                                    href="#signup"
+                                    className="inline-flex items-center justify-center rounded-md bg-primary px-6 py-3 text-sm font-medium text-primary-foreground shadow transition-colors hover:bg-primary/90"
+                                >
+                                    Join the Scandio Network
+                                </Link>
+                                <Link
+                                    href="/"
+                                    className="inline-flex items-center justify-center rounded-md border border-input bg-background px-6 py-3 text-sm font-medium shadow-sm transition-colors hover:bg-accent hover:text-accent-foreground"
+                                >
+                                    I&apos;m a homeowner
+                                </Link>
+                            </div>
+                        </div>
+                        <div className="flex justify-center">
+                            <div className="relative w-full max-w-[348px] overflow-hidden rounded-3xl border border-border/50 bg-secondary/50 hover:bg-secondary/25 transition-all duration-250">
+                                <div className="aspect-[9/16] flex items-center justify-center p-4 text-center text-sm text-muted-foreground">
+                                    Scandio Report Mockup
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </section>

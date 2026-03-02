@@ -23,11 +23,20 @@ export interface DiagnosisData {
     confidence?: number;
 }
 
+/** Single attachment entry for display and storage (Phase 2). */
+export interface AttachmentEntry {
+    url: string;
+    type: 'image' | 'video' | 'document';
+    filename?: string;
+}
+
 export interface Message {
     role: 'user' | 'assistant';
     content: string;
     feedback?: 'up' | 'down' | null;
     attachments?: string[];
+    /** Phase 2: Structured attachments (url, type, filename) for images/videos. */
+    attachment_urls?: AttachmentEntry[];
     /** Stored text descriptions of images (from AI); used for history instead of re-sending image data. */
     attachment_descriptions?: string[];
     hasUpdatedDiagnosis?: boolean;
@@ -81,4 +90,10 @@ export interface Provider {
     reviewConcerns?: string;
     /** Cached Google reviews (up to 50); used for display and linking to pro page. */
     reviews?: Array<{ text?: string; rating?: number | null; authorName?: string | null; relativePublishTimeDescription?: string | null }>;
+    /** Phase 3: plan tier for claimed providers (solo_starter | team_lite | pro_team | enterprise). */
+    plan_tier?: string | null;
+    /** Badge label shown to homeowners (e.g. "ID Verified", "Scandio Elite"). */
+    badge_earned?: string | null;
+    /** Short copy explaining what the badge means. */
+    badge_copy?: string | null;
 }

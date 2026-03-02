@@ -5,6 +5,7 @@ import { isCacheStale, refreshCachedProvider } from '@/lib/refresh-provider-cach
 import { formatBusinessName } from '@/lib/utils';
 import { analyseReviewsForProPage, getAboutCompany } from '@/lib/ai-review-metrics';
 import type { ReviewCategory } from '@/lib/ai-review-metrics';
+import { getPlanTierInfo } from '@/lib/plan-tiers';
 import Link from 'next/link';
 import NextImage from 'next/image';
 import { ProviderPageClient } from './_components/provider-page-client';
@@ -56,7 +57,7 @@ export default async function ProviderIdPage({ params }: PageProps) {
     const { data: providerProfile, error } = await supabase
         .from('provider_profiles')
         .select(
-            'id, slug, banner_url, short_description, main_description, service_categories, google_place_id, ai_review_summary, positives, negatives, metrics_punctuality, metrics_tidiness, metrics_professionalism, metrics_cleanup, total_jobs_completed, updated_at'
+            'id, slug, banner_url, short_description, main_description, service_categories, google_place_id, ai_review_summary, positives, negatives, metrics_punctuality, metrics_tidiness, metrics_professionalism, metrics_cleanup, total_jobs_completed, plan_tier, updated_at'
         )
         .eq('id', decoded)
         .maybeSingle();
@@ -82,10 +83,15 @@ export default async function ProviderIdPage({ params }: PageProps) {
             .eq('provider_id', providerProfile.id)
             .eq('is_active', true);
 
+        const planTier = (providerProfile as { plan_tier?: string | null }).plan_tier ?? 'solo_starter';
+        const tierInfo = getPlanTierInfo(planTier);
         const provider = {
             ...providerProfile,
             display_name: displayName,
             locations: locations ?? [],
+            plan_tier: planTier,
+            badge_earned: tierInfo.badgeEarned,
+            badge_copy: tierInfo.badgeCopy,
         };
 
         return (

@@ -34,6 +34,10 @@ type Provider = {
         longitude: number | null;
         service_radius_km: number;
     }>;
+    /** Phase 3: plan tier and badge for homeowners */
+    plan_tier?: string | null;
+    badge_earned?: string | null;
+    badge_copy?: string | null;
 };
 
 export function ProviderPageClient({ provider }: { provider: Provider }) {
@@ -80,6 +84,16 @@ export function ProviderPageClient({ provider }: { provider: Provider }) {
                 <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
                     {provider.display_name}
                 </h1>
+                {(provider.badge_earned ?? provider.badge_copy) && (
+                    <div className="mt-2 flex flex-col gap-1">
+                        <Badge variant="default" className="w-fit font-medium bg-primary/90 text-primary-foreground">
+                            {provider.badge_earned ?? 'Verified'}
+                        </Badge>
+                        {provider.badge_copy && (
+                            <p className="text-sm text-muted-foreground max-w-xl">{provider.badge_copy}</p>
+                        )}
+                    </div>
+                )}
                 {provider.short_description && (
                     <p className="mt-2 text-muted-foreground">{provider.short_description}</p>
                 )}

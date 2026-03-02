@@ -1,0 +1,290 @@
+================================================================================
+THE SCANDIO "NEW STANDARD" FULL BUILD SPECIFICATION
+================================================================================
+
+This master build specification provides the full prompt to transition Scandio
+from a diagnostic tool into a comprehensive marketplace. It establishes the
+infrastructure for Provider Verification, Tiered Subscription Plans, Shadcn-
+based CRM and Customer Hub, and rich messaging (images, documents, video).
+
+--------------------------------------------------------------------------------
+OVERVIEW
+--------------------------------------------------------------------------------
+
+This specification covers:
+
+  • Pro CRM: Dashboard, Leads, Jobs, Products, Finance, plus dedicated
+    Customer and Job detail pages.
+  • Customer Hub: Property Vault, Messages, Favourites, Settings.
+  • Messaging: Image, document, and video upload in both diagnosis (chat) and
+    Pro–Customer threads; display of all media on the report page.
+  • Schema and RLS for verification, products, pricing, attachments, and
+    audit trails.
+
+The app moves from global hardcoded constants to a flexible, provider-driven
+system that scales from solo practitioners to multi-location enterprises.
+
+
+================================================================================
+PHASE 1: VERIFICATION & FLEXIBLE PRICING INFRASTRUCTURE
+================================================================================
+
+Goal: Update the database to support verification documents, provider-specific
+pricing, and product catalogs.
+
+  1.1  New table: provider_verification
+       • id (UUID, PK)
+       • provider_id (FK → provider_profiles)
+       • document_type (enum or text: e.g. Insurance, COIDC, Business Reg)
+       • document_url (TEXT; S3/storage path)
+       • status (enum: pending, verified, rejected)
+       • expiry_date (DATE; optional)
+       • created_at, updated_at
+       • Index on (provider_id, document_type) for quick lookup.
+
+  1.2  Enhance provider_profiles
+       • verification_status (enum: unverified, verified, gold) — derived or
+         stored; used for badges and tier gating.
+       • base_callout_fee (DECIMAL) — provider’s default call-out amount.
+       • rate_per_km (DECIMAL) — travel rate used for quote calculation.
+       • plan_tier (enum: solo_starter, team_lite, pro_team, enterprise) —
+         drives fee, seat limits, and badge (see Phase 3).
+
+  1.3  New table: provider_products
+       • id (UUID, PK)
+       • provider_id (FK → provider_profiles)
+       • name (TEXT) — e.g. "Wall Painting - Per sqm", "Geyser Element Swap"
+       • description (TEXT; optional)
+       • price (DECIMAL)
+       • unit (TEXT) — e.g. "sqm", "item", "hour"
+       • sort_order (INT; optional)
+       • active (BOOLEAN, default true)
+       • created_at, updated_at
+       • Enforce product limits per plan_tier (application or trigger).
+
+
+================================================================================
+PHASE 2: MEDIA & ATTACHMENTS — CHAT, REPORT, AND MESSAGING
+================================================================================
+
+Goal: Support images, documents, and video in diagnosis (chat), in report view,
+and in Pro–Customer messaging. Ensure storage, schema, and UI are consistent.
+
+  2.1  Diagnosis (Chat) uploads
+       • Chat page: Accept image uploads (existing) and add support for
+         video uploads. Validate MIME types (e.g. image/*, video/mp4, video/webm).
+       • Store diagnosis media in existing or dedicated storage path; keep
+         references in conversations or messages (e.g. attachments array).
+       • Limit file size and duration for video (e.g. max 50MB, 2 min) to
+         avoid abuse; show clear errors on failure.
+
+  2.2  Report page
+       • Show all diagnosis attachments: images and videos.
+       • Images: existing behaviour (gallery/carousel if applicable).
+       • Videos: render with <video> (or player) with controls; same
+         access rules as report (public/shareable link).
+       • Ensure report layout accommodates mixed media (images + videos)
+         without breaking print or share.
+
+  2.3  Messaging (Pro–Customer threads)
+       • Schema: message_attachments or extend messages table with
+         attachment_urls (JSONB array of { url, type, filename }).
+       • Supported types: image (image/*), document (PDF, etc.), video
+         (video/mp4, video/webm). Define allowed MIME types and max sizes
+         in one place (env or config).
+       • Storage: Use existing Supabase storage (e.g. gallery/vault);
+         scope paths by conversation_id and message_id for RLS and cleanup.
+       • UI: In the messaging composer, allow paste/drag and a clear
+         “Attach” action; show thumbnails for images, icons for documents,
+         and a small preview/play for video. Display received attachments
+         inline in the thread (images and video playable; documents
+         download or open in new tab).
+
+  2.4  Storage and RLS
+       • Define buckets/paths for: diagnosis media, report media, and
+         message attachments. Ensure RLS policies allow upload and read
+         only for authorised users (customer for their conversation;
+         provider for jobs they are assigned to).
+
+
+================================================================================
+PHASE 3: TIERED PLAN IMPLEMENTATION
+================================================================================
+
+Goal: Enforce the four plans in code and UI. Each tier has a fee, seat limit,
+and a badge shown to homeowners with explanatory copy.
+
+  Plan matrix:
+
+  +----------------+----------+-------------+---------------------+------------+
+  | Tier           | Fee      | Seats       | Badge Earned        | (see below)|
+  +----------------+----------+-------------+---------------------+------------+
+  | Solo Starter   | R149/mo  | 1           | ID Verified         |            |
+  +----------------+----------+-------------+---------------------+------------+
+  | Team Lite      | R399/mo  | Up to 3     | Quality Assured     |            |
+  +----------------+----------+-------------+---------------------+------------+
+  | Pro Team       | R799/mo  | Up to 6     | Verified Professional|           |
+  +----------------+----------+-------------+---------------------+------------+
+  | Enterprise     | R1,499/mo| Unlimited   | Scandio Elite       |            |
+  +----------------+----------+-------------+---------------------+------------+
+
+  What it means (Homeowner view) — display this copy next to the badge:
+
+  • Solo Starter — "ID Verified"
+    "We have their SA ID and Trade Cert on file. They are who they say they are."
+
+  • Team Lite — "Quality Assured"
+    "This team has 5+ completed jobs on Scandio with 4+ star ratings."
+
+  • Pro Team — "Verified Professional"
+    "Vetted for Cleanliness & Punctuality. Covered by Scandio's basic mediation."
+
+  • Enterprise — "Scandio Elite"
+    "Top-tier reliability. Full background checks on all seats. Priority Support."
+
+  Implementation:
+  • Store plan_tier on provider_profiles (solo_starter | team_lite | pro_team |
+    enterprise). Default new claims to solo_starter.
+  • Store or derive badge_earned and badge_copy per tier; show on Pro cards
+    and Pro profile so homeowners see the badge and its explanation.
+  • Enforce seat limit per plan: count of linked users/seats per provider;
+    block adding seats when at limit; show upgrade CTA.
+  • Billing: Fee is per tier (R149 / R399 / R799 / R1,499); integrate with
+    payment provider for subscription; gate features by plan_tier.
+  • UI: Pro Settings/Dashboard shows current plan, seat count, badge, and
+    link to upgrade. Homeowner-facing Pro list and profile show badge +
+    “What it means” copy.
+
+
+================================================================================
+PHASE 4: PRO CRM — DASHBOARD, LEADS, AND CORE PAGES
+================================================================================
+
+Goal: Build the Pro control centre with Shadcn Sidebar and first-class
+Customer and Job pages.
+
+  4.1  Layout and navigation (Pro)
+       • Desktop: Use the default Shadcn Sidebar for the Pro area. Sidebar
+         links: Dashboard, Leads, Jobs, Products, Finance, Settings (and
+         optionally Customers as a list).
+       • Mobile: No sidebar; use a footer nav with the same links (Dashboard,
+         Leads, Jobs, etc.) so Pros can switch sections from the bottom.
+       • Dashboard: Summary cards (new leads, open jobs, revenue this month);
+         quick links to recent leads and jobs.
+
+  4.2  Onboarding (Claim Profile) wizard
+       • Search/filter cached_providers (by name, area, trade). Provider
+         selects their business and clicks “Claim Profile”.
+       • Create or link provider_profiles row to auth.uid(); link
+         google_place_id to the chosen cached_provider.
+       • Multi-step wizard:
+         Step 1 — Verify: Upload documents (Insurance, COIDC, Business Reg).
+         Step 2 — Pricing: Set base_callout_fee and rate_per_km.
+         Step 3 — Catalog: Add first 3 (or plan-max) products.
+       • After completion, redirect to Dashboard or Leads.
+
+  4.3  Lead Inbox (Leads list)
+       • List jobs where status = 'lead' and provider_id = current user’s
+         provider. Show customer name, address, diagnosis summary, created_at.
+       • Row action: “Accept” → update job status to 'quoted'; optionally
+         logAudit('LEAD_ACCEPTED', job_id). Redirect to Job page or open
+         quote form.
+
+  4.4  Job page (Provider) — CRITICAL
+       • Route: e.g. /pro/jobs/[jobId]. One page per job for the assigned Pro.
+       • Header: Job ref, customer name, status badge (lead / quoted / active /
+         completed / cancelled), created/updated dates.
+       • Sections:
+         (a) Customer snapshot: Name, service address, phone (if allowed),
+             link to “Customer page” for this customer.
+         (b) Diagnosis context: Original diagnosis summary, link to report
+             (if shareable), and any diagnosis images/videos.
+         (c) Messaging: Full thread with the customer. Support image,
+             document, and video upload (see Phase 2). Real-time or
+             polled updates.
+         (d) Quote/Invoice: If status is quoted or beyond, show line items,
+             call-out fee, travel (rate_per_km × distance_km), total. Actions:
+             “Send Quote”, “Mark as Accepted”, “Convert to Invoice”.
+         (e) Finance (if completed): Toggle is_paid; upload payment_proof_url
+             to S3 vault; logAudit on payment verification.
+       • Status transitions with validation and logAudit (e.g. quoted →
+         active when customer accepts).
+
+  4.5  Customer page (Provider) — CRITICAL
+       • Route: e.g. /pro/customers/[customerId] or /pro/customers/[jobId]
+         (customer inferred from job). Dedicated page for “this customer”
+         from the Pro’s perspective.
+       • Content:
+         (a) Customer profile: Display name, primary address (from jobs or
+             customer settings). No PII beyond what’s needed for the job.
+         (b) Job history: List all jobs (this provider only) for this
+             customer — status, date, short summary. Each row links to the
+             Job page.
+         (c) Quick actions: “Start new job” (if product allows) or link back
+             to Leads.
+       • Data: Join jobs + conversations (or customer profile if you add one);
+             filter by provider_id and customer identifier.
+
+  4.6  Products and Finance
+       • Products: CRUD for provider_products; enforce plan limits.
+       • Finance: Table of jobs with status = 'completed'. Columns: customer,
+         date, total, is_paid, payment_proof_url. Actions: Toggle is_paid;
+         upload proof to vault; logAudit('PAYMENT_VERIFIED', job_id).
+
+
+================================================================================
+PHASE 5: CUSTOMER HUB
+================================================================================
+
+Goal: Centralised dashboard for homeowners — vault, messaging, favourites,
+settings.
+
+  5.1  Layout and navigation (Customer)
+       • No sidebar. Use the same nav pattern as the landing page:
+       • Desktop: Header nav (horizontal links). Links: My Vault, Messages,
+         Favourites, Settings (and logo/home).
+       • Mobile: Footer nav (fixed bottom bar) with the same links so
+         customers switch sections from the bottom.
+
+  5.2  My Vault (Property Vault)
+       • Vertical timeline of past conversations (scans). Each card: date,
+         diagnosis summary, link to full report, thumbnails for images/videos.
+       • Filter by saved locations (if multiple properties).
+
+  5.3  Messages (Active chats)
+       • Unified view: List of “threads” — one per job or per Pro (depending
+         on data model). Each thread shows last message, Pro name, job ref.
+       • Click thread → open messaging view for that job. Support image,
+         document, and video upload (same as Pro side); display received
+         attachments inline.
+
+  5.4  Favourites and Settings
+       • Favourites: List of “Gold Star” Pros (provider_favourites); link to
+         Pro profile page.
+       • Settings: Update primary service address(es); notification prefs
+         if applicable.
+
+
+================================================================================
+PHASE 6: SECURE MESSAGING & AUDIT LOGGING
+================================================================================
+
+Goal: RLS so Pros only see data for their jobs; every material status change
+is audited.
+
+  6.1  RLS for messages and attachments
+       • Pros: Can read/write messages (and message_attachments) only for
+         conversations that are linked to a job where job.provider_id =
+         their provider_profiles.id.
+       • Customers: Can read/write messages only for conversations they
+         own (conversation tied to their auth or session).
+       • Storage: RLS on storage objects so that message attachment paths
+         are readable only by participants (customer + assigned Pro).
+
+  6.2  Non-repudiation and logAudit
+       • On every status change (Lead → Quoted, Quoted → Active, Active →
+         Completed, and is_paid / payment_proof), call logAudit with
+         event_type, entity_type ('job'), entity_id, and relevant payload.
+       • Standard events: LEAD_ACCEPTED, QUOTE_SENT, JOB_ACTIVATED,
+         JOB_COMPLETED, PAYMENT_VERIFIED, PAYMENT_PROOF_UPLOADED.
+       • Ensure audit_logs table is retained and not editable by app logic.

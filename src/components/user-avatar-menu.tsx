@@ -64,12 +64,20 @@ export function UserAvatarMenu() {
                         </>
                     )}
 
+                    {user && (
+                        <Button variant="ghost" className="justify-start w-full" asChild>
+                            <Link href="/hub/vault" onClick={() => setOpen(false)}>
+                                My Hub
+                            </Link>
+                        </Button>
+                    )}
+
                     <Button
                         variant="ghost"
                         className="justify-start w-full"
                         asChild
                     >
-                        <Link href="/auth/login" onClick={() => setOpen(false)}>
+                        <Link href={user ? "/hub/settings" : "/auth/login"} onClick={() => setOpen(false)}>
                             Settings
                         </Link>
                     </Button>

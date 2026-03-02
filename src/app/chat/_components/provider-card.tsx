@@ -302,6 +302,23 @@ export function ProviderCard({
                             />
                         </div>
                     </div>
+                    {(provider.badge_earned ?? provider.badge_copy) && (
+                        <Popover>
+                            <PopoverTrigger asChild>
+                                <Badge
+                                    variant="default"
+                                    className="shrink-0 cursor-help font-medium bg-primary/90 text-primary-foreground"
+                                    title={provider.badge_copy ?? undefined}
+                                >
+                                    {provider.badge_earned ?? 'Verified'}
+                                </Badge>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-72 p-3 shadow-xl rounded-md border-input" side="top" align="start">
+                                <p className="text-xs font-semibold text-muted-foreground mb-1">What it means</p>
+                                <p className="text-sm text-foreground">{provider.badge_copy ?? provider.badge_earned}</p>
+                            </PopoverContent>
+                        </Popover>
+                    )}
                     <div className="flex flex-wrap gap-2">
                         <ServiceBadges
                             services={provider.services || []}
