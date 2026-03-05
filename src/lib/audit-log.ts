@@ -2,18 +2,6 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 
 export type LogCategory = 'AUTH' | 'DIAGNOSTIC' | 'TRANSACTIONAL' | 'SYSTEM' | 'MARKETING';
 
-/** Phase 6: Standard job lifecycle audit actions (non-repudiation) */
-export const JOB_AUDIT_ACTIONS = {
-    LEAD_ACCEPTED: 'LEAD_ACCEPTED',
-    QUOTE_SENT: 'QUOTE_SENT',
-    JOB_ACTIVATED: 'JOB_ACTIVATED',
-    JOB_COMPLETED: 'JOB_COMPLETED',
-    PAYMENT_VERIFIED: 'PAYMENT_VERIFIED',
-    PAYMENT_PROOF_UPLOADED: 'PAYMENT_PROOF_UPLOADED',
-} as const;
-
-export type JobAuditAction = (typeof JOB_AUDIT_ACTIONS)[keyof typeof JOB_AUDIT_ACTIONS];
-
 export interface ScandioEvent {
     action: string;
     type: LogCategory;
@@ -78,29 +66,4 @@ export async function logScandioEvent(
     } catch (e) {
         return { error: e instanceof Error ? e : new Error(String(e)) };
     }
-}
-
-/**
- * Phase 6: Log a job lifecycle or finance audit event (non-repudiation).
- * Call on every status change: Lead → Quoted, Quoted → Active, Active → Completed,
- * and on is_paid / payment_proof updates.
- */
-export async function logJobAudit(
-    supabase: SupabaseClient,
-    action: JobAuditAction | string,
-    jobId: string,
-    payload?: Record<string, unknown>,
-    options?: { metadata?: ClientMetadata; headers?: Headers }
-): Promise<{ error: Error | null }> {
-    return logScandioEvent(
-        supabase,
-        {
-            action,
-            type: 'TRANSACTIONAL',
-            entityType: 'job',
-            entityId: jobId,
-            payload: payload ?? undefined,
-        },
-        options
-    );
 }

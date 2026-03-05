@@ -1,7 +1,6 @@
 import type { Metadata } from 'next';
 import { fetchLegalDocument } from '@/lib/fetch-legal-document';
 import { LegalDocumentView } from '@/components/legal-document-view';
-import { LandingFooter } from '@/components/landing-footer';
 import { LandingHeader } from '@/components/landing-header';
 
 export const metadata: Metadata = {
@@ -39,8 +38,6 @@ export default async function PrivacyPage() {
                     </div>
                 )}
             </main>
-
-            <LandingFooter />
         </div>
     );
 }

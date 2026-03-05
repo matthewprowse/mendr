@@ -4,7 +4,7 @@ import { formatApiError } from '@/lib/utils';
 
 export type { Service } from '@/lib/fetch-services';
 
-/** GET /api/services — returns active services from Supabase, ordered by sort_order. */
+/** GET /api/services — returns active services from Supabase. */
 export async function GET() {
     try {
         const services = await getServices();

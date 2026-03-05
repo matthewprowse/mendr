@@ -14,21 +14,13 @@ import { UnrelatedImageCard } from '@/app/chat/_components/unrelated-image-card'
 import { UnservicedCategoryCard } from '@/app/chat/_components/unserviced-category-card';
 import { ProvidersMap } from '@/app/chat/_components/providers-map';
 
-type AttachmentItem = { url: string; type?: 'image' | 'video' | 'document' };
-
 type ReportData = {
     diagnosis: Record<string, unknown> | null;
     image_url: string | null;
     customer_address: string | null;
     customer_lat: number | null;
     customer_lng: number | null;
-    messages?: {
-        content: string;
-        role: string;
-        attachments?: string[];
-        attachment_urls?: AttachmentItem[];
-        diagnosis?: Record<string, unknown> | null;
-    }[];
+    messages?: { content: string; role: string; attachments?: string[]; diagnosis?: Record<string, unknown> | null }[];
 };
 
 export interface ReportDetailContentProps {
@@ -104,7 +96,7 @@ export function ReportDetailContent({ reportId }: ReportDetailContentProps) {
 
             const { data: msgsRaw } = await (supabase as any)
                 .from('messages')
-                .select('content, role, attachments, attachment_urls, diagnosis')
+                .select('content, role, attachments, diagnosis')
                 .eq('conversation_id', id)
                 .order('created_at', { ascending: true });
 
@@ -112,7 +104,6 @@ export function ReportDetailContent({ reportId }: ReportDetailContentProps) {
                 content: string;
                 role: string;
                 attachments?: string[];
-                attachment_urls?: AttachmentItem[] | null;
                 diagnosis?: Record<string, unknown> | null;
             }>;
 
@@ -140,7 +131,7 @@ export function ReportDetailContent({ reportId }: ReportDetailContentProps) {
                 customer_address: conv.customer_address as string | null,
                 customer_lat: conv.customer_lat as number | null,
                 customer_lng: conv.customer_lng as number | null,
-                messages: (msgs || []).map((m) => ({ ...m, attachment_urls: m.attachment_urls ?? undefined })),
+                messages: msgs || [],
             });
         } catch (e: unknown) {
             const errMsg =
@@ -245,24 +236,19 @@ export function ReportDetailContent({ reportId }: ReportDetailContentProps) {
     const diag = reportData.diagnosis;
     const isRejected = diag?.rejected === true;
     const isUnserviced = diag?.unserviced === true && !diag?.rejected;
-    const allMedia: AttachmentItem[] = [];
-    if (reportData.image_url) {
-        allMedia.push({ url: reportData.image_url, type: 'image' });
-    }
+    const allImages: string[] = [];
+    if (reportData.image_url) allImages.push(reportData.image_url);
     reportData.messages?.forEach((m) => {
-        const urls = m.attachment_urls?.length
-            ? m.attachment_urls.map((a) => ({ url: a.url, type: (a.type === 'video' || a.type === 'document' ? a.type : 'image') as 'image' | 'video' | 'document' }))
-            : (m.attachments ?? []).map((url) => ({ url: String(url), type: 'image' as const }));
-        urls.forEach((item) => {
-            if (item.url && !allMedia.some((x) => x.url === item.url)) allMedia.push(item);
+        m.attachments?.forEach((url) => {
+            if (url && !allImages.includes(url)) allImages.push(url);
         });
     });
-    const mainMedia = allMedia[0];
-    const additionalMedia = allMedia.slice(1);
+    const mainImage = allImages[0];
+    const additionalImages = allImages.slice(1);
 
     return (
         <div className="flex flex-col min-h-screen bg-background">
-            <AppHeader imageSrc={mainMedia?.url ?? null} showViewImage={false} />
+            <AppHeader imageSrc={mainImage} showViewImage={false} showBack />
 
             <main className="flex flex-1 flex-col overflow-y-auto">
                 <div className="max-w-4xl mx-auto w-full px-4 md:px-12 py-4 flex flex-col gap-8">
@@ -511,64 +497,46 @@ export function ReportDetailContent({ reportId }: ReportDetailContentProps) {
 
                     <Separator />
 
-                    {/* Media - images and videos from diagnosis */}
+                    {/* Images - main first, then additional */}
                     <section className="space-y-4">
                         <div className="flex items-center justify-between gap-2">
-                            <h2 className="text-lg font-semibold text-foreground">Photos &amp; videos</h2>
-                            {allMedia.length > 0 && (
+                            <h2 className="text-lg font-semibold text-foreground">Photos</h2>
+                            {allImages.length > 0 && (
                                 <Badge variant="secondary" className="text-xs font-medium">
-                                    {allMedia.length} item{allMedia.length !== 1 ? 's' : ''}
+                                    {allImages.length} Photo{allImages.length !== 1 ? 's' : ''}
                                 </Badge>
                             )}
                         </div>
-                        {allMedia.length > 0 ? (
+                        {allImages.length > 0 ? (
                             <>
-                                {mainMedia && (
+                                {mainImage && (
                                     <div className="rounded-lg border border-border overflow-hidden">
-                                        {mainMedia.type === 'video' ? (
-                                            <video
-                                                src={mainMedia.url}
-                                                controls
-                                                playsInline
-                                                className="w-full max-h-[480px] object-contain bg-muted"
-                                            />
-                                        ) : (
-                                            <img
-                                                src={mainMedia.url}
-                                                alt=""
-                                                className="w-full object-cover max-h-[480px]"
-                                            />
-                                        )}
+                                        <img
+                                            src={mainImage}
+                                            alt=""
+                                            className="w-full object-cover max-h-[480px]"
+                                        />
                                     </div>
                                 )}
-                                {additionalMedia.length > 0 && (
+                                {additionalImages.length > 0 && (
                                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                                        {additionalMedia.map((item, i) => (
+                                        {additionalImages.map((url, i) => (
                                             <div
                                                 key={i}
                                                 className="rounded-lg border border-border overflow-hidden aspect-square"
                                             >
-                                                {item.type === 'video' ? (
-                                                    <video
-                                                        src={item.url}
-                                                        controls
-                                                        playsInline
-                                                        className="w-full h-full object-cover"
-                                                    />
-                                                ) : (
-                                                    <img
-                                                        src={item.url}
-                                                        alt=""
-                                                        className="w-full h-full object-cover"
-                                                    />
-                                                )}
+                                                <img
+                                                    src={url}
+                                                    alt=""
+                                                    className="w-full h-full object-cover"
+                                                />
                                             </div>
                                         ))}
                                     </div>
                                 )}
                             </>
                         ) : (
-                            <p className="text-sm text-muted-foreground">No photos or videos</p>
+                            <p className="text-sm text-muted-foreground">No photos</p>
                         )}
                     </section>
                 </div>

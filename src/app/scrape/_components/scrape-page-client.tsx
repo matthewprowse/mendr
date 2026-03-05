@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
 
-type Service = { id: string; label: string; search_query: string; sort_order: number };
+type Service = { id: string; label: string; search_query: string; sort_order?: number };
 type Area = { name: string; lat: number; lng: number; radiusKm: number };
 
 export function ScrapePageClient() {

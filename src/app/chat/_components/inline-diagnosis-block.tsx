@@ -376,7 +376,8 @@ export function InlineDiagnosisBlock({
                                                 </div>
                                             </>
                                         )}
-                                        {(nearbyOnlyProviders?.length ?? 0) > 0 && (
+                                        {(nearbyOnlyProviders?.length ?? 0) > 0 &&
+                                            ((providers?.length ?? 0) + (emergingProviders?.length ?? 0)) < 6 && (
                                             <>
                                                 <Separator className="w-full" />
                                                 <div className="flex flex-col gap-0.5">
@@ -384,9 +385,8 @@ export function InlineDiagnosisBlock({
                                                         Other Providers in Area
                                                     </h3>
                                                     <p className="text-sm text-foreground leading-relaxed">
-                                                        These providers are in your area but do not meet our
-                                                        usual recommendation criteria. Below is a summary
-                                                        and notable feedback from customer reviews.
+                                                        These providers are in your area but do not meet our usual
+                                                        recommendation criteria.
                                                     </p>
                                                 </div>
                                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">

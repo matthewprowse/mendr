@@ -3,7 +3,6 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import { createSupabaseServerClient, createSupabaseAdminClient } from '@/lib/supabase-server';
 import { isCacheStale, refreshCachedProvider } from '@/lib/refresh-provider-cache';
 import { formatBusinessName } from '@/lib/utils';
-import { getPlanTierInfo } from '@/lib/plan-tiers';
 
 export async function POST(req: NextRequest) {
     try {
@@ -98,7 +97,139 @@ export async function POST(req: NextRequest) {
             builder: 'Builder',
             contractor: 'Building Contractor',
         };
-        const searchQuery = providedSearchQuery || TRADE_QUERY_MAP[String(trade).toLowerCase().trim()] || trade;
+        const tradeNorm = String(trade).toLowerCase().trim();
+        const searchQuery = providedSearchQuery || TRADE_QUERY_MAP[tradeNorm] || trade;
+
+        // Basic safety net: hard block obviously irrelevant categories (weed dispensaries, restaurants, etc.)
+        const BANNED_TYPES = new Set<string>([
+            'cannabis_store',
+            'marijuana_dispensary',
+            'liquor_store',
+            'bar',
+            'restaurant',
+            'cafe',
+            'coffee_shop',
+            'night_club',
+            'spa',
+            'hair_salon',
+            'beauty_salon',
+            'nail_salon',
+            'clothing_store',
+            'shoe_store',
+            'supermarket',
+            'grocery_or_supermarket',
+        ]);
+        const BANNED_KEYWORDS = [
+            'cannabis',
+            'marijuana',
+            'weed',
+            'dispensary',
+            'vape',
+            'coffee',
+            'restaurant',
+            'bar ',
+            ' bar',
+            'cocktail',
+            'nail bar',
+            'hair salon',
+            'beauty',
+        ];
+
+        // Home-service related keywords – anything that *doesn't* contain one of these is suspicious
+        const SERVICE_KEYWORDS = [
+            'electric',
+            'plumb',
+            'geyser',
+            'drain',
+            'sewer',
+            'gate',
+            'garage door',
+            'door',
+            'roof',
+            'gutter',
+            'tile',
+            'floor',
+            'flooring',
+            'paint',
+            'pool',
+            'locksmith',
+            'waste',
+            'rubble',
+            'removal',
+            'weld',
+            'carpentry',
+            'woodwork',
+            'builder',
+            'construction',
+            'contractor',
+            'handyman',
+        ];
+
+        function isProviderRelevantForTrade(params: {
+            place: any;
+            aiData: any;
+            cached: any;
+        }): boolean {
+            const { place, aiData, cached } = params;
+            const types: string[] = (place.types || []).map((t: string) => t.toLowerCase());
+
+            // Hard block banned Google types (e.g. cannabis stores, restaurants)
+            if (types.some((t) => BANNED_TYPES.has(t))) return false;
+
+            const servicesFromAi = Array.isArray(aiData?.services)
+                ? (aiData.services as { short?: string; full?: string }[])
+                : [];
+            const servicesFromCache = Array.isArray(cached?.services)
+                ? (cached.services as { short?: string; full?: string }[])
+                : [];
+            const servicesText = [...servicesFromAi, ...servicesFromCache]
+                .flatMap((s) => [s.short, s.full])
+                .filter(Boolean)
+                .join(' ')
+                .toLowerCase();
+
+            const name = (aiData?.name || place.displayName?.text || cached?.name || '')
+                .toString()
+                .toLowerCase();
+
+            const haystack = [
+                name,
+                servicesText,
+                ...types,
+                (place.formattedAddress || '').toString().toLowerCase(),
+            ].join(' ');
+
+            // Hard block on banned textual keywords (weed shops, etc.)
+            if (BANNED_KEYWORDS.some((kw) => haystack.includes(kw))) {
+                return false;
+            }
+
+            // Require at least one home-service style keyword somewhere in the data
+            const hasServiceKeyword = SERVICE_KEYWORDS.some((kw) => haystack.includes(kw));
+            if (!hasServiceKeyword) return false;
+
+            // Light trade-specific check: when we know the trade, prefer matching text
+            if (tradeNorm) {
+                const t = tradeNorm;
+                if (t.includes('plumb') && !haystack.includes('plumb') && !haystack.includes('geyser')) {
+                    return false;
+                }
+                if (t.includes('electric') && !haystack.includes('electric')) {
+                    return false;
+                }
+                if (t.includes('locksmith') && !haystack.includes('lock')) {
+                    return false;
+                }
+                if ((t.includes('pool') || t.includes('swim')) && !haystack.includes('pool')) {
+                    return false;
+                }
+                if ((t.includes('paint') || t.includes('painting')) && !haystack.includes('paint')) {
+                    return false;
+                }
+            }
+
+            return true;
+        }
 
         const normalizePlaceId = (id: string) => (id || '').replace(/^places\//, '');
         const SEARCH_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
@@ -248,23 +379,22 @@ export async function POST(req: NextRequest) {
         // 3. Caching Logic: Check which providers are already analysed (parallel DB queries)
         const placeIds = places.map((p: any) => p.id);
         const genericFallback = `Local ${trade} professional.`;
-        type ProfileRow = { id: string; google_place_id: string; plan_tier?: string | null };
-        let profileRows: ProfileRow[] = [];
+        let profileRows: { id: string; google_place_id: string }[] = [];
         if (cachedData.length === 0 && supabase) {
             const [cachedRes, profileRes] = await Promise.all([
                 supabase.from('cached_providers').select('*').in('place_id', placeIds),
                 placeIds.length > 0
-                    ? supabase.from('provider_profiles').select('id, google_place_id, plan_tier').in('google_place_id', placeIds)
-                    : Promise.resolve({ data: [] as ProfileRow[] }),
+                    ? supabase.from('provider_profiles').select('id, google_place_id').in('google_place_id', placeIds)
+                    : Promise.resolve({ data: [] as { id: string; google_place_id: string }[] }),
             ]);
             cachedData = cachedRes.data || [];
-            profileRows = (profileRes.data || []) as ProfileRow[];
+            profileRows = (profileRes.data || []) as { id: string; google_place_id: string }[];
         } else if (supabase && placeIds.length > 0) {
             const { data } = await supabase
                 .from('provider_profiles')
-                .select('id, google_place_id, plan_tier')
+                .select('id, google_place_id')
                 .in('google_place_id', placeIds);
-            profileRows = (data || []) as ProfileRow[];
+            profileRows = (data || []) as { id: string; google_place_id: string }[];
         }
 
         const cachedMap = new Map<string, any>();
@@ -289,20 +419,14 @@ export async function POST(req: NextRequest) {
             });
         }
 
-        // Provider page id and plan_tier: Scandio profile id or cached_providers.id for /pro/[id]
+        // Provider page id: Scandio profile id or cached_providers.id for /pro/[id]
         const idByPlaceId = new Map<string, string>();
-        const planTierByPlaceId = new Map<string, string>();
-        profileRows.forEach((row: ProfileRow) => {
+        profileRows.forEach((row: { id: string; google_place_id: string }) => {
             const gpid = row.google_place_id;
             if (gpid && row.id) {
                 idByPlaceId.set(gpid, row.id);
                 idByPlaceId.set(normalizePlaceId(gpid), row.id);
                 if (!gpid.startsWith('places/')) idByPlaceId.set(`places/${gpid}`, row.id);
-                if (row.plan_tier) {
-                    planTierByPlaceId.set(gpid, row.plan_tier);
-                    planTierByPlaceId.set(normalizePlaceId(gpid), row.plan_tier);
-                    if (!gpid.startsWith('places/')) planTierByPlaceId.set(`places/${gpid}`, row.plan_tier);
-                }
             }
         });
 
@@ -341,7 +465,7 @@ export async function POST(req: NextRequest) {
             try {
                 const genAI = new GoogleGenerativeAI(geminiKey);
                 const model = genAI.getGenerativeModel({
-                    model: 'gemini-2.0-flash',
+                    model: 'gemini-2.5-flash',
                     generationConfig: { temperature: 0.1 },
                 });
                 const batchPrompt = `Analyse these ${providersContext.length} home service providers. Use British English throughout (e.g. "specialise", "recognise", "organise", "colour").
@@ -419,6 +543,11 @@ Output JSON only: {"results":[{"place_id":"","name":"","summary":"","services":[
             const aiData =
                 aiResult || (cached && !cachedHasFallbackOnly ? cached : null);
 
+            // Final relevance check: drop any provider that clearly doesn't match the requested trade / service
+            if (!isProviderRelevantForTrade({ place, aiData, cached })) {
+                return null;
+            }
+
             // Safe address formatting
             const components = place.addressComponents || [];
             const getComponent = (type: string) =>
@@ -479,8 +608,6 @@ Output JSON only: {"results":[{"place_id":"","name":"","summary":"","services":[
 
             const displayName = aiData?.name || place.displayName?.text || 'Unknown Provider';
             const idFromProfile = idByPlaceId.get(place.id) ?? idByPlaceId.get(placeIdNorm);
-            const planTier = planTierByPlaceId.get(place.id) ?? planTierByPlaceId.get(placeIdNorm);
-            const tierInfo = planTier ? getPlanTierInfo(planTier) : null;
             const providerData = {
                 place_id: place.id,
                 name: displayName,
@@ -540,11 +667,6 @@ Output JSON only: {"results":[{"place_id":"","name":"","summary":"","services":[
                 nextOpenTime: providerData.nextOpenTime,
                 reviews: (providerData.reviews ?? []).slice(0, 50),
                 id: providerId ?? null,
-                ...(tierInfo && {
-                    plan_tier: tierInfo.key,
-                    badge_earned: tierInfo.badgeEarned,
-                    badge_copy: tierInfo.badgeCopy,
-                }),
             };
         }).filter(Boolean);
 
@@ -611,93 +733,20 @@ Output JSON only: {"results":[{"place_id":"","name":"","summary":"","services":[
             establishedCount > 0 ? emerging.slice(0, 6) : [];
         const nextPageToken = data.nextPageToken || null;
 
-        // Nearby-only: providers in the area that we don't recommend (not in main or emerging) — show so user has options in sparse areas
-        const normalizeIdForSet = (p: any) => (p.place_id || p.id || '').toString().replace(/^places\//, '');
-        const providerPlaceIds = new Set<string>();
-        [...providers, ...emergingProviders].forEach((p: any) => {
-            const id = (p.place_id || p.id || '').toString();
-            if (id) providerPlaceIds.add(id.replace(/^places\//, ''));
-        });
-        const nearbyOnlyRaw = sorted
-            .filter((p: any) => !providerPlaceIds.has(normalizeIdForSet(p)))
-            .slice(0, 6);
-
-        // Use cached review_concerns when available; only call Gemini for uncached (saves API cost)
-        let nearbyOnlyProviders: any[] = nearbyOnlyRaw.map((p: any) => {
-            const cached = cachedMap.get(p.place_id) || cachedMap.get(normalizeIdForSet(p));
-            const reviewConcerns = (cached as any)?.review_concerns ?? null;
-            return { ...p, reviewConcerns };
-        });
-        const needsReviewConcerns = nearbyOnlyProviders.filter((p: any) => !p.reviewConcerns);
-        if (needsReviewConcerns.length > 0 && geminiKey) {
-            try {
-                const genAI = new GoogleGenerativeAI(geminiKey);
-                const model = genAI.getGenerativeModel({
-                    model: 'gemini-2.0-flash',
-                    generationConfig: { temperature: 0.2 },
-                });
-                const context = needsReviewConcerns.map((p: any) => ({
-                    place_id: p.place_id || p.id,
-                    name: p.name,
-                    rating: p.rating,
-                    rating_count: p.ratingCount ?? p.rating_count ?? 0,
-                    reviews: (p.reviews || [])
-                        .slice(0, 8)
-                        .map((r: any) => ({ text: r.text || r.body, rating: r.rating })),
-                }));
-                const prompt = `For each of these home service providers, customers have left reviews. Many have lower ratings or fewer reviews. For each provider output 1–2 short, professional sentences summarising notable feedback from reviews (e.g. recurring customer concerns, reasons ratings may be lower, or "Limited review history" if very few reviews). Use British English. Be factual, neutral and helpful.
-
-Output JSON only: {"results":[{"place_id":"<same as input>","review_concerns":"..."}]}. DATA: ${JSON.stringify(context)}`;
-                const result = await model.generateContent(prompt);
-                const jsonMatch = result.response.text().match(/\{[\s\S]*\}/);
-                if (jsonMatch) {
-                    const parsed = JSON.parse(jsonMatch[0]);
-                    const concernsMap = new Map(
-                        (parsed.results || []).map((r: any) => [
-                            (r.place_id || '').toString().replace(/^places\//, ''),
-                            r.review_concerns || r.reviewConcerns || 'Limited review history.',
-                        ])
-                    );
-                    const cachedByPlaceId = new Map(nearbyOnlyRaw.map((p: any) => [normalizeIdForSet(p), (cachedMap.get(p.place_id) || cachedMap.get(normalizeIdForSet(p)) as any)?.review_concerns]));
-                    nearbyOnlyProviders = nearbyOnlyRaw.map((p: any) => ({
-                        ...p,
-                        reviewConcerns: cachedByPlaceId.get(normalizeIdForSet(p)) || concernsMap.get(normalizeIdForSet(p)) || 'Limited review history.',
-                    }));
-                    // Persist review_concerns to cache so we don't call Gemini again for these places
-                    if (supabase && concernsMap.size > 0) {
-                        try {
-                            const adminSupabase = await createSupabaseAdminClient();
-                            for (const p of needsReviewConcerns) {
-                                const placeIdNorm = normalizeIdForSet(p);
-                                const review_concerns = concernsMap.get(placeIdNorm) || 'Limited review history.';
-                                const placeId = p.place_id || p.id;
-                                await adminSupabase
-                                    .from('cached_providers')
-                                    .update({ review_concerns, last_updated: new Date().toISOString() })
-                                    .eq('place_id', placeId);
-                            }
-                        } catch (e) {
-                            console.warn('Cache upsert for review_concerns failed:', (e as Error).message);
-                        }
-                    }
-                }
-            } catch (e) {
-                console.warn('Review concerns generation failed:', (e as Error).message);
-                nearbyOnlyProviders = nearbyOnlyRaw.map((p: any) => ({
-                    ...p,
-                    reviewConcerns: (p.rating != null && p.rating < 4.0)
-                        ? 'Lower rating than our recommended providers; check reviews before booking.'
-                        : 'Limited review history; consider checking reviews and asking for references.',
-                }));
-            }
-        } else {
-            // Fallback when no Gemini: use generic message for those still missing
-            nearbyOnlyProviders = nearbyOnlyProviders.map((p: any) => ({
-                ...p,
-                reviewConcerns: p.reviewConcerns || ((p.rating != null && p.rating < 4.0)
-                    ? 'Lower rating than our recommended providers; check reviews before booking.'
-                    : 'Limited review history; consider checking reviews and asking for references.'),
-            }));
+        // Nearby-only: providers in the area that we don't recommend (not in main or emerging) — only show if fewer than 6 providers were already returned
+        const alreadyShownCount = providers.length + (emergingProviders?.length ?? 0);
+        let nearbyOnlyProviders: any[] = [];
+        if (alreadyShownCount < 6) {
+            const normalizeIdForSet = (p: any) =>
+                (p.place_id || p.id || '').toString().replace(/^places\//, '');
+            const providerPlaceIds = new Set<string>();
+            [...providers, ...emergingProviders].forEach((p: any) => {
+                const id = (p.place_id || p.id || '').toString();
+                if (id) providerPlaceIds.add(id.replace(/^places\//, ''));
+            });
+            nearbyOnlyProviders = sorted
+                .filter((p: any) => !providerPlaceIds.has(normalizeIdForSet(p)))
+                .slice(0, 6);
         }
 
         // Fast heuristic for Scandio's Pick (no AI call — saves ~1–2s): open > 4.5+ & 25+ reviews > best by rating

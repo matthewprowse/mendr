@@ -50,10 +50,6 @@ export function AppHeader({ imageSrc, showViewImage = true, showBack = false }: 
                         </Button>
                     )}
 
-                    <Button variant="secondary" asChild>
-                        <Link href="/pro">Join Pro Network</Link>
-                    </Button>
-
                     <UserAvatarMenu />
                 </div>
             </div>

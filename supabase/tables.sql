@@ -120,32 +120,6 @@ EXCEPTION
     WHEN duplicate_object THEN NULL; -- constraint already exists
 END $$;
 
--- Ensure user_id has a named unique constraint (required for ON CONFLICT user_id in PostgREST)
-DO $$
-BEGIN
-    IF EXISTS (
-        SELECT 1
-        FROM information_schema.columns
-        WHERE table_schema = 'public'
-          AND table_name = 'profiles'
-          AND column_name = 'user_id'
-    ) THEN
-        IF NOT EXISTS (
-            SELECT 1
-            FROM pg_constraint
-            WHERE conrelid = 'public.profiles'::regclass
-              AND contype = 'u'
-              AND conname = 'profiles_user_id_key'
-        ) THEN
-            BEGIN
-                ALTER TABLE profiles ADD CONSTRAINT profiles_user_id_key UNIQUE (user_id);
-            EXCEPTION
-                WHEN duplicate_object THEN NULL;
-            END;
-        END IF;
-    END IF;
-END $$;
-
 -- =============================================================================
 -- 3. Cached Providers (Google Places enrichment cache)
 -- =============================================================================
@@ -175,8 +149,7 @@ ALTER TABLE cached_providers ADD COLUMN IF NOT EXISTS reviews JSONB;
 ALTER TABLE cached_providers ADD COLUMN IF NOT EXISTS weekday_descriptions JSONB;
 ALTER TABLE cached_providers ADD COLUMN IF NOT EXISTS photos JSONB;
 ALTER TABLE cached_providers ADD COLUMN IF NOT EXISTS review_highlights JSONB;
--- AI-generated "notable feedback from reviews" for nearby-only / low-rated providers (reduces Gemini calls)
-ALTER TABLE cached_providers ADD COLUMN IF NOT EXISTS review_concerns TEXT;
+ALTER TABLE cached_providers ADD COLUMN IF NOT EXISTS ai_review_summary TEXT;
 
 -- =============================================================================
 -- 3b. API response caches (reduce Google/Gemini API usage)
@@ -278,6 +251,7 @@ ALTER TABLE conversations ADD COLUMN IF NOT EXISTS customer_address TEXT;
 ALTER TABLE conversations ADD COLUMN IF NOT EXISTS diagnosis JSONB;
 ALTER TABLE conversations ADD COLUMN IF NOT EXISTS providers JSONB;
 ALTER TABLE conversations ADD COLUMN IF NOT EXISTS device TEXT;
+ALTER TABLE conversations ADD COLUMN IF NOT EXISTS pinned BOOLEAN DEFAULT false;
 
 -- Drop removed columns
 ALTER TABLE conversations ADD COLUMN IF NOT EXISTS initial_image_description TEXT;
@@ -324,9 +298,6 @@ ALTER TABLE messages ADD COLUMN IF NOT EXISTS diagnosis JSONB;
 ALTER TABLE messages ADD COLUMN IF NOT EXISTS providers JSONB;
 ALTER TABLE messages ADD COLUMN IF NOT EXISTS emerging_providers JSONB;
 ALTER TABLE messages ADD COLUMN IF NOT EXISTS attachment_descriptions TEXT[];
-
--- Phase 2: Structured attachment metadata (url, type, filename) for report/messaging (images + videos).
-ALTER TABLE messages ADD COLUMN IF NOT EXISTS attachment_urls JSONB DEFAULT '[]'::jsonb;
 
 CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(conversation_id);
 
@@ -550,70 +521,6 @@ CREATE TABLE IF NOT EXISTS provider_profiles (
 CREATE INDEX IF NOT EXISTS idx_provider_profiles_slug ON provider_profiles(slug);
 CREATE INDEX IF NOT EXISTS idx_provider_profiles_google_place ON provider_profiles(google_place_id) WHERE google_place_id IS NOT NULL;
 
--- =============================================================================
--- 14.2b Phase 1: Verification & Flexible Pricing (enums + provider_verification)
--- =============================================================================
-DO $$ BEGIN
-    CREATE TYPE verification_status AS ENUM ('unverified', 'verified', 'gold');
-EXCEPTION
-    WHEN duplicate_object THEN NULL;
-END $$;
-DO $$ BEGIN
-    CREATE TYPE verification_document_status AS ENUM ('pending', 'verified', 'rejected');
-EXCEPTION
-    WHEN duplicate_object THEN NULL;
-END $$;
-DO $$ BEGIN
-    CREATE TYPE plan_tier AS ENUM ('solo_starter', 'team_lite', 'pro_team', 'enterprise');
-EXCEPTION
-    WHEN duplicate_object THEN NULL;
-END $$;
-
-CREATE TABLE IF NOT EXISTS provider_verification (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    provider_id UUID NOT NULL REFERENCES provider_profiles(id) ON DELETE CASCADE,
-    document_type TEXT NOT NULL,
-    document_url TEXT NOT NULL,
-    status verification_document_status NOT NULL DEFAULT 'pending',
-    expiry_date DATE,
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-CREATE INDEX IF NOT EXISTS idx_provider_verification_provider_type ON provider_verification(provider_id, document_type);
-
--- 14.2c Phase 1: Enhance provider_profiles (verification_status, pricing, plan_tier)
-ALTER TABLE provider_profiles ADD COLUMN IF NOT EXISTS verification_status verification_status DEFAULT 'unverified';
-ALTER TABLE provider_profiles ADD COLUMN IF NOT EXISTS base_callout_fee DECIMAL(12,2);
-ALTER TABLE provider_profiles ADD COLUMN IF NOT EXISTS rate_per_km DECIMAL(12,2);
-ALTER TABLE provider_profiles ADD COLUMN IF NOT EXISTS plan_tier plan_tier DEFAULT 'solo_starter';
-
--- 14.2d Phase 1: Provider product catalog
-CREATE TABLE IF NOT EXISTS provider_products (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    provider_id UUID NOT NULL REFERENCES provider_profiles(id) ON DELETE CASCADE,
-    name TEXT NOT NULL,
-    description TEXT,
-    price DECIMAL(12,2) NOT NULL,
-    unit TEXT NOT NULL,
-    sort_order INT DEFAULT 0,
-    active BOOLEAN DEFAULT true,
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-CREATE INDEX IF NOT EXISTS idx_provider_products_provider ON provider_products(provider_id);
-CREATE INDEX IF NOT EXISTS idx_provider_products_provider_active ON provider_products(provider_id, active) WHERE active = true;
-
--- 14.2e Phase 3: Provider team members (seats) — owner = 1 seat; each row = extra seat
-CREATE TABLE IF NOT EXISTS provider_team_members (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    provider_id UUID NOT NULL REFERENCES provider_profiles(id) ON DELETE CASCADE,
-    user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    UNIQUE(provider_id, user_id)
-);
-CREATE INDEX IF NOT EXISTS idx_provider_team_members_provider ON provider_team_members(provider_id);
-CREATE INDEX IF NOT EXISTS idx_provider_team_members_user ON provider_team_members(user_id);
-
 -- 14.3 Transactional job engine
 CREATE TABLE IF NOT EXISTS jobs (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -623,13 +530,10 @@ CREATE TABLE IF NOT EXISTS jobs (
     status job_status DEFAULT 'lead',
     category TEXT NOT NULL,
     initial_diagnosis_id UUID,
+    -- Conversation this job is associated with (for reports, links from vault, etc.)
+    conversation_id UUID REFERENCES conversations(id) ON DELETE SET NULL,
     current_quote JSONB DEFAULT '{"parts": [], "labour": [], "total": 0}'::jsonb,
     is_paid BOOLEAN DEFAULT false,
-    -- Optional CRM metadata for off-platform work
-    lead_source TEXT,
-    external_ref TEXT,
-    customer_name TEXT,
-    customer_contact TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -640,185 +544,8 @@ CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status);
 CREATE INDEX IF NOT EXISTS idx_jobs_created ON jobs(created_at);
 
 -- =============================================================================
--- 14.3b CRM Customers (provider-owned customer book for off-platform work)
--- =============================================================================
-CREATE TABLE IF NOT EXISTS crm_customers (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    provider_id UUID NOT NULL REFERENCES provider_profiles(id) ON DELETE CASCADE,
-    name TEXT NOT NULL,
-    email TEXT,
-    phone TEXT,
-    address TEXT,
-    notes TEXT,
-    created_at TIMESTAMPTZ DEFAULT NOW()
-);
-CREATE INDEX IF NOT EXISTS idx_crm_customers_provider ON crm_customers(provider_id);
-CREATE INDEX IF NOT EXISTS idx_crm_customers_name ON crm_customers(provider_id, name);
-
--- =============================================================================
--- 14.4 Phase 2: Pro–Customer messaging (job threads)
--- =============================================================================
--- Phase 4: Link job to conversation (for messaging) and payment proof
-ALTER TABLE jobs ADD COLUMN IF NOT EXISTS conversation_id UUID REFERENCES conversations(id) ON DELETE SET NULL;
-ALTER TABLE jobs ADD COLUMN IF NOT EXISTS payment_proof_url TEXT;
-ALTER TABLE jobs ADD COLUMN IF NOT EXISTS service_address TEXT;
-CREATE INDEX IF NOT EXISTS idx_jobs_conversation ON jobs(conversation_id) WHERE conversation_id IS NOT NULL;
-
--- Migration helper: if a legacy job_messages table exists that still uses conversation_id
--- (from an earlier schema with job_conversations), migrate it to use job_id so the app
--- and RLS policies that expect job_messages.job_id will work transparently.
-DO $$
-BEGIN
-    IF EXISTS (
-        SELECT 1
-        FROM information_schema.tables
-        WHERE table_schema = 'public'
-          AND table_name = 'job_messages'
-    )
-    AND EXISTS (
-        SELECT 1
-        FROM information_schema.columns
-        WHERE table_schema = 'public'
-          AND table_name = 'job_messages'
-          AND column_name = 'conversation_id'
-    ) THEN
-        -- Add job_id column if it doesn't exist yet.
-        IF NOT EXISTS (
-            SELECT 1
-            FROM information_schema.columns
-            WHERE table_schema = 'public'
-              AND table_name = 'job_messages'
-              AND column_name = 'job_id'
-        ) THEN
-            ALTER TABLE job_messages ADD COLUMN job_id UUID;
-        END IF;
-
-        -- Best-effort backfill of job_id from job_conversations if that table exists.
-        IF EXISTS (
-            SELECT 1
-            FROM information_schema.tables
-            WHERE table_schema = 'public'
-              AND table_name = 'job_conversations'
-        ) THEN
-            UPDATE job_messages jm
-            SET job_id = jc.job_id
-            FROM job_conversations jc
-            WHERE jm.conversation_id = jc.id
-              AND jm.job_id IS NULL;
-        END IF;
-
-        -- Try to enforce NOT NULL and FK; ignore if data prevents strict enforcement.
-        BEGIN
-            ALTER TABLE job_messages ALTER COLUMN job_id SET NOT NULL;
-        EXCEPTION
-            WHEN others THEN NULL;
-        END;
-
-        BEGIN
-            ALTER TABLE job_messages
-            ADD CONSTRAINT job_messages_job_id_fkey
-            FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE CASCADE;
-        EXCEPTION
-            WHEN others THEN NULL;
-        END;
-
-        -- Drop old conversation_id column and any related index if present.
-        BEGIN
-            DROP INDEX IF EXISTS idx_job_messages_conversation;
-        EXCEPTION
-            WHEN others THEN NULL;
-        END;
-
-        BEGIN
-            ALTER TABLE job_messages DROP COLUMN conversation_id;
-        EXCEPTION
-            WHEN others THEN NULL;
-        END;
-    END IF;
-END $$;
-
--- Legacy job_conversations table is no longer used by the app; keep this drop
--- idempotent so the script can be run safely on fresh and existing databases.
-DROP TABLE IF EXISTS job_conversations;
-
--- =============================================================================
--- 14.4 Job messages (Pro–Customer messaging; Phase 2.3 / Phase 5)
--- One thread per job; attachment_urls: [{ url, type, filename }]
--- =============================================================================
-CREATE TABLE IF NOT EXISTS job_messages (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    job_id UUID NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
-    sender_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-    sender_type TEXT NOT NULL CHECK (sender_type IN ('customer', 'pro')),
-    content TEXT NOT NULL DEFAULT '',
-    attachment_urls JSONB DEFAULT '[]'::jsonb,
-    created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-CREATE INDEX IF NOT EXISTS idx_job_messages_job ON job_messages(job_id);
-CREATE INDEX IF NOT EXISTS idx_job_messages_created ON job_messages(created_at);
-
--- =============================================================================
 -- 15. Global Audit Log (non-repudiation; Phase 5)
 -- =============================================================================
--- 14.5 Quotes and Invoices (standalone CRM documents; can be linked to jobs or off-platform work)
-DO $$ BEGIN
-    CREATE TYPE quote_status AS ENUM ('draft', 'sent', 'accepted', 'declined');
-EXCEPTION
-    WHEN duplicate_object THEN NULL;
-END $$;
-DO $$ BEGIN
-    CREATE TYPE invoice_status AS ENUM ('draft', 'sent', 'paid', 'void');
-EXCEPTION
-    WHEN duplicate_object THEN NULL;
-END $$;
-
-CREATE TABLE IF NOT EXISTS quotes (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    provider_id UUID NOT NULL REFERENCES provider_profiles(id) ON DELETE CASCADE,
-    job_id UUID REFERENCES jobs(id) ON DELETE SET NULL,
-    client_id UUID REFERENCES profiles(id) ON DELETE SET NULL,
-    customer_name TEXT,
-    customer_contact TEXT,
-    title TEXT,
-    notes TEXT,
-    line_items JSONB DEFAULT '[]'::jsonb,
-    subtotal NUMERIC(12,2) DEFAULT 0,
-    tax NUMERIC(12,2) DEFAULT 0,
-    total NUMERIC(12,2) DEFAULT 0,
-    status quote_status DEFAULT 'draft',
-    source TEXT,
-    issued_at TIMESTAMPTZ DEFAULT NOW(),
-    valid_until TIMESTAMPTZ,
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-CREATE INDEX IF NOT EXISTS idx_quotes_provider ON quotes(provider_id);
-CREATE INDEX IF NOT EXISTS idx_quotes_job ON quotes(job_id);
-
-CREATE TABLE IF NOT EXISTS invoices (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    provider_id UUID NOT NULL REFERENCES provider_profiles(id) ON DELETE CASCADE,
-    job_id UUID REFERENCES jobs(id) ON DELETE SET NULL,
-    client_id UUID REFERENCES profiles(id) ON DELETE SET NULL,
-    customer_name TEXT,
-    customer_contact TEXT,
-    title TEXT,
-    notes TEXT,
-    line_items JSONB DEFAULT '[]'::jsonb,
-    subtotal NUMERIC(12,2) DEFAULT 0,
-    tax NUMERIC(12,2) DEFAULT 0,
-    total NUMERIC(12,2) DEFAULT 0,
-    status invoice_status DEFAULT 'draft',
-    source TEXT,
-    issued_at TIMESTAMPTZ DEFAULT NOW(),
-    due_at TIMESTAMPTZ,
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-CREATE INDEX IF NOT EXISTS idx_invoices_provider ON invoices(provider_id);
-CREATE INDEX IF NOT EXISTS idx_invoices_job ON invoices(job_id);
-
 CREATE TABLE IF NOT EXISTS audit_logs (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
@@ -834,22 +561,6 @@ CREATE TABLE IF NOT EXISTS audit_logs (
 CREATE INDEX IF NOT EXISTS idx_audit_logs_user ON audit_logs(user_id);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_created ON audit_logs(created_at);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_event_action ON audit_logs(event_type, action);
-
--- Phase 6: audit_logs are append-only (non-repudiation); no UPDATE or DELETE
-CREATE OR REPLACE FUNCTION public.audit_logs_deny_update_delete()
-RETURNS TRIGGER
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public
-AS $$
-BEGIN
-  RAISE EXCEPTION 'audit_logs are append-only; updates and deletes are not allowed';
-END;
-$$;
-DROP TRIGGER IF EXISTS audit_logs_deny_update_delete_trigger ON audit_logs;
-CREATE TRIGGER audit_logs_deny_update_delete_trigger
-  BEFORE UPDATE OR DELETE ON audit_logs
-  FOR EACH ROW EXECUTE PROCEDURE public.audit_logs_deny_update_delete();
 
 -- Seed initial legal documents (idempotent — only if none exist for each type)
 -- Update existing documents to latest content (run after INSERT for existing DBs)
@@ -1089,9 +800,7 @@ VALUES
   ('vault', 'vault', true),
   ('showcase', 'showcase', true),
   ('reviews', 'reviews', true),
-  ('gallery', 'gallery', true),
-  ('diagnosis', 'diagnosis', true),
-  ('message-attachments', 'message-attachments', true)
+  ('gallery', 'gallery', true)
 ON CONFLICT (id) DO UPDATE SET
   public = EXCLUDED.public,
   name = EXCLUDED.name;

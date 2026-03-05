@@ -23,20 +23,11 @@ export interface DiagnosisData {
     confidence?: number;
 }
 
-/** Single attachment entry for display and storage (Phase 2). */
-export interface AttachmentEntry {
-    url: string;
-    type: 'image' | 'video' | 'document';
-    filename?: string;
-}
-
 export interface Message {
     role: 'user' | 'assistant';
     content: string;
     feedback?: 'up' | 'down' | null;
     attachments?: string[];
-    /** Phase 2: Structured attachments (url, type, filename) for images/videos. */
-    attachment_urls?: AttachmentEntry[];
     /** Stored text descriptions of images (from AI); used for history instead of re-sending image data. */
     attachment_descriptions?: string[];
     hasUpdatedDiagnosis?: boolean;
@@ -46,7 +37,7 @@ export interface Message {
     providers?: Provider[];
     /** Emerging providers (<25 reviews but good rating), shown in separate section below. */
     emergingProviders?: Provider[];
-    /** Nearby providers we don't recommend (low rating/few reviews) but shown for sparse areas; includes reviewConcerns. */
+    /** Nearby providers we don't recommend (low rating/few reviews) but shown for sparse areas. */
     nearbyOnlyProviders?: Provider[];
     /** Pagination: next page token from Google Places for "load more providers". */
     providerNextPageToken?: string | null;
@@ -86,14 +77,6 @@ export interface Provider {
     photos?: Array<{ name: string }>;
     /** Estimated driving duration, e.g. "12 mins" */
     durationText?: string;
-    /** For nearby-only / non-recommended providers: key things to look out for from reviews (why reviews are low). */
-    reviewConcerns?: string;
     /** Cached Google reviews (up to 50); used for display and linking to pro page. */
     reviews?: Array<{ text?: string; rating?: number | null; authorName?: string | null; relativePublishTimeDescription?: string | null }>;
-    /** Phase 3: plan tier for claimed providers (solo_starter | team_lite | pro_team | enterprise). */
-    plan_tier?: string | null;
-    /** Badge label shown to homeowners (e.g. "ID Verified", "Scandio Elite"). */
-    badge_earned?: string | null;
-    /** Short copy explaining what the badge means. */
-    badge_copy?: string | null;
 }

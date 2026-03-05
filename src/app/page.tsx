@@ -1,7 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Suspense } from 'react';
-import { LandingFooter } from '@/components/landing-footer';
 import { LandingHeader } from '@/components/landing-header';
 import { Placeholder } from '@/components/placeholder';
 import { TestimonialsSection } from '@/app/page/_components/testimonials-section';
@@ -127,6 +126,7 @@ export default function LandingPage() {
                     { href: '#how-it-works', label: 'How It Works' },
                     { href: '#features', label: 'Features' },
                     { href: '#all-services', label: 'Services' },
+                    { href: '#testimonials', label: 'Testimonials' },
 
                     { href: '/pro', label: 'For Pros' },
                 ]}
@@ -364,10 +364,10 @@ export default function LandingPage() {
                     </Suspense>
                 </section>
 
-                <TestimonialsSection />
+                <section id="testimonials" className="scroll-mt-16">
+                    <TestimonialsSection />
+                </section>
             </main>
-
-            <LandingFooter showLargeBrandText />
         </div>
     );
 }

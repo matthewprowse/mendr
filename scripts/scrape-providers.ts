@@ -48,13 +48,12 @@ function toAreaKey(area: ScrapeArea): string {
     return `${lat}_${lng}_${area.radiusM}`;
 }
 
-/** Fetch active trades (search_query) from Supabase services table, ordered by sort_order. */
+/** Fetch active trades (search_query) from Supabase services table. */
 async function getTradesFromSupabase(supabase: SupabaseClient): Promise<string[]> {
     const { data, error } = await supabase
         .from('services')
         .select('search_query')
-        .eq('active', true)
-        .order('sort_order', { ascending: true });
+        .eq('active', true);
     if (error) {
         throw new Error(`Failed to fetch services: ${error.message}`);
     }

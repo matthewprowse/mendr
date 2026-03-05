@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation';
 
 export default function HubPage() {
-    redirect('/hub/vault');
+    redirect('/app/scans');
 }

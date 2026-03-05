@@ -16,22 +16,24 @@ import { AppHeader } from '@/components/app-header';
 
 import { sanitizeAiContent, tryParseDiagnosisJson, extractMessageFromRaw } from '@/lib/utils';
 import { tradeToServiceLabel } from '@/lib/services';
+import type { ServiceLabel } from '@/lib/service-icons';
 import { logScandioEvent } from '@/lib/audit-log';
-import { validateDiagnosisFile, getAttachmentType, MEDIA_CONFIG } from '@/lib/media-config';
-import { getVideoDuration } from '@/lib/video-duration';
 import { useAuth } from '@/context/auth-context';
-import { AttachmentEntry, DiagnosisData, Message, Provider } from './types';
+import { DiagnosisData, Message, Provider } from './types';
 import { ChatMessage } from './chat-message';
 import { ChatFooter } from './chat-footer';
+import { ChatWelcome } from './chat-welcome';
 import { DiagnosisResponseCard } from './diagnosis-response-card';
 import { ChatPageImageSkeleton, ChatPageTradeSkeleton } from './skeletons';
 
 export interface ChatPageClientProps {
     conversationId: string;
     initialTrade?: string;
+    /** When true, omit AppHeader (used when embedded in app shell) */
+    embedInApp?: boolean;
 }
 
-export function ChatPageClient({ conversationId, initialTrade }: ChatPageClientProps) {
+export function ChatPageClient({ conversationId, initialTrade, embedInApp }: ChatPageClientProps) {
     const router = useRouter();
     const { user } = useAuth();
     const id = conversationId;
@@ -59,7 +61,7 @@ export function ChatPageClient({ conversationId, initialTrade }: ChatPageClientP
     } | null>(null);
     const [openPopoverId, setOpenPopoverId] = useState<string | null>(null);
     const [message, setMessage] = useState('');
-    const [pendingAttachments, setPendingAttachments] = useState<AttachmentEntry[]>([]);
+    const [pendingAttachments, setPendingAttachments] = useState<string[]>([]);
     const [directTradeSelection, setDirectTradeSelection] = useState<{
         trade: string;
         diagnosis: string;
@@ -73,7 +75,21 @@ export function ChatPageClient({ conversationId, initialTrade }: ChatPageClientP
     } | null>(null);
     const [isLoadingDirectProviders, setIsLoadingDirectProviders] = useState(false);
     const [providerRadiusKm, setProviderRadiusKm] = useState(25);
+    const [welcomeSelectedService, setWelcomeSelectedService] = useState<ServiceLabel | null>(null);
+
+    // Use stored image immediately so we never block on loading when coming from home page
+    const displayImage = imageSrc;
     // --- Refs ---
+
+    // Pre-select service when coming from URL with trade (e.g. /chat/xxx?trade=Plumbing)
+    useEffect(() => {
+        if (initialTrade?.trim() && isLoaded && !displayImage) {
+            const canonical = tradeToServiceLabel(initialTrade);
+            if (canonical) {
+                setWelcomeSelectedService(canonical as ServiceLabel);
+            }
+        }
+    }, [initialTrade, isLoaded, displayImage]);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const mainRef = useRef<HTMLElement>(null);
     const welcomeFileInputRef = useRef<HTMLInputElement>(null);
@@ -85,6 +101,9 @@ export function ChatPageClient({ conversationId, initialTrade }: ChatPageClientP
         const isImage = file.type.startsWith('image/');
         const isVideo = file.type.startsWith('video/');
         if (!isImage && !isVideo) return;
+        if (welcomeSelectedService) {
+            setDirectTradeSelection({ trade: welcomeSelectedService, diagnosis: '' });
+        }
         setIsUploading(true);
         try {
             const reader = new FileReader();
@@ -166,30 +185,17 @@ export function ChatPageClient({ conversationId, initialTrade }: ChatPageClientP
                 if (msgs && msgs.length > 0) {
                     const mappedMsgs = msgs.map((m: any) => {
                         const rawAtt = m.attachments || [];
-                        const rawUrls = m.attachment_urls as Array<{ url: string; type?: string; filename?: string }> | undefined;
-                        const attachmentUrls: AttachmentEntry[] = Array.isArray(rawUrls) && rawUrls.length > 0
-                            ? rawUrls.map((a) => ({
-                                  url: typeof a.url === 'string' ? a.url : '',
-                                  type: (a.type === 'video' || a.type === 'document' ? a.type : 'image') as 'image' | 'video' | 'document',
-                                  filename: a.filename,
-                              }))
+                        const attachments = Array.isArray(rawAtt)
+                            ? rawAtt
+                                  .map((a: unknown) =>
+                                      typeof a === 'string'
+                                          ? a
+                                          : a && typeof a === 'object' && 'url' in a
+                                            ? (a as { url: string }).url
+                                            : null
+                                  )
+                                  .filter((x: unknown): x is string => typeof x === 'string')
                             : [];
-                        const attachments = attachmentUrls.length > 0
-                            ? attachmentUrls.map((a) => a.url)
-                            : Array.isArray(rawAtt)
-                                ? rawAtt
-                                      .map((a: unknown) =>
-                                          typeof a === 'string'
-                                              ? a
-                                              : a && typeof a === 'object' && 'url' in a
-                                                ? (a as { url: string }).url
-                                                : null
-                                      )
-                                      .filter((x: unknown): x is string => typeof x === 'string')
-                                : [];
-                        if (attachmentUrls.length === 0 && attachments.length > 0) {
-                            attachmentUrls.push(...attachments.map((url) => ({ url, type: 'image' as const })));
-                        }
                         const rawContent = m.content;
                         const content =
                             typeof rawContent === 'string'
@@ -201,7 +207,6 @@ export function ChatPageClient({ conversationId, initialTrade }: ChatPageClientP
                             role: m.role as 'user' | 'assistant',
                             content: content === '[object Object]' ? '' : content,
                             attachments,
-                            attachment_urls: attachmentUrls.length > 0 ? attachmentUrls : undefined,
                             attachment_descriptions: (m.attachment_descriptions as string[] | undefined) ?? undefined,
                             feedback: m.feedback as 'up' | 'down' | null,
                             hasUpdatedDiagnosis: m.diagnosis_updated,
@@ -234,8 +239,7 @@ export function ChatPageClient({ conversationId, initialTrade }: ChatPageClientP
         hasUpdatedDiagnosis: boolean = false,
         diagnosisJson?: DiagnosisData | null,
         providersJson?: Provider[] | null,
-        attachment_descriptions?: string[],
-        attachment_urls?: AttachmentEntry[]
+        attachment_descriptions?: string[]
     ): Promise<{ id: string } | undefined> => {
         if (!id) return undefined;
         const { data, error } = await (supabase as any)
@@ -249,7 +253,6 @@ export function ChatPageClient({ conversationId, initialTrade }: ChatPageClientP
                 diagnosis: diagnosisJson ?? undefined,
                 providers: providersJson ?? undefined,
                 attachment_descriptions: attachment_descriptions ?? undefined,
-                attachment_urls: attachment_urls ?? [],
             })
             .select('id')
             .single();
@@ -1298,17 +1301,15 @@ export function ChatPageClient({ conversationId, initialTrade }: ChatPageClientP
         options?: { diagnosisRejected?: boolean }
     ) => {
         const msgToSend = String(overrideMessage ?? message ?? '').trim();
-        const attachmentsToSend: AttachmentEntry[] = options?.diagnosisRejected ? [] : pendingAttachments;
+        const attachmentsToSend = options?.diagnosisRejected ? [] : pendingAttachments;
         if (!msgToSend && attachmentsToSend.length === 0) return;
         if (isResponding) return;
 
-        const attachmentUrls = attachmentsToSend.map((a) => a.url);
         const userMsg = msgToSend || 'Sent images';
         const newMessage: Message = {
             role: 'user',
             content: userMsg,
-            attachments: attachmentUrls,
-            attachment_urls: attachmentsToSend.length > 0 ? attachmentsToSend : undefined,
+            attachments: attachmentsToSend,
         };
 
         const previousDiagnosis = diagnosis;
@@ -1319,7 +1320,7 @@ export function ChatPageClient({ conversationId, initialTrade }: ChatPageClientP
         }
         setIsResponding(true);
 
-        const userMsgId = (await saveMessage('user', userMsg, attachmentUrls, false, undefined, undefined, undefined, attachmentsToSend.length > 0 ? attachmentsToSend : undefined))?.id;
+        const userMsgId = (await saveMessage('user', userMsg, attachmentsToSend))?.id;
         setDiagnosis((prev) => (prev ? { ...prev, thinking: '' } : prev));
 
         try {
@@ -1351,17 +1352,18 @@ export function ChatPageClient({ conversationId, initialTrade }: ChatPageClientP
                   ? { trade: directTradeSelection.trade, diagnosis: directTradeSelection.diagnosis }
                   : undefined;
 
-            const firstImageUrl = attachmentsToSend.find((a) => a.type === 'image')?.url ?? attachmentsToSend[0]?.url;
             const primaryImage =
                 isFirstMessage
                     ? imageSrc ?? null
-                    : firstImageUrl && typeof firstImageUrl === 'string' && firstImageUrl.startsWith('data:')
-                      ? firstImageUrl
+                    : attachmentsToSend.length > 0 &&
+                        typeof attachmentsToSend[0] === 'string' &&
+                        attachmentsToSend[0].startsWith('data:')
+                      ? attachmentsToSend[0]
                       : null;
             const attachmentsForApi =
-                attachmentUrls.length > 0
-                    ? (primaryImage && attachmentUrls[0] === primaryImage ? attachmentUrls.slice(1) : attachmentUrls)
-                    : [];
+                primaryImage && attachmentsToSend[0] === primaryImage
+                    ? attachmentsToSend.slice(1)
+                    : attachmentsToSend;
             const res = await fetch('/api/diagnose', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -2271,9 +2273,6 @@ export function ChatPageClient({ conversationId, initialTrade }: ChatPageClientP
     };
 
     // --- Render ---
-
-    // Use store image immediately so we never block on loading when coming from home page
-    const displayImage = imageSrc;
     // Only show the thinking/analysing indicator when actively running — never on a loaded conversation
     const showThinking =
         (isDiagnosing || isResponding) ||
@@ -2288,7 +2287,7 @@ export function ChatPageClient({ conversationId, initialTrade }: ChatPageClientP
     if (!isLoaded && !displayImage) {
         return (
             <div className="flex flex-1 flex-col">
-                <AppHeader showBack />
+                {!embedInApp && <AppHeader showBack />}
                 <div className="flex-1 max-w-4xl mx-auto w-full px-4 py-4">
                     {initialTrade ? <ChatPageTradeSkeleton /> : <ChatPageImageSkeleton />}
                 </div>
@@ -2297,17 +2296,42 @@ export function ChatPageClient({ conversationId, initialTrade }: ChatPageClientP
     }
 
     return (
-        <div className="flex flex-col min-h-screen bg-background">
-            <AppHeader imageSrc={displayImage} showViewImage={false} showBack />
+        <div
+            className={`flex flex-col bg-background ${embedInApp ? 'min-h-0 flex-1' : 'min-h-screen'}`}
+        >
+            {!embedInApp && (
+                <AppHeader imageSrc={displayImage} showViewImage={false} showBack />
+            )}
 
             <main
                 ref={mainRef}
                 className="flex flex-1 min-h-0 flex-col"
             >
                 <div className="flex-1 min-h-0 overflow-y-auto">
-                <div className="max-w-4xl mx-auto w-full px-4 py-4 flex flex-col gap-6 min-w-0">
+                <div
+                    className={`mx-auto w-full flex flex-col gap-6 min-w-0 ${
+                        displayImage
+                            ? 'max-w-4xl px-4 py-4'
+                            : embedInApp
+                              ? 'max-w-7xl px-0 py-12 sm:py-16'
+                              : 'max-w-7xl px-4 py-16 sm:px-6 lg:px-8'
+                    }`}
+                >
+                    {/* Welcome: service cards or upload zone when no image (hide if direct trade flow from URL) */}
+                    {!displayImage &&
+                    !(initialTrade && (directTradeSelection || directTradeResult)) && (
+                        <ChatWelcome
+                            selectedService={welcomeSelectedService}
+                            onSelectService={setWelcomeSelectedService}
+                            onUpload={handleWelcomeUpload}
+                            isUploading={isUploading}
+                            fileInputRef={welcomeFileInputRef}
+                        />
+                    )}
+
                     {/* Provider results - when direct trade with providers; hide if a message already shows diagnosis+providers (avoid duplicate) */}
-                    {(directTradeResult || (directTradeSelection && isLoadingDirectProviders)) &&
+                    {displayImage &&
+                    (directTradeResult || (directTradeSelection && isLoadingDirectProviders)) &&
                         !messages.some(
                             (m) =>
                                 m.role === 'assistant' &&
@@ -2377,6 +2401,7 @@ export function ChatPageClient({ conversationId, initialTrade }: ChatPageClientP
                     )}
 
                     {/* Image on left (AI side), then thinking below it, then messages */}
+                    {displayImage && (
                     <div className="flex flex-col gap-4">
                         {/* Initial diagnosis image - left-aligned (AI side), larger */}
                         {displayImage && (
@@ -2471,9 +2496,11 @@ export function ChatPageClient({ conversationId, initialTrade }: ChatPageClientP
                             <div ref={messagesEndRef} />
                         </div>
                     </div>
+                    )}
                 </div>
                 </div>
 
+                {displayImage && (
                 <ChatFooter
                     message={message}
                     setMessage={setMessage}
@@ -2487,29 +2514,17 @@ export function ChatPageClient({ conversationId, initialTrade }: ChatPageClientP
                         ? async (files) => {
                               const remaining = 5 - pendingAttachments.length;
                               const toAdd = files.slice(0, remaining);
-                              const newEntries: AttachmentEntry[] = [];
+                              const dataUrls: string[] = [];
                               for (const file of toAdd) {
-                                  const err = validateDiagnosisFile(file);
-                                  if (err) {
-                                      toast.error(err);
-                                      continue;
-                                  }
-                                  if (file.type.startsWith('video/')) {
-                                      const duration = await getVideoDuration(file);
-                                      if (duration != null && duration > MEDIA_CONFIG.maxVideoDurationSeconds) {
-                                          toast.error(`Video must be under ${MEDIA_CONFIG.maxVideoDurationSeconds / 60} minutes. This one is ${Math.ceil(duration / 60)} min.`);
-                                          continue;
-                                      }
-                                  }
                                   try {
                                       const url = await new Promise<string>((resolve, reject) => {
                                           const r = new FileReader();
                                           r.onload = () => resolve(r.result as string);
-                                          r.onerror = () => reject(new Error('Failed to read file'));
+                                          r.onerror = () =>
+                                              reject(new Error('Failed to read file'));
                                           r.readAsDataURL(file);
                                       });
-                                      const type = getAttachmentType(file.type);
-                                      const isImage = type === 'image';
+                                      const isImage = file.type.startsWith('image/');
                                       let finalUrl: string;
                                       if (isImage) {
                                           try {
@@ -2520,15 +2535,19 @@ export function ChatPageClient({ conversationId, initialTrade }: ChatPageClientP
                                       } else {
                                           finalUrl = url;
                                       }
-                                      newEntries.push({ url: finalUrl, type: type === 'document' ? 'image' : type, filename: file.name });
+                                      dataUrls.push(finalUrl);
                                   } catch (e) {
                                       console.error('Failed to process attachment:', e);
-                                      toast.error(`Could not process ${file.name}. Try a different file.`);
+                                      toast.error(
+                                          file.type.startsWith('video/')
+                                              ? 'Video uploads are not supported. Please use images.'
+                                              : `Could not process ${file.name}. Please try a different image.`
+                                      );
                                   }
                               }
-                              if (newEntries.length > 0) {
+                              if (dataUrls.length > 0) {
                                   setPendingAttachments((prev) =>
-                                      [...prev, ...newEntries].slice(0, 5)
+                                      [...prev, ...dataUrls].slice(0, 5)
                                   );
                               }
                           }
@@ -2544,9 +2563,10 @@ export function ChatPageClient({ conversationId, initialTrade }: ChatPageClientP
                         ? (i) => setPendingAttachments((prev) => prev.filter((_, j) => j !== i))
                         : () => {}
                 }
-                    welcomeMode={!displayImage}
+                    welcomeMode={false}
                     inputRef={welcomeFileInputRef}
                 />
+                )}
             </main>
         </div>
     );

@@ -13,32 +13,6 @@ import { ProvidersMap } from './providers-map';
 import { ServiceTradeLink } from './service-trade-link';
 import { ProvidersSkeleton } from './skeletons';
 
-const WORD_DELAY_MS = 40;
-
-function RevealText({ text }: { text: string }) {
-    const words = text.trim() ? text.trim().split(/\s+/) : [];
-    const [visibleCount, setVisibleCount] = useState(0);
-
-    useEffect(() => {
-        setVisibleCount(0);
-    }, [text]);
-
-    useEffect(() => {
-        if (visibleCount >= words.length) return;
-        const t = setTimeout(() => setVisibleCount((c) => c + 1), WORD_DELAY_MS);
-        return () => clearTimeout(t);
-    }, [visibleCount, words.length]);
-
-    const visible = words.slice(0, visibleCount).join(' ');
-    const trailingSpace = visibleCount > 0 && visibleCount < words.length ? ' ' : '';
-    return (
-        <>
-            {visible}
-            {trailingSpace}
-        </>
-    );
-}
-
 export function DiagnosisResponseCard({
     conversationId,
     diagnosis,
@@ -399,7 +373,8 @@ export function DiagnosisResponseCard({
                                                     </div>
                                                 </>
                                             )}
-                                            {(nearbyOnlyProviders?.length ?? 0) > 0 && (
+                                            {(nearbyOnlyProviders?.length ?? 0) > 0 &&
+                                                (providers.length + (emergingProviders?.length ?? 0)) < 6 && (
                                                 <>
                                                     <Separator className="w-full" />
                                                     <div className="flex flex-col gap-0.5">
@@ -407,9 +382,8 @@ export function DiagnosisResponseCard({
                                                             Other Providers in Area
                                                         </h3>
                                                         <p className="text-sm text-foreground leading-relaxed">
-                                                            These providers are in your area but do not meet our
-                                                            usual recommendation criteria. Below is a summary
-                                                            and notable feedback from customer reviews.
+                                                            These providers are in your area but do not meet our usual
+                                                            recommendation criteria.
                                                         </p>
                                                     </div>
                                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">

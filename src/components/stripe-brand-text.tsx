@@ -49,7 +49,7 @@ export function StripeBrandText() {
                 Scandio
             </span>
             <span
-                className="text-striped-muted block whitespace-nowrap text-center font-bold leading-none tracking-tighter"
+                className="text-striped-muted block w-full whitespace-nowrap text-left font-bold leading-none tracking-tighter"
                 style={{
                     fontSize: `${fontSize}px`,
                     fontFamily: 'var(--font-geist-sans), system-ui, sans-serif',

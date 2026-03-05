@@ -8,6 +8,7 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { useAuth } from '@/context/auth-context';
+import { Heart, Layout, LogOut, Settings, iconSize } from '@/lib/icons';
 
 export function UserAvatarMenu() {
     const [open, setOpen] = useState(false);
@@ -31,17 +32,18 @@ export function UserAvatarMenu() {
                 .toUpperCase()
           : null;
 
-    if (isLoading) return null;
+    // Do not render avatar/menu at all while auth is loading or when user is not logged in.
+    if (isLoading || !user) return null;
 
     return (
         <Popover open={open} onOpenChange={setOpen}>
             <PopoverTrigger asChild>
                 <button
                     type="button"
-                    className="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    className="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                     aria-label="Account menu"
                 >
-                    <Avatar className="h-9 w-9 cursor-pointer hover:opacity-80 transition-opacity">
+                    <Avatar className="h-9 w-9 cursor-pointer transition-opacity hover:opacity-90">
                         <AvatarFallback className="h-9 w-9 bg-secondary text-secondary-foreground text-xs font-semibold">
                             {initials ?? ''}
                         </AvatarFallback>
@@ -52,54 +54,89 @@ export function UserAvatarMenu() {
                 align="end"
                 sideOffset={8}
                 side="bottom"
-                className="w-56 p-3 rounded-md shadow-xl border-input"
+                className="w-54 rounded-md border-input/75 bg-popover shadow-none"
             >
-                <div className="flex flex-col gap-1">
-                    {user?.email && (
-                        <>
-                            <p className="text-xs text-muted-foreground font-semibold mb-1 truncate">
-                                {user.email}
-                            </p>
-                            <Separator className="my-2" />
-                        </>
-                    )}
 
-                    {user && (
-                        <Button variant="ghost" className="justify-start w-full" asChild>
-                            <Link href="/hub/vault" onClick={() => setOpen(false)}>
-                                My Hub
-                            </Link>
-                        </Button>
-                    )}
-
+                <div className="flex items-center gap-0.5 p-1 -mx-2 pb-3 -mt-2 border-b border-input/75 mb-3">
+                    <div className="flex flex-col gap-1">
+                        <p className="text-sm font-medium text-foreground">Matthew Prowse</p>
+                        <p className="truncate text-xs text-muted-foreground">
+                            {user.email ?? 'Account'}
+                        </p>
+                    </div>
+                </div>
+                <div className="flex flex-col gap-1 p-1 -mx-2 pb-3 -mt-1">
                     <Button
                         variant="ghost"
-                        className="justify-start w-full"
+                        className="h-8 w-full justify-start px-3 text-sm font-normal text-muted-foreground hover:text-foreground transition-all duration-250"
                         asChild
                     >
-                        <Link href={user ? "/hub/settings" : "/auth/login"} onClick={() => setOpen(false)}>
+                        <Link href="/app/home" onClick={() => setOpen(false)}>
+                            Home
+                        </Link>
+                    </Button>
+                    <Button
+                        variant="ghost"
+                        className="h-8 w-full justify-start px-3 text-sm font-normal text-muted-foreground hover:text-foreground transition-all duration-250"
+                        asChild
+                    >
+                        <Link href="/app/scans" onClick={() => setOpen(false)}>
+                            Scans
+                        </Link>
+                    </Button>
+                    <Button
+                        variant="ghost"
+                        className="h-8 w-full justify-start px-3 text-sm font-normal text-muted-foreground hover:text-foreground transition-all duration-250"
+                        asChild
+                    >
+                        <Link href="/app/favourites" onClick={() => setOpen(false)}>
+                            Favourites
+                        </Link>
+                    </Button>
+                    <Button
+                        variant="ghost"
+                        className="h-8 w-full justify-start px-3 text-sm font-normal text-muted-foreground hover:text-foreground transition-all duration-250"
+                        asChild
+                    >
+                        <Link href="/app/settings" onClick={() => setOpen(false)}>
                             Settings
                         </Link>
                     </Button>
-
-                    <Separator className="my-2" />
-
-                    {user ? (
-                        <Button
-                            variant="ghost"
-                            className="justify-start w-full text-destructive hover:text-destructive hover:bg-destructive/10"
-                            onClick={handleSignOut}
-                        >
-                            Log out
-                        </Button>
-                    ) : (
-                        <Button variant="ghost" className="justify-start w-full" asChild>
-                            <Link href="/auth/login" onClick={() => setOpen(false)}>
-                                Login
-                            </Link>
-                        </Button>
-                    )}
                 </div>
+
+                <div className="flex flex-col gap-1 border-t border-input/75 pt-3 pb-3 -mx-1">
+                    <Button
+                        variant="ghost"
+                        className="h-8 w-full justify-start px-3 text-sm font-normal text-muted-foreground hover:text-foreground transition-all duration-250"
+                        asChild
+                    >
+                        <Link href="/app/settings" onClick={() => setOpen(false)}>
+                            Terms
+                        </Link>
+                    </Button>
+                    <Button
+                        variant="ghost"
+                        className="h-8 w-full justify-start px-3 text-sm font-normal text-muted-foreground hover:text-foreground transition-all duration-250"
+                        asChild
+                    >
+                        <Link href="/app/settings" onClick={() => setOpen(false)}>
+                            Privacy Policy
+                        </Link>
+                    </Button>
+                </div>
+
+                <div className="flex flex-col gap-1 border-t border-input/75 pt-3 -mx-1 -mb-1">
+                    <Button
+                        variant="secondary"
+                        className="h-8 w-full justify-start px-3 text-sm font-normal transition-all duration-250"
+                        asChild
+                    >
+                        <Link href="/app/settings" onClick={() => setOpen(false)}>
+                            Log Out
+                        </Link>
+                    </Button>
+                </div>
+
             </PopoverContent>
         </Popover>
     );

@@ -10,8 +10,6 @@ export const STORAGE_BUCKETS = {
   vault: 'vault',
   showcase: 'showcase',
   reviews: 'reviews',
-  diagnosis: 'diagnosis',
-  messageAttachments: 'message-attachments',
 } as const;
 
 export type StorageBucket = keyof typeof STORAGE_BUCKETS;
@@ -47,23 +45,4 @@ export function showcasePath(
 /** Evidence-based review photo: {job_id}/{uuid}.jpg */
 export function reviewPath(jobId: string, uuid: string): string {
   return `${jobId}/${uuid}.jpg`;
-}
-
-/** Phase 2: Diagnosis chat media (images/videos). Path: {conversation_id}/{uuid}.{ext} */
-export function diagnosisMediaPath(
-  conversationId: string,
-  fileId: string,
-  ext: string
-): string {
-  return `${conversationId}/${fileId}.${ext}`;
-}
-
-/** Phase 2: Pro–Customer message attachments. Path: {conversation_id}/{message_id}/{uuid}.{ext} */
-export function messageAttachmentPath(
-  conversationId: string,
-  messageId: string,
-  fileId: string,
-  ext: string
-): string {
-  return `${conversationId}/${messageId}/${fileId}.${ext}`;
 }

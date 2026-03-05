@@ -12,7 +12,7 @@ export function HubAuthGuard({ children }: { children: React.ReactNode }) {
     useEffect(() => {
         if (isLoading) return;
         if (!user) {
-            router.replace(`/auth/login?next=${encodeURIComponent('/hub/vault')}`);
+            router.replace(`/auth/login?next=${encodeURIComponent('/app/scans')}`);
         }
     }, [user, isLoading, router]);
 

@@ -109,7 +109,7 @@ export function ReportPageContent() {
             <main className="flex-1 px-4 py-8 sm:px-6 lg:px-8">
                 <div className="mx-auto max-w-2xl space-y-6">
                     <div>
-                        <h1 className="text-2xl font-semibold tracking-tight">Report a provider</h1>
+                        <h1 className="text-2xl font-semibold tracking-tight">Report Provider</h1>
                         <p className="mt-1 text-sm text-muted-foreground">
                             Search for a provider to report and help us keep our platform safe.
                         </p>
@@ -117,7 +117,7 @@ export function ReportPageContent() {
 
                     {/* Search */}
                     <div className="space-y-2">
-                        <Label htmlFor="search">Search for a provider</Label>
+                        <Label htmlFor="search">Search Providers</Label>
                         <div className="flex gap-2">
                             <Input
                                 id="search"

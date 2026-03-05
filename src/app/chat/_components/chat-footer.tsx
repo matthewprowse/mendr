@@ -1,15 +1,12 @@
 'use client';
 
-import { forwardRef, useRef } from 'react';
+import { forwardRef, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { ArrowUp, Paperclip, Cross } from '@/lib/icons';
 import { cn } from '@/lib/utils';
 
 const MAX_ATTACHMENTS = 5;
-
-/** Entry can be legacy URL string or Phase 2 { url, type }. */
-export type PendingAttachmentItem = string | { url: string; type?: 'image' | 'video' | 'document' };
 
 export const ChatFooter = forwardRef<
     HTMLElement,
@@ -20,7 +17,7 @@ export const ChatFooter = forwardRef<
         isDiagnosing: boolean;
         isResponding: boolean;
         hasDiagnosis: boolean;
-        pendingAttachments: PendingAttachmentItem[];
+        pendingAttachments: string[];
         onAddAttachments: (files: File[]) => void;
         onRemoveAttachment: (index: number) => void;
         welcomeMode?: boolean;
@@ -121,42 +118,32 @@ export const ChatFooter = forwardRef<
                     >
                         {!welcomeMode && pendingAttachments.length > 0 && (
                             <div className="px-3 pt-3 pb-1.5 flex flex-wrap gap-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden shrink-0">
-                                {pendingAttachments.map((item, i) => {
-                                    const url = typeof item === 'string' ? item : item.url;
-                                    const type = typeof item === 'string' ? 'image' : (item.type ?? 'image');
-                                    const isVideo = type === 'video';
-                                    return (
+                                {pendingAttachments
+                                    .map((url, i) =>
+                                        typeof url === 'string' ? { url, i } : null
+                                    )
+                                    .filter((x): x is { url: string; i: number } => x !== null)
+                                    .map(({ url, i }) => (
                                         <div
                                             key={i}
                                             className="relative size-16 rounded-lg overflow-hidden border border-border shrink-0 group"
                                         >
-                                            {isVideo ? (
-                                                <video
-                                                    src={url}
-                                                    className="h-full w-full object-cover"
-                                                    muted
-                                                    playsInline
-                                                    preload="metadata"
-                                                />
-                                            ) : (
-                                                <img
-                                                    src={url}
-                                                    alt={`Attachment ${i + 1}`}
-                                                    className="h-full w-full object-cover"
-                                                />
-                                            )}
-                                            <Button
-                                                onClick={() => onRemoveAttachment(i)}
-                                                size="icon"
-                                                variant="secondary"
-                                                className="absolute h-6 w-6 top-1 right-1 p-0.5 text-black rounded-md"
-                                                aria-label="Remove Attachment"
-                                            >
-                                                <Cross className="size-3.5" />
-                                            </Button>
+                                            <img
+                                                src={url}
+                                                alt={`Attachment ${i + 1}`}
+                                                className="h-full w-full object-cover"
+                                            />
+                                        <Button
+                                            onClick={() => onRemoveAttachment(i)}
+                                            size="icon"
+                                            variant="secondary"
+                                            className="absolute h-6 w-6 top-1 right-1 p-0.5 text-black rounded-md"
+                                            aria-label="Remove Attachment"
+                                        >
+                                            <Cross className="size-3.5" />
+                                        </Button>
                                         </div>
-                                    );
-                                })}
+                                    ))}
                             </div>
                         )}
                         <div className="relative flex-1 min-w-0 flex">

@@ -54,17 +54,17 @@ export function ReportCard({ conversationId }: ReportCardProps) {
     };
 
     return (
-        <div className="flex flex-col overflow-hidden rounded-md border border-input bg-card shadow-none p-4">
+        <div className="flex flex-col overflow-hidden">
             <div className="flex flex-1 flex-col gap-1">
-                <p className="text-sm font-semibold text-foreground">
-                    Scan your report
+                <p className="text-base font-semibold text-foreground">
+                    Scandio Report
                 </p>
                 <p className="text-sm text-muted-foreground">
                     Send the link to your provider before they come. They can quote accurately and show up with the right parts. Sharing your Scandio Report helps them prepare the right materials and give you a clearer quote.
                 </p>
             </div>
-            <div className="flex h-9 items-center gap-2 border-t border-border pt-4 mt-5">
-                <Button onClick={handleOpenReport} variant="secondary" size="sm" className="h-9">
+            <div className="flex h-9 items-center gap-2 mt-3">
+                <Button onClick={handleOpenReport} variant="secondary" size="sm">
                     Open Report
                 </Button>
                 <button

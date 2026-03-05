@@ -203,7 +203,7 @@ CRITICAL: "confidence" must be an integer 0–100. If you are less than 85% conf
 
         const genAI = new GoogleGenerativeAI(apiKey);
         const model = genAI.getGenerativeModel({
-            model: 'gemini-2.0-flash',
+            model: 'gemini-2.5-flash',
             systemInstruction,
         });
 

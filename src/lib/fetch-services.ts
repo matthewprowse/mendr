@@ -1,16 +1,20 @@
+import { unstable_noStore as noStore } from 'next/cache';
 import { createSupabaseServerClient } from '@/lib/supabase-server';
 
 export type Service = {
     id: string;
     label: string;
     search_query: string;
-    sort_order: number;
+    sort_order?: number;
 };
 
 const SERVICES_FETCH_TIMEOUT_MS = 8000;
 
-/** Fetches active services from Supabase, ordered by sort_order. Never hangs: times out and returns [] after 8s. */
+/** Fetch active services directly from Supabase. Never hangs: times out and returns [] after 8s. */
 export async function getServices(): Promise<Service[]> {
+    // This data depends on request cookies (via Supabase), so opt out of Next.js caching.
+    noStore();
+
     const timeout = new Promise<Service[]>((_, reject) =>
         setTimeout(() => reject(new Error('getServices timeout')), SERVICES_FETCH_TIMEOUT_MS)
     );
@@ -18,9 +22,8 @@ export async function getServices(): Promise<Service[]> {
         const supabase = await createSupabaseServerClient();
         const { data, error } = await supabase
             .from('services')
-            .select('id, label, search_query, sort_order')
-            .eq('active', true)
-            .order('sort_order', { ascending: true });
+            .select('id, label, search_query')
+            .eq('active', true);
         if (error) {
             console.error('getServices error:', error);
             return [];
