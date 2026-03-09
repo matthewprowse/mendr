@@ -6,6 +6,9 @@
 
 -- Enable RLS on all tables
 ALTER TABLE cached_providers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE providers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE reviews ENABLE ROW LEVEL SECURITY;
+ALTER TABLE provider_images ENABLE ROW LEVEL SECURITY;
 ALTER TABLE services ENABLE ROW LEVEL SECURITY;
 ALTER TABLE conversations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE messages ENABLE ROW LEVEL SECURITY;
@@ -19,6 +22,32 @@ DROP POLICY IF EXISTS "Public Read Cached Providers" ON cached_providers;
 CREATE POLICY "Public Read Cached Providers" 
 ON cached_providers FOR SELECT 
 USING (true);
+
+-- 2c. Providers: Public read access for everyone
+DROP POLICY IF EXISTS "Public Read Providers" ON providers;
+CREATE POLICY "Public Read Providers"
+ON providers FOR SELECT
+USING (true);
+
+-- 2d. Provider images: Public read access for everyone
+DROP POLICY IF EXISTS "Public Read Provider Images" ON provider_images;
+CREATE POLICY "Public Read Provider Images"
+ON provider_images FOR SELECT
+USING (true);
+
+-- 17b. Reviews (Unified): public read approved; allow insert; allow update own pending
+DROP POLICY IF EXISTS "Reviews public read approved" ON reviews;
+CREATE POLICY "Reviews public read approved" ON reviews
+    FOR SELECT USING (status = 'approved');
+
+DROP POLICY IF EXISTS "Reviews allow insert" ON reviews;
+CREATE POLICY "Reviews allow insert" ON reviews
+    FOR INSERT WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Reviews update own pending" ON reviews;
+CREATE POLICY "Reviews update own pending" ON reviews
+    FOR UPDATE USING (reviewer_user_id = auth.uid() AND status = 'pending')
+    WITH CHECK (status = 'pending');
 
 -- 2b. API caches: public read (writes use service role / admin)
 ALTER TABLE geocode_cache ENABLE ROW LEVEL SECURITY;
@@ -231,6 +260,7 @@ TO authenticated
 WITH CHECK (bucket_id IN ('avatars', 'banners', 'vault', 'showcase', 'reviews', 'gallery'));
 
 -- Allow unauthenticated uploads to reviews and gallery (images are moderated before display)
+DROP POLICY IF EXISTS "Scandio storage anon insert reviews gallery" ON storage.objects;
 CREATE POLICY "Scandio storage anon insert reviews gallery"
 ON storage.objects FOR INSERT
 TO anon
@@ -249,5 +279,7 @@ USING (bucket_id IN ('avatars', 'banners', 'vault', 'showcase', 'reviews', 'gall
 
 -- Gallery uploads: public read (approved only), public insert
 ALTER TABLE gallery_uploads ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Gallery uploads public read approved" ON gallery_uploads;
 CREATE POLICY "Gallery uploads public read approved" ON gallery_uploads FOR SELECT USING (status = 'approved');
+DROP POLICY IF EXISTS "Gallery uploads allow insert" ON gallery_uploads;
 CREATE POLICY "Gallery uploads allow insert" ON gallery_uploads FOR INSERT WITH CHECK (true);

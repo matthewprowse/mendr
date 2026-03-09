@@ -201,7 +201,7 @@ export default function VaultPage() {
                                                             href={`/chat/${c.id}`}
                                                             className="text-primary underline underline-offset-2"
                                                         >
-                                                            Open chat
+                                                            Open scan
                                                         </Link>
                                                         <Link
                                                             href={`/report/${c.id}`}

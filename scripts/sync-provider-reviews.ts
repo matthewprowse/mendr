@@ -1,8 +1,8 @@
 #!/usr/bin/env npx tsx
 /**
- * Sync reviews (and opening hours, etc.) for every provider in cached_providers.
+ * Sync reviews (and opening hours, etc.) for every Google provider in providers.
  * Calls the app's refresh-cache endpoint for each place_id so Google Place Details
- * is fetched and cached_providers.reviews is updated.
+ * is fetched and providers/reviews/provider_images are updated.
  *
  * Note: Google Places API returns a maximum of 5 reviews per place. This script
  * ensures every cached provider has those reviews stored; the app then displays
@@ -97,16 +97,18 @@ async function main() {
     }
 
     const { data: rows, error } = await supabase
-        .from('cached_providers')
-        .select('place_id')
-        .not('place_id', 'is', null);
+        .from('providers')
+        .select('google_place_id')
+        .not('google_place_id', 'is', null);
 
     if (error) {
-        console.error('Failed to load cached_providers:', error.message);
+        console.error('Failed to load providers:', error.message);
         process.exit(1);
     }
 
-    const placeIds = (rows ?? []).map((r: { place_id: string }) => r.place_id).filter(Boolean);
+    const placeIds = (rows ?? [])
+        .map((r: { google_place_id: string }) => r.google_place_id)
+        .filter(Boolean);
     console.log(`Found ${placeIds.length} providers in cache.\n`);
 
     if (placeIds.length === 0) {

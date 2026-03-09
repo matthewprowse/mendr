@@ -1,11 +1,30 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { getGeminiModel } from '@/lib/ai-client';
+import { aiConfig } from '@/lib/ai-config';
+import { logAiEvent } from '@/lib/ai-logging';
 import { createSupabaseServerClient, createSupabaseAdminClient } from '@/lib/supabase-server';
 import { isCacheStale, refreshCachedProvider } from '@/lib/refresh-provider-cache';
 import { formatBusinessName } from '@/lib/utils';
 
+function buildProviderEnrichmentPrompt(trade: string, providersContext: unknown[]): string {
+    return `Analyse these ${providersContext.length} home service providers. Use British English throughout (e.g. "specialise", "recognise", "organise", "colour").
+
+For each provider output JSON with:
+1) "name": THE CLEAN BUSINESS NAME ONLY. Understand what the actual trading name is and return nothing else.
+   - Strip everything that is not the core business name: marketing tags (e.g. "New", "Repairs", "24/7", "Open"), pipe- or dash-separated service lists (e.g. " - New | Repairs | Automations" or " | Garage Doors | Gates"), location suffixes ("Cape Town", "Western Cape"), legal suffixes ("Pty Ltd", "Ltd", "LLC").
+   - Examples: "Al Garage Door Solutions - New | Repairs | Automations" → "Al Garage Door Solutions". "Planet Automations" → "Planet Automations" (keep as-is). "Joe's Plumbing Pty Ltd - Cape Town" → "Joe's Plumbing". "Brano Cape Garage Doors" → "Brano Cape Garage Doors".
+   - Output Title Case. No trailing spaces, pipes, or dashes.
+2) "summary": A fuller customer-focused description: 4–6 sentences. CRITICAL: Do NOT start with or include the business/company name (e.g. no "Plum Plumbers are...", "Combat Plumbing is..."). Write in third person about what customers say: e.g. "Consistently praised for prompt, professional service. Staff noted for attention to detail. Highly recommended." Under 80 words. NEVER return empty summary.
+3) "services" array: [{"short":"≤15 chars","full":"≤30 chars"}] for trade: ${trade}.
+
+Output JSON only: {"results":[{"place_id":"","name":"","summary":"","services":[]}]}. DATA: ${JSON.stringify(
+        providersContext
+    )}`;
+}
+
 export async function POST(req: NextRequest) {
     try {
+        const startedAt = Date.now();
         const {
             lat,
             lng,
@@ -38,14 +57,9 @@ export async function POST(req: NextRequest) {
         }
 
         const apiKey = process.env.GOOGLE_PLACES_API_KEY;
-        const geminiKey = process.env.GEMINI_API_KEY;
-
-        if (!geminiKey) {
-            console.error('GEMINI_API_KEY is missing');
-            throw new Error('Gemini API key is not configured');
-        }
 
         if (!apiKey) {
+            // eslint-disable-next-line no-console
             console.error('GOOGLE_PLACES_API_KEY is missing from environment variables');
             return NextResponse.json(
                 { error: 'Google Places API key is not configured' },
@@ -53,6 +67,7 @@ export async function POST(req: NextRequest) {
             );
         }
 
+        // eslint-disable-next-line no-console
         console.log(
             `Using API Key starting with: ${apiKey.substring(0, 6)}... (Length: ${apiKey.length})`
         );
@@ -99,6 +114,24 @@ export async function POST(req: NextRequest) {
         };
         const tradeNorm = String(trade).toLowerCase().trim();
         const searchQuery = providedSearchQuery || TRADE_QUERY_MAP[tradeNorm] || trade;
+
+        // Map trade → canonical service label used in `services` table.
+        const TRADE_SERVICE_LABEL_MAP: Record<string, string> = {
+            electrical: 'Electrical',
+            plumbing: 'Plumbing',
+            'security & access': 'Security & Access',
+            'building & construction': 'Building & Construction',
+            'carpentry & woodwork': 'Carpentry & Woodwork',
+            'flooring & tiling': 'Flooring & Tiling',
+            'general handyman': 'General Handyman',
+            'locksmith services': 'Locksmith Services',
+            painting: 'Painting',
+            'pool maintenance': 'Pool Maintenance',
+            'rubble & waste removal': 'Rubble & Waste Removal',
+            welding: 'Welding',
+        };
+        const canonicalServiceLabel =
+            TRADE_SERVICE_LABEL_MAP[tradeNorm] || TRADE_SERVICE_LABEL_MAP[searchQuery.toLowerCase()] || null;
 
         // Basic safety net: hard block obviously irrelevant categories (weed dispensaries, restaurants, etc.)
         const BANNED_TYPES = new Set<string>([
@@ -255,17 +288,19 @@ export async function POST(req: NextRequest) {
                 if (Date.now() - createdAt < SEARCH_CACHE_TTL_MS) {
                     const placeIdsFromCache = searchRow.place_ids as string[];
                     const { data: providerRows } = await supabase
-                        .from('cached_providers')
+                        .from('providers')
                         .select('*')
-                        .in('place_id', placeIdsFromCache);
-                    const rowsByPlaceId = new Map((providerRows || []).map((r: any) => [normalizePlaceId(r.place_id), r]));
+                        .in('google_place_id', placeIdsFromCache);
+                    const rowsByPlaceId = new Map(
+                        (providerRows || []).map((r: any) => [normalizePlaceId(r.google_place_id), r])
+                    );
                     const orderedRows = placeIdsFromCache
                         .map((id) => rowsByPlaceId.get(normalizePlaceId(id)))
                         .filter(Boolean);
                     if (orderedRows.length > 0) {
                         const routingFromCache = (searchRow.routing_summaries || []) as any[];
                         places = orderedRows.map((row: any) => ({
-                            id: row.place_id,
+                            id: row.google_place_id,
                             displayName: { text: row.name },
                             formattedAddress: row.address || '',
                             addressComponents: [],
@@ -278,10 +313,10 @@ export async function POST(req: NextRequest) {
                             reviewSummary: row.summary ? { text: { text: row.summary } } : null,
                             editorialSummary: null,
                             types: [],
-                            reviews: row.reviews || [],
-                            photos: Array.isArray(row.photos) ? row.photos.map((p: any) => ({ name: p?.name || p })) : [],
+                            reviews: [],
+                            photos: [],
                             regularOpeningHours: {
-                                weekdayDescriptions: row.weekday_descriptions || [],
+                                weekdayDescriptions: [],
                                 nextOpenTime: null,
                             },
                         }));
@@ -302,7 +337,7 @@ export async function POST(req: NextRequest) {
                 'Content-Type': 'application/json',
                 'X-Goog-Api-Key': apiKey,
                 'X-Goog-FieldMask':
-                    'places.id,places.displayName,places.formattedAddress,places.addressComponents,places.rating,places.userRatingCount,places.nationalPhoneNumber,places.internationalPhoneNumber,places.websiteUri,places.location,places.editorialSummary,places.reviewSummary,places.types,places.reviews,places.photos,routingSummaries,places.regularOpeningHours,nextPageToken',
+                    'places.id,places.displayName,places.formattedAddress,places.addressComponents,places.rating,places.userRatingCount,places.nationalPhoneNumber,places.internationalPhoneNumber,places.websiteUri,places.location,places.editorialSummary,places.reviewSummary,places.types,places.reviews.name,places.reviews.text,places.reviews.rating,places.reviews.relativePublishTimeDescription,places.reviews.authorAttribution.displayName,places.photos,routingSummaries,places.regularOpeningHours,nextPageToken',
             },
             body: JSON.stringify({
                 textQuery: searchQuery,
@@ -373,6 +408,16 @@ export async function POST(req: NextRequest) {
         }
 
         if (places.length === 0) {
+            const durationMs = Date.now() - startedAt;
+            logAiEvent({
+                endpoint: 'providers',
+                status: 'ok',
+                durationMs,
+                meta: {
+                    trade,
+                    providersCount: 0,
+                },
+            });
             return NextResponse.json({ providers: [] });
         }
 
@@ -382,7 +427,7 @@ export async function POST(req: NextRequest) {
         let profileRows: { id: string; google_place_id: string }[] = [];
         if (cachedData.length === 0 && supabase) {
             const [cachedRes, profileRes] = await Promise.all([
-                supabase.from('cached_providers').select('*').in('place_id', placeIds),
+                supabase.from('providers').select('*').in('google_place_id', placeIds),
                 placeIds.length > 0
                     ? supabase.from('provider_profiles').select('id, google_place_id').in('google_place_id', placeIds)
                     : Promise.resolve({ data: [] as { id: string; google_place_id: string }[] }),
@@ -399,7 +444,7 @@ export async function POST(req: NextRequest) {
 
         const cachedMap = new Map<string, any>();
         (cachedData || []).forEach((item: any) => {
-            const pid = item.place_id;
+            const pid = item.google_place_id;
             if (pid) {
                 cachedMap.set(pid, item);
                 cachedMap.set(normalizePlaceId(pid), item);
@@ -440,7 +485,7 @@ export async function POST(req: NextRequest) {
 
         // 3. Await AI enrichment for uncached providers so summaries appear in response
         let aiResults: any[] = [];
-        if (missingPlaces.length > 0 && geminiKey) {
+        if (missingPlaces.length > 0 && aiConfig.enableProviderEnrichment) {
             const providersContext = missingPlaces.map((place: any) => {
                 const reviews =
                     place.reviews
@@ -462,24 +507,12 @@ export async function POST(req: NextRequest) {
                     reviews,
                 };
             });
-            try {
-                const genAI = new GoogleGenerativeAI(geminiKey);
-                const model = genAI.getGenerativeModel({
-                    model: 'gemini-2.5-flash',
-                    generationConfig: { temperature: 0.1 },
-                });
-                const batchPrompt = `Analyse these ${providersContext.length} home service providers. Use British English throughout (e.g. "specialise", "recognise", "organise", "colour").
-
-For each provider output JSON with:
-1) "name": THE CLEAN BUSINESS NAME ONLY. Understand what the actual trading name is and return nothing else.
-   - Strip everything that is not the core business name: marketing tags (e.g. "New", "Repairs", "24/7", "Open"), pipe- or dash-separated service lists (e.g. " - New | Repairs | Automations" or " | Garage Doors | Gates"), location suffixes ("Cape Town", "Western Cape"), legal suffixes ("Pty Ltd", "Ltd", "LLC").
-   - Examples: "Al Garage Door Solutions - New | Repairs | Automations" → "Al Garage Door Solutions". "Planet Automations" → "Planet Automations" (keep as-is). "Joe's Plumbing Pty Ltd - Cape Town" → "Joe's Plumbing". "Brano Cape Garage Doors" → "Brano Cape Garage Doors".
-   - Output Title Case. No trailing spaces, pipes, or dashes.
-2) "summary": A fuller customer-focused description: 4–6 sentences. CRITICAL: Do NOT start with or include the business/company name (e.g. no "Plum Plumbers are...", "Combat Plumbing is..."). Write in third person about what customers say: e.g. "Consistently praised for prompt, professional service. Staff noted for attention to detail. Highly recommended." Under 80 words. NEVER return empty summary.
-3) "services" array: [{"short":"≤15 chars","full":"≤30 chars"}] for trade: ${trade}.
-
-Output JSON only: {"results":[{"place_id":"","name":"","summary":"","services":[]}]}. DATA: ${JSON.stringify(providersContext)}`;
-                const result = await model.generateContent(batchPrompt);
+                try {
+                    const model = getGeminiModel({
+                        generationConfig: { temperature: 0.1 },
+                    });
+                    const batchPrompt = buildProviderEnrichmentPrompt(trade, providersContext);
+                    const result = await model.generateContent(batchPrompt);
                 const jsonMatch = result.response.text().match(/\{[\s\S]*\}/);
                 if (jsonMatch) {
                     const parsed = JSON.parse(jsonMatch[0]);
@@ -503,8 +536,9 @@ Output JSON only: {"results":[{"place_id":"","name":"","summary":"","services":[
                                 if (!summary || summary === genericFallback) return null;
                                 return place
                                     ? {
-                                          place_id: place.id,
                                           id: crypto.randomUUID(),
+                                          source: 'google',
+                                          google_place_id: place.id,
                                           name: r.name || place.displayName?.text,
                                           address: place.formattedAddress || '',
                                           rating: place.rating,
@@ -520,10 +554,13 @@ Output JSON only: {"results":[{"place_id":"","name":"","summary":"","services":[
                             })
                             .filter(Boolean);
                         if (toCache.length > 0)
-                            await adminSupabase.from('cached_providers').upsert(toCache);
+                            await adminSupabase
+                                .from('providers')
+                                .upsert(toCache, { onConflict: 'google_place_id' });
                     }
                 }
             } catch (e) {
+                // eslint-disable-next-line no-console
                 console.warn('Provider enrichment failed:', (e as Error).message);
             }
         }
@@ -595,21 +632,78 @@ Output JSON only: {"results":[{"place_id":"","name":"","summary":"","services":[
             const weekdayDescriptions = place.regularOpeningHours?.weekdayDescriptions ?? [];
             const nextOpenTime = place.regularOpeningHours?.nextOpenTime ?? null;
             const rawReviews = place.reviews ?? [];
-            const reviews = rawReviews.map((r: any) => {
-                const authorName =
-                    (r.authorAttribution?.displayName && String(r.authorAttribution.displayName).trim()) || 'Google user';
-                return {
-                    text: typeof r.text === 'string' ? r.text : r.text?.text ?? '',
-                    rating: r.rating ?? null,
-                    relativePublishTimeDescription: r.relativePublishTimeDescription ?? null,
-                    authorName,
-                };
-            }).filter((r: { text: string }) => r.text?.trim());
+
+            function derivePublishedAt(relative?: string | null): string | null {
+                if (!relative) return null;
+                const text = String(relative).trim().toLowerCase();
+                const now = new Date();
+
+                const yearMatch = text.match(/(\d+)\s+year/);
+                if (yearMatch) {
+                    const years = parseInt(yearMatch[1] ?? '0', 10);
+                    if (!Number.isNaN(years) && years > 0) {
+                        const d = new Date(now);
+                        d.setFullYear(d.getFullYear() - years);
+                        return d.toISOString();
+                    }
+                }
+
+                const monthMatch = text.match(/(\d+)\s+month/);
+                if (monthMatch) {
+                    const months = parseInt(monthMatch[1] ?? '0', 10);
+                    if (!Number.isNaN(months) && months > 0) {
+                        const d = new Date(now);
+                        d.setMonth(d.getMonth() - months);
+                        return d.toISOString();
+                    }
+                }
+
+                const weekMatch = text.match(/(\d+)\s+week/);
+                if (weekMatch) {
+                    const weeks = parseInt(weekMatch[1] ?? '0', 10);
+                    if (!Number.isNaN(weeks) && weeks > 0) {
+                        const d = new Date(now);
+                        d.setDate(d.getDate() - weeks * 7);
+                        return d.toISOString();
+                    }
+                }
+
+                const dayMatch = text.match(/(\d+)\s+day/);
+                if (dayMatch) {
+                    const days = parseInt(dayMatch[1] ?? '0', 10);
+                    if (!Number.isNaN(days) && days > 0) {
+                        const d = new Date(now);
+                        d.setDate(d.getDate() - days);
+                        return d.toISOString();
+                    }
+                }
+
+                return null;
+            }
+
+            const reviews = rawReviews
+                .map((r: any) => {
+                    const authorName =
+                        (r.authorAttribution?.displayName &&
+                            String(r.authorAttribution.displayName).trim()) ||
+                        'Google user';
+                    const relative = r.relativePublishTimeDescription ?? null;
+                    const publishedAt = derivePublishedAt(relative);
+                    return {
+                        text: typeof r.text === 'string' ? r.text : r.text?.text ?? '',
+                        rating: r.rating ?? null,
+                        relativePublishTimeDescription: relative,
+                        authorName,
+                        published_at: publishedAt,
+                    };
+                })
+                .filter((r: { text: string }) => r.text?.trim());
 
             const displayName = aiData?.name || place.displayName?.text || 'Unknown Provider';
             const idFromProfile = idByPlaceId.get(place.id) ?? idByPlaceId.get(placeIdNorm);
             const providerData = {
                 place_id: place.id,
+                google_place_id: place.id,
                 name: displayName,
                 address: shortAddress || place.formattedAddress || 'Address not available',
                 rating: place.rating,
@@ -630,18 +724,21 @@ Output JSON only: {"results":[{"place_id":"","name":"","summary":"","services":[
                     place.reviewSummary?.text?.text ||
                     place.editorialSummary?.text ||
                     genericFallback,
+                // For chat UI and backend, always align services to the canonical category label.
                 services:
-                    aiData?.services ||
-                    place.types
-                        ?.filter(
-                            (t: string) =>
-                                !['point_of_interest', 'establishment', 'premise', 'map'].includes(
-                                    t
-                                )
-                        )
-                        .slice(0, 5)
-                        .map((t: string) => ({ short: t.slice(0, 15), full: t })) ||
-                    [],
+                    canonicalServiceLabel != null
+                        ? [{ short: canonicalServiceLabel.slice(0, 15), full: canonicalServiceLabel }]
+                        : aiData?.services ||
+                          place.types
+                              ?.filter(
+                                  (t: string) =>
+                                      !['point_of_interest', 'establishment', 'premise', 'map'].includes(
+                                          t
+                                      )
+                              )
+                              .slice(0, 5)
+                              .map((t: string) => ({ short: t.slice(0, 15), full: t })) ||
+                          [],
                 photos: (place.photos ?? [])
                     .slice(0, 10)
                     .map((p: { name?: string }) => (p?.name ? { name: p.name } : null))
@@ -651,9 +748,17 @@ Output JSON only: {"results":[{"place_id":"","name":"","summary":"","services":[
             };
             const hasRealSummary =
                 providerData.summary && providerData.summary !== genericFallback;
+            const hasServices =
+                Array.isArray(providerData.services) &&
+                providerData.services.length > 0;
+
+            // Drop providers that don't end up with any services/trades at all.
+            if (!hasServices) {
+                return null;
+            }
             const newId = crypto.randomUUID();
             // Always cache every place we return so /pro/[id] can resolve when user clicks "View account"
-            toCache.push({ ...providerData, id: cached?.id ?? newId });
+            toCache.push({ ...providerData, id: cached?.id ?? newId, source: 'google' });
             const providerId = idFromProfile ?? cached?.id ?? newId ?? null;
             (providerData as any).id = providerId;
 
@@ -675,8 +780,9 @@ Output JSON only: {"results":[{"place_id":"","name":"","summary":"","services":[
             try {
                 const adminSupabase = await createSupabaseAdminClient();
                 const dbToCache = toCache.map((p) => ({
-                    place_id: p.place_id,
                     id: p.id,
+                    source: 'google',
+                    google_place_id: p.google_place_id,
                     name: p.name,
                     address: p.address,
                     rating: p.rating,
@@ -687,14 +793,13 @@ Output JSON only: {"results":[{"place_id":"","name":"","summary":"","services":[
                     longitude: p.longitude,
                     summary: p.summary,
                     services: p.services,
-                    reviews: p.reviews ?? [],
                     weekday_descriptions: p.weekdayDescriptions ?? [],
-                    photos: (p as { photos?: { name: string }[] }).photos ?? [],
                     last_updated: new Date().toISOString(),
+                    updated_at: new Date().toISOString(),
                 }));
                 const { error } = await adminSupabase
-                    .from('cached_providers')
-                    .upsert(dbToCache, { onConflict: 'place_id' });
+                    .from('providers')
+                    .upsert(dbToCache, { onConflict: 'google_place_id' });
                 if (error) console.error('Cache upsert failed:', error);
             } catch (e) {
                 console.warn('Supabase cache update skipped:', (e as Error).message);
@@ -723,14 +828,10 @@ Output JSON only: {"results":[{"place_id":"","name":"","summary":"","services":[
 
         const establishedCount = established.length;
         const takeCount = Math.min(6, establishedCount);
-        // When no "established" (25+ reviews), show top of sorted so we always show providers when we have any
-        const providers =
-            establishedCount > 0
-                ? established.slice(0, takeCount)
-                : sorted.slice(0, 6);
-        // Avoid duplicating when main list is fallback from sorted (emerging would overlap)
-        const emergingProviders =
-            establishedCount > 0 ? emerging.slice(0, 6) : [];
+        // Main providers: ONLY established (25+ reviews). Never show <25-review providers here.
+        const providers = established.slice(0, takeCount);
+        // Emerging providers: always include good-rated <25-review providers in their own section.
+        const emergingProviders = emerging.slice(0, 6);
         const nextPageToken = data.nextPageToken || null;
 
         // Nearby-only: providers in the area that we don't recommend (not in main or emerging) — only show if fewer than 6 providers were already returned
@@ -780,6 +881,20 @@ Output JSON only: {"results":[{"place_id":"","name":"","summary":"","services":[
             favouriteReason: i === recommendedProviderIndex ? favouriteReason : undefined,
         }));
 
+        const durationMs = Date.now() - startedAt;
+        logAiEvent({
+            endpoint: 'providers',
+            status: 'ok',
+            durationMs,
+            meta: {
+                trade,
+                providersCount: providersWithFavourite.length,
+                enrichedCount: aiResults.length,
+                missingPlacesCount: missingPlaces.length,
+                usedEnrichment: aiConfig.enableProviderEnrichment,
+            },
+        });
+
         return NextResponse.json({
             providers: providersWithFavourite,
             emergingProviders,
@@ -789,6 +904,16 @@ Output JSON only: {"results":[{"place_id":"","name":"","summary":"","services":[
             recommendedProviderIndex,
         });
     } catch (error: any) {
+        const durationMs = Date.now() - (typeof performance !== 'undefined' ? performance.now() : Date.now());
+        logAiEvent({
+            endpoint: 'providers',
+            status: 'error',
+            durationMs,
+            meta: {
+                error: error?.message || 'Unknown error',
+            },
+        });
+        // eslint-disable-next-line no-console
         console.error('Places API Error:', error);
         return NextResponse.json(
             { error: error.message || 'Failed to fetch providers' },

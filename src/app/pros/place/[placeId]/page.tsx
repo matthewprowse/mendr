@@ -15,16 +15,10 @@ export default async function ProsPlaceRedirect({ params }: PageProps) {
     const norm = normalizePlaceId(decoded);
     const supabase = await createSupabaseServerClient();
     const { data: row } = await supabase
-        .from('cached_providers')
+        .from('providers')
         .select('id')
-        .eq('place_id', norm)
+        .eq('google_place_id', norm.startsWith('places/') ? norm : `places/${norm}`)
         .maybeSingle();
     if (row?.id) redirect(`/pro/${encodeURIComponent(row.id)}`);
-    const { data: row2 } = await supabase
-        .from('cached_providers')
-        .select('id')
-        .eq('place_id', `places/${norm}`)
-        .maybeSingle();
-    if (!row2?.id) notFound();
-    redirect(`/pro/${encodeURIComponent(row2.id)}`);
+    notFound();
 }

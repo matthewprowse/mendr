@@ -17,6 +17,8 @@ type ProvidersMapProps = {
     conversationId?: string;
     /** When true, hide the floating card and mobile strip (e.g. report page shows its own distance overlay). */
     hideFloatingCard?: boolean;
+    /** Controls which badges show in the top-left: ranking tags (default) or service-type filters. */
+    mode?: 'rank' | 'service';
 };
 
 function getDistanceText(
@@ -77,6 +79,7 @@ export function ProvidersMap({
     userLocation,
     conversationId,
     hideFloatingCard = false,
+    mode = 'rank',
 }: ProvidersMapProps) {
     const containerRef = useRef<HTMLDivElement>(null);
     const mapRef = useRef<google.maps.Map | null>(null);
@@ -90,7 +93,27 @@ export function ProvidersMap({
     const [liveDuration, setLiveDuration] = useState<string>('');
 
     const allProviders = [...(providers ?? []), ...(emergingProviders ?? []), ...(nearbyOnlyProviders ?? [])];
-    const validProviders = allProviders.filter((p) => p.latitude != null && p.longitude != null);
+    const allValidProviders = allProviders.filter((p) => p.latitude != null && p.longitude != null);
+
+    const [activeServiceFilter, setActiveServiceFilter] = useState<string | 'all'>('all');
+
+    const serviceFilters = useMemo(() => {
+        const set = new Set<string>();
+        allValidProviders.forEach((p) => {
+            (p.services ?? []).forEach((s) => {
+                if (s?.short) set.add(s.short);
+            });
+        });
+        return Array.from(set).sort((a, b) => a.localeCompare(b));
+    }, [allValidProviders]);
+
+    const validProviders = useMemo(() => {
+        if (mode !== 'service' || activeServiceFilter === 'all') return allValidProviders;
+        return allValidProviders.filter((p) =>
+            (p.services ?? []).some((s) => s.short === activeServiceFilter)
+        );
+    }, [allValidProviders, activeServiceFilter, mode]);
+
     const total = validProviders.length;
 
     // Indices for "Closest", "Best Rated", "Most Reviewed", "Scandio's Pick"
@@ -462,36 +485,88 @@ export function ProvidersMap({
     ];
 
     return (
-        <div className="w-full overflow-hidden rounded-xl border border-border bg-background">
+        <div className="w-full max-w-full overflow-hidden rounded-xl border border-border bg-background">
             {/* Map */}
-            <div className="relative aspect-[4/3] sm:aspect-auto sm:h-[460px]">
-                {/* Tags as badge cards – top left of map (match chat badge styling) */}
+            <div className="relative w-full aspect-[4/3] sm:aspect-auto sm:h-[460px]">
+                {/* Tags or service filters as badge cards – top left of map */}
                 {!hideFloatingCard && !loading && validProviders.length > 0 && (
                     <div className="absolute top-3 left-3 z-10 flex flex-wrap gap-2">
-                        {tagButtons.map(({ key, label, index }) => {
-                            const isActive = activeIndex === index;
-                            return (
+                        {mode === 'service' && serviceFilters.length > 0 ? (
+                            <>
                                 <button
-                                    key={key}
                                     type="button"
-                                    onClick={() => setActiveIndex(index)}
-                                    aria-pressed={isActive}
+                                    onClick={() => {
+                                        setActiveServiceFilter('all');
+                                        setActiveIndex(0);
+                                    }}
                                 >
                                     <Badge
                                         variant="secondary"
                                         className={[
                                             'cursor-pointer px-3 py-1.5 text-xs sm:text-[13px] font-medium',
                                             'shadow-sm',
-                                            isActive
+                                            activeServiceFilter === 'all'
                                                 ? 'bg-foreground text-background'
                                                 : 'bg-card/95 text-muted-foreground hover:bg-card hover:text-foreground',
                                         ].join(' ')}
                                     >
-                                        {label}
+                                        All
                                     </Badge>
                                 </button>
-                            );
-                        })}
+                                {serviceFilters.map((label) => {
+                                    const isActive = activeServiceFilter === label;
+                                    return (
+                                        <button
+                                            key={label}
+                                            type="button"
+                                            onClick={() => {
+                                                setActiveServiceFilter(label);
+                                                setActiveIndex(0);
+                                            }}
+                                            aria-pressed={isActive}
+                                        >
+                                            <Badge
+                                                variant="secondary"
+                                                className={[
+                                                    'cursor-pointer px-3 py-1.5 text-xs sm:text-[13px] font-medium',
+                                                    'shadow-sm',
+                                                    isActive
+                                                        ? 'bg-foreground text-background'
+                                                        : 'bg-card/95 text-muted-foreground hover:bg-card hover:text-foreground',
+                                                ].join(' ')}
+                                            >
+                                                {label}
+                                            </Badge>
+                                        </button>
+                                    );
+                                })}
+                            </>
+                        ) : (
+                            tagButtons.map(({ key, label, index }) => {
+                                const isActive = activeIndex === index;
+                                return (
+                                    <button
+                                        key={key}
+                                        type="button"
+                                        onClick={() => setActiveIndex(index)}
+                                        aria-pressed={isActive}
+                                    >
+                                        <Badge
+                                            variant="secondary"
+                                            className={[
+                                                'cursor-pointer px-3 py-1.5 text-xs sm:text-[13px] font-medium',
+                                                'shadow-sm',
+                                                isActive
+                                                    ? 'bg-foreground text-background'
+                                                    : 'bg-card/95 text-muted-foreground hover:bg-card hover:text-foreground',
+                                            ].join(' ')}
+                                        >
+                                            {label}
+                                        </Badge>
+                                    </button>
+                                );
+                            })
+                        )}
                     </div>
                 )}
                 {loading && (

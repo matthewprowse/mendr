@@ -291,10 +291,11 @@ export function ProviderCard({
                                     {provider.rating?.toFixed(1) || 'N/A'}
                                 </span>
                                 <span className="text-xs text-muted-foreground">
-                                    ({provider.ratingCount || 0})
+                                    {provider.ratingCount || 0} Reviews
                                 </span>
                             </div>
                             <FavouriteButton
+                                providerId={provider.id}
                                 placeId={provider.place_id}
                                 providerName={displayName}
                                 variant="icon"
@@ -329,19 +330,36 @@ export function ProviderCard({
                 </div>
                 <blockquote className="border-l-2 border-input pl-3">
                     <p className="text-sm text-muted-foreground leading-relaxed">
-                        {formatCustomerSummary(provider.summary || '', provider.name || displayName)}
+                        {(() => {
+                            const base = formatCustomerSummary(
+                                provider.summary || '',
+                                provider.name || displayName
+                            );
+
+                            // Treat very short or obviously generic strings as missing summaries
+                            const isLikelyGeneric =
+                                !base ||
+                                base.length < 20 ||
+                                (/professional\b/i.test(base) && base.split(/\s+/).length <= 6);
+
+                            if (!isLikelyGeneric) return base;
+
+                            const firstReviewText =
+                                provider.reviews?.find((r) => r.text && r.text.trim())?.text?.trim() ??
+                                '';
+
+                            if (firstReviewText) {
+                                const sentences = firstReviewText
+                                    .split(/(?<=[.!?])\s+/)
+                                    .filter(Boolean);
+                                const snippet = sentences.slice(0, 2).join(' ').trim();
+                                return snippet ? `Customers say: ${snippet}` : firstReviewText;
+                            }
+
+                            return 'Customer feedback will appear here as reviews are added.';
+                        })()}
                     </p>
                 </blockquote>
-                {(provider.reviews?.length ?? 0) > 0 && (provider.id ?? provider.place_id) && (
-                    <div className="pt-2">
-                        <Link
-                            href={`/pro/${provider.id ?? encodeURIComponent(provider.place_id ?? '')}`}
-                            className="text-sm text-muted-foreground hover:text-foreground underline"
-                        >
-                            View {Math.min(provider.reviews?.length ?? 0, 50)} review{(provider.reviews?.length ?? 0) !== 1 ? 's' : ''}
-                        </Link>
-                    </div>
-                )}
             </div>
             <div className="flex flex-wrap items-center gap-2 mt-auto">
                 <Popover

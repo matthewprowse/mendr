@@ -27,6 +27,7 @@ export {
     Copy,
     Cross,
     Droplet,
+    Eye,
     External,
     FileText,
     GridSquare,

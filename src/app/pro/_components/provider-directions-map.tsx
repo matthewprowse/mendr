@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { setOptions, importLibrary } from '@googlemaps/js-api-loader';
 import { Card, CardContent } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { formatBusinessName } from '@/lib/utils';
 
@@ -183,7 +182,7 @@ export function ProviderDirectionsMap({ apiKey, provider, mapsUrl }: ProviderDir
         distanceKm != null ? `${distanceKm.toFixed(1)} km` : null;
 
     return (
-        <Card className="border-border/70 bg-card overflow-hidden">
+        <Card className="border-border/70 bg-card overflow-hidden rounded-xl shadow-sm">
             <CardContent className="p-0">
                 <div className="relative h-64 w-full sm:h-80">
                     {loading && (
@@ -199,54 +198,45 @@ export function ProviderDirectionsMap({ apiKey, provider, mapsUrl }: ProviderDir
                         </div>
                     )}
 
-                    <div className="absolute bottom-3 left-3 right-3 z-10">
-                        <div className="flex flex-col gap-2 rounded-md bg-background/95 p-3 shadow-sm border border-border/70">
-                            <div className="flex flex-col gap-0.5">
-                                <p className="text-sm font-semibold text-foreground truncate">
+                    <div className="absolute bottom-3 left-3 right-3 z-10 max-w-md">
+                        <div className="flex flex-col gap-3 rounded-xl border border-border/80 bg-card/95 p-4 shadow-lg backdrop-blur-sm">
+                            <div className="flex flex-col gap-1">
+                                <p className="text-base font-semibold text-foreground truncate">
                                     {displayName}
                                 </p>
                                 {provider.address && (
-                                    <p className="text-xs text-muted-foreground truncate">
+                                    <p className="text-sm text-muted-foreground line-clamp-2">
                                         {provider.address}
                                     </p>
                                 )}
                             </div>
-                            <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
-                                <div className="flex flex-wrap items-center gap-1.5">
-                                    {distanceLabel && (
-                                        <Badge
-                                            variant="outline"
-                                            className="text-[11px] font-medium"
-                                        >
-                                            {distanceLabel} away
-                                        </Badge>
-                                    )}
-                                    {durationText && (
-                                        <Badge
-                                            variant="outline"
-                                            className="text-[11px] font-medium"
-                                        >
-                                            {formatDuration(durationText)} drive
-                                        </Badge>
-                                    )}
-                                </div>
-                                {mapsUrl && (
-                                    <Button
-                                        asChild
-                                        size="sm"
-                                        variant="secondary"
-                                        className="h-7 px-3 text-xs font-medium"
-                                    >
-                                        <a
-                                            href={mapsUrl}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                        >
-                                            Get directions
-                                        </a>
-                                    </Button>
+                            <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                                {distanceLabel && (
+                                    <span className="inline-flex items-center rounded-md bg-muted/80 px-2.5 py-1 text-xs font-medium">
+                                        {distanceLabel} away
+                                    </span>
+                                )}
+                                {durationText && (
+                                    <span className="inline-flex items-center rounded-md bg-muted/80 px-2.5 py-1 text-xs font-medium">
+                                        {formatDuration(durationText)} drive
+                                    </span>
                                 )}
                             </div>
+                            {mapsUrl && (
+                                <Button
+                                    asChild
+                                    size="sm"
+                                    className="w-full sm:w-auto h-9 text-sm font-medium"
+                                >
+                                    <a
+                                        href={mapsUrl}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                    >
+                                        Get directions in Google Maps
+                                    </a>
+                                </Button>
+                            )}
                         </div>
                     </div>
                 </div>

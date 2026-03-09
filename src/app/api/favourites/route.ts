@@ -12,10 +12,11 @@ export async function GET(req: NextRequest) {
         }
 
         const { searchParams } = new URL(req.url);
+        const providerId = searchParams.get('provider_id');
         const placeId = searchParams.get('place_id');
         const slug = searchParams.get('slug');
 
-        if (!placeId && !slug) {
+        if (!providerId && !placeId && !slug) {
             return NextResponse.json({ favourited: false });
         }
 
@@ -24,7 +25,9 @@ export async function GET(req: NextRequest) {
             .select('id')
             .eq('user_id', user.id);
 
-        if (placeId) {
+        if (providerId) {
+            query = query.eq('provider_id', providerId);
+        } else if (placeId) {
             query = query.eq('place_id', placeId);
         } else if (slug) {
             query = query.eq('provider_profile_slug', slug);
@@ -50,23 +53,26 @@ export async function POST(req: NextRequest) {
         }
 
         const body = await req.json();
-        const { place_id, provider_profile_slug, provider_name } = body;
+        const { provider_id, place_id, provider_profile_slug, provider_name } = body;
 
-        if (!place_id && !provider_profile_slug) {
+        if (!provider_id && !place_id && !provider_profile_slug) {
             return NextResponse.json({ error: 'Provider target is required.' }, { status: 400 });
         }
 
         const { error } = await supabase.from('provider_favourites').upsert(
             {
                 user_id: user.id,
+                provider_id: provider_id ?? null,
                 place_id: place_id ?? null,
                 provider_profile_slug: provider_profile_slug ?? null,
                 provider_name: provider_name ?? null,
             },
             {
-                onConflict: place_id
-                    ? 'user_id,place_id'
-                    : 'user_id,provider_profile_slug',
+                onConflict: provider_id
+                    ? 'user_id,provider_id'
+                    : place_id
+                      ? 'user_id,place_id'
+                      : 'user_id,provider_profile_slug',
                 ignoreDuplicates: true,
             }
         );
@@ -94,9 +100,9 @@ export async function DELETE(req: NextRequest) {
         }
 
         const body = await req.json();
-        const { place_id, provider_profile_slug } = body;
+        const { provider_id, place_id, provider_profile_slug } = body;
 
-        if (!place_id && !provider_profile_slug) {
+        if (!provider_id && !place_id && !provider_profile_slug) {
             return NextResponse.json({ error: 'Provider target is required.' }, { status: 400 });
         }
 
@@ -105,7 +111,9 @@ export async function DELETE(req: NextRequest) {
             .delete()
             .eq('user_id', user.id);
 
-        if (place_id) {
+        if (provider_id) {
+            query = query.eq('provider_id', provider_id);
+        } else if (place_id) {
             query = query.eq('place_id', place_id);
         } else if (provider_profile_slug) {
             query = query.eq('provider_profile_slug', provider_profile_slug);

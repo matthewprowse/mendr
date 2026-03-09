@@ -1,6 +1,6 @@
 'use client';
 
-import { forwardRef, useRef, useState } from 'react';
+import { forwardRef, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { ArrowUp, Paperclip, Cross } from '@/lib/icons';
@@ -59,6 +59,39 @@ export const ChatFooter = forwardRef<
             e.target.value = '';
         };
 
+        // Welcome mode: only show upload button (no textarea) until the user has uploaded the first image.
+        if (welcomeMode) {
+            return (
+                <footer
+                    ref={ref}
+                    className="sticky bottom-0 left-0 right-0 z-40 bg-background/95 backdrop-blur px-4 py-3"
+                >
+                    <div className="max-w-5xl px-0 md:px-4 mx-auto w-full flex flex-col gap-2">
+                        <input
+                            ref={fileInputRef}
+                            type="file"
+                            accept="image/*,video/*"
+                            multiple={false}
+                            className="hidden"
+                            onChange={handleFileChange}
+                        />
+
+                        <div className="flex items-center justify-start">
+                            <Button
+                                type="button"
+                                variant="default"
+                                className="inline-flex items-center w-full"
+                                onClick={() => fileInputRef.current?.click()}
+                                disabled={isResponding}
+                            >
+                                <span className="text-sm">Upload Image</span>
+                            </Button>
+                        </div>
+                    </div>
+                </footer>
+            );
+        }
+
         const handlePaste = (e: React.ClipboardEvent) => {
             const items = e.clipboardData?.items;
             if (!items) return;
@@ -74,7 +107,7 @@ export const ChatFooter = forwardRef<
                 }
             }
             if (imageFiles.length > 0) {
-                const remaining = welcomeMode ? 1 : MAX_ATTACHMENTS - pendingAttachments.length;
+                const remaining = MAX_ATTACHMENTS - pendingAttachments.length;
                 const toAdd = imageFiles.slice(0, Math.max(0, remaining));
                 if (toAdd.length > 0) onAddAttachments(toAdd);
             }
@@ -87,7 +120,7 @@ export const ChatFooter = forwardRef<
             );
             if (imageFiles.length > 0) {
                 e.preventDefault();
-                const remaining = welcomeMode ? 1 : MAX_ATTACHMENTS - pendingAttachments.length;
+                const remaining = MAX_ATTACHMENTS - pendingAttachments.length;
                 const toAdd = imageFiles.slice(0, Math.max(0, remaining));
                 if (toAdd.length > 0) onAddAttachments(toAdd);
             }
@@ -102,12 +135,12 @@ export const ChatFooter = forwardRef<
                 ref={ref}
                 className="sticky bottom-0 left-0 right-0 z-40 bg-background/95 backdrop-blur px-4 py-3"
             >
-                <div className="max-w-4xl px-0 md:px-4 mx-auto w-full flex flex-col gap-2">
+                <div className="max-w-5xl px-0 md:px-4 mx-auto w-full flex flex-col gap-2">
                     <input
                         ref={fileInputRef}
                         type="file"
                         accept="image/*,video/*"
-                        multiple={!welcomeMode}
+                        multiple
                         className="hidden"
                         onChange={handleFileChange}
                     />
@@ -116,7 +149,7 @@ export const ChatFooter = forwardRef<
                         onDrop={handleDrop}
                         onDragOver={handleDragOver}
                     >
-                        {!welcomeMode && pendingAttachments.length > 0 && (
+                        {pendingAttachments.length > 0 && (
                             <div className="px-3 pt-3 pb-1.5 flex flex-wrap gap-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden shrink-0">
                                 {pendingAttachments
                                     .map((url, i) =>
@@ -128,20 +161,29 @@ export const ChatFooter = forwardRef<
                                             key={i}
                                             className="relative size-16 rounded-lg overflow-hidden border border-border shrink-0 group"
                                         >
-                                            <img
-                                                src={url}
-                                                alt={`Attachment ${i + 1}`}
-                                                className="h-full w-full object-cover"
-                                            />
-                                        <Button
-                                            onClick={() => onRemoveAttachment(i)}
-                                            size="icon"
-                                            variant="secondary"
-                                            className="absolute h-6 w-6 top-1 right-1 p-0.5 text-black rounded-md"
-                                            aria-label="Remove Attachment"
-                                        >
-                                            <Cross className="size-3.5" />
-                                        </Button>
+                                            {url.startsWith('data:video/') ? (
+                                                <video
+                                                    src={url}
+                                                    className="h-full w-full object-cover"
+                                                    muted
+                                                    playsInline
+                                                />
+                                            ) : (
+                                                <img
+                                                    src={url}
+                                                    alt={`Attachment ${i + 1}`}
+                                                    className="h-full w-full object-cover"
+                                                />
+                                            )}
+                                            <Button
+                                                onClick={() => onRemoveAttachment(i)}
+                                                size="icon"
+                                                variant="secondary"
+                                                className="absolute h-6 w-6 top-1 right-1 p-0.5 text-black rounded-md"
+                                                aria-label="Remove Attachment"
+                                            >
+                                                <Cross className="size-3.5" />
+                                            </Button>
                                         </div>
                                     ))}
                             </div>
@@ -158,13 +200,9 @@ export const ChatFooter = forwardRef<
                                     }
                                 }}
                                 placeholder={
-                                    welcomeMode
-                                        ? isResponding
-                                            ? 'Processing…'
-                                            : 'Upload a photo or type what you need. We need at least one image for a full report.'
-                                        : isDisabled
-                                          ? 'Processing...'
-                                          : "Scandio's AI Assistant"
+                                    isDisabled
+                                        ? 'Processing...'
+                                        : "Scandio's AI Assistant — ask follow-up questions or add details."
                                 }
                                 disabled={isDisabled || isResponding}
                                 className={cn(
@@ -180,16 +218,11 @@ export const ChatFooter = forwardRef<
                                     className="size-9 shrink-0 text-muted-foreground hover:text-foreground"
                                     onClick={() => fileInputRef.current?.click()}
                                     disabled={
-                                        welcomeMode
-                                            ? isResponding
-                                            : isDisabled ||
-                                              pendingAttachments.length >= MAX_ATTACHMENTS
+                                        isDisabled ||
+                                        isResponding ||
+                                        pendingAttachments.length >= MAX_ATTACHMENTS
                                     }
-                                    title={
-                                        welcomeMode
-                                            ? 'Add Image'
-                                            : `Add Images (Max ${MAX_ATTACHMENTS})`
-                                    }
+                                    title={`Add images or videos (Max ${MAX_ATTACHMENTS})`}
                                 >
                                     <Paperclip strokeWidth={2} className="size-4" />
                                 </Button>

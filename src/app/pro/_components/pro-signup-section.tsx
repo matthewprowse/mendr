@@ -31,7 +31,9 @@ export function ProSignupSection() {
     const [mainTrade, setMainTrade] = useState('');
     const [teamSize, setTeamSize] = useState('');
     const [address, setAddress] = useState('');
-    const [businessSearch, setBusinessSearch] = useState('');
+    const [addressLat, setAddressLat] = useState<number | null>(null);
+    const [addressLng, setAddressLng] = useState<number | null>(null);
+    const [addressError, setAddressError] = useState<string | null>(null);
     const [tradeOptions, setTradeOptions] = useState<ServiceOption[]>([]);
     const [tradesLoading, setTradesLoading] = useState(false);
     const [submitting, setSubmitting] = useState(false);
@@ -60,11 +62,48 @@ export function ProSignupSection() {
         };
     }, []);
 
-    const handleOpenMapsSearch = () => {
-        if (typeof window === 'undefined') return;
-        const query = address.trim() || businessSearch.trim() || 'Western Cape South Africa';
-        const url = `https://www.google.com/maps/search/${encodeURIComponent(query)}`;
-        window.open(url, '_blank', 'noopener,noreferrer');
+    const handleAddressBlur = async () => {
+        const query = address.trim();
+        if (!query) {
+            setAddressError(null);
+            setAddressLat(null);
+            setAddressLng(null);
+            setGoogleMapsLink('');
+            return;
+        }
+
+        try {
+            setAddressError(null);
+            const res = await fetch('/api/geocode', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ address: query }),
+            });
+            const data = await res.json();
+
+            if (!res.ok) {
+                setAddressError(
+                    data.error ||
+                        'We could not verify this address. Please make sure it is in Western Cape, South Africa.'
+                );
+                setAddressLat(null);
+                setAddressLng(null);
+                setGoogleMapsLink('');
+                return;
+            }
+
+            if (data.address && data.lat != null && data.lng != null) {
+                setAddress(data.address);
+                setAddressLat(data.lat);
+                setAddressLng(data.lng);
+                const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+                    `${data.lat},${data.lng}`
+                )}`;
+                setGoogleMapsLink(mapsUrl);
+            }
+        } catch {
+            setAddressError('Unable to verify this address right now. Please try again in a moment.');
+        }
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -91,6 +130,8 @@ export function ProSignupSection() {
                             : undefined,
                     team_size: teamSize || undefined,
                     address: address.trim() || undefined,
+                    lat: addressLat ?? undefined,
+                    lng: addressLng ?? undefined,
                     report_conversation_id: undefined,
                     marketing_consent: false,
                 }),
@@ -107,8 +148,10 @@ export function ProSignupSection() {
             setWhatsappOnNumber(false);
             setMainTrade('');
             setTeamSize('');
-            setBusinessSearch('');
             setAddress('');
+            setAddressLat(null);
+            setAddressLng(null);
+            setAddressError(null);
         } catch {
             toast.error('Something went wrong. Please try again.');
         } finally {
@@ -179,21 +222,24 @@ export function ProSignupSection() {
                                 />
                             </div>
                             <div className="space-y-3 sm:col-span-2">
-                                <Label htmlFor="business_address">Business address</Label>
+                                <Label htmlFor="business_address">Business Address</Label>
                                 <Input
                                     id="business_address"
                                     value={address}
-                                    onChange={(e) => setAddress(e.target.value)}
-                                    placeholder="Street, suburb, city"
+                                    onChange={(e) => {
+                                        setAddress(e.target.value);
+                                        setAddressError(null);
+                                        setAddressLat(null);
+                                        setAddressLng(null);
+                                        setGoogleMapsLink('');
+                                    }}
+                                    onBlur={handleAddressBlur}
+                                    placeholder="e.g. 123 Scandio Drive, Cape Town, Western Cape"
                                     className="flex-1 text-[14px] sm:text-sm bg-background"
                                 />
-                                <button
-                                    type="button"
-                                    onClick={handleOpenMapsSearch}
-                                    className="mt-1 text-xs text-muted-foreground underline underline-offset-2"
-                                >
-                                    Search this address on Google Maps
-                                </button>
+                                {addressError && (
+                                    <p className="mt-1 text-xs text-destructive">{addressError}</p>
+                                )}
                             </div>
                             <div className="space-y-3">
                                 <Label htmlFor="main_trade">Main Trade</Label>
@@ -258,21 +304,6 @@ export function ProSignupSection() {
                                     placeholder="e.g. 021 123 4567"
                                     className="text-[14px] sm:text-sm bg-background"
                                 />
-                                <div className="flex items-center gap-2">
-                                    <Checkbox
-                                        id="whatsapp"
-                                        checked={whatsappOnNumber}
-                                        onCheckedChange={(checked) =>
-                                            setWhatsappOnNumber(checked === true)
-                                        }
-                                    />
-                                    <Label
-                                        htmlFor="whatsapp"
-                                        className="text-xs text-muted-foreground font-normal"
-                                    >
-                                        This number is available on WhatsApp
-                                    </Label>
-                                </div>
                             </div>
                         </div>
 
@@ -284,7 +315,7 @@ export function ProSignupSection() {
                             onChange={(e) => setAdditionalInfo(e.target.value)}
                             className="min-h-[72px] max-h-[148px] text-[14px] sm:text-sm bg-background"
                             rows={4}
-                            placeholder="Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Describe your business, typical jobs you take on, and the areas you most often serve."
+                            placeholder="Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua."
                         />
                     </div>
 

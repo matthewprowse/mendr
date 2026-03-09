@@ -247,29 +247,40 @@ export function InlineDiagnosisBlock({
                         )}
                     </div>
                     {(() => {
-                        // Don't show "No providers" until we've actually received a fetch result (avoids flash)
-                        const hasResult = providers !== undefined || emergingProviders !== undefined || nearbyOnlyProviders !== undefined;
-                        const allEmpty = (providers?.length ?? 0) === 0 && (emergingProviders?.length ?? 0) === 0 && (nearbyOnlyProviders?.length ?? 0) === 0;
-                        const showSkeleton = !hasLocation || isLoadingProviders || (hasLocation && !hasResult);
-                        if (showSkeleton) return (
-                            <div className="flex flex-col gap-3">
-                                {hasLocation && (isLoadingProviders || !hasResult) && (
+                        // Stored providers (e.g. from DB when reopening) are arrays; treat any array as "we have result".
+                        const hasResult =
+                            (Array.isArray(providers) && providers.length > 0) ||
+                            (Array.isArray(emergingProviders) && (emergingProviders?.length ?? 0) > 0) ||
+                            (Array.isArray(nearbyOnlyProviders) && (nearbyOnlyProviders?.length ?? 0) > 0) ||
+                            providers !== undefined ||
+                            emergingProviders !== undefined ||
+                            nearbyOnlyProviders !== undefined;
+                        const allEmpty =
+                            (providers?.length ?? 0) === 0 &&
+                            (emergingProviders?.length ?? 0) === 0 &&
+                            (nearbyOnlyProviders?.length ?? 0) === 0;
+                        // Only show skeleton when actively loading. When reopening, stored providers are passed in and must render.
+                        const showSkeleton = isLoadingProviders;
+                        if (showSkeleton) {
+                            return (
+                                <div className="flex flex-col gap-3">
                                     <p className="text-sm text-muted-foreground">
                                         Finding providers…
                                     </p>
-                                )}
-                                <ProvidersSkeleton />
-                            </div>
-                        );
-                        if (hasResult && allEmpty) return (
-                            <p className="text-sm text-muted-foreground py-2">
-                                No providers found in your area.
-                            </p>
-                        );
+                                    <ProvidersSkeleton />
+                                </div>
+                            );
+                        }
+                        if (hasResult && allEmpty) {
+                            return (
+                                <p className="text-sm text-muted-foreground py-2">
+                                    No providers found in your area.
+                                </p>
+                            );
+                        }
                         return (
                         <div className="flex flex-col gap-6">
                             {((providers?.length ?? 0) + (emergingProviders?.length ?? 0) + (nearbyOnlyProviders?.length ?? 0)) > 0 &&
-                                hasLocation &&
                                 (process.env.NEXT_PUBLIC_GOOGLE_MAPS_EMBED_KEY ||
                                     process.env.NEXT_PUBLIC_GOOGLE_PLACES_API_KEY) && (
                                     <ProvidersMap

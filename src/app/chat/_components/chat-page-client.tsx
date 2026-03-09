@@ -22,7 +22,6 @@ import { useAuth } from '@/context/auth-context';
 import { DiagnosisData, Message, Provider } from './types';
 import { ChatMessage } from './chat-message';
 import { ChatFooter } from './chat-footer';
-import { ChatWelcome } from './chat-welcome';
 import { DiagnosisResponseCard } from './diagnosis-response-card';
 import { ChatPageImageSkeleton, ChatPageTradeSkeleton } from './skeletons';
 
@@ -171,14 +170,6 @@ export function ChatPageClient({ conversationId, initialTrade, embedInApp }: Cha
                             address: conv.customer_address || '',
                         });
                     }
-                } else {
-                    // Create empty conversation so we can insert messages later
-                    await (supabase as any).from('conversations').upsert({
-                        id,
-                        title: 'New Diagnosis',
-                        user_id: user?.id ?? null,
-                        updated_at: new Date().toISOString(),
-                    });
                 }
                 if (getCancelled?.()) return null;
 
@@ -203,6 +194,13 @@ export function ChatPageClient({ conversationId, initialTrade, embedInApp }: Cha
                                 : rawContent != null
                                   ? String(rawContent)
                                   : '';
+                        // DB columns are snake_case; support both for robustness. Normalise to arrays so stored providers render when reopening.
+                        const rawProviders = m.providers ?? m['providers'];
+                        const rawEmerging = m.emerging_providers ?? m['emerging_providers'];
+                        const rawNearby = (m as { nearby_only_providers?: unknown })['nearby_only_providers'];
+                        const providersMapped = Array.isArray(rawProviders) ? rawProviders : (rawProviders != null ? [] : undefined);
+                        const emergingMapped = Array.isArray(rawEmerging) ? rawEmerging : (rawEmerging != null ? [] : undefined);
+                        const nearbyMapped = Array.isArray(rawNearby) ? rawNearby : (rawNearby != null ? [] : undefined);
                         return {
                             role: m.role as 'user' | 'assistant',
                             content: content === '[object Object]' ? '' : content,
@@ -211,9 +209,9 @@ export function ChatPageClient({ conversationId, initialTrade, embedInApp }: Cha
                             feedback: m.feedback as 'up' | 'down' | null,
                             hasUpdatedDiagnosis: m.diagnosis_updated,
                             diagnosis: m.diagnosis ?? undefined,
-                            providers: m.providers ?? undefined,
-                            emergingProviders: m.emerging_providers ?? undefined,
-                            nearbyOnlyProviders: (m as { nearby_only_providers?: Provider[] }).nearby_only_providers ?? undefined,
+                            providers: providersMapped,
+                            emergingProviders: emergingMapped,
+                            nearbyOnlyProviders: nearbyMapped,
                         };
                     });
                     setMessages(mappedMsgs);
@@ -755,11 +753,6 @@ export function ChatPageClient({ conversationId, initialTrade, embedInApp }: Cha
         []
     );
 
-    const handleServiceSelect = useCallback((trade: string, diagnosis: string) => {
-        setDirectTradeResult(null);
-        setDirectTradeSelection({ trade, diagnosis });
-    }, []);
-
     const handleGetCompaniesNow = useCallback(
         (directTrade: { trade: string; diagnosis: string }) => {
             setIsLoadingDirectProviders(true);
@@ -784,6 +777,18 @@ export function ChatPageClient({ conversationId, initialTrade, embedInApp }: Cha
             getCurrentLocation({ directTrade });
         },
         [userLocation, useLocationAndFetchProviders, getCurrentLocation]
+    );
+
+    // When user clicks "Start Diagnosis" on the in-chat welcome service cards,
+    // mirror the marketing "Our Services" behaviour: immediately fetch providers
+    // for that trade, show them, and ask the user to upload an image to generate the report.
+    const handleWelcomeStartDiagnosis = useCallback(
+        (trade: ServiceLabel, diagnosis: string) => {
+            setDirectTradeResult(null);
+            setDirectTradeSelection({ trade, diagnosis });
+            handleGetCompaniesNow({ trade, diagnosis });
+        },
+        [handleGetCompaniesNow]
     );
 
     const initialTradeAppliedRef = useRef(false);
@@ -2288,7 +2293,7 @@ export function ChatPageClient({ conversationId, initialTrade, embedInApp }: Cha
         return (
             <div className="flex flex-1 flex-col">
                 {!embedInApp && <AppHeader showBack />}
-                <div className="flex-1 max-w-4xl mx-auto w-full px-4 py-4">
+                <div className="flex-1 max-w-7xl mx-auto w-full px-4 py-4">
                     {initialTrade ? <ChatPageTradeSkeleton /> : <ChatPageImageSkeleton />}
                 </div>
             </div>
@@ -2297,7 +2302,7 @@ export function ChatPageClient({ conversationId, initialTrade, embedInApp }: Cha
 
     return (
         <div
-            className={`flex flex-col bg-background ${embedInApp ? 'min-h-0 flex-1' : 'min-h-screen'}`}
+            className={`flex flex-col bg-background overflow-x-hidden ${embedInApp ? 'min-h-0 flex-1' : 'min-h-screen'}`}
         >
             {!embedInApp && (
                 <AppHeader imageSrc={displayImage} showViewImage={false} showBack />
@@ -2305,33 +2310,20 @@ export function ChatPageClient({ conversationId, initialTrade, embedInApp }: Cha
 
             <main
                 ref={mainRef}
-                className="flex flex-1 min-h-0 flex-col"
+                className="flex flex-1 min-h-0 flex-col px-0 sm:px-4"
             >
                 <div className="flex-1 min-h-0 overflow-y-auto">
                 <div
                     className={`mx-auto w-full flex flex-col gap-6 min-w-0 ${
                         displayImage
-                            ? 'max-w-4xl px-4 py-4'
+                            ? 'max-w-7xl px-4 py-4'
                             : embedInApp
                               ? 'max-w-7xl px-0 py-12 sm:py-16'
-                              : 'max-w-7xl px-4 py-16 sm:px-6 lg:px-8'
+                              : 'max-w-7xl px-4 py-12 sm:px-6 lg:px-8'
                     }`}
                 >
-                    {/* Welcome: service cards or upload zone when no image (hide if direct trade flow from URL) */}
-                    {!displayImage &&
-                    !(initialTrade && (directTradeSelection || directTradeResult)) && (
-                        <ChatWelcome
-                            selectedService={welcomeSelectedService}
-                            onSelectService={setWelcomeSelectedService}
-                            onUpload={handleWelcomeUpload}
-                            isUploading={isUploading}
-                            fileInputRef={welcomeFileInputRef}
-                        />
-                    )}
-
                     {/* Provider results - when direct trade with providers; hide if a message already shows diagnosis+providers (avoid duplicate) */}
-                    {displayImage &&
-                    (directTradeResult || (directTradeSelection && isLoadingDirectProviders)) &&
+                    {(directTradeResult || (directTradeSelection && isLoadingDirectProviders)) &&
                         !messages.some(
                             (m) =>
                                 m.role === 'assistant' &&
@@ -2345,7 +2337,8 @@ export function ChatPageClient({ conversationId, initialTrade, embedInApp }: Cha
                                     diagnosis: (directTradeResult || directTradeSelection)!
                                         .diagnosis,
                                     trade: (directTradeResult || directTradeSelection)!.trade,
-                                    action_required: '',
+                                    action_required:
+                                        'In order to generate your Scandio Report, please upload a clear photo of the issue.',
                                     estimated_cost: '',
                                     confidence: 100,
                                 }}
@@ -2402,15 +2395,15 @@ export function ChatPageClient({ conversationId, initialTrade, embedInApp }: Cha
 
                     {/* Image on left (AI side), then thinking below it, then messages */}
                     {displayImage && (
-                    <div className="flex flex-col gap-4">
-                        {/* Initial diagnosis image - left-aligned (AI side), larger */}
+                    <div className="flex flex-col gap-4 items-start">
+                        {/* Initial diagnosis image - left-aligned (AI side), half-width on desktop */}
                         {displayImage && (
-                            <div className="flex flex-col gap-2 w-full items-start">
+                            <div className="flex flex-col gap-2 w-full md:w-1/2 items-start">
                                 <a
                                     href={displayImage}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    className="block max-w-[420px] w-full aspect-[16/10] md:aspect-[4/3] rounded-lg overflow-hidden border border-border/50 hover:opacity-95"
+                                    className="block w-full aspect-[16/10] md:aspect-[4/3] rounded-lg overflow-hidden border border-border/50 hover:opacity-95"
                                 >
                                     <img
                                         src={displayImage}
@@ -2500,7 +2493,6 @@ export function ChatPageClient({ conversationId, initialTrade, embedInApp }: Cha
                 </div>
                 </div>
 
-                {displayImage && (
                 <ChatFooter
                     message={message}
                     setMessage={setMessage}
@@ -2510,63 +2502,62 @@ export function ChatPageClient({ conversationId, initialTrade, embedInApp }: Cha
                     hasDiagnosis={!!diagnosis || !!directTradeResult}
                     pendingAttachments={displayImage ? pendingAttachments : []}
                     onAddAttachments={
-                    displayImage
-                        ? async (files) => {
-                              const remaining = 5 - pendingAttachments.length;
-                              const toAdd = files.slice(0, remaining);
-                              const dataUrls: string[] = [];
-                              for (const file of toAdd) {
-                                  try {
-                                      const url = await new Promise<string>((resolve, reject) => {
-                                          const r = new FileReader();
-                                          r.onload = () => resolve(r.result as string);
-                                          r.onerror = () =>
-                                              reject(new Error('Failed to read file'));
-                                          r.readAsDataURL(file);
-                                      });
-                                      const isImage = file.type.startsWith('image/');
-                                      let finalUrl: string;
-                                      if (isImage) {
-                                          try {
-                                              finalUrl = await compressImage(url);
-                                          } catch {
+                        displayImage
+                            ? async (files) => {
+                                  const remaining = 5 - pendingAttachments.length;
+                                  const toAdd = files.slice(0, remaining);
+                                  const dataUrls: string[] = [];
+                                  for (const file of toAdd) {
+                                      try {
+                                          const url = await new Promise<string>((resolve, reject) => {
+                                              const r = new FileReader();
+                                              r.onload = () => resolve(r.result as string);
+                                              r.onerror = () =>
+                                                  reject(new Error('Failed to read file'));
+                                              r.readAsDataURL(file);
+                                          });
+                                          const isImage = file.type.startsWith('image/');
+                                          let finalUrl: string;
+                                          if (isImage) {
+                                              try {
+                                                  finalUrl = await compressImage(url);
+                                              } catch {
+                                                  finalUrl = url;
+                                              }
+                                          } else {
                                               finalUrl = url;
                                           }
-                                      } else {
-                                          finalUrl = url;
+                                          dataUrls.push(finalUrl);
+                                      } catch (e) {
+                                          console.error('Failed to process attachment:', e);
+                                          toast.error(
+                                              file.type.startsWith('video/')
+                                                  ? 'Could not process this video. Please try a different file.'
+                                                  : `Could not process ${file.name}. Please try a different image.`
+                                          );
                                       }
-                                      dataUrls.push(finalUrl);
-                                  } catch (e) {
-                                      console.error('Failed to process attachment:', e);
-                                      toast.error(
-                                          file.type.startsWith('video/')
-                                              ? 'Video uploads are not supported. Please use images.'
-                                              : `Could not process ${file.name}. Please try a different image.`
+                                  }
+                                  if (dataUrls.length > 0) {
+                                      setPendingAttachments((prev) =>
+                                          [...prev, ...dataUrls].slice(0, 5)
                                       );
                                   }
                               }
-                              if (dataUrls.length > 0) {
-                                  setPendingAttachments((prev) =>
-                                      [...prev, ...dataUrls].slice(0, 5)
+                            : async (files) => {
+                                  const file = files.find(
+                                      (f) => f.type.startsWith('image/') || f.type.startsWith('video/')
                                   );
+                                  if (file) handleWelcomeUpload(file);
                               }
-                          }
-                        : async (files) => {
-                              const file = files.find(
-                                  (f) => f.type.startsWith('image/') || f.type.startsWith('video/')
-                              );
-                              if (file) handleWelcomeUpload(file);
-                          }
-                }
+                    }
                     onRemoveAttachment={
-                    displayImage
-                        ? (i) => setPendingAttachments((prev) => prev.filter((_, j) => j !== i))
-                        : () => {}
-                }
-                    welcomeMode={false}
+                        displayImage
+                            ? (i) => setPendingAttachments((prev) => prev.filter((_, j) => j !== i))
+                            : () => {}
+                    }
+                    welcomeMode={!displayImage}
                     inputRef={welcomeFileInputRef}
                 />
-                )}
             </main>
         </div>
     );

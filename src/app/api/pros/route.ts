@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createSupabaseServerClient } from '@/lib/supabase-server';
+import { createSupabaseServerClient, createSupabaseAdminClient } from '@/lib/supabase-server';
+import { SERVICE_LABELS } from '@/lib/services';
 
 function haversineKm(
     lat1: number,
@@ -64,6 +65,9 @@ export async function GET(req: NextRequest) {
             });
         }
 
+        const canonicalServices = new Set<string>(SERVICE_LABELS);
+        const invalidProviderIds = new Set<string>();
+
         const withDistance = (locations ?? [])
             .filter((loc: any) => {
                 const locLat = loc.latitude != null ? Number(loc.latitude) : null;
@@ -80,10 +84,24 @@ export async function GET(req: NextRequest) {
                     locLat != null && locLng != null
                         ? haversineKm(latNum, lngNum, locLat, locLng)
                         : null;
-                return { ...loc, distance_km: dist, profile: profilesMap[loc.provider_id] };
+
+                const profile = profilesMap[loc.provider_id];
+                const rawCategories = (profile?.service_categories ?? []) as string[];
+                const hasValidCategory = rawCategories.some((cat) =>
+                    canonicalServices.has(cat)
+                );
+
+                if (!hasValidCategory) {
+                    invalidProviderIds.add(loc.provider_id);
+                }
+
+                return { ...loc, distance_km: dist, profile };
             });
 
-        let filtered = withDistance;
+        // Drop providers whose service categories are empty or contain only non-canonical values.
+        let filtered = withDistance.filter(
+            (loc: any) => !invalidProviderIds.has(loc.provider_id)
+        );
         if (category && category.trim() !== '') {
             const catLower = category.trim().toLowerCase();
             filtered = withDistance.filter((loc: any) => {
@@ -115,6 +133,21 @@ export async function GET(req: NextRequest) {
             total_jobs_completed: loc.profile?.total_jobs_completed ?? 0,
             google_place_id: loc.profile?.google_place_id ?? null,
         }));
+
+        // Best-effort backend cleanup: remove invalid provider_profiles and their locations.
+        if (invalidProviderIds.size > 0) {
+            try {
+                const admin = await createSupabaseAdminClient();
+                const ids = Array.from(invalidProviderIds);
+                await admin.from('provider_locations').delete().in('provider_id', ids);
+                await admin.from('provider_profiles').delete().in('id', ids);
+            } catch (e) {
+                console.warn(
+                    'Failed to delete providers with invalid/empty trades:',
+                    (e as Error).message
+                );
+            }
+        }
 
         return NextResponse.json({ pros });
     } catch (e) {

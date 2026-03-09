@@ -118,7 +118,13 @@ export async function analyseReviewsWithGemini(
     };
 }
 
-const CATEGORY_ORDER = ['Punctuality', 'Tidiness', 'Professionalism', 'Quality', 'Value', 'Other'] as const;
+const CATEGORY_ORDER = [
+    'Punctuality',
+    'Professionalism',
+    'Cleanliness',
+    'Accuracy',
+    'Other',
+] as const;
 export type ReviewCategory = (typeof CATEGORY_ORDER)[number];
 
 export interface ProPageReviewAnalysis {
@@ -133,19 +139,16 @@ const PRO_PAGE_REVIEW_PROMPT = `You are analysing Google reviews for a home serv
 Tasks:
 1. **reviewCategories**: For each review (index 0 to N-1), assign it to ONE OR MORE relevant categories. A review may appear in multiple category arrays if it meaningfully mentions multiple topics.
    Categories and what counts as evidence:
-   - Punctuality: arriving on time, meeting deadlines, scheduling, time management (e.g. "on time", "ran late", "missed deadline", "never returned")
-   - Tidiness: cleanliness of work area, leaving the site clean after the job (e.g. "cleaned up", "left a mess", "neat finish")
-   - Professionalism: communication, courtesy, handling of problems, maturity, expertise (e.g. "professional", "rude", "wouldn't return calls", "knowledgeable", "handled it well")
-   - Quality: quality and completeness of the actual work done (e.g. "great results", "shoddy work", "had to redo it", "excellent finish")
-   - Value: fairness of pricing relative to what was delivered (e.g. "great value", "overpriced", "charged for work not done", "quoted one price then charged more")
-   - Other: anything that does not clearly fit the above.
-   Only use "Other" for a review when none of the five categories above apply at all.
-2. **summary**: Write 2–3 short sentences summarising what customers say overall. Cover the main themes (punctuality, quality, value), what they praise, and any criticisms. Do not include the business name.
+   - Punctuality: arriving on time, meeting deadlines, scheduling, time management (e.g. "on time", "ran late", "missed deadline", "never returned").
+   - Professionalism: communication, courtesy, handling of problems, maturity, expertise (e.g. "professional", "rude", "wouldn't return calls", "knowledgeable", "handled it well").
+   - Cleanliness: cleanliness of work area, leaving the site clean after the job (e.g. "cleaned up", "left a mess", "neat finish", "left the place spotless").
+   - Accuracy: quote and diagnosis accuracy — the price and scope of work matching what was quoted and what was actually done (e.g. "quote was accurate", "no hidden costs", "charged more than quoted", "underquoted", "fair and transparent pricing").
+   Only use a category when there is clear evidence in the review text, otherwise omit it for that review entirely.
+2. **summary**: Write 2–3 short sentences summarising what customers say overall. Cover the main themes (punctuality, professionalism, cleanliness, accuracy), what they praise, and any criticisms. Do not include the business name.
 3. **highlights**: Extract 8–20 short terms (one or two words each) that reviewers frequently mention — like Google's "What people mention" for a place. Use lowercase. Examples for a plumber: "on time", "fair price", "clean work", "professional", "quick", "reliable". Examples for a winery: "picnic", "platters", "lawns", "atmosphere", "afternoon", "trees", "kids". Only include terms that actually appear or are strongly implied across the reviews. Return as an array of strings.
 
 Output valid JSON only, no markdown:
-{"reviewCategories":{"Punctuality":[0,2],"Tidiness":[1],...},"summary":"...","highlights":["on time","fair price",...]}
-A review index may appear in multiple category arrays. Only use "Other" when no other category applies.`;
+{"reviewCategories":{"Punctuality":[0,2],"Professionalism":[1],...},"summary":"...","highlights":["on time","fair price",...]}`;
 
 export async function analyseReviewsForProPage(
     reviews: Array<{ text: string; rating?: number | null }>,

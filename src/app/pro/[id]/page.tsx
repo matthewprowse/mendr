@@ -3,7 +3,6 @@ import { redirect, notFound } from 'next/navigation';
 import { createSupabaseServerClient, createSupabaseAdminClient } from '@/lib/supabase-server';
 import { isCacheStale, refreshCachedProvider } from '@/lib/refresh-provider-cache';
 import { formatBusinessName } from '@/lib/utils';
-import { analyseReviewsForProPage, getAboutCompany } from '@/lib/ai-review-metrics';
 import type { ReviewCategory } from '@/lib/ai-review-metrics';
 import Link from 'next/link';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
@@ -18,6 +17,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { ProviderAboutSection } from '../_components/provider-about-section';
 import { ProviderReviewsSection } from '../_components/provider-reviews-section';
 import { StarFill } from '@/lib/icons';
+import { ContactPopover } from '@/components/contact-popover';
 
 type PageProps = { params: Promise<{ id: string }> };
 
@@ -36,7 +36,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
             return { title: 'Scandio Pro', description: profile.short_description };
         }
         const { data: cached } = await supabase
-            .from('cached_providers')
+            .from('providers')
             .select('name')
             .eq('id', decoded)
             .maybeSingle();
@@ -120,11 +120,12 @@ export default async function ProviderIdPage({ params }: PageProps) {
             .limit(8);
 
         const { data: reviews } = await supabase
-            .from('customer_reviews')
-            .select('id, rating, title, body, created_at, reviewer_name')
-            .eq('provider_profile_slug', providerProfile.slug)
+            .from('reviews')
+            .select('id, rating, title, body, published_at, created_at, reviewer_name, category_ratings')
+            .eq('provider_id', providerProfile.id)
+            .eq('source', 'scandio')
             .eq('status', 'approved')
-            .order('created_at', { ascending: false })
+            .order('published_at', { ascending: false })
             .limit(4);
 
         // Global favourites count for this Scandio Pro profile
@@ -182,8 +183,8 @@ export default async function ProviderIdPage({ params }: PageProps) {
         return (
             <div className="flex min-h-screen flex-col bg-background">
                 <AppHeader showBack />
-                <main className="mx-auto flex-1 max-w-5xl space-y-6 px-4 py-6 sm:px-6 lg:px-8">
-                    <section className="space-y-4">
+                <main className="mx-auto flex-1 w-full max-w-7xl space-y-6 px-0 py-6 pb-20 sm:px-6 lg:px-8">
+                    <section className="space-y-4 px-4 sm:px-0">
                         <div className="relative w-full rounded-xl bg-secondary/60 p-4 sm:p-6">
                             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:gap-6">
                                 <Avatar className="h-14 w-14 sm:h-16 sm:w-16 bg-background text-foreground">
@@ -223,6 +224,7 @@ export default async function ProviderIdPage({ params }: PageProps) {
                                 </div>
                                 <div className="flex flex-col items-start gap-2 sm:items-end">
                                     <FavouriteButton
+                                        providerId={providerProfile.id}
                                         providerProfileSlug={providerProfile.slug}
                                         providerName={provider.display_name}
                                         variant="icon"
@@ -236,11 +238,6 @@ export default async function ProviderIdPage({ params }: PageProps) {
                             </div>
                         </div>
 
-                        {profileSummary && (
-                            <p className="max-w-3xl text-sm text-muted-foreground sm:text-base">
-                                {profileSummary}
-                            </p>
-                        )}
                     </section>
 
                     <Tabs defaultValue="about" className="w-full">
@@ -278,13 +275,21 @@ export default async function ProviderIdPage({ params }: PageProps) {
                                 providerName={provider.display_name}
                                 providerProfileSlug={providerProfile.slug}
                                 placeId={provider.google_place_id ?? null}
-                                initialCustomerReviews={reviews ?? []}
+                                initialCustomerReviews={(reviews ?? []).map((r: any) => ({
+                                    id: r.id,
+                                    rating: r.rating,
+                                    title: r.title,
+                                    body: r.body,
+                                    created_at: r.published_at ?? r.created_at,
+                                    reviewer_name: r.reviewer_name,
+                                    category_ratings: r.category_ratings ?? null,
+                                }))}
                                 reviewSummary={profileSummary}
                                 profileMetrics={{
                                     punctuality: provider.metrics_punctuality ?? null,
                                     cleanliness: provider.metrics_tidiness ?? null,
                                     professionalism: provider.metrics_professionalism ?? null,
-                                    categoriesAccuracy: provider.metrics_cleanup ?? null,
+                                    cleanup: provider.metrics_cleanup ?? null,
                                 }}
                                 reviewCategories={{}}
                                 googleReviews={[]}
@@ -327,157 +332,158 @@ export default async function ProviderIdPage({ params }: PageProps) {
                         </TabsContent>
                     </Tabs>
                 </main>
+                <footer className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+                    <div className="mx-auto flex w-full max-w-7xl items-center justify-between gap-3 px-4 py-3 sm:px-6 lg:px-8">
+                        <div className="min-w-0">
+                            <p className="truncate text-sm font-medium text-foreground">
+                                Contact {provider.display_name}
+                            </p>
+                            {primaryLocation?.address && (
+                                <p className="truncate text-xs text-muted-foreground">
+                                    {primaryLocation.address}
+                                </p>
+                            )}
+                        </div>
+                        <ContactPopover
+                            providerName={provider.display_name}
+                            displayName={provider.display_name}
+                            phone={null}
+                            label="Contact"
+                            className="min-w-[120px]"
+                            side="top"
+                            align="end"
+                        />
+                    </div>
+                </footer>
             </div>
         );
     }
 
-    // 2. Try cached provider (Google place): by place_id first (stable), then by id (UUID)
-    const cacheSelect =
-        'place_id, name, address, rating, rating_count, phone, website, summary, services, latitude, longitude, reviews, weekday_descriptions, photos, review_highlights, ai_review_summary, last_updated';
+    // 2. Unified provider (Google/scraped/manual) from providers table.
+    const providerSelect =
+        'id, source, google_place_id, name, address, rating, rating_count, phone, website, summary, services, latitude, longitude, weekday_descriptions, review_highlights, ai_review_summary, last_updated';
     const looksLikeUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(decoded);
-    let { data: cached } = await supabase
-        .from('cached_providers')
-        .select(cacheSelect)
-        .eq('place_id', decoded)
-        .maybeSingle();
 
-    if (!cached && decoded.startsWith('places/') === false) {
-        const { data: byPlace } = await supabase
-            .from('cached_providers')
-            .select(cacheSelect)
-            .eq('place_id', `places/${decoded}`)
-            .maybeSingle();
-        if (byPlace) cached = byPlace;
-    }
-    if (!cached && looksLikeUuid) {
-        const { data: byId } = await supabase
-            .from('cached_providers')
-            .select(cacheSelect)
-            .eq('id', decoded)
-            .maybeSingle();
-        if (byId) cached = byId;
-    }
+    const placeIdForLookup = decoded.startsWith('places/')
+        ? decoded
+        : looksLikeUuid
+          ? null
+          : `places/${decoded.replace(/^places\//, '')}`;
 
-    // If still missing and param is not a UUID, treat as Google place_id and fetch then cache
-    if (!cached && !looksLikeUuid) {
+    let { data: providerRow } = looksLikeUuid
+        ? await supabase.from('providers').select(providerSelect).eq('id', decoded).maybeSingle()
+        : await supabase
+              .from('providers')
+              .select(providerSelect)
+              .eq('google_place_id', placeIdForLookup)
+              .maybeSingle();
+
+    // If still missing and param is not a UUID, treat as Google place_id and refresh from Places.
+    if (!providerRow && !looksLikeUuid && placeIdForLookup) {
         try {
-            const placeIdForFetch = decoded.startsWith('places/') ? decoded : `places/${decoded}`;
-            await refreshCachedProvider(placeIdForFetch);
+            await refreshCachedProvider(placeIdForLookup);
             const { data: afterFetch } = await supabase
-                .from('cached_providers')
-                .select(cacheSelect)
-                .eq('place_id', placeIdForFetch)
+                .from('providers')
+                .select(providerSelect)
+                .eq('google_place_id', placeIdForLookup)
                 .maybeSingle();
-            if (afterFetch) cached = afterFetch;
-            if (!cached) {
-                const { data: alt } = await supabase
-                    .from('cached_providers')
-                    .select(cacheSelect)
-                    .eq('place_id', decoded)
-                    .maybeSingle();
-                if (alt) cached = alt;
-            }
+            if (afterFetch) providerRow = afterFetch;
         } catch (e) {
             console.warn('Pro page: refresh/re-read failed', (e as Error).message);
-            // Leave cached null so we show not-found below
         }
     }
 
-    if (!cached) notFound();
+    if (!providerRow) notFound();
 
-    const hasNoReviews =
-        !cached.reviews || (Array.isArray(cached.reviews) && cached.reviews.length === 0);
-    const hasNoHours =
-        !cached.weekday_descriptions ||
-        (Array.isArray(cached.weekday_descriptions) && cached.weekday_descriptions.length === 0);
-    const hasNoPhotos =
-        !cached.photos || (Array.isArray(cached.photos) && cached.photos.length === 0);
-    let freshData: Awaited<ReturnType<typeof refreshCachedProvider>> | null = null;
-    if (isCacheStale(cached.last_updated) || hasNoReviews || hasNoHours || hasNoPhotos) {
-        freshData = await refreshCachedProvider(cached.place_id);
-        const { data: refreshed } = await supabase
-            .from('cached_providers')
-            .select(cacheSelect)
-            .eq('place_id', cached.place_id)
-            .maybeSingle();
-        if (refreshed) cached = refreshed;
+    const providerId = (providerRow as any).id as string;
+    const googlePlaceId = ((providerRow as any).google_place_id as string | null) ?? null;
+
+    // Refresh stale Google providers in background (best-effort)
+    if (googlePlaceId && isCacheStale((providerRow as any).last_updated)) {
+        try {
+            await refreshCachedProvider(googlePlaceId);
+            const { data: refreshed } = await supabase
+                .from('providers')
+                .select(providerSelect)
+                .eq('id', providerId)
+                .maybeSingle();
+            if (refreshed) providerRow = refreshed;
+        } catch {
+            // ignore
+        }
     }
-    // Use freshly fetched reviews/hours when cache still has none (e.g. DB write failed or re-read was stale)
-    const reviewsFromCache = Array.isArray(cached.reviews)
-        ? (cached.reviews as Array<{ text: string; rating: number | null; relativePublishTimeDescription?: string | null; authorName?: string | null }>).map((r) => ({ ...r, authorName: r.authorName ?? 'Google user' }))
+
+    const { data: providerImages } = await supabase
+        .from('provider_images')
+        .select('bucket, path')
+        .eq('provider_id', providerId)
+        .order('sort_order', { ascending: true })
+        .limit(12);
+
+    const imageUrls =
+        process.env.NEXT_PUBLIC_SUPABASE_URL && Array.isArray(providerImages)
+            ? providerImages
+                  .map((img: any) =>
+                      img?.bucket && img?.path
+                          ? `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/${img.bucket}/${img.path}`
+                          : null
+                  )
+                  .filter((u: unknown): u is string => typeof u === 'string')
+            : [];
+
+    const { data: googleReviewRows } = await supabase
+        .from('reviews')
+        .select('body, rating, relative_publish_time_description, reviewer_name, published_at')
+        .eq('provider_id', providerId)
+        .eq('source', 'google')
+        .eq('status', 'approved')
+        .order('published_at', { ascending: false })
+        .limit(50);
+
+    const reviewsToUse = (googleReviewRows ?? []).map((r: any) => ({
+        text: r.body,
+        rating: typeof r.rating === 'number' ? r.rating : null,
+        relativePublishTimeDescription: r.relative_publish_time_description ?? null,
+        authorName: r.reviewer_name ?? null,
+        published_at: r.published_at ?? null,
+    }));
+
+    const weekdayDescriptionsToUse: string[] = Array.isArray((providerRow as any).weekday_descriptions)
+        ? ((providerRow as any).weekday_descriptions as string[])
         : [];
-    const reviewsFromFresh = Array.isArray(freshData?.reviews) ? freshData!.reviews : [];
-    const reviewsToUse =
-        reviewsFromCache.length > 0 ? reviewsFromCache : reviewsFromFresh;
-    const weekdayDescriptionsToUse =
-        (Array.isArray(cached.weekday_descriptions) && cached.weekday_descriptions.length > 0)
-            ? (cached.weekday_descriptions as string[])
-            : (freshData?.weekday_descriptions ?? []);
 
-    const geminiKey = process.env.GEMINI_API_KEY;
-    let reviewsSummary: string | null = (cached as any).ai_review_summary ?? null;
-    let reviewCategories: Partial<Record<ReviewCategory, number[]>> = {};
-    let reviewHighlights: string[] = [];
-    let aboutCompany: string | null = null;
+    // Use any precomputed AI summary when available; otherwise fall back to a simple static summary.
+    let reviewsSummary: string | null = ((providerRow as any).ai_review_summary as string | null) ?? null;
+    const reviewCategories: Partial<Record<ReviewCategory, number[]>> =
+        ((providerRow as any).review_categories as Partial<Record<ReviewCategory, number[]>> | null) ?? {};
+    const reviewHighlights: string[] = [];
 
-    if (reviewsToUse.length > 0 && geminiKey && !reviewsSummary) {
-        try {
-            const analysis = await analyseReviewsForProPage(
-                reviewsToUse.map((r) => ({ text: r.text, rating: r.rating })),
-                geminiKey
-            );
-            reviewsSummary = analysis.summary;
-            reviewCategories = analysis.reviewCategories;
-            reviewHighlights = analysis.highlights ?? [];
-            const updatePayload: { review_highlights?: string[]; ai_review_summary?: string } = {};
-            if (reviewHighlights.length > 0) {
-                updatePayload.review_highlights = reviewHighlights;
-            }
-            if (reviewsSummary) {
-                updatePayload.ai_review_summary = reviewsSummary;
-            }
-            if (Object.keys(updatePayload).length > 0) {
-                await supabase
-                    .from('cached_providers')
-                    .update(updatePayload)
-                    .eq('place_id', cached.place_id);
-            }
-        } catch (e) {
-            console.warn('Pro page: review analysis failed', (e as Error).message);
-        }
-    }
-
-    if (geminiKey && (cached.summary || (cached.services as Array<{ short?: string; full?: string }>)?.length)) {
-        try {
-            aboutCompany = await getAboutCompany(
-                cached.name,
-                cached.summary ?? null,
-                (cached.services as Array<{ short?: string; full?: string }>) ?? [],
-                geminiKey
-            );
-        } catch (e) {
-            console.warn('Pro page: about company failed', (e as Error).message);
-        }
-    }
-
-    // Global favourites count for this cached provider (by place_id)
+    // Global favourites count (prefer provider_id; fall back to legacy place_id)
     let favouritesTotal = 0;
     try {
         const admin = await createSupabaseAdminClient();
-        const { count } = await admin
-            .from('provider_favourites')
-            .select('id', { count: 'exact', head: true })
-            .eq('place_id', cached.place_id);
-        favouritesTotal = count ?? 0;
+        const [{ count: byProvider }, { count: byPlace }] = await Promise.all([
+            admin
+                .from('provider_favourites')
+                .select('id', { count: 'exact', head: true })
+                .eq('provider_id', providerId),
+            googlePlaceId
+                ? admin
+                      .from('provider_favourites')
+                      .select('id', { count: 'exact', head: true })
+                      .eq('place_id', googlePlaceId)
+                : Promise.resolve({ count: 0 } as any),
+        ]);
+        favouritesTotal = (byProvider ?? 0) + (byPlace ?? 0);
     } catch (e) {
-        console.warn('Pro page: favourites count (cached) failed', (e as Error).message);
+        console.warn('Pro page: favourites count (provider) failed', (e as Error).message);
     }
 
-    const placeIdForMaps = (cached.place_id || '').replace(/^places\//, '');
+    const placeIdForMaps = (googlePlaceId || '').replace(/^places\//, '');
     const mapQuery =
-        cached.latitude != null && cached.longitude != null
-            ? `${cached.latitude},${cached.longitude}`
-            : [cached.name, cached.address].filter(Boolean).join(' ');
+        (providerRow as any).latitude != null && (providerRow as any).longitude != null
+            ? `${(providerRow as any).latitude},${(providerRow as any).longitude}`
+            : [(providerRow as any).name, (providerRow as any).address].filter(Boolean).join(' ');
     const mapsUrl =
         placeIdForMaps && mapQuery
             ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
@@ -487,25 +493,27 @@ export default async function ProviderIdPage({ params }: PageProps) {
                   mapQuery || 'Cape Town',
               )}`;
 
-    const primaryAddress = cached.address || null;
+    const primaryAddress = (providerRow as any).address || null;
     const ratingText =
-        cached.rating != null
-            ? `${cached.rating.toFixed(1)}${cached.rating_count ? ` (${cached.rating_count} reviews)` : ''}`
+        (providerRow as any).rating != null
+            ? `${Number((providerRow as any).rating).toFixed(1)}${
+                  (providerRow as any).rating_count ? ` (${(providerRow as any).rating_count} reviews)` : ''
+              }`
             : null;
 
     const { data: gallery } = await supabase
         .from('gallery_uploads')
         .select('id, url, title, description')
-        .eq('place_id', cached.place_id)
+        .eq('place_id', googlePlaceId)
         .order('created_at', { ascending: false })
         .limit(8);
 
     const aboutSummary =
-        reviewsSummary || aboutCompany || cached.summary || null;
+        reviewsSummary || (providerRow as any).summary || null;
 
-    const servicesForCached: string[] = Array.isArray(cached.services)
+    const servicesForCached: string[] = Array.isArray((providerRow as any).services)
         ? (
-              cached.services as Array<{
+              (providerRow as any).services as Array<{
                   short?: string;
                   full?: string;
               }>
@@ -521,51 +529,52 @@ export default async function ProviderIdPage({ params }: PageProps) {
             ? {
                   apiKey: mapsKey,
                   provider: {
-                      name: cached.name,
-                      latitude: cached.latitude,
-                      longitude: cached.longitude,
-                      address: cached.address,
+                      name: (providerRow as any).name,
+                      latitude: (providerRow as any).latitude,
+                      longitude: (providerRow as any).longitude,
+                      address: (providerRow as any).address,
                   },
                   mapsUrl,
               }
             : null;
 
-    const placeIdForReviews = cached.place_id;
-    const fullStars = cached.rating != null ? Math.round(cached.rating) : 0;
+    const placeIdForReviews = googlePlaceId;
+    const fullStars = (providerRow as any).rating != null ? Math.round((providerRow as any).rating) : 0;
     const totalStars = 5;
 
-    return (
-        <div className="flex min-h-screen flex-col bg-background">
+        return (
+            <div className="flex min-h-screen flex-col bg-background">
             <AppHeader showBack />
-            <main className="mx-auto flex-1 w-full max-w-7xl space-y-6 px-0 py-6 sm:px-6 lg:px-8">
+            <main className="mx-auto flex-1 w-full max-w-7xl space-y-6 px-0 py-6 pb-20 sm:px-6 lg:px-8">
                 <section className="flex flex-col gap-6 px-4 sm:px-0">
                     <div className="w-full h-48 sm:h-96 rounded-lg border border-input/50 bg-secondary/50" />
-                    <div className="flex flex-col gap-3">
+                    <div className="flex flex-col gap-4">
                         <div className="flex flex-row justify-between items-center">
                             <div className="flex flex-row items-center gap-3">
                                 <div className="flex flex-row items-center gap-1.5">
                                     {Array.from({ length: totalStars }).map((_, i) => (
                                         <StarFill
                                             key={i}
-                                            className={`size-4 ${i < fullStars ? 'text-yellow-500' : 'text-muted-foreground/20'}`}
+                                            className={`size-4 sm:size-5 ${i < fullStars ? 'text-yellow-500' : 'text-muted-foreground/20'}`}
                                             aria-hidden
                                         />
                                     ))}
                                 </div>
-                                <p className="text-sm font-medium text-foreground">
-                                    {cached.rating != null ? cached.rating.toFixed(1) : '—'}
-                                    {cached.rating_count ? (
+                                <p className="text-base sm:text-lg font-semibold text-foreground">
+                                    {(providerRow as any).rating != null ? Number((providerRow as any).rating).toFixed(1) : '—'}
+                                    {(providerRow as any).rating_count ? (
                                         <span className="ml-1 text-xs text-muted-foreground">
-                                            ({cached.rating_count} Ratings)
+                                            ({(providerRow as any).rating_count} Ratings)
                                         </span>
                                     ) : null}
                                 </p>
                             </div>
                             <div className="flex flex-row items-center gap-3">
                                 <FavouriteButton
-                                    placeId={cached.place_id}
+                                    providerId={providerId}
+                                    placeId={googlePlaceId}
                                     providerProfileSlug={null}
-                                    providerName={cached.name}
+                                    providerName={(providerRow as any).name}
                                     variant="icon"
                                 />
                                 <p className="text-sm text-muted-foreground">
@@ -577,8 +586,8 @@ export default async function ProviderIdPage({ params }: PageProps) {
                         </div>
                         <div className="flex flex-row flex-wrap items-center gap-2 justify-between">
                             <div className="flex flex-wrap items-center gap-3">
-                                <h1 className="text-xl font-semibold sm:font-bold sm:text-2xl leading-tight tracking-tight">
-                                    {formatBusinessName(cached.name)}
+                                <h1 className="text-xl sm:text-3xl font-semibold sm:font-bold leading-tight tracking-tight">
+                                    {formatBusinessName((providerRow as any).name)}
                                 </h1>
                                 <Badge variant="outline">
                                     Verify
@@ -595,10 +604,6 @@ export default async function ProviderIdPage({ params }: PageProps) {
                             </div>
                         )}
                     </div>
-                    {aboutSummary && (
-                        <p className="text-sm text-muted-foreground">{aboutSummary}</p>
-                    )}
-
                     <Tabs defaultValue="about" className="w-full">
                         <TabsList className="w-full">
                             <TabsTrigger value="about" className="flex-1">
@@ -614,7 +619,7 @@ export default async function ProviderIdPage({ params }: PageProps) {
 
                         <TabsContent value="about" className="pt-4">
                             <ProviderAboutSection
-                                name={cached.name}
+                                name={(providerRow as any).name}
                                 address={primaryAddress}
                                 summary={aboutSummary}
                                 services={servicesForCached}
@@ -627,7 +632,7 @@ export default async function ProviderIdPage({ params }: PageProps) {
                         <TabsContent value="reviews" className="pt-4">
                             <ProviderReviewsSection
                                 mode="cached"
-                                providerName={cached.name}
+                                providerName={(providerRow as any).name}
                                 providerProfileSlug={null}
                                 placeId={placeIdForReviews}
                                 initialCustomerReviews={[]}
@@ -639,7 +644,7 @@ export default async function ProviderIdPage({ params }: PageProps) {
                         </TabsContent>
 
                         <TabsContent value="gallery" className="pt-4">
-                            {gallery && gallery.length > 0 ? (
+                            {imageUrls.length > 0 || (gallery && gallery.length > 0) ? (
                                 <section>
                                     <Card className="border-border/70 bg-card">
                                         <CardHeader className="space-y-1 pb-3">
@@ -649,7 +654,20 @@ export default async function ProviderIdPage({ params }: PageProps) {
                                         </CardHeader>
                                         <CardContent className="space-y-3">
                                             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                                                {gallery.map((item) => (
+                                                {imageUrls.map((url) => (
+                                                    <div
+                                                        key={url}
+                                                        className="overflow-hidden rounded-md border border-border/60 bg-muted"
+                                                    >
+                                                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                                                        <img
+                                                            src={url}
+                                                            alt="Provider image"
+                                                            className="h-28 w-full object-cover sm:h-32"
+                                                        />
+                                                    </div>
+                                                ))}
+                                                {(gallery ?? []).map((item) => (
                                                     <div
                                                         key={item.id}
                                                         className="overflow-hidden rounded-md border border-border/60 bg-muted"
@@ -675,6 +693,19 @@ export default async function ProviderIdPage({ params }: PageProps) {
                     </Tabs>
                 </section>
             </main>
+            <footer className="fixed inset-x-0 bottom-0 z-40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+                <div className="mx-auto flex w-full max-w-7xl items-center justify-between gap-3 px-4 py-3 sm:px-6 lg:px-8">
+                    <ContactPopover
+                        providerName={(providerRow as any).name}
+                        displayName={formatBusinessName((providerRow as any).name)}
+                        phone={(providerRow as any).phone}
+                        label="Contact"
+                        className="min-w-[120px]"
+                        side="top"
+                        align="end"
+                    />
+                </div>
+            </footer>
         </div>
     );
 }

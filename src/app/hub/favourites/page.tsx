@@ -72,18 +72,19 @@ export default function FavouritesPage() {
             const placeIds = list.map((f) => f.place_id).filter(Boolean) as string[];
             if (placeIds.length > 0) {
                 const { data: places } = await supabase
-                    .from('cached_providers')
-                    .select('place_id, address')
-                    .in('place_id', placeIds);
+                    .from('providers')
+                    .select('google_place_id, address')
+                    .in('google_place_id', placeIds.map((p) => (p.startsWith('places/') ? p : `places/${p}`)));
                 const addrByPlace = new Map<string, string | null>(
-                    (places ?? []).map((p: { place_id: string; address: string | null }) => [
-                        p.place_id,
+                    (places ?? []).map((p: { google_place_id: string; address: string | null }) => [
+                        p.google_place_id,
                         p.address,
                     ]),
                 );
                 list.forEach((f) => {
-                    if (f.place_id && addrByPlace.has(f.place_id)) {
-                        (f as FavouriteRow).address = addrByPlace.get(f.place_id) ?? null;
+                    const key = f.place_id ? (f.place_id.startsWith('places/') ? f.place_id : `places/${f.place_id}`) : null;
+                    if (key && addrByPlace.has(key)) {
+                        (f as FavouriteRow).address = addrByPlace.get(key) ?? null;
                     }
                 });
             }

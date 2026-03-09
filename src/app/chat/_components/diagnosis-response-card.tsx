@@ -262,13 +262,17 @@ export function DiagnosisResponseCard({
                     {hasLocation &&
                         (isLoadingProviders ? (
                             <ProvidersSkeleton />
-                        ) : providers.length === 0 && emergingProviders.length === 0 && (nearbyOnlyProviders?.length ?? 0) === 0 ? (
+                        ) : providers.length === 0 &&
+                          emergingProviders.length === 0 &&
+                          (nearbyOnlyProviders?.length ?? 0) === 0 ? (
                             <p className="text-sm text-muted-foreground py-2">
                                 No providers found in your area.
                             </p>
                         ) : (
                             <div className="flex flex-col gap-6">
-                                {(providers.length + emergingProviders.length + (nearbyOnlyProviders?.length ?? 0)) > 0 &&
+                                {(providers.length +
+                                    emergingProviders.length +
+                                    (nearbyOnlyProviders?.length ?? 0)) > 0 &&
                                     (process.env.NEXT_PUBLIC_GOOGLE_MAPS_EMBED_KEY ||
                                         process.env.NEXT_PUBLIC_GOOGLE_PLACES_API_KEY) && (
                                         <ProvidersMap

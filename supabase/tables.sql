@@ -47,6 +47,9 @@ CREATE TABLE IF NOT EXISTS services (
 
 CREATE INDEX IF NOT EXISTS idx_services_active ON services(active) WHERE active = true;
 
+-- Ensure sort_order exists (table may have been created from older schema)
+ALTER TABLE services ADD COLUMN IF NOT EXISTS sort_order INT DEFAULT 0;
+
 -- Seed initial services (idempotent)
 INSERT INTO services (label, search_query, sort_order) VALUES
     ('Electrical', 'Electrician', 1),
@@ -152,6 +155,54 @@ ALTER TABLE cached_providers ADD COLUMN IF NOT EXISTS review_highlights JSONB;
 ALTER TABLE cached_providers ADD COLUMN IF NOT EXISTS ai_review_summary TEXT;
 
 -- =============================================================================
+-- 3a. Providers (Unified: Scandio + Google + scraped + manual)
+-- This replaces the need to store providers in multiple tables.
+-- Notes:
+-- - Google providers: set google_place_id (places/...) and source='google' (or 'scrape')
+-- - Scandio providers: set profile_id + slug and source='scandio'
+-- - cached_providers remains for backwards compatibility during migration.
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS providers (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    source TEXT NOT NULL CHECK (source IN ('google', 'scrape', 'scandio', 'manual')),
+    -- Google identifier (always store with places/ prefix)
+    google_place_id TEXT UNIQUE,
+    -- Scandio Pro identifier (profiles.id)
+    profile_id UUID UNIQUE REFERENCES profiles(id) ON DELETE CASCADE,
+    -- Scandio Pro public slug (from provider_profiles.slug)
+    slug TEXT UNIQUE,
+    name TEXT NOT NULL,
+    address TEXT,
+    rating DECIMAL(3,2),
+    rating_count INT,
+    phone TEXT,
+    website TEXT,
+    latitude DOUBLE PRECISION,
+    longitude DOUBLE PRECISION,
+    summary TEXT,
+    services JSONB,
+    -- Canonical Scandio service categories (must match services.label)
+    service_categories TEXT[] DEFAULT '{}',
+    weekday_descriptions JSONB,
+    review_highlights JSONB,
+    review_categories JSONB,
+    ai_review_summary TEXT,
+    last_updated TIMESTAMPTZ DEFAULT NOW(),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE providers ADD COLUMN IF NOT EXISTS weekday_descriptions JSONB;
+ALTER TABLE providers ADD COLUMN IF NOT EXISTS review_highlights JSONB;
+ALTER TABLE providers ADD COLUMN IF NOT EXISTS review_categories JSONB;
+ALTER TABLE providers ADD COLUMN IF NOT EXISTS ai_review_summary TEXT;
+ALTER TABLE providers ADD COLUMN IF NOT EXISTS service_categories TEXT[] DEFAULT '{}';
+
+CREATE INDEX IF NOT EXISTS idx_providers_google_place_id ON providers(google_place_id) WHERE google_place_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_providers_profile_id ON providers(profile_id) WHERE profile_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_providers_source ON providers(source);
+
+-- =============================================================================
 -- 3b. API response caches (reduce Google/Gemini API usage)
 -- =============================================================================
 -- Geocode: address or lat,lng -> lat, lng, formatted_address (30-day TTL)
@@ -191,6 +242,7 @@ CREATE TABLE IF NOT EXISTS provider_search_cache (
     next_page_token TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
+ALTER TABLE provider_search_cache ADD COLUMN IF NOT EXISTS providers JSONB;
 CREATE INDEX IF NOT EXISTS idx_provider_search_cache_created_at ON provider_search_cache(created_at);
 
 -- Scraper progress: (area_key, trade) so the scrape-providers script can resume after stop.
@@ -297,6 +349,7 @@ ALTER TABLE messages ADD COLUMN IF NOT EXISTS diagnosis_updated BOOLEAN DEFAULT 
 ALTER TABLE messages ADD COLUMN IF NOT EXISTS diagnosis JSONB;
 ALTER TABLE messages ADD COLUMN IF NOT EXISTS providers JSONB;
 ALTER TABLE messages ADD COLUMN IF NOT EXISTS emerging_providers JSONB;
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS nearby_only_providers JSONB;
 ALTER TABLE messages ADD COLUMN IF NOT EXISTS attachment_descriptions TEXT[];
 
 CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(conversation_id);
@@ -769,22 +822,82 @@ CREATE INDEX IF NOT EXISTS idx_customer_reviews_status ON customer_reviews(statu
 CREATE INDEX IF NOT EXISTS idx_customer_reviews_created ON customer_reviews(created_at);
 
 -- =============================================================================
+-- 17b. Reviews (Unified: Google + Scandio-native)
+-- This is the canonical reviews table going forward.
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS reviews (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    provider_id UUID NOT NULL REFERENCES providers(id) ON DELETE CASCADE,
+    source TEXT NOT NULL CHECK (source IN ('google', 'scandio')),
+    -- Stable external id when available (Google review name), otherwise an app-generated dedupe key
+    source_ref TEXT,
+    reviewer_user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+    reviewer_name TEXT,
+    reviewer_email TEXT,
+    rating SMALLINT CHECK (rating BETWEEN 1 AND 5),
+    -- For Scandio reviews: per-category ratings; for Google reviews: null
+    category_ratings JSONB,
+    title TEXT,
+    body TEXT NOT NULL,
+    image_urls TEXT[] DEFAULT '{}',
+    status TEXT NOT NULL DEFAULT 'approved' CHECK (status IN ('pending', 'approved', 'rejected')),
+    relative_publish_time_description TEXT,
+    published_at TIMESTAMPTZ,
+    raw JSONB,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE (source, source_ref)
+);
+
+CREATE INDEX IF NOT EXISTS idx_reviews_provider_id ON reviews(provider_id);
+CREATE INDEX IF NOT EXISTS idx_reviews_source ON reviews(source);
+CREATE INDEX IF NOT EXISTS idx_reviews_status ON reviews(status);
+CREATE INDEX IF NOT EXISTS idx_reviews_published_at ON reviews(published_at);
+
+-- =============================================================================
+-- 17c. Provider Images (Unified gallery/media for providers)
+-- Stores references to files in Supabase Storage buckets (S3-backed).
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS provider_images (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    provider_id UUID NOT NULL REFERENCES providers(id) ON DELETE CASCADE,
+    source TEXT NOT NULL CHECK (source IN ('google', 'user', 'provider')),
+    source_ref TEXT,
+    bucket TEXT NOT NULL DEFAULT 'gallery',
+    path TEXT NOT NULL,
+    sort_order INT DEFAULT 0,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE (provider_id, source, source_ref),
+    UNIQUE (provider_id, path)
+);
+
+CREATE INDEX IF NOT EXISTS idx_provider_images_provider_id ON provider_images(provider_id);
+
+-- =============================================================================
 -- 18. Provider Favourites (customers save providers they like)
 -- =============================================================================
 CREATE TABLE IF NOT EXISTS provider_favourites (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    -- Unified provider reference (preferred)
+    provider_id UUID REFERENCES providers(id) ON DELETE CASCADE,
     -- Target provider — exactly one of these should be set
     place_id TEXT REFERENCES cached_providers(place_id) ON DELETE CASCADE,
     provider_profile_slug TEXT REFERENCES provider_profiles(slug) ON DELETE CASCADE,
     -- Snapshot of provider name at time of favouriting (for display without joins)
     provider_name TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE (user_id, provider_id),
     UNIQUE (user_id, place_id),
     UNIQUE (user_id, provider_profile_slug)
 );
 
+-- Backfill new unified provider_id column when upgrading existing DBs
+ALTER TABLE provider_favourites
+    ADD COLUMN IF NOT EXISTS provider_id UUID REFERENCES providers(id) ON DELETE CASCADE;
+
 CREATE INDEX IF NOT EXISTS idx_provider_favourites_user ON provider_favourites(user_id);
+CREATE INDEX IF NOT EXISTS idx_provider_favourites_provider ON provider_favourites(provider_id) WHERE provider_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_provider_favourites_place ON provider_favourites(place_id) WHERE place_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_provider_favourites_slug ON provider_favourites(provider_profile_slug) WHERE provider_profile_slug IS NOT NULL;
 
@@ -823,3 +936,11 @@ CREATE TABLE IF NOT EXISTS gallery_uploads (
 CREATE INDEX IF NOT EXISTS idx_gallery_uploads_place ON gallery_uploads(place_id) WHERE place_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_gallery_uploads_slug ON gallery_uploads(provider_profile_slug) WHERE provider_profile_slug IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_gallery_uploads_status ON gallery_uploads(status);
+
+-- =============================================================================
+-- GIN indexes for JSONB columns (deep query performance)
+-- =============================================================================
+CREATE INDEX IF NOT EXISTS idx_cached_providers_services_gin ON cached_providers USING GIN (services);
+CREATE INDEX IF NOT EXISTS idx_conversations_diagnosis_gin ON conversations USING GIN (diagnosis);
+CREATE INDEX IF NOT EXISTS idx_conversations_providers_gin ON conversations USING GIN (providers);
+CREATE INDEX IF NOT EXISTS idx_jobs_current_quote_gin ON jobs USING GIN (current_quote);

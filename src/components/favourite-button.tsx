@@ -7,6 +7,8 @@ import { AuthPromptDialog } from '@/components/auth-prompt-dialog';
 import { useAuth } from '@/context/auth-context';
 
 interface FavouriteButtonProps {
+    /** Unified providers.id (preferred) */
+    providerId?: string | null;
     /** Google Places place_id for a cached provider */
     placeId?: string | null;
     /** Slug for a registered provider_profile */
@@ -23,6 +25,7 @@ interface FavouriteButtonProps {
  * If not logged in, shows an AuthPromptDialog.
  */
 export function FavouriteButton({
+    providerId,
     placeId,
     providerProfileSlug,
     providerName,
@@ -37,9 +40,10 @@ export function FavouriteButton({
 
     // Fetch current favourite state when user is present
     const fetchState = useCallback(async () => {
-        if (!user || (!placeId && !providerProfileSlug)) return;
+        if (!user || (!providerId && !placeId && !providerProfileSlug)) return;
         try {
             const params = new URLSearchParams();
+            if (providerId) params.set('provider_id', providerId);
             if (placeId) params.set('place_id', placeId);
             if (providerProfileSlug) params.set('slug', providerProfileSlug);
             const res = await fetch(`/api/favourites?${params.toString()}`);
@@ -48,7 +52,7 @@ export function FavouriteButton({
                 setIsFavourited(!!data.favourited);
             }
         } catch (_) {}
-    }, [user, placeId, providerProfileSlug]);
+    }, [user, providerId, placeId, providerProfileSlug]);
 
     useEffect(() => {
         fetchState();
@@ -69,6 +73,7 @@ export function FavouriteButton({
                 method: next ? 'POST' : 'DELETE',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
+                    provider_id: providerId ?? null,
                     place_id: placeId ?? null,
                     provider_profile_slug: providerProfileSlug ?? null,
                     provider_name: providerName,

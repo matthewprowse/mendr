@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseAdminClient } from '@/lib/supabase-server';
 import { analyseReviewsWithGemini, type ReviewInput } from '@/lib/ai-review-metrics';
+import { logAiEvent } from '@/lib/ai-logging';
 
 function normalizePlaceId(placeId: string): string {
     return (placeId || '').replace(/^places\//, '').trim();
@@ -8,6 +9,7 @@ function normalizePlaceId(placeId: string): string {
 
 export async function POST(req: NextRequest) {
     try {
+        const startedAt = Date.now();
         const body = await req.json().catch(() => ({}));
         const {
             google_place_id: bodyPlaceId,
@@ -25,14 +27,6 @@ export async function POST(req: NextRequest) {
                         'Missing google_place_id (or place_id), or provide reviews array to analyse.',
                 },
                 { status: 400 }
-            );
-        }
-
-        const geminiKey = process.env.GEMINI_API_KEY;
-        if (!geminiKey) {
-            return NextResponse.json(
-                { error: 'GEMINI_API_KEY is not configured' },
-                { status: 500 }
             );
         }
 
@@ -96,6 +90,14 @@ export async function POST(req: NextRequest) {
                     rating: typeof r.rating === 'number' ? r.rating : undefined,
                 }))
                 .filter((r: ReviewInput) => r.text && r.text.length > 0);
+        }
+
+        const geminiKey = process.env.GEMINI_API_KEY;
+        if (!geminiKey) {
+            return NextResponse.json(
+                { error: 'GEMINI_API_KEY is not configured' },
+                { status: 500 }
+            );
         }
 
         const analysis = await analyseReviewsWithGemini(reviews, geminiKey);
@@ -162,6 +164,17 @@ export async function POST(req: NextRequest) {
             console.warn('audit_log REVIEWS_SYNCED insert failed:', auditError);
         }
 
+        const durationMs = Date.now() - startedAt;
+        logAiEvent({
+            endpoint: 'reviews-sync',
+            status: 'ok',
+            durationMs,
+            meta: {
+                placeId: placeIdNorm || googlePlaceId,
+                reviewsAnalysed: reviews.length,
+            },
+        });
+
         return NextResponse.json({
             ok: true,
             google_place_id: placeIdNorm || googlePlaceId,
@@ -174,7 +187,17 @@ export async function POST(req: NextRequest) {
                 metrics: analysis.metrics,
             },
         });
-    } catch (err) {
+    } catch (err: any) {
+        const durationMs = Date.now();
+        logAiEvent({
+            endpoint: 'reviews-sync',
+            status: 'error',
+            durationMs,
+            meta: {
+                error: err instanceof Error ? err.message : 'Failed to sync reviews',
+            },
+        });
+        // eslint-disable-next-line no-console
         console.error('reviews-sync error:', err);
         return NextResponse.json(
             {

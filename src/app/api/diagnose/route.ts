@@ -1,7 +1,10 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
 import { NextRequest } from 'next/server';
+import { getGeminiModel } from '@/lib/ai-client';
+import { logAiEvent } from '@/lib/ai-logging';
 
 export async function POST(req: NextRequest) {
+    const startedAt = Date.now();
+    // eslint-disable-next-line no-console
     console.log('POST /api/diagnose received request');
     try {
         const body = await req.json();
@@ -22,16 +25,24 @@ export async function POST(req: NextRequest) {
             ? attachments.filter((a: unknown) => typeof a === 'string' && a.startsWith('data:'))
             : [];
 
-        console.log('Request body keys:', Object.keys(body));
-        if (image) console.log('Image size:', image.length);
-        if (textQuery) console.log('Text query length:', textQuery?.length);
-        if (attachmentImages.length) console.log('Attachments count:', attachmentImages.length);
-        if (history) console.log('History length:', history.length);
+        // Basic request-shape logging only; detailed metrics are captured at the end.
+        // eslint-disable-next-line no-console
+        console.log(
+            JSON.stringify({
+                type: 'ai_request',
+                endpoint: 'diagnose',
+                hasImage: Boolean(image),
+                hasText: Boolean(textQuery),
+                attachmentsCount: attachmentImages.length,
+                historyLength: Array.isArray(history) ? history.length : 0,
+            })
+        );
 
         const hasAttachments = attachmentImages.length > 0;
         const isTextOnly =
             !image && !hasAttachments && typeof textQuery === 'string';
         if (!image && !isTextOnly && !hasAttachments) {
+            // eslint-disable-next-line no-console
             console.error('No image, text query, or attachments provided');
             return new Response(
                 JSON.stringify({
@@ -192,18 +203,7 @@ Set "refetch_providers" to true ONLY when the user explicitly asks for new/diffe
 CRITICAL: "confidence" must be an integer 0–100. If you are less than 85% confident OR your diagnosis would be vague, set "requires_clarification" to true and ask a targeted follow-up question in "message". Only when confidence >= 85 AND you have a specific diagnosis should you provide a full report with providers.
 `;
 
-        const apiKey = process.env.GEMINI_API_KEY;
-        if (!apiKey) {
-            console.error('GEMINI_API_KEY is not set');
-            return new Response(
-                JSON.stringify({ error: 'Server configuration error: GEMINI_API_KEY is missing' }),
-                { status: 500 }
-            );
-        }
-
-        const genAI = new GoogleGenerativeAI(apiKey);
-        const model = genAI.getGenerativeModel({
-            model: 'gemini-2.5-flash',
+        const model = getGeminiModel({
             systemInstruction,
         });
 
@@ -344,6 +344,7 @@ CRITICAL: Output <thought> FIRST (2–3 short sentences summarising what you see
             }
         }
 
+        // eslint-disable-next-line no-console
         console.log('Starting Gemini stream generation...');
         const result = await model.generateContentStream({
             contents,
@@ -359,12 +360,14 @@ CRITICAL: Output <thought> FIRST (2–3 short sentences summarising what you see
             async start(controller) {
                 const encoder = new TextEncoder();
                 try {
+                    // eslint-disable-next-line no-console
                     console.log('Awaiting first chunk from Gemini...');
                     for await (const chunk of result.stream) {
                         const text = chunk.text();
                         // console.log("Gemini chunk:", text.substring(0, 20) + "...");
                         controller.enqueue(encoder.encode(text));
                     }
+                    // eslint-disable-next-line no-console
                     console.log('Gemini stream completed successfully');
                 } catch (e) {
                     console.error('Error during Gemini stream iteration:', e);
@@ -375,6 +378,21 @@ CRITICAL: Output <thought> FIRST (2–3 short sentences summarising what you see
             },
         });
 
+        const durationMs = Date.now() - startedAt;
+        logAiEvent({
+            endpoint: 'diagnose',
+            status: 'ok',
+            durationMs,
+            meta: {
+                isTextOnly,
+                isFollowUp,
+                hasUserContext,
+                hasImage: Boolean(image),
+                attachmentsCount: attachmentImages.length,
+                historyLength: Array.isArray(history) ? history.length : 0,
+            },
+        });
+
         return new Response(stream, {
             headers: {
                 'Content-Type': 'text/plain; charset=utf-8',
@@ -382,6 +400,16 @@ CRITICAL: Output <thought> FIRST (2–3 short sentences summarising what you see
             },
         });
     } catch (error: any) {
+        const durationMs = Date.now() - startedAt;
+        logAiEvent({
+            endpoint: 'diagnose',
+            status: 'error',
+            durationMs,
+            meta: {
+                error: error?.message || error?.toString?.() || 'Unknown error',
+            },
+        });
+        // eslint-disable-next-line no-console
         console.error('Gemini Diagnosis Error:', error);
         const message = error?.message || error?.toString?.() || 'Failed to diagnose image';
         return new Response(
