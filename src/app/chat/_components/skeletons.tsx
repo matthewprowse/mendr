@@ -2,17 +2,6 @@ import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 
-/** Matches the ProvidersMap container exactly: aspect-[16/10] min-h-[180px]. */
-function MapSkeleton() {
-    return (
-        <div className="w-full overflow-hidden rounded-lg border border-border">
-            <div className="aspect-[16/10] min-h-[180px] w-full">
-                <Skeleton className="h-full w-full rounded-none" />
-            </div>
-        </div>
-    );
-}
-
 /** Skeleton that matches ProviderCard structure exactly for seamless loading transition. */
 function ProviderCardSkeleton() {
     return (
@@ -100,7 +89,6 @@ function OtherProvidersSkeleton() {
 export function ProvidersSkeleton() {
     return (
         <div className="flex flex-col gap-6">
-            <MapSkeleton />
             <ScandiosPickSkeleton />
             <OtherProvidersSkeleton />
         </div>
@@ -109,7 +97,7 @@ export function ProvidersSkeleton() {
 
 /**
  * Full-page skeleton for the image-upload diagnosis flow.
- * Mirrors: uploaded image → thinking block → diagnosis card → map → provider cards.
+ * Mirrors: uploaded image → thinking block → diagnosis card → provider cards.
  */
 export function ChatPageImageSkeleton() {
     return (

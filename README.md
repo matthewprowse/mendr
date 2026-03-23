@@ -1,6 +1,6 @@
 # Scandio
 
-Home maintenance assistant — AI-powered image diagnosis and local provider discovery for homeowners and service professionals.
+Home maintenance assistant — AI-powered image diagnosis and fast local provider suggestions for homeowners.
 
 ## Tech Stack
 
@@ -74,26 +74,31 @@ See `.env.example` for the full list. Never commit `.env` or `.env.local`.
 | `npm run format` | Format code with Prettier    |
 | `npm run format:check` | Check formatting         |
 
-## Project Structure
+## MVP Product Shape
 
-```
-app/
-├── src/
-│   ├── app/           # Next.js App Router (pages, API, layouts)
-│   ├── components/    # Shared UI components
-│   │   └── ui/        # shadcn primitives
-│   ├── lib/           # Utilities, Supabase clients
-│   ├── hooks/         # Custom hooks
-│   └── context/       # React context providers
-├── supabase/          # Schema, RLS
-│   ├── tables.sql
-│   └── rls.sql
-└── docs/
-```
+- **Landing page** (`/`): marketing copy plus a primary call-to-action that starts a new diagnosis.
+- **Chat page** (`/chat/[id]`): single, anonymous chat experience (image + text) for diagnosis and provider suggestions.
+- **APIs**:
+  - `/api/diagnose` — streams AI diagnosis for the current conversation.
+  - `/api/providers` — returns a fast, simplified list of nearby providers from Google Places.
+  - `/api/geocode` — address → lat/lng (Western Cape only, with caching).
+  - `/api/location` — approximate lat/lng from IP as a fallback.
 
-## Coding Guidelines
+There is no separate \"app\" or \"hub\" area in the MVP flow; auth can exist but is not required to use chat.
 
-See [docs/CODING_GUIDELINES.md](../docs/CODING_GUIDELINES.md) for naming, structure, TypeScript, and Supabase conventions.
+## Rate Limiting
+
+To protect costs and abuse without forcing login, we use simple IP-based limits:
+
+- `/api/diagnose`: 50 diagnosis requests per IP per 24 hours.
+- `/api/geocode`: 30 geocode lookups per IP per 24 hours.
+- `/api/location`: 20 IP-based location lookups per IP per 24 hours.
+
+These limits are enforced in-memory per server instance via `app/src/lib/rate-limit.ts`. Tune the `max` values there as needed.
+
+## Conventions
+
+See `app/src/CONVENTIONS.md` for naming, structure, and commenting rules for this project.
 
 ## Deploy
 

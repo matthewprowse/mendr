@@ -6,6 +6,7 @@ import { Message } from './types';
 import { InlineDiagnosisBlock } from './inline-diagnosis-block';
 import { UnrelatedImageCard } from './unrelated-image-card';
 import { UnservicedCategoryCard } from './unserviced-category-card';
+import { openInNewTab } from '@/lib/open-in-new-tab';
 
 export function ChatMessage({
     message,
@@ -70,7 +71,7 @@ export function ChatMessage({
                     className={cn(
                         'text-sm leading-relaxed flex flex-col gap-2',
                         isUser
-                            ? 'bg-secondary text-secondary-foreground rounded-md px-3 py-1.5 max-w-[75%]'
+                            ? 'bg-secondary text-secondary-foreground rounded-md px-3 py-2 max-w-[90%]'
                             : 'text-foreground w-full',
                         (hasDiagnosisBlock || hasRejectedBlock || hasUnservicedBlock) && 'hidden'
                     )}
@@ -122,6 +123,12 @@ export function ChatMessage({
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="block max-w-[200px] max-h-48 rounded-lg overflow-hidden border border-border/50 hover:opacity-95 shrink-0"
+                                onClick={(e) => {
+                                    if (url.startsWith('data:')) {
+                                        e.preventDefault();
+                                        openInNewTab(url);
+                                    }
+                                }}
                             >
                                 <img
                                     src={url}
@@ -138,7 +145,7 @@ export function ChatMessage({
     return (
         <div
             className={cn(
-                'flex flex-col gap-4 w-full mt-3',
+                'flex min-w-0 max-w-full flex-col gap-4 w-full mt-3 overflow-hidden',
                 isUser ? 'items-end' : 'items-start'
             )}
         >
@@ -180,7 +187,7 @@ export function ChatMessage({
             )}
             {/* User messages: wrap text + attachments in one block aligned right */}
             {isUser ? (
-                <div className="flex flex-col gap-2 items-end max-w-[85%]">
+                <div className="flex flex-col gap-2 items-end max-w-[95%] w-full">
                     {userContentBlock}
                 </div>
             ) : (

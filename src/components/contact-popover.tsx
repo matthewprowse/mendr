@@ -13,11 +13,15 @@ import {
     DialogTitle,
 } from '@/components/ui/dialog';
 import { toWhatsAppPhone, isWhatsAppCapablePhone } from '@/lib/utils';
+import { resolveWhatsAppPrefill } from '@/lib/whatsapp-prefill';
+import { toast } from 'sonner';
 
 export type ContactPopoverProps = {
     providerName: string;
     displayName: string;
     phone: string | null | undefined;
+    /** When set, enables the Email row with mailto: */
+    email?: string | null | undefined;
     /** Optional: open state controlled externally (for popover ID patterns). Omit for self-controlled. */
     open?: boolean;
     onOpenChange?: (open: boolean) => void;
@@ -31,12 +35,18 @@ export type ContactPopoverProps = {
     side?: 'top' | 'bottom' | 'left' | 'right';
     /** Alignment of the popover */
     align?: 'start' | 'center' | 'end';
+    /**
+     * Optional profile URL for WhatsApp when there is no saved report (passed to /api/whatsapp-message).
+     * Defaults to window.location.href when resolving prefill.
+     */
+    profileUrlHint?: string;
 };
 
 export function ContactPopover({
     providerName,
     displayName,
     phone,
+    email,
     open: controlledOpen,
     onOpenChange: controlledOnOpenChange,
     label = 'Contact',
@@ -44,6 +54,7 @@ export function ContactPopover({
     onLead,
     side = 'top',
     align = 'start',
+    profileUrlHint,
 }: ContactPopoverProps) {
     const [internalOpen, setInternalOpen] = useState(false);
     const [whatsappDialogOpen, setWhatsappDialogOpen] = useState(false);
@@ -58,6 +69,8 @@ export function ContactPopover({
     const rawPhone = phone;
     const waPhone = toWhatsAppPhone(rawPhone);
     const waCapable = isWhatsAppCapablePhone(rawPhone);
+    const emailTrimmed = typeof email === 'string' ? email.trim() : '';
+    const hasEmail = Boolean(emailTrimmed);
 
     const handleSendWhatsAppSummary = () => {
         if (!waCapable) return;
@@ -69,11 +82,31 @@ export function ContactPopover({
         if (!waPhone || !waCapable) return;
         setWhatsappLoading(true);
         try {
+            const prefill = await resolveWhatsAppPrefill(profileUrlHint ?? '');
+            const msgRes = await fetch('/api/whatsapp-message', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    diagnosis: prefill.diagnosis,
+                    provider_name: displayName || providerName,
+                    trade: prefill.trade,
+                    report_url: prefill.report_url,
+                    profile_url: prefill.profile_url,
+                }),
+            });
+            const msgData = (await msgRes.json().catch(() => ({}))) as { message?: string; error?: string };
+            if (!msgRes.ok || !msgData.message) {
+                throw new Error(msgData.error || 'Could not generate message');
+            }
             onLead?.('whatsapp');
-            window.open(`https://wa.me/${waPhone}`, '_blank');
+            const text = encodeURIComponent(msgData.message);
+            setWhatsappDialogOpen(false);
+            window.open(`https://wa.me/${waPhone}?text=${text}`, '_blank');
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : 'Could not generate WhatsApp message.';
+            toast.error(msg);
         } finally {
             setWhatsappLoading(false);
-            setWhatsappDialogOpen(false);
         }
     };
 
@@ -95,30 +128,25 @@ export function ContactPopover({
                             Recommended
                         </p>
 
-                        {/* Send WhatsApp Summary */}
-                        <Button
-                            variant="secondary"
-                            className="justify-start w-full"
-                            onClick={handleSendWhatsAppSummary}
-                            disabled={!waCapable}
-                            title={
-                                !waCapable && rawPhone
-                                    ? "This number doesn't appear to be a mobile number — WhatsApp requires a mobile number."
-                                    : undefined
-                            }
-                        >
-                            Send WhatsApp Summary
-                        </Button>
-
-                        <Separator className="my-2" />
-
-                        {/* Immediate Assistance / Call */}
-                        {rawPhone && (
+                        {waCapable ? (
                             <Button
-                                variant="ghost"
-                                className="justify-start w-full mb-1"
-                                asChild
+                                variant="secondary"
+                                className="justify-start w-full"
+                                onClick={handleSendWhatsAppSummary}
                             >
+                                Send WhatsApp summary
+                            </Button>
+                        ) : null}
+
+                        {waCapable ? <Separator className="my-2" /> : null}
+
+                        <Button
+                            variant="ghost"
+                            className="justify-start w-full mb-1"
+                            disabled={!rawPhone?.trim()}
+                            asChild={Boolean(rawPhone?.trim())}
+                        >
+                            {rawPhone?.trim() ? (
                                 <a
                                     href={`tel:${rawPhone}`}
                                     onClick={() => {
@@ -127,50 +155,49 @@ export function ContactPopover({
                                     }}
                                     className="flex items-center justify-between w-full"
                                 >
-                                    Immediate Assistance
+                                    Phone
                                 </a>
-                            </Button>
-                        )}
+                            ) : (
+                                <span className="flex w-full items-center justify-start">Phone</span>
+                            )}
+                        </Button>
 
-                        {/* Request Quote */}
                         <Button
                             variant="ghost"
                             className="justify-start"
+                            disabled={!hasEmail}
                             onClick={() => {
+                                if (!hasEmail) return;
                                 onLead?.('email');
                                 setOpen(false);
-                                window.open(
-                                    `mailto:info@${providerName.toLowerCase().replace(/\s+/g, '')}.com`
-                                );
+                                window.open(`mailto:${encodeURIComponent(emailTrimmed)}`, '_blank');
                             }}
                         >
-                            Request Quote
+                            Email
                         </Button>
                     </div>
                 </PopoverContent>
             </Popover>
 
-            {/* WhatsApp confirmation dialog */}
             <Dialog open={whatsappDialogOpen} onOpenChange={setWhatsappDialogOpen}>
                 <DialogContent>
-                    <DialogHeader>
-                        <DialogTitle>Send WhatsApp Summary</DialogTitle>
+                    <DialogHeader className="text-left gap-3 sm:text-left">
+                        <DialogTitle>Send WhatsApp summary</DialogTitle>
                         <DialogDescription>
                             {waCapable ? (
                                 <>
-                                    We&apos;ve generated a summary for{' '}
-                                    <span className="font-medium">{displayName}</span>. You will
-                                    open WhatsApp to send it.
+                                    We&apos;ll draft a short message for{' '}
+                                    <span className="font-medium">{displayName}</span> using your latest
+                                    Scandio scan when available, then open WhatsApp for you to send it.
                                     <blockquote className="mt-2 border-l-2 border-input pl-3 text-muted-foreground text-sm">
-                                        We try to ensure all numbers are available on WhatsApp.
-                                        If you&apos;re having trouble, please try phoning them
-                                        directly.
+                                        Mobile numbers only — landlines can&apos;t receive WhatsApp. If
+                                        something fails, try calling them directly.
                                     </blockquote>
                                 </>
                             ) : (
                                 <>
-                                    This provider&apos;s number doesn&apos;t appear to be a mobile
-                                    number. WhatsApp requires a mobile number.
+                                    This number doesn&apos;t look like a South African mobile (WhatsApp
+                                    needs a mobile number, not a landline).
                                 </>
                             )}
                         </DialogDescription>
@@ -180,10 +207,10 @@ export function ContactPopover({
                             Cancel
                         </Button>
                         <Button
-                            onClick={confirmWhatsApp}
+                            onClick={() => void confirmWhatsApp()}
                             disabled={!waPhone || !waCapable || whatsappLoading}
                         >
-                            {whatsappLoading ? 'Generating…' : 'Continue'}
+                            {whatsappLoading ? 'Preparing…' : 'Continue'}
                         </Button>
                     </DialogFooter>
                 </DialogContent>

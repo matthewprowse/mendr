@@ -7,7 +7,7 @@ export default async function ChatIndexPage({
 }) {
     const params = await searchParams;
     if (params.id) {
-        redirect(`/chat/${params.id}`);
+        redirect(`/scan/${params.id}`);
     }
     redirect('/');
 }

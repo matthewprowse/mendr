@@ -1,18 +1,16 @@
-/**
- * Pricing constants for Scandio reports.
- * Western Cape home services industry rates.
- */
-
-/** Call-out fee per kilometre (ZAR). Based on typical Western Cape home service rates. */
-export const CALLOUT_RATE_PER_KM = 18;
+export const CALLOUT_RATE_PER_KM = 12;
+export const MIN_CALLOUT_FEE = 350;
 
 /**
- * Calculates the exact call-out fee based on driving distance.
- * @param distanceMeters - Distance from provider to customer in metres
- * @returns Exact fee in ZAR, formatted (e.g. "R277")
+ * Converts route distance (meters) to a rounded Rand call-out estimate.
  */
 export function calculateCalloutFee(distanceMeters: number): string {
-    const km = distanceMeters / 1000;
-    const amount = Math.round(km * CALLOUT_RATE_PER_KM);
-    return `R${amount.toLocaleString('en-ZA')}`;
+    if (!Number.isFinite(distanceMeters) || distanceMeters < 0) {
+        return `R${MIN_CALLOUT_FEE}`;
+    }
+
+    const distanceKm = distanceMeters / 1000;
+    const variableFee = distanceKm * CALLOUT_RATE_PER_KM;
+    const total = Math.max(MIN_CALLOUT_FEE, Math.round(variableFee));
+    return `R${total.toLocaleString('en-ZA')}`;
 }

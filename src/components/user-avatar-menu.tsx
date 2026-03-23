@@ -8,7 +8,7 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { useAuth } from '@/context/auth-context';
-import { Heart, Layout, LogOut, Settings, iconSize } from '@/lib/icons';
+import { LogOut } from '@/lib/icons';
 
 export function UserAvatarMenu() {
     const [open, setOpen] = useState(false);
@@ -65,75 +65,13 @@ export function UserAvatarMenu() {
                         </p>
                     </div>
                 </div>
-                <div className="flex flex-col gap-1 p-1 -mx-2 pb-3 -mt-1">
-                    <Button
-                        variant="ghost"
-                        className="h-8 w-full justify-start px-3 text-sm font-normal text-muted-foreground hover:text-foreground transition-all duration-250"
-                        asChild
-                    >
-                        <Link href="/app/home" onClick={() => setOpen(false)}>
-                            Home
-                        </Link>
-                    </Button>
-                    <Button
-                        variant="ghost"
-                        className="h-8 w-full justify-start px-3 text-sm font-normal text-muted-foreground hover:text-foreground transition-all duration-250"
-                        asChild
-                    >
-                        <Link href="/app/scans" onClick={() => setOpen(false)}>
-                            Scans
-                        </Link>
-                    </Button>
-                    <Button
-                        variant="ghost"
-                        className="h-8 w-full justify-start px-3 text-sm font-normal text-muted-foreground hover:text-foreground transition-all duration-250"
-                        asChild
-                    >
-                        <Link href="/app/favourites" onClick={() => setOpen(false)}>
-                            Favourites
-                        </Link>
-                    </Button>
-                    <Button
-                        variant="ghost"
-                        className="h-8 w-full justify-start px-3 text-sm font-normal text-muted-foreground hover:text-foreground transition-all duration-250"
-                        asChild
-                    >
-                        <Link href="/app/settings" onClick={() => setOpen(false)}>
-                            Settings
-                        </Link>
-                    </Button>
-                </div>
-
-                <div className="flex flex-col gap-1 border-t border-input/75 pt-3 pb-3 -mx-1">
-                    <Button
-                        variant="ghost"
-                        className="h-8 w-full justify-start px-3 text-sm font-normal text-muted-foreground hover:text-foreground transition-all duration-250"
-                        asChild
-                    >
-                        <Link href="/app/settings" onClick={() => setOpen(false)}>
-                            Terms
-                        </Link>
-                    </Button>
-                    <Button
-                        variant="ghost"
-                        className="h-8 w-full justify-start px-3 text-sm font-normal text-muted-foreground hover:text-foreground transition-all duration-250"
-                        asChild
-                    >
-                        <Link href="/app/settings" onClick={() => setOpen(false)}>
-                            Privacy Policy
-                        </Link>
-                    </Button>
-                </div>
-
                 <div className="flex flex-col gap-1 border-t border-input/75 pt-3 -mx-1 -mb-1">
                     <Button
                         variant="secondary"
                         className="h-8 w-full justify-start px-3 text-sm font-normal transition-all duration-250"
-                        asChild
+                        onClick={handleSignOut}
                     >
-                        <Link href="/app/settings" onClick={() => setOpen(false)}>
-                            Log Out
-                        </Link>
+                        Log Out
                     </Button>
                 </div>
 

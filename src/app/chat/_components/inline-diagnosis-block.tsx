@@ -9,7 +9,6 @@ import { sanitizeAiContent } from '@/lib/utils';
 import { toTitleCase } from '@/lib/services';
 import { DiagnosisData, Provider } from './types';
 import { ProviderCard } from './provider-card';
-import { ProvidersMap } from './providers-map';
 import { ServiceTradeLink } from './service-trade-link';
 import { ProvidersSkeleton } from './skeletons';
 import { ReportCard } from './report-card';
@@ -84,6 +83,13 @@ export function InlineDiagnosisBlock({
     const isUnrelated = diagnosis.rejected || diagnosis.requires_clarification;
     const confidence = diagnosis.confidence ?? 100;
     const canShowProviders = !isUnrelated && trade && trade !== 'N/A' && confidence >= 85;
+    const hasProvidersOrLoading =
+        (providers?.length ?? 0) > 0 ||
+        (emergingProviders?.length ?? 0) > 0 ||
+        (nearbyOnlyProviders?.length ?? 0) > 0 ||
+        isLoadingProviders;
+    const hasDiagnosisToShow = diagnosis?.diagnosis && !isUnrelated;
+    const showProvidersSection = hasDiagnosisToShow;
     const hasLocation =
         typeof userLocation?.lat === 'number' &&
         typeof userLocation?.lng === 'number' &&
@@ -91,7 +97,7 @@ export function InlineDiagnosisBlock({
         !isNaN(userLocation.lng);
 
     return (
-        <div className="w-full space-y-6 animate-in fade-in duration-300">
+        <div className="w-full max-w-full min-w-0 space-y-6 animate-in fade-in duration-300 overflow-hidden">
             {diagnosis.diagnosis && !diagnosis.requires_clarification && (
                 <div className="space-y-6">
                     <div className="mt-3 space-y-2">
@@ -105,26 +111,16 @@ export function InlineDiagnosisBlock({
                             </p>
                         )}
                     </div>
-                    {diagnosis.estimated_cost && diagnosis.estimated_cost !== 'N/A' && (
-                        <div className="flex flex-col gap-1">
-                            <h3 className="text-md font-semibold text-foreground">
-                                Estimated Repair Cost
-                            </h3>
-                            <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">
-                                {sanitizeAiContent(diagnosis.estimated_cost)}
-                            </p>
-                        </div>
-                    )}
                 </div>
             )}
 
-            {canShowProviders && (
+            {showProvidersSection && (
                 <div className="flex flex-col gap-3">
                     <div className="flex flex-col gap-2">
                         {hasLocation && userLocation?.address ? (
                             <>
-                                <div className="flex items-center gap-2 min-w-0">
-                                    <span className="text-sm font-medium truncate min-w-0">
+                                <div className="flex items-center gap-2 min-w-0 max-w-full overflow-hidden">
+                                    <span className="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-sm font-medium" title={userLocation.address}>
                                         {userLocation.address}
                                     </span>
                                     {onAddressSelect && (
@@ -280,21 +276,6 @@ export function InlineDiagnosisBlock({
                         }
                         return (
                         <div className="flex flex-col gap-6">
-                            {((providers?.length ?? 0) + (emergingProviders?.length ?? 0) + (nearbyOnlyProviders?.length ?? 0)) > 0 &&
-                                (process.env.NEXT_PUBLIC_GOOGLE_MAPS_EMBED_KEY ||
-                                    process.env.NEXT_PUBLIC_GOOGLE_PLACES_API_KEY) && (
-                                    <ProvidersMap
-                                        apiKey={
-                                            process.env.NEXT_PUBLIC_GOOGLE_MAPS_EMBED_KEY ||
-                                            process.env.NEXT_PUBLIC_GOOGLE_PLACES_API_KEY ||
-                                            ''
-                                        }
-                                        providers={providers ?? []}
-                                        emergingProviders={emergingProviders ?? []}
-                                        nearbyOnlyProviders={nearbyOnlyProviders ?? []}
-                                        userLocation={userLocation}
-                                    />
-                                )}
                             {(() => {
                                 const list = providers ?? [];
                                 const favourite = list.find((p) => p.isFavourite);

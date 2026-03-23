@@ -1,6 +1,5 @@
 import { useState, useMemo } from 'react';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
-import { StarFill } from '@/lib/icons';
 import { Badge } from '@/components/ui/badge';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import {
@@ -17,7 +16,6 @@ import { toast } from 'sonner';
 import Link from 'next/link';
 import { Provider, type Service } from './types';
 import { toWhatsAppPhone, isWhatsAppCapablePhone, formatBusinessName } from '@/lib/utils';
-import { FavouriteButton } from '@/components/favourite-button';
 
 function toTitleCase(s: string): string {
     return s
@@ -27,7 +25,7 @@ function toTitleCase(s: string): string {
         .join(' ');
 }
 
-/** Shorten summary and remove leading provider name (2–3 sentences max). */
+/** Shorten summary and remove leading provider name (up to 5 sentences). */
 function formatCustomerSummary(summary: string, providerName: string): string {
     if (!summary?.trim()) return summary || '';
     let text = summary.trim();
@@ -37,8 +35,8 @@ function formatCustomerSummary(summary: string, providerName: string): string {
         text = text.replace(new RegExp(`^${escaped}[\\s.,]+`, 'i'), '').trim();
     }
     const sentences = text.split(/(?<=[.!?])\s+/).filter(Boolean);
-    if (sentences.length <= 3) return text;
-    return sentences.slice(0, 3).join(' ').trim();
+    if (sentences.length <= 5) return text;
+    return sentences.slice(0, 5).join(' ').trim();
 }
 
 const VISIBLE_BADGE_COUNT = 3;
@@ -207,7 +205,7 @@ export function ProviderCard({
     const rawPhone = provider.phoneInternational || provider.phone;
     const waPhone = toWhatsAppPhone(rawPhone);
     const waCapable = isWhatsAppCapablePhone(rawPhone);
-
+    const providerDetailId = provider.place_id || provider.id;
     const logLead = async (contactType: 'whatsapp' | 'phone' | 'email') => {
         try {
             await fetch('/api/leads', {
@@ -272,102 +270,83 @@ export function ProviderCard({
     };
 
     return (
-        <Card className="flex flex-col h-full border-input shadow-none p-4 rounded-md">
-            <CardHeader className="flex flex-col gap-1.5 p-0">
+        <Card className="flex flex-col h-full border-input/50 shadow-none p-4 rounded-lg min-w-0 overflow-hidden">
+            <CardHeader className="flex flex-col gap-2 p-0">
                 <div className="flex flex-col gap-1 w-full min-w-0">
                     <div className="flex justify-between items-center gap-2 w-full min-w-0">
                         <div className="min-w-0 flex-1">
                             <CardTitle
-                                className="text-lg font-semibold truncate"
+                                className="text-lg font-semibold leading-tight tracking-tight truncate"
                                 title={displayName}
                             >
                                 {displayName}
                             </CardTitle>
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
-                            <StarFill className="size-4 text-yellow-500 fill-yellow-500" />
                             <div className="flex items-center gap-1">
+                                <span className="text-base leading-none text-yellow-400" aria-hidden="true">
+                                    ★
+                                </span>
                                 <span className="text-sm font-semibold">
                                     {provider.rating?.toFixed(1) || 'N/A'}
                                 </span>
                                 <span className="text-xs text-muted-foreground">
-                                    {provider.ratingCount || 0} Reviews
+                                    ({provider.ratingCount || 0} Reviews)
                                 </span>
                             </div>
-                            <FavouriteButton
-                                providerId={provider.id}
-                                placeId={provider.place_id}
-                                providerName={displayName}
-                                variant="icon"
-                                className="-mr-1"
-                            />
                         </div>
                     </div>
-                    <div className="flex flex-wrap gap-2">
-                        <ServiceBadges
-                            services={provider.services || []}
-                            trade={trade}
-                            isOpen={provider.isOpen}
-                            providerName={displayName}
-                        />
-                    </div>
+                    {(provider.services?.length ?? 0) > 0 ? (
+                        <div className="flex flex-col gap-1.5">
+                            <div className="flex flex-wrap gap-2">
+                                <ServiceBadges
+                                    services={provider.services || []}
+                                    trade={trade}
+                                    isOpen={provider.isOpen}
+                                    providerName={displayName}
+                                />
+                            </div>
+                        </div>
+                    ) : null}
                 </div>
             </CardHeader>
-            <div className="flex items-center gap-1 w-full text-xs text-muted-foreground min-w-0">
-                <span className="truncate min-w-0" title={provider.address}>
+            <div className="flex min-w-0 max-w-full items-center gap-1 overflow-hidden text-xs text-muted-foreground">
+                <span className="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap" title={provider.address}>
                     {provider.address}
                 </span>
                 {distance && (
-                    <span className="flex-none whitespace-nowrap">
+                    <span className="flex-none whitespace-nowrap shrink-0">
                         {' '}
                         • {String(distance).endsWith('km') ? distance : `${distance} km`}
                     </span>
                 )}
             </div>
-            <div className="flex flex-col gap-2">
-                <div className="flex items-center justify-between gap-2">
-                    <p className="text-sm font-medium">Customer Summary</p>
-                </div>
-                <blockquote className="border-l-2 border-input pl-3">
-                    <p className="text-sm text-muted-foreground leading-relaxed">
-                        {(() => {
-                            const base = formatCustomerSummary(
-                                provider.summary || '',
-                                provider.name || displayName
-                            );
-
-                            // Treat very short or obviously generic strings as missing summaries
-                            const isLikelyGeneric =
-                                !base ||
-                                base.length < 20 ||
-                                (/professional\b/i.test(base) && base.split(/\s+/).length <= 6);
-
-                            if (!isLikelyGeneric) return base;
-
-                            const firstReviewText =
-                                provider.reviews?.find((r) => r.text && r.text.trim())?.text?.trim() ??
-                                '';
-
-                            if (firstReviewText) {
-                                const sentences = firstReviewText
-                                    .split(/(?<=[.!?])\s+/)
-                                    .filter(Boolean);
-                                const snippet = sentences.slice(0, 2).join(' ').trim();
-                                return snippet ? `Customers say: ${snippet}` : firstReviewText;
-                            }
-
-                            return 'Customer feedback will appear here as reviews are added.';
-                        })()}
-                    </p>
-                </blockquote>
-            </div>
+            {(() => {
+                const base = formatCustomerSummary(
+                    provider.summary || '',
+                    provider.name || displayName
+                );
+                const displaySummary = base?.trim() ? base.trim() : null;
+                if (!displaySummary) return null;
+                return (
+                    <div className="flex flex-col gap-2">
+                        <p className="text-base text-foreground font-medium">Customer Summary</p>
+                        <p className="text-sm text-muted-foreground leading-relaxed">
+                            {displaySummary}
+                        </p>
+                    </div>
+                );
+            })()}
             <div className="flex flex-wrap items-center gap-2 mt-auto">
                 <Popover
                     open={contactPopoverOpen}
                     onOpenChange={setContactPopoverOpen}
                 >
                     <PopoverTrigger asChild>
-                        <Button variant="default" className="flex-1 min-w-0">
+                        <Button
+                            variant="default"
+                            className="flex-1 min-w-0 h-10 px-6 rounded-full text-base"
+                        >
                             Contact
                         </Button>
                     </PopoverTrigger>
@@ -382,7 +361,7 @@ export function ProviderCard({
                             </p>
                             <Button
                                 variant="secondary"
-                                className="justify-start w-full"
+                                className="justify-start w-full h-9 rounded-full"
                                 onClick={handleSendWhatsAppSummary}
                                 disabled={!waCapable}
                                 title={
@@ -399,7 +378,7 @@ export function ProviderCard({
                             {provider.phone && (
                                 <Button
                                     variant="ghost"
-                                    className="justify-start w-full mb-1"
+                                    className="justify-start w-full mb-1 h-9 rounded-full"
                                     asChild
                                 >
                                     <a
@@ -413,7 +392,7 @@ export function ProviderCard({
                             )}
                             <Button
                                 variant="ghost"
-                                className="justify-start"
+                                className="justify-start h-9 rounded-full"
                                 onClick={() => {
                                     logLead('email');
                                     window.open(
@@ -455,12 +434,17 @@ export function ProviderCard({
                             </DialogDescription>
                         </DialogHeader>
                         <DialogFooter>
-                            <Button variant="outline" onClick={() => setWhatsappDialogOpen(false)}>
+                            <Button
+                                variant="outline"
+                                className="h-10 px-4 rounded-full text-base"
+                                onClick={() => setWhatsappDialogOpen(false)}
+                            >
                                 Cancel
                             </Button>
                             <Button
                                 onClick={confirmWhatsAppSummary}
                                 disabled={!waPhone || !waCapable || whatsappLoading}
+                                className="h-10 px-6 rounded-full text-base"
                             >
                                 {whatsappLoading ? 'Generating…' : 'Continue'}
                             </Button>
@@ -470,21 +454,21 @@ export function ProviderCard({
                 {provider.website && (
                     <Button
                         variant="secondary"
-                        className="flex-1 min-w-0"
+                        className="flex-1 min-w-0 h-10 px-6 rounded-full text-base"
                         onClick={() => window.open(provider.website!, '_blank')}
                     >
                         Website
                     </Button>
                 )}
-                {(provider.id ?? provider.place_id) && (
-                    <Button variant="secondary" className="flex-1 min-w-0" asChild>
-                        <a
-                            href={`/pro/${encodeURIComponent(provider.place_id ?? provider.id ?? '')}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                        >
-                            View Account
-                        </a>
+                {providerDetailId && (
+                    <Button
+                        variant="outline"
+                        className="flex-1 min-w-0 h-10 px-6 rounded-full text-base"
+                        asChild
+                    >
+                        <Link href={`/pro/${encodeURIComponent(providerDetailId)}`}>
+                            View profile
+                        </Link>
                     </Button>
                 )}
             </div>

@@ -101,6 +101,14 @@ export function isWhatsAppCapablePhone(phone: string | undefined | null): boolea
     return false;
 }
 
+/** Returns a usable http(s) URL for linking, or null if empty. */
+export function normalizeWebsiteUrl(raw: string | null | undefined): string | null {
+    if (!raw?.trim()) return null;
+    const t = raw.trim();
+    if (/^https?:\/\//i.test(t)) return t;
+    return `https://${t}`;
+}
+
 /** Format unknown error for API responses. Returns user-safe message. */
 export function formatApiError(error: unknown): string {
     if (error instanceof Error) return error.message;

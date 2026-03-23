@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { setOptions, importLibrary } from '@googlemaps/js-api-loader';
-import { ArrowLeft, ArrowRight, StarFill } from '@/lib/icons';
+import { ArrowLeft, ArrowRight } from '@/lib/icons';
 import { formatBusinessName } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
@@ -19,7 +19,18 @@ type ProvidersMapProps = {
     hideFloatingCard?: boolean;
     /** Controls which badges show in the top-left: ranking tags (default) or service-type filters. */
     mode?: 'rank' | 'service';
+    /** Optional controlled active index; when provided, map follows this index instead of its own internal state. */
+    activeIndex?: number;
+    /** Notified when the active provider index changes (via map markers, tags, or internal controls). */
+    onActiveIndexChange?: (index: number) => void;
+    /** Optional custom wrapper className (defaults to inset card used on landing/report pages). */
+    className?: string;
+    /** Optional class for the map canvas area (defaults to aspect + responsive height). */
+    mapInnerClassName?: string;
 };
+
+const DEFAULT_MAP_INNER_CLASS =
+    'relative w-full aspect-[4/3] sm:aspect-auto sm:h-[460px]';
 
 function getDistanceText(
     provider: Provider,
@@ -80,6 +91,10 @@ export function ProvidersMap({
     conversationId,
     hideFloatingCard = false,
     mode = 'rank',
+    activeIndex: controlledActiveIndex,
+    onActiveIndexChange,
+    className,
+    mapInnerClassName = DEFAULT_MAP_INNER_CLASS,
 }: ProvidersMapProps) {
     const containerRef = useRef<HTMLDivElement>(null);
     const mapRef = useRef<google.maps.Map | null>(null);
@@ -89,7 +104,7 @@ export function ProvidersMap({
 
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const [activeIndex, setActiveIndex] = useState(0);
+    const [internalActiveIndex, setInternalActiveIndex] = useState(0);
     const [liveDuration, setLiveDuration] = useState<string>('');
 
     const allProviders = [...(providers ?? []), ...(emergingProviders ?? []), ...(nearbyOnlyProviders ?? [])];
@@ -115,6 +130,30 @@ export function ProvidersMap({
     }, [allValidProviders, activeServiceFilter, mode]);
 
     const total = validProviders.length;
+
+    const currentIndex = useMemo(
+        () =>
+            typeof controlledActiveIndex === 'number'
+                ? Math.max(0, Math.min(controlledActiveIndex, Math.max(total - 1, 0)))
+                : internalActiveIndex,
+        [controlledActiveIndex, internalActiveIndex, total]
+    );
+
+    const setIndex = useCallback(
+        (next: number) => {
+            if (total === 0) {
+                if (!onActiveIndexChange) setInternalActiveIndex(0);
+                return;
+            }
+            const bounded = ((next % total) + total) % total;
+            if (onActiveIndexChange) {
+                onActiveIndexChange(bounded);
+            } else {
+                setInternalActiveIndex(bounded);
+            }
+        },
+        [onActiveIndexChange, total]
+    );
 
     // Indices for "Closest", "Best Rated", "Most Reviewed", "Scandio's Pick"
     const tagIndices = useMemo(() => {
@@ -291,7 +330,9 @@ export function ProvidersMap({
         const map = mapRef.current;
         if (!map) return;
 
-        markersRef.current.forEach((m) => { m.map = null; });
+        markersRef.current.forEach((m) => {
+            m.map = null;
+        });
         markersRef.current = [];
 
         const bounds = new google.maps.LatLngBounds();
@@ -322,7 +363,7 @@ export function ProvidersMap({
                 content: makeMarkerContent(isFirst ? '#EA4335' : '#64748b', isFirst ? 1.8 : 1.2),
                 zIndex: isFirst ? 10 : 1,
             });
-            marker.addListener('click', () => setActiveIndex(i));
+            marker.addListener('click', () => setIndex(i));
             markersRef.current.push(marker);
         });
 
@@ -344,26 +385,26 @@ export function ProvidersMap({
             }
         }
 
-        setActiveIndex(0);
+        setIndex(0);
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [loading, validProviders.length, userLocation?.lat, userLocation?.lng]);
+    }, [loading, validProviders.length, userLocation?.lat, userLocation?.lng, setIndex]);
 
     useEffect(() => {
         if (loading || !mapRef.current) return;
         setLiveDuration('');
-        updateMarkerIcons(activeIndex);
-        drawDirections(activeIndex);
-    }, [activeIndex, loading, drawDirections, updateMarkerIcons]);
+        updateMarkerIcons(currentIndex);
+        drawDirections(currentIndex);
+    }, [currentIndex, loading, drawDirections, updateMarkerIcons]);
 
     const goTo = useCallback(
         (next: number) => {
             if (total === 0) return;
-            setActiveIndex(((next % total) + total) % total);
+            setIndex(next);
         },
-        [total]
+        [setIndex, total]
     );
 
-    const activeProvider = validProviders[activeIndex] ?? null;
+    const activeProvider = validProviders[currentIndex] ?? null;
     const displayName = activeProvider ? formatBusinessName(activeProvider.name) : '';
     const distanceText = activeProvider ? getDistanceText(activeProvider, userLocation) : '';
     const durationText = activeProvider?.durationText ?? '';
@@ -405,10 +446,13 @@ export function ProvidersMap({
                     <div className="flex items-center gap-1.5 flex-wrap mt-1 text-xs">
                         {activeProvider.rating != null && (
                             <span className="flex items-center gap-0.5">
-                                <StarFill className="size-4 text-yellow-500 fill-yellow-500 shrink-0" />
-                                <span className="font-medium text-foreground">{activeProvider.rating.toFixed(1)}</span>
+                                <span className="font-medium text-foreground">
+                                    {activeProvider.rating.toFixed(1)}
+                                </span>
                                 {activeProvider.ratingCount != null && (
-                                    <span className="text-muted-foreground">({activeProvider.ratingCount} Reviews)</span>
+                                    <span className="text-muted-foreground">
+                                        ({activeProvider.ratingCount} Reviews)
+                                    </span>
                                 )}
                             </span>
                         )}
@@ -430,14 +474,14 @@ export function ProvidersMap({
                 {total > 1 && (
                     <div className="flex items-center gap-1 shrink-0 mt-0.5">
                         <button
-                            onClick={() => goTo(activeIndex - 1)}
+                            onClick={() => goTo(currentIndex - 1)}
                             className="flex size-7 items-center justify-center rounded-md bg-secondary text-secondary-foreground transition-colors hover:bg-secondary/80 hover:text-foreground"
                             aria-label="Previous provider"
                         >
                             <ArrowLeft className="size-3.5" />
                         </button>
                         <button
-                            onClick={() => goTo(activeIndex + 1)}
+                            onClick={() => goTo(currentIndex + 1)}
                             className="flex size-7 items-center justify-center rounded-md bg-secondary text-secondary-foreground transition-colors hover:bg-secondary/80 hover:text-foreground"
                             aria-label="Next provider"
                         >
@@ -455,21 +499,16 @@ export function ProvidersMap({
                                 key={i}
                                 onClick={() => goTo(i)}
                                 aria-label={`Go to provider ${i + 1}`}
-                                className={`size-1.5 rounded-full transition-colors ${i === activeIndex ? 'bg-foreground' : 'bg-muted-foreground/40 hover:bg-muted-foreground/60'}`}
+                                className={`size-1.5 rounded-full transition-colors ${
+                                    i === currentIndex
+                                        ? 'bg-foreground'
+                                        : 'bg-muted-foreground/40 hover:bg-muted-foreground/60'
+                                }`}
                             />
                         ))}
                     </div>
                 ) : <div />}
 
-                {providerUrl && (
-                    <a
-                        href={providerUrl}
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center justify-center rounded-md bg-secondary text-secondary-foreground px-3 h-8 text-sm font-medium hover:bg-secondary/80 transition-colors shrink-0"
-                    >
-                        View Account
-                    </a>
-                )}
             </div>
         </>
     );
@@ -484,10 +523,14 @@ export function ProvidersMap({
             : []),
     ];
 
+    const wrapperClass =
+        className ??
+        'w-[92%] mx-auto sm:w-full max-w-full overflow-hidden rounded-xl border border-border bg-background';
+
     return (
-        <div className="w-full max-w-full overflow-hidden rounded-xl border border-border bg-background">
+        <div className={wrapperClass}>
             {/* Map */}
-            <div className="relative w-full aspect-[4/3] sm:aspect-auto sm:h-[460px]">
+            <div className={mapInnerClassName}>
                 {/* Tags or service filters as badge cards – top left of map */}
                 {!hideFloatingCard && !loading && validProviders.length > 0 && (
                     <div className="absolute top-3 left-3 z-10 flex flex-wrap gap-2">
@@ -497,7 +540,7 @@ export function ProvidersMap({
                                     type="button"
                                     onClick={() => {
                                         setActiveServiceFilter('all');
-                                        setActiveIndex(0);
+                                        setIndex(0);
                                     }}
                                 >
                                     <Badge
@@ -519,10 +562,10 @@ export function ProvidersMap({
                                         <button
                                             key={label}
                                             type="button"
-                                            onClick={() => {
-                                                setActiveServiceFilter(label);
-                                                setActiveIndex(0);
-                                            }}
+                                                onClick={() => {
+                                                    setActiveServiceFilter(label);
+                                                    setIndex(0);
+                                                }}
                                             aria-pressed={isActive}
                                         >
                                             <Badge
@@ -543,12 +586,12 @@ export function ProvidersMap({
                             </>
                         ) : (
                             tagButtons.map(({ key, label, index }) => {
-                                const isActive = activeIndex === index;
+                                const isActive = currentIndex === index;
                                 return (
                                     <button
                                         key={key}
                                         type="button"
-                                        onClick={() => setActiveIndex(index)}
+                                        onClick={() => setIndex(index)}
                                         aria-pressed={isActive}
                                     >
                                         <Badge

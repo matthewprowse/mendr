@@ -45,6 +45,26 @@ export function ReportDetailContent({ reportId }: ReportDetailContentProps) {
         duration_text: string;
     } | null>(null);
 
+    useEffect(() => {
+        if (typeof window === 'undefined' || !id?.trim() || error) return;
+        if (!reportData) return;
+        try {
+            const key = 'scandio_my_reports';
+            const raw = window.localStorage.getItem(key);
+            const list: Array<{ conversationId: string; title: string; date: string }> = raw ? JSON.parse(raw) : [];
+            if (!list.some((r) => r.conversationId === id)) {
+                list.unshift({
+                    conversationId: id,
+                    title: (reportData.diagnosis as any)?.diagnosis ? `Report: ${String((reportData.diagnosis as any).diagnosis).slice(0, 40)}…` : `Report ${new Date().toLocaleDateString()}`,
+                    date: new Date().toISOString(),
+                });
+                window.localStorage.setItem(key, JSON.stringify(list.slice(0, 50)));
+            }
+        } catch {
+            // Ignore
+        }
+    }, [id, reportData, error]);
+
     const loadReport = useCallback(async () => {
         if (!id) return;
         setLoading(true);

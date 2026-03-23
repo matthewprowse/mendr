@@ -1,0 +1,567 @@
+'use client';
+
+import { useEffect, useState, useCallback, useRef } from 'react';
+import { useRouter } from 'next/navigation';
+import { getSupabase } from '@/lib/supabase';
+import { getScanSessionHandoff, clearScanSessionHandoff } from '@/lib/scan-session-store';
+import type { DiagnosisData } from '@/app/chat/_components/types';
+import { Textarea } from '@/components/ui/textarea';
+import { Button } from '@/components/ui/button';
+import { AppHeader } from '@/components/app-header';
+import { toast } from 'sonner';
+import { compressImage } from '@/lib/image-compression';
+import { sanitizeAiContent } from '@/lib/utils';
+import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
+import { Separator } from '@/components/ui/separator';
+
+type DiagnosisPageClientProps = {
+    conversationId: string;
+};
+
+type ConversationRow = {
+    id: string;
+    image_url: string | null;
+    diagnosis: DiagnosisData | null;
+    initial_image_description: string | null;
+};
+
+function parseDiagnosisFromResponse(text: string): DiagnosisData | null {
+    const jsonBlockMatch = text.match(/<json>([\s\S]*?)<\/json>/i);
+    const candidate = jsonBlockMatch?.[1] ?? text;
+    // Try to find the first balanced JSON object if there is surrounding text.
+    const braceMatch = candidate.match(/\{[\s\S]*\}/);
+    const toParse = braceMatch ? braceMatch[0] : candidate;
+    try {
+        const parsed = JSON.parse(toParse);
+        if (parsed && typeof parsed === 'object' && parsed.diagnosis) {
+            return parsed as DiagnosisData;
+        }
+    } catch {
+        // ignore
+    }
+    return null;
+}
+
+export function DiagnosisPageClient({ conversationId }: DiagnosisPageClientProps) {
+    const router = useRouter();
+    const supabase = getSupabase();
+
+    const [loading, setLoading] = useState(true);
+    const [imageSrc, setImageSrc] = useState<string | null>(null);
+    const [diagnosis, setDiagnosis] = useState<DiagnosisData | null>(null);
+    const [serviceType, setServiceType] = useState<string | null>(null);
+    const [initialPrompt, setInitialPrompt] = useState<string>('');
+    const [serviceCatalog, setServiceCatalog] = useState<string[]>([]);
+    const [refineText, setRefineText] = useState('');
+    const [refineMode, setRefineMode] = useState(false);
+    const [refining, setRefining] = useState(false);
+    const [confirming, setConfirming] = useState(false);
+    const refineFileInputRef = useRef<HTMLInputElement | null>(null);
+
+    const loadConversation = useCallback(
+        async (id: string): Promise<ConversationRow | null> => {
+            const { data, error } = await supabase
+                .from('conversations')
+                .select('id,image_url,diagnosis,initial_image_description')
+                .eq('id', id)
+                .maybeSingle();
+            if (error) {
+                if (process.env.NODE_ENV === 'development') {
+                    // eslint-disable-next-line no-console
+                    console.warn('[DiagnosisPage] loadConversation error', error);
+                }
+                return null;
+            }
+            if (!data) return null;
+            return {
+                id: data.id,
+                image_url: (data as any).image_url ?? null,
+                diagnosis: (data as any).diagnosis ?? null,
+                initial_image_description: (data as any).initial_image_description ?? null,
+            };
+        },
+        [supabase]
+    );
+
+    const saveConversationDiagnosis = useCallback(
+        async (diag: DiagnosisData | null, img: string | null, prompt?: string) => {
+            const deviceType =
+                typeof navigator !== 'undefined' && /Mobi|Android/i.test(navigator.userAgent)
+                    ? 'mobile'
+                    : 'desktop';
+            try {
+                await supabase
+                    .from('conversations')
+                    .upsert({
+                        id: conversationId,
+                        title: diag?.diagnosis || 'New Diagnosis',
+                        image_url: img,
+                        diagnosis: diag,
+                        initial_image_description: (prompt ?? '').trim() || null,
+                        device: deviceType,
+                        user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : '',
+                    })
+                    .select('id')
+                    .single();
+            } catch {
+                // Swallow persistence errors here; the user can still see the diagnosis.
+            }
+        },
+        [conversationId, supabase]
+    );
+
+    const runInitialDiagnosis = useCallback(
+        async (img: string, prompt: string, selectedService: string | null) => {
+            try {
+                let catalog = serviceCatalog;
+                if (catalog.length === 0) {
+                    const { data } = await supabase
+                        .from('services')
+                        .select('label')
+                        .eq('active', true)
+                        .order('sort_order', { ascending: true });
+                    catalog = Array.isArray(data)
+                        ? data
+                              .map((r: any) => String(r?.label ?? '').trim())
+                              .filter((x: string) => x.length > 0)
+                        : [];
+                    if (catalog.length > 0) setServiceCatalog(catalog);
+                }
+                if (catalog.length === 0) {
+                    toast.error('Could not load services catalog.');
+                    return null;
+                }
+
+                const body: Record<string, unknown> = {
+                    image: img,
+                    serviceCatalog: catalog,
+                };
+                if (prompt.trim()) body.textQuery = prompt.trim();
+                if (selectedService) {
+                    body.userSelectedTrade = {
+                        trade: selectedService,
+                        diagnosis: `${selectedService} services`,
+                    };
+                }
+                const res = await fetch('/api/diagnose', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body),
+                });
+                const text = await res.text();
+                if (!res.ok) {
+                    let errMsg = 'Failed to start analysis';
+                    try {
+                        const parsed = JSON.parse(text);
+                        if (parsed?.error) errMsg = parsed.error;
+                    } catch {
+                        // ignore
+                    }
+                    toast.error(errMsg);
+                    return null;
+                }
+                const diag = parseDiagnosisFromResponse(text);
+                if (!diag) {
+                    toast.error('Could not understand the diagnosis response.');
+                    return null;
+                }
+                setDiagnosis(diag);
+                await saveConversationDiagnosis(diag, img, prompt);
+                return diag;
+            } catch (e) {
+                if (process.env.NODE_ENV === 'development') {
+                    // eslint-disable-next-line no-console
+                    console.error('[DiagnosisPage] runInitialDiagnosis error', e);
+                }
+                toast.error("We couldn't start the diagnosis. Please try again.");
+                return null;
+            }
+        },
+        [saveConversationDiagnosis, serviceCatalog, supabase]
+    );
+
+    const runRefinedDiagnosis = useCallback(
+        async (extraText: string) => {
+            if (!diagnosis || !imageSrc) return;
+            setRefining(true);
+            try {
+                let catalog = serviceCatalog;
+                if (catalog.length === 0) {
+                    const { data } = await supabase
+                        .from('services')
+                        .select('label')
+                        .eq('active', true)
+                        .order('sort_order', { ascending: true });
+                    catalog = Array.isArray(data)
+                        ? data
+                              .map((r: any) => String(r?.label ?? '').trim())
+                              .filter((x: string) => x.length > 0)
+                        : [];
+                    if (catalog.length > 0) setServiceCatalog(catalog);
+                }
+                if (catalog.length === 0) {
+                    toast.error('Could not load services catalog.');
+                    return;
+                }
+
+                const body: Record<string, unknown> = {
+                    image: imageSrc,
+                    textQuery: [initialPrompt, extraText].filter(Boolean).join('\n\n'),
+                    serviceCatalog: catalog,
+                    previousDiagnosis: {
+                        diagnosis: diagnosis.diagnosis,
+                        trade: diagnosis.trade,
+                        action_required: diagnosis.action_required,
+                        estimated_cost: diagnosis.estimated_cost,
+                    },
+                    diagnosisRejected: true,
+                };
+                const res = await fetch('/api/diagnose', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body),
+                });
+                const text = await res.text();
+                if (!res.ok) {
+                    let errMsg = 'Failed to refine diagnosis';
+                    try {
+                        const parsed = JSON.parse(text);
+                        if (parsed?.error) errMsg = parsed.error;
+                    } catch {
+                        // ignore
+                    }
+                    toast.error(errMsg);
+                    return;
+                }
+                const diag = parseDiagnosisFromResponse(text);
+                if (!diag) {
+                    toast.error('Could not understand the updated diagnosis.');
+                    return;
+                }
+                setDiagnosis(diag);
+                setRefineText('');
+                await saveConversationDiagnosis(diag, imageSrc, initialPrompt);
+            } catch (e) {
+                if (process.env.NODE_ENV === 'development') {
+                    // eslint-disable-next-line no-console
+                    console.error('[DiagnosisPage] runRefinedDiagnosis error', e);
+                }
+                toast.error("We couldn't update the diagnosis. Please try again.");
+            } finally {
+                setRefining(false);
+            }
+        },
+        [diagnosis, imageSrc, initialPrompt, saveConversationDiagnosis, serviceCatalog, supabase]
+    );
+
+    useEffect(() => {
+        let cancelled = false;
+        const loadServices = async () => {
+            const { data } = await supabase
+                .from('services')
+                .select('label')
+                .eq('active', true)
+                .order('sort_order', { ascending: true });
+            if (cancelled) return;
+            const labels = Array.isArray(data)
+                ? data
+                      .map((r: any) => String(r?.label ?? '').trim())
+                      .filter((x: string) => x.length > 0)
+                : [];
+            setServiceCatalog(labels);
+        };
+        void loadServices();
+        return () => {
+            cancelled = true;
+        };
+    }, [supabase]);
+
+    const handleRefineUpload = useCallback(
+        async (file: File) => {
+            if (!file) return;
+            const isImage = file.type.startsWith('image/');
+            const isVideo = file.type.startsWith('video/');
+            if (!isImage && !isVideo) return;
+            try {
+                const reader = new FileReader();
+                reader.onloadend = async () => {
+                    const base64 = reader.result as string;
+                    const finalDataUrl = isImage ? await compressImage(base64) : base64;
+                    setImageSrc(finalDataUrl);
+                };
+                reader.readAsDataURL(file);
+            } catch {
+                toast.error('Could not process that file. Please try another photo or video.');
+            }
+        },
+        []
+    );
+
+    useEffect(() => {
+        let cancelled = false;
+        const bootstrap = async () => {
+            setLoading(true);
+            try {
+                const handoff = getScanSessionHandoff();
+                if (
+                    handoff &&
+                    handoff.conversationId === conversationId &&
+                    handoff.primaryAssetDataUrl
+                ) {
+                    clearScanSessionHandoff();
+                    if (cancelled) return;
+                    setImageSrc(handoff.primaryAssetDataUrl);
+                    setInitialPrompt(handoff.initialPrompt ?? '');
+                    setServiceType(handoff.selectedService ?? null);
+                    const diag = await runInitialDiagnosis(
+                        handoff.primaryAssetDataUrl,
+                        handoff.initialPrompt ?? '',
+                        handoff.selectedService
+                    );
+                    if (!cancelled && !diag) {
+                        // If diagnosis failed, send back to welcome so they can retry.
+                        router.replace('/welcome');
+                        return;
+                    }
+                    return;
+                }
+
+                // No handoff: try to load an existing conversation.
+                const existing = await loadConversation(conversationId);
+                if (cancelled) return;
+                if (existing) {
+                    setImageSrc(existing.image_url);
+                    if (existing.initial_image_description) {
+                        setInitialPrompt(existing.initial_image_description);
+                    }
+                    if (existing.diagnosis) {
+                        setDiagnosis(existing.diagnosis);
+                        setServiceType(existing.diagnosis.trade ?? null);
+                    } else if (existing.image_url) {
+                        await runInitialDiagnosis(
+                            existing.image_url,
+                            existing.initial_image_description ?? '',
+                            null
+                        );
+                    }
+                }
+            } finally {
+                if (!cancelled) setLoading(false);
+            }
+        };
+        void bootstrap();
+        return () => {
+            cancelled = true;
+        };
+    }, [conversationId, loadConversation, router, runInitialDiagnosis]);
+
+    const handleConfirmYes = async () => {
+        if (!diagnosis) return;
+        setConfirming(true);
+        try {
+            await saveConversationDiagnosis(diagnosis, imageSrc, initialPrompt);
+            const key = `pending_diagnosis_image_url:${conversationId}`;
+            try {
+                sessionStorage.removeItem(key);
+            } catch {}
+            try {
+                localStorage.removeItem(key);
+            } catch {}
+            router.push(`/match/${encodeURIComponent(conversationId)}`);
+        } finally {
+            setConfirming(false);
+        }
+    };
+
+    const guidanceText = (() => {
+        if (!diagnosis) return '';
+        const cleanedMessage = sanitizeAiContent(diagnosis.message ?? '').trim();
+        if (diagnosis.requires_clarification || diagnosis.rejected) {
+            if (cleanedMessage) return cleanedMessage;
+            return `To refine this diagnosis, add more detail below and, if possible, upload clearer photos showing the full context of the issue.`;
+        }
+        return diagnosis.thinking || cleanedMessage || '';
+    })();
+
+    return (
+        <main className="flex min-h-screen flex-col bg-background">
+            <AppHeader
+                showBack
+                showNewScan
+                onNewScanClick={() => router.push('/welcome')}
+            />
+
+            <div className="mx-auto flex w-full max-w-md flex-1 flex-col px-4 pb-24 pt-6 sm:max-w-lg">
+                <section className="flex flex-1 flex-col gap-6">
+                    <header className="flex flex-col gap-2">
+                        <h1 className="text-2xl text-foreground font-bold tracking-tight">
+                            Review Diagnosis
+                        </h1>
+                        <p className="text-sm text-muted-foreground">
+                            Confirm that this looks correct, or help us improve it by adding more
+                            context. Once confirmed, we&apos;ll match you with the best providers in
+                            your area.
+                        </p>
+                    </header>
+
+                    {loading && !diagnosis && (
+                        <div className="mt-4 flex flex-1 items-center justify-center">
+                            <div className="flex flex-col items-center gap-3">
+                                <div className="h-8 w-8 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent" />
+                                <p className="text-sm text-muted-foreground">
+                                    Analysing Home Maintenance Issue...
+                                </p>
+                            </div>
+                        </div>
+                    )}
+
+                    {!loading && !imageSrc && !diagnosis && (
+                        <div className="mt-4 flex flex-1 items-center justify-center">
+                            <div className="space-y-3 text-center">
+                                <p className="text-sm font-medium text-foreground">
+                                    We couldn&apos;t find this diagnosis.
+                                </p>
+                                <p className="text-xs text-muted-foreground">
+                                    Please start again from the welcome step.
+                                </p>
+                                <Button size="sm" onClick={() => router.push('/welcome')}>
+                                    Back to welcome
+                                </Button>
+                            </div>
+                        </div>
+                    )}
+
+                    {(imageSrc || diagnosis) && (
+                        <section aria-label="Photo and diagnosis" className="space-y-3">
+                            <div className="space-y-3">
+                                <Badge variant="secondary">
+                                    {serviceType ?? diagnosis?.trade ?? 'Not Specified'}
+                                </Badge>
+                                <p className="text-sm text-foreground -mt-1">
+                                    {initialPrompt.trim() ? initialPrompt.trim() : ''}
+                                </p>
+                            </div>
+                            {imageSrc && (
+                                <div className="relative w-full overflow-hidden rounded-lg border border-input/50 bg-background">
+                                    <div className="aspect-[4/5] w-full">
+                                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                                        <img
+                                            src={imageSrc}
+                                            className="h-full w-full rounded-lg object-cover"
+                                        />
+                                    </div>
+                                </div>
+                            )}
+                            {guidanceText && (
+                                <div>
+                                    <p className="text-sm text-muted-foreground">
+                                        {guidanceText}
+                                    </p>
+
+                                </div>
+                            )}
+                            {diagnosis && (
+                                <div>
+                                    <h2 className="text-xl font-semibold">
+                                        {diagnosis.diagnosis || 'Estimated Diagnosis'}
+                                    </h2>
+                                    {diagnosis.action_required && (
+                                        <p className="text-sm text-foreground mt-2">
+                                            {diagnosis.action_required}
+                                        </p>
+                                    )}
+                                </div>
+                            )}
+                        </section>
+                    )}
+
+                    {/* refine input is handled in the sticky footer when refine mode is active */}
+                </section>
+            </div>
+
+            {diagnosis && !diagnosis.requires_clarification && !diagnosis.rejected && !refineMode && (
+                <footer className="fixed inset-x-0 bottom-0 z-20">
+                    <div className="mx-auto flex w-full max-w-md items-center justify-between gap-3 px-4 py-3 sm:max-w-lg bg-background">
+                        <p className="text-sm text-muted-foreground font-medium truncate">
+                            Next: Provider Matches
+                        </p>
+                        <div className="flex items-center gap-2">
+                            <Button
+                                type="button"
+                                variant="outline"
+                                
+                                onClick={() => setRefineMode(true)}
+                            >
+                                Refine Diagnosis
+                            </Button>
+                            <Button
+                                type="button"
+                                onClick={handleConfirmYes}
+                                disabled={confirming}
+                            >
+                                {confirming ? 'Saving…' : 'Continue'}
+                            </Button>
+                        </div>
+                    </div>
+                </footer>
+            )}
+
+            {diagnosis && (diagnosis.requires_clarification || diagnosis.rejected || refineMode) && (
+                <footer className="fixed inset-x-0 bottom-0 z-20">
+                    <div className="mx-auto flex w-full max-w-md flex-col gap-3 px-4 py-3 sm:max-w-lg bg-background">
+                        <Label className="text-sm text-foreground font-medium">Additional Information</Label>
+                        <div className="space-y-2">
+                            <Textarea
+                                value={refineText}
+                                onChange={(e) => setRefineText(e.target.value)}
+                                className="min-h-[96px] resize-none text-sm"
+                            />
+                            <div className="flex items-center justify-between gap-2 mt-3">
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={() => {
+                                        setRefineMode(false);
+                                        setRefineText('');
+                                    }}
+                                    disabled={refining}
+                                >
+                                    Cancel
+                                </Button>
+                                <div className="flex items-center gap-2">
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        onClick={() => refineFileInputRef.current?.click()}
+                                        disabled={refining}
+                                    >
+                                        Replace Photo
+                                    </Button>
+                                    <Button
+                                        type="button"
+                                        onClick={() => runRefinedDiagnosis(refineText)}
+                                        disabled={refining || !refineText.trim()}
+                                    >
+                                        {refining ? 'Sending…' : 'Send'}
+                                    </Button>
+                                </div>
+                            </div>
+                            <input
+                                ref={refineFileInputRef}
+                                type="file"
+                                accept="image/*,video/*"
+                                className="hidden"
+                                onChange={(e) => {
+                                    const file = e.target.files?.[0];
+                                    if (file) handleRefineUpload(file);
+                                    e.target.value = '';
+                                }}
+                            />
+                        </div>
+                    </div>
+                </footer>
+            )}
+        </main>
+    );
+}

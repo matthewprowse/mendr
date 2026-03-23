@@ -9,7 +9,6 @@ import { sanitizeAiContent } from '@/lib/utils';
 import { toTitleCase } from '@/lib/services';
 import { DiagnosisData, Provider } from './types';
 import { ProviderCard } from './provider-card';
-import { ProvidersMap } from './providers-map';
 import { ServiceTradeLink } from './service-trade-link';
 import { ProvidersSkeleton } from './skeletons';
 
@@ -111,16 +110,6 @@ export function DiagnosisResponseCard({
                             </p>
                         )}
                     </div>
-                    {diagnosis.estimated_cost && diagnosis.estimated_cost !== 'N/A' && (
-                        <div className="flex flex-col gap-1">
-                            <h3 className="text-md font-semibold text-foreground">
-                                Estimated Repair Cost
-                            </h3>
-                            <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">
-                                {sanitizeAiContent(diagnosis.estimated_cost)}
-                            </p>
-                        </div>
-                    )}
                     {canShowProviders &&
                         diagnosisConfirmed === null &&
                         onConfirmYes &&
@@ -147,8 +136,8 @@ export function DiagnosisResponseCard({
                     <div className="flex flex-col gap-2">
                         {hasLocation && userLocation?.address ? (
                             <>
-                                <div className="flex items-center gap-2 min-w-0">
-                                    <span className="text-sm font-medium truncate min-w-0">
+                                <div className="flex min-w-0 max-w-full items-center gap-2 overflow-hidden">
+                                    <span className="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-sm font-medium" title={userLocation.address}>
                                         {userLocation.address}
                                     </span>
                                     <Popover
@@ -270,23 +259,6 @@ export function DiagnosisResponseCard({
                             </p>
                         ) : (
                             <div className="flex flex-col gap-6">
-                                {(providers.length +
-                                    emergingProviders.length +
-                                    (nearbyOnlyProviders?.length ?? 0)) > 0 &&
-                                    (process.env.NEXT_PUBLIC_GOOGLE_MAPS_EMBED_KEY ||
-                                        process.env.NEXT_PUBLIC_GOOGLE_PLACES_API_KEY) && (
-                                        <ProvidersMap
-                                            apiKey={
-                                                process.env.NEXT_PUBLIC_GOOGLE_MAPS_EMBED_KEY ||
-                                                process.env.NEXT_PUBLIC_GOOGLE_PLACES_API_KEY ||
-                                                ''
-                                            }
-                                            providers={providers}
-                                            emergingProviders={emergingProviders}
-                                            nearbyOnlyProviders={nearbyOnlyProviders}
-                                            userLocation={userLocation}
-                                        />
-                                    )}
                                 {(() => {
                                     const favourite = providers.find((p) => p.isFavourite);
                                     const others = providers.filter((p) => !p.isFavourite);

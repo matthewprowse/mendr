@@ -37,7 +37,8 @@ const emptySingle = { data: null, error: null };
 const dummyFrom = (table: string) => {
     const chain = {
         eq: () => chain,
-        order: () => Promise.resolve(emptyResult),
+        /** Must return `chain` so callers can chain multiple `.order()` calls (e.g. gallery sort). */
+        order: () => chain,
         in: () => Promise.resolve(emptyResult),
         maybeSingle: () => Promise.resolve(emptySingle),
         single: () => Promise.resolve(emptySingle),

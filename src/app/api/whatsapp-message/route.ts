@@ -1,157 +1,109 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getGeminiModel } from '@/lib/ai-client';
-import { aiConfig } from '@/lib/ai-config';
-import { logAiEvent } from '@/lib/ai-logging';
 
-function buildWhatsAppPrompt(issueHint: string, providerName: string, reportUrl?: string | null): string {
-    return `You are composing a short WhatsApp message. A homeowner will send this to a service provider to request a quote. Follow the template below exactly.
+type Body = {
+    diagnosis?: string;
+    provider_name?: string;
+    trade?: string;
+    action_required?: string;
+    estimated_cost?: string;
+    report_url?: string;
+    profile_url?: string;
+};
 
-STRICT RULES:
-- Use British English (e.g. "recognised", "organise", "colour").
-- No em dashes (—), no en dashes (–). Use a comma or a full stop instead.
-- No bullet points, no bold, no markdown.
-- No corporate speak. Keep it natural and direct.
-- Do not add details that are not in the template or data fields below.
-- Do not diagnose or speculate. The homeowner is asking the provider to come and assess.
-- Output ONLY the message text. No quotes, no preamble.
-
-TEMPLATE (fill in the bracketed fields using the data below — keep everything else word for word):
-
-Hi [PROVIDER FIRST NAME],
-
-I used Scandio to help identify an issue with [ISSUE]. The app suggested I get in touch with you to come and take a proper look and assist with the repair.
-
-Could you let me know when you are available to visit and give me a quote?
-
----
-
-*Scandio Job Report*
-I have attached a Scandio report below. It includes my contact details, location, photos of the issue, and an initial assessment from the app. It should give you everything you need before you arrive.
-
-[REPORT URL LINE — only include if a report URL is provided]
-
-Sent via Scandio.
-
-DATA:
-- Provider name (use first name or full name): ${providerName}
-- Issue (derive a natural short phrase from this, e.g. "a gate motor fault", "a blocked drain", "an electrical issue"): ${issueHint}
-- Report URL: ${reportUrl || ''}
-
-INSTRUCTIONS FOR FILLING IN THE TEMPLATE:
-- [PROVIDER FIRST NAME]: Use the first word of the provider name if it looks like a person's name. If it is a business name, use the full business name.
-- [ISSUE]: Write a short natural phrase describing the issue (e.g. "a gate motor fault", "a plumbing issue in my bathroom"). Derive it only from the issue field above.
-- [REPORT URL LINE]: If a report URL is provided, write exactly: "View the full report here: [the URL]". If no URL is provided, omit this line entirely.
-- Keep the "---" separator and the "*Scandio Job Report*" heading exactly as shown.`;
-}
-
-function buildStaticWhatsAppMessage(issueHint: string, providerName: string, reportUrl?: string | null): string {
-    const providerFirst =
-        providerName?.trim().split(/\s+/)[0] || 'there';
-
-    const lines = [
-        `Hi ${providerFirst},`,
-        '',
-        `I used Scandio to help identify an issue with ${issueHint || 'a home maintenance problem'}. The app suggested I get in touch with you to come and take a proper look and assist with the repair.`,
-        '',
-        'Could you let me know when you are available to visit and give me a quote?',
-        '',
-        '---',
-        '',
-        '*Scandio Job Report*',
-        'I have attached a Scandio report below. It includes my contact details, location, photos of the issue, and an initial assessment from the app. It should give you everything you need before you arrive.',
-    ];
-
-    if (reportUrl) {
-        lines.push('', `View the full report here: ${reportUrl}`);
+function buildFallbackMessage(input: {
+    diagnosis: string;
+    provider_name: string;
+    trade: string;
+    action_required: string;
+    estimated_cost: string;
+    report_url: string;
+    profile_url: string;
+}): string {
+    const lines: string[] = [];
+    lines.push(`Hi, I'm messaging about work I need help with on Scandio.`);
+    lines.push('');
+    lines.push(`Business: ${input.provider_name}`);
+    if (input.trade) lines.push(`Trade: ${input.trade}`);
+    if (input.diagnosis && input.diagnosis !== 'Home repair or maintenance') {
+        lines.push('');
+        lines.push(`Context: ${input.diagnosis.slice(0, 500)}${input.diagnosis.length > 500 ? '…' : ''}`);
     }
-
-    lines.push('', 'Sent via Scandio.');
-
+    if (input.action_required) lines.push(`Action: ${input.action_required.slice(0, 200)}`);
+    if (input.estimated_cost) lines.push(`Estimated cost (from Scandio): ${input.estimated_cost}`);
+    lines.push('');
+    if (input.report_url) {
+        lines.push(`My Scandio report: ${input.report_url}`);
+    } else if (input.profile_url) {
+        lines.push(`I found you on Scandio: ${input.profile_url}`);
+    }
+    lines.push('');
+    lines.push(`Could you help with a quote or next steps?`);
     return lines.join('\n');
 }
 
+/**
+ * POST /api/whatsapp-message
+ * Builds a short WhatsApp-ready message (Gemini when configured, else template).
+ */
 export async function POST(req: NextRequest) {
     try {
-        const startedAt = Date.now();
-        const body = await req.json();
-        const { diagnosis, provider_name, trade, report_url } = body;
+        const body = (await req.json()) as Body;
+        const provider_name = String(body.provider_name || 'the business').trim() || 'the business';
+        const diagnosis = String(body.diagnosis || '').trim() || 'Home repair or maintenance';
+        const trade = String(body.trade || '').trim();
+        const action_required = String(body.action_required || '').trim();
+        const estimated_cost = String(body.estimated_cost || '').trim();
+        const report_url = String(body.report_url || '').trim();
+        const profile_url = String(body.profile_url || '').trim();
 
-        if (!diagnosis || !provider_name) {
-            return NextResponse.json(
-                { error: 'diagnosis and provider_name are required' },
-                { status: 400 }
-            );
-        }
+        const fallback = buildFallbackMessage({
+            diagnosis,
+            provider_name,
+            trade,
+            action_required,
+            estimated_cost,
+            report_url,
+            profile_url,
+        });
 
-        // Derive a short issue description from the diagnosis and trade
-        // e.g. "a gate motor fault" or "a plumbing issue"
-        const issueHint = trade && trade !== 'N/A' ? trade.toLowerCase() : diagnosis.toLowerCase();
-        const useAi = aiConfig.enableWhatsappAiMessage;
-
-        if (!useAi) {
-            const fallback = buildStaticWhatsAppMessage(issueHint, provider_name, report_url);
-            const durationMs = Date.now() - startedAt;
-            logAiEvent({
-                endpoint: 'whatsapp',
-                status: 'ok',
-                durationMs,
-                meta: {
-                    usedAi: false,
-                    usedFallback: true,
-                    hasReportUrl: Boolean(report_url),
-                },
-            });
+        const apiKey = process.env.GEMINI_API_KEY;
+        if (!apiKey) {
             return NextResponse.json({ message: fallback });
         }
 
         try {
             const model = getGeminiModel();
-            const prompt = buildWhatsAppPrompt(issueHint, provider_name, report_url);
+
+            const prompt = `You write short WhatsApp messages for South African homeowners contacting home-service businesses.
+British English. Warm and practical. No markdown or bullet lists. Under 900 characters.
+Include the report or profile link verbatim if provided. Do not invent facts.
+
+Write ONE message the customer can send to "${provider_name}".
+
+Context:
+- What they need / diagnosis: ${diagnosis}
+${trade ? `- Trade: ${trade}` : ''}
+${action_required ? `- Action: ${action_required}` : ''}
+${estimated_cost ? `- Cost note: ${estimated_cost}` : ''}
+${report_url ? `- Their Scandio report URL (include exactly): ${report_url}` : ''}
+${!report_url && profile_url ? `- Scandio profile URL (include exactly): ${profile_url}` : ''}
+
+Reply with only the message text, nothing else.`;
+
             const result = await model.generateContent(prompt);
-            let text = result.response
-                .text()
-                .trim()
-                .replace(/^["']|["']$/g, '')
-                // Remove any em/en dashes the model sneaks in despite instructions
-                .replace(/\s*[—–]\s*/g, ', ');
-
-            const durationMs = Date.now() - startedAt;
-            logAiEvent({
-                endpoint: 'whatsapp',
-                status: 'ok',
-                durationMs,
-                meta: {
-                    usedAi: true,
-                    usedFallback: false,
-                    hasReportUrl: Boolean(report_url),
-                },
+            const text = result.response.text().trim();
+            if (!text) {
+                return NextResponse.json({ message: fallback });
+            }
+            return NextResponse.json({
+                message: text.length > 4000 ? text.slice(0, 3990) + '…' : text,
             });
-
-            return NextResponse.json({ message: text });
-        } catch (e: any) {
-            const fallback = buildStaticWhatsAppMessage(issueHint, provider_name, report_url);
-            const durationMs = Date.now() - startedAt;
-            logAiEvent({
-                endpoint: 'whatsapp',
-                status: 'error',
-                durationMs,
-                meta: {
-                    usedAi: true,
-                    usedFallback: true,
-                    hasReportUrl: Boolean(report_url),
-                    error: e?.message || 'Failed to generate message with AI; used fallback',
-                },
-            });
-            // eslint-disable-next-line no-console
-            console.error('WhatsApp message generation error (AI, fallback used):', e);
+        } catch {
             return NextResponse.json({ message: fallback });
         }
-    } catch (e: any) {
-        // eslint-disable-next-line no-console
-        console.error('WhatsApp message generation error:', e);
-        return NextResponse.json(
-            { error: e?.message || 'Failed to generate message' },
-            { status: 500 }
-        );
+    } catch (e) {
+        const msg = e instanceof Error ? e.message : 'Failed to generate message';
+        return NextResponse.json({ error: msg }, { status: 500 });
     }
 }

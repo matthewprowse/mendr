@@ -5,20 +5,27 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft } from '@/lib/icons';
 import { Button } from '@/components/ui/button';
-import { UserAvatarMenu } from '@/components/user-avatar-menu';
 
 interface AppHeaderProps {
     imageSrc?: string | null;
     showViewImage?: boolean;
     showBack?: boolean;
+    showNewScan?: boolean;
+    onNewScanClick?: () => void;
 }
 
-export function AppHeader({ imageSrc, showViewImage = true, showBack = false }: AppHeaderProps) {
+export function AppHeader({
+    imageSrc,
+    showViewImage = true,
+    showBack = false,
+    showNewScan = false,
+    onNewScanClick,
+}: AppHeaderProps) {
     const router = useRouter();
 
     return (
-        <header className="sticky top-0 z-50 bg-background">
-            <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
+        <header className="sticky top-0 z-50 border-b border-border/40 bg-background/80 backdrop-blur-md">
+            <div className="mx-auto flex h-14 max-w-md items-center justify-between px-4">
                 <div className="flex items-center gap-1">
                     {showBack && (
                         <Button
@@ -35,22 +42,36 @@ export function AppHeader({ imageSrc, showViewImage = true, showBack = false }: 
                         <NextImage
                             src="/logo.svg"
                             alt="Scandio"
-                            width={36}
-                            height={36}
-                            className="h-9 w-9 shrink-0 rounded-lg"
+                            width={28}
+                            height={28}
+                            className="h-7 w-7 shrink-0 rounded-lg"
                         />
-                        <span className="font-semibold">Scandio</span>
+                        <span className="text-sm font-semibold tracking-tight">Scandio</span>
                     </Link>
                 </div>
 
                 <div className="flex items-center gap-2">
                     {imageSrc && showViewImage && (
-                        <Button variant="secondary" onClick={() => window.open(imageSrc, '_blank')}>
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 rounded-full text-xs"
+                            onClick={() => window.open(imageSrc, '_blank')}
+                        >
                             View Image
                         </Button>
                     )}
-
-                    <UserAvatarMenu />
+                    {showNewScan && (
+                        <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="h-8 rounded-full text-xs"
+                            onClick={onNewScanClick}
+                        >
+                            New Scan
+                        </Button>
+                    )}
                 </div>
             </div>
         </header>

@@ -15,25 +15,42 @@ export async function getServices(): Promise<Service[]> {
     // This data depends on request cookies (via Supabase), so opt out of Next.js caching.
     noStore();
 
-    const timeout = new Promise<Service[]>((_, reject) =>
-        setTimeout(() => reject(new Error('getServices timeout')), SERVICES_FETCH_TIMEOUT_MS)
-    );
-    const fetchServices = async (): Promise<Service[]> => {
-        const supabase = await createSupabaseServerClient();
-        const { data, error } = await supabase
-            .from('services')
-            .select('id, label, search_query')
-            .eq('active', true);
-        if (error) {
-            console.error('getServices error:', error);
-            return [];
-        }
-        return data ?? [];
-    };
     try {
-        return await Promise.race([fetchServices(), timeout]);
+        const timeout = new Promise<Service[]>((resolve) =>
+            setTimeout(() => resolve([]), SERVICES_FETCH_TIMEOUT_MS)
+        );
+
+        const fetchServices = async (): Promise<Service[]> => {
+            try {
+                const supabase = await createSupabaseServerClient();
+                const { data, error } = await supabase
+                    .from('services')
+                    .select('id, label, search_query')
+                    .eq('active', true);
+                if (error) {
+                    if (process.env.NODE_ENV === 'development') {
+                        console.warn('getServices error:', error);
+                    }
+                    return [];
+                }
+                return data ?? [];
+            } catch (e) {
+                // Important: never throw from a server component dependency (RSC can fail hard).
+                if (process.env.NODE_ENV === 'development') {
+                    console.warn('getServices failed:', e);
+                }
+                return [];
+            }
+        };
+
+        // Ensure fetch never results in an unhandled rejection, even if it loses the race.
+        const safeFetch = fetchServices().catch(() => []);
+
+        return await Promise.race([safeFetch, timeout]);
     } catch (e) {
-        console.error('getServices failed:', e);
+        if (process.env.NODE_ENV === 'development') {
+            console.warn('getServices failed:', e);
+        }
         return [];
     }
 }

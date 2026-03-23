@@ -202,7 +202,7 @@ export const ChatFooter = forwardRef<
                                 placeholder={
                                     isDisabled
                                         ? 'Processing...'
-                                        : "Scandio's AI Assistant — ask follow-up questions or add details."
+                                        : 'Ask a follow-up or add details…'
                                 }
                                 disabled={isDisabled || isResponding}
                                 className={cn(

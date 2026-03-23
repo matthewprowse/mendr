@@ -79,4 +79,6 @@ export interface Provider {
     durationText?: string;
     /** Cached Google reviews (up to 50); used for display and linking to pro page. */
     reviews?: Array<{ text?: string; rating?: number | null; authorName?: string | null; relativePublishTimeDescription?: string | null }>;
+    /** Metadata about how the summary was generated. */
+    summaryMeta?: { kind: 'reviews'; pos: number; neg: number; neu: number } | null;
 }

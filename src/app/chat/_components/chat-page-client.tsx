@@ -11,8 +11,8 @@ import { getLocation, clearLocation } from '@/lib/location-store';
 import { getImageData, clearImageData } from '@/lib/image-store';
 import { supabase } from '@/lib/supabase';
 import { compressImage } from '@/lib/image-compression';
+import { openInNewTab } from '@/lib/open-in-new-tab';
 import { toast } from 'sonner';
-import { AppHeader } from '@/components/app-header';
 
 import { sanitizeAiContent, tryParseDiagnosisJson, extractMessageFromRaw } from '@/lib/utils';
 import { tradeToServiceLabel } from '@/lib/services';
@@ -28,11 +28,9 @@ import { ChatPageImageSkeleton, ChatPageTradeSkeleton } from './skeletons';
 export interface ChatPageClientProps {
     conversationId: string;
     initialTrade?: string;
-    /** When true, omit AppHeader (used when embedded in app shell) */
-    embedInApp?: boolean;
 }
 
-export function ChatPageClient({ conversationId, initialTrade, embedInApp }: ChatPageClientProps) {
+export function ChatPageClient({ conversationId, initialTrade }: ChatPageClientProps) {
     const router = useRouter();
     const { user } = useAuth();
     const id = conversationId;
@@ -40,6 +38,7 @@ export function ChatPageClient({ conversationId, initialTrade, embedInApp }: Cha
     // Don't read store during render to avoid hydration mismatch (server has no store; client might).
     // Store is applied in useEffect so first paint matches server.
     const [imageSrc, setImageSrc] = useState<string | null>(null);
+    const [imagePublicUrl, setImagePublicUrl] = useState<string | null>(null);
     const [initialImageDescription, setInitialImageDescription] = useState<string | null>(null);
     const [diagnosis, setDiagnosis] = useState<DiagnosisData | null>(null);
     const [messages, setMessages] = useState<Message[]>([]);
@@ -78,6 +77,7 @@ export function ChatPageClient({ conversationId, initialTrade, embedInApp }: Cha
 
     // Use stored image immediately so we never block on loading when coming from home page
     const displayImage = imageSrc;
+    const displayImageHref = imagePublicUrl || imageSrc;
     // --- Refs ---
 
     // Pre-select service when coming from URL with trade (e.g. /chat/xxx?trade=Plumbing)
@@ -110,6 +110,7 @@ export function ChatPageClient({ conversationId, initialTrade, embedInApp }: Cha
                 const base64 = reader.result as string;
                 const finalDataUrl = isImage ? await compressImage(base64) : base64;
                 setImageSrc(finalDataUrl);
+                setImagePublicUrl(null);
                 setHasStartedDiagnosis(false);
                 diagnosisStartedRef.current = false;
                 setIsDiagnosing(true);
@@ -411,10 +412,10 @@ export function ChatPageClient({ conversationId, initialTrade, embedInApp }: Cha
                 });
                 clearTimeout(timeoutId);
                 const data = await res.json();
-                if (res.ok && data.providers) {
-                    const finalProviders = data.providers as Provider[];
-                    const finalEmerging = (data.emergingProviders ?? []) as Provider[];
-                    const finalNearbyOnly = (data.nearbyOnlyProviders ?? []) as Provider[];
+                if (res.ok) {
+                    const finalProviders = (Array.isArray(data.providers) ? data.providers : []) as Provider[];
+                    const finalEmerging = (Array.isArray(data.emergingProviders) ? data.emergingProviders : []) as Provider[];
+                    const finalNearbyOnly = (Array.isArray(data.nearbyOnlyProviders) ? data.nearbyOnlyProviders : []) as Provider[];
 
                     setMessages((prev) => {
                         const next = [...prev];
@@ -512,7 +513,7 @@ export function ChatPageClient({ conversationId, initialTrade, embedInApp }: Cha
         [providerRadiusKm]
     );
 
-    const useLocationAndFetchProviders = useCallback(
+    const locationAndFetchProviders = useCallback(
         async (
             lat: number,
             lng: number,
@@ -560,6 +561,7 @@ export function ChatPageClient({ conversationId, initialTrade, embedInApp }: Cha
                         (geocodeResult!.data as { error?: string }).error ||
                             'Location must be in Western Cape, South Africa'
                     );
+                    if (opts?.messageIndex != null) setIsLoadingProvidersForMessage(null);
                     return;
                 }
                 const address = (geocodeResult!.data as { address?: string }).address || 'Current Location';
@@ -611,15 +613,20 @@ export function ChatPageClient({ conversationId, initialTrade, embedInApp }: Cha
                             );
                         }
                     }
-                } else if (providerResult && !providerResult.res.ok) {
-                    const err = (providerResult.data as { error?: string }).error;
-                    toast.error(err || "Couldn't load providers. Try 'Use my location' again.");
+                    if (opts?.messageIndex != null) setIsLoadingProvidersForMessage(null);
+                } else {
+                    if (providerResult && !providerResult.res.ok) {
+                        const err = (providerResult.data as { error?: string }).error;
+                        toast.error(err || "Couldn't load providers. Try 'Use my location' again.");
+                    }
+                    if (opts?.messageIndex != null) setIsLoadingProvidersForMessage(null);
                 }
             } catch (e) {
                 console.error('Error getting location:', e);
                 toast.error(
                     'Could not verify location. Please try searching for an address in Western Cape.'
                 );
+                if (opts?.messageIndex != null) setIsLoadingProvidersForMessage(null);
             }
         },
         [saveConversation, messages, updateMessageProviders, providerRadiusKm]
@@ -735,6 +742,7 @@ export function ChatPageClient({ conversationId, initialTrade, embedInApp }: Cha
                         setIsLoadingDirectProviders(false);
                         setDirectTradeSelection(null);
                     }
+                    if (opts?.messageIndex != null) setIsLoadingProvidersForMessage(null);
                     if (err.code === 1) {
                         toast.error(
                             "Location was denied. Tap your browser's lock/info icon next to the address bar and allow location for this site, then try again."
@@ -763,20 +771,20 @@ export function ChatPageClient({ conversationId, initialTrade, embedInApp }: Cha
                 !isNaN(userLocation.lat) &&
                 !isNaN(userLocation.lng);
             if (stored && typeof stored.lat === 'number' && typeof stored.lng === 'number') {
-                useLocationAndFetchProviders(stored.lat, stored.lng, {
+                locationAndFetchProviders(stored.lat, stored.lng, {
                     directTrade,
                 });
                 return;
             }
             if (hasLoc) {
-                useLocationAndFetchProviders(userLocation!.lat, userLocation!.lng, {
+                locationAndFetchProviders(userLocation!.lat, userLocation!.lng, {
                     directTrade,
                 });
                 return;
             }
             getCurrentLocation({ directTrade });
         },
-        [userLocation, useLocationAndFetchProviders, getCurrentLocation]
+        [userLocation, locationAndFetchProviders, getCurrentLocation]
     );
 
     // When user clicks "Start Diagnosis" on the in-chat welcome service cards,
@@ -838,6 +846,19 @@ export function ChatPageClient({ conversationId, initialTrade, embedInApp }: Cha
                     }),
                     signal: abortController.signal,
                 });
+
+                const storedImageUrl = res.headers.get('X-Image-Url');
+                if (storedImageUrl) {
+                    setImageSrc(storedImageUrl);
+                    setImagePublicUrl(storedImageUrl);
+                    // Persist so reloads use the Supabase URL (not data:/blob).
+                    if (id) {
+                        void (supabase as any)
+                            .from('conversations')
+                            .update({ image_url: storedImageUrl })
+                            .eq('id', id);
+                    }
+                }
 
                 if (!res.ok) {
                     const error = await res.json().catch(() => ({ error: 'Unknown error' }));
@@ -1181,8 +1202,8 @@ export function ChatPageClient({ conversationId, initialTrade, embedInApp }: Cha
         ]
     );
 
-    const useLocationRef = useRef(useLocationAndFetchProviders);
-    useLocationRef.current = useLocationAndFetchProviders;
+    const useLocationRef = useRef(locationAndFetchProviders);
+    useLocationRef.current = locationAndFetchProviders;
 
     useEffect(
         () => () => {
@@ -1407,7 +1428,13 @@ export function ChatPageClient({ conversationId, initialTrade, embedInApp }: Cha
                 return;
             }
 
-            setMessages((prev) => [...prev, { role: 'assistant', content: '', feedback: null }]);
+            // Track the index of the assistant message we append so provider results
+            // are applied to the correct message (avoid stale `messages.length`).
+            let assistantMsgIndex = -1;
+            setMessages((prev) => {
+                assistantMsgIndex = prev.length;
+                return [...prev, { role: 'assistant', content: '', feedback: null }];
+            });
 
             const reader = res.body.getReader();
             const decoder = new TextDecoder();
@@ -1535,7 +1562,8 @@ export function ChatPageClient({ conversationId, initialTrade, embedInApp }: Cha
                             }
                             if (canFetchEarly && !providersFetchedForStream) {
                                 providersFetchedForStream = true;
-                                const msgIdx = messages.length;
+                                const msgIdx =
+                                    assistantMsgIndex >= 0 ? assistantMsgIndex : messages.length;
                                 const loc = userLocation;
                                 const hasLoc =
                                     typeof loc?.lat === 'number' &&
@@ -2062,7 +2090,13 @@ export function ChatPageClient({ conversationId, initialTrade, embedInApp }: Cha
                 return;
             }
 
-            setMessages((prev) => [...prev, { role: 'assistant', content: '', feedback: null }]);
+            // Track the index of the assistant message we append so provider results
+            // are applied to the correct message (avoid stale `messages.length`).
+            let assistantMsgIndex = -1;
+            setMessages((prev) => {
+                assistantMsgIndex = prev.length;
+                return [...prev, { role: 'assistant', content: '', feedback: null }];
+            });
 
             const reader = res.body.getReader();
             const decoder = new TextDecoder();
@@ -2291,8 +2325,7 @@ export function ChatPageClient({ conversationId, initialTrade, embedInApp }: Cha
     // Show a skeleton while the conversation is loading
     if (!isLoaded && !displayImage) {
         return (
-            <div className="flex flex-1 flex-col">
-                {!embedInApp && <AppHeader showBack />}
+            <div className="flex flex-1 flex-col bg-background min-h-screen">
                 <div className="flex-1 max-w-7xl mx-auto w-full px-4 py-4">
                     {initialTrade ? <ChatPageTradeSkeleton /> : <ChatPageImageSkeleton />}
                 </div>
@@ -2301,263 +2334,220 @@ export function ChatPageClient({ conversationId, initialTrade, embedInApp }: Cha
     }
 
     return (
-        <div
-            className={`flex flex-col bg-background overflow-x-hidden ${embedInApp ? 'min-h-0 flex-1' : 'min-h-screen'}`}
-        >
-            {!embedInApp && (
-                <AppHeader imageSrc={displayImage} showViewImage={false} showBack />
-            )}
-
+        <div className="flex flex-col h-dvh min-h-screen bg-background overflow-x-hidden overflow-y-hidden">
             <main
                 ref={mainRef}
-                className="flex flex-1 min-h-0 flex-col px-0 sm:px-4"
+                className="flex flex-1 min-h-0 flex-col px-0 sm:px-4 overflow-hidden"
             >
-                <div className="flex-1 min-h-0 overflow-y-auto">
-                <div
-                    className={`mx-auto w-full flex flex-col gap-6 min-w-0 ${
-                        displayImage
-                            ? 'max-w-7xl px-4 py-4'
-                            : embedInApp
-                              ? 'max-w-7xl px-0 py-12 sm:py-16'
-                              : 'max-w-7xl px-4 py-12 sm:px-6 lg:px-8'
-                    }`}
-                >
-                    {/* Provider results - when direct trade with providers; hide if a message already shows diagnosis+providers (avoid duplicate) */}
-                    {(directTradeResult || (directTradeSelection && isLoadingDirectProviders)) &&
-                        !messages.some(
-                            (m) =>
-                                m.role === 'assistant' &&
-                                m.diagnosis &&
-                                (m.providers?.length ?? 0) > 0
-                        ) && (
-                        <DiagnosisResponseCard
-                                conversationId={id}
-                                diagnosis={{
-                                    thinking: '',
-                                    diagnosis: (directTradeResult || directTradeSelection)!
-                                        .diagnosis,
-                                    trade: (directTradeResult || directTradeSelection)!.trade,
-                                    action_required:
-                                        'In order to generate your Scandio Report, please upload a clear photo of the issue.',
-                                    estimated_cost: '',
-                                    confidence: 100,
-                                }}
-                                providers={directTradeResult?.providers ?? []}
-                                emergingProviders={directTradeResult?.emergingProviders ?? []}
-                                nearbyOnlyProviders={directTradeResult?.nearbyOnlyProviders ?? []}
-                                isLoadingProviders={isLoadingDirectProviders}
-                                userLocation={userLocation}
-                                onRequestLocation={() =>
-                                    getCurrentLocation({
-                                        directTrade: {
-                                            trade: (directTradeResult || directTradeSelection)!
-                                                .trade,
-                                            diagnosis: (directTradeResult || directTradeSelection)!
-                                                .diagnosis,
-                                        },
-                                    })
-                                }
-                                onAddressSelect={(loc) => {
-                                    setUserLocation(loc);
-                                    setIsLoadingDirectProviders(true);
-                                    const dt = directTradeResult || directTradeSelection;
-                                    if (dt)
-                                        fetchDirectProviders(
-                                            dt.trade,
-                                            loc.lat,
-                                            loc.lng,
-                                            dt.diagnosis
-                                        );
-                                }}
-                                onConfirmYes={undefined}
-                                onConfirmNo={undefined}
-                                diagnosisConfirmed={true}
-                                trade={(directTradeResult || directTradeSelection)!.trade}
-                                openPopoverId={openPopoverId}
-                                setOpenPopoverId={setOpenPopoverId}
-                                hasImage={false}
-                                providerRadiusKm={providerRadiusKm}
-                                onRadiusChange={(km) => {
-                                    setProviderRadiusKm(km);
-                                    const dt = directTradeResult || directTradeSelection;
-                                    if (dt && userLocation) {
-                                        fetchDirectProviders(
-                                            dt.trade,
-                                            userLocation.lat,
-                                            userLocation.lng,
-                                            dt.diagnosis,
-                                            km
-                                        );
+                <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
+                    <div
+                        className={`mx-auto w-full max-w-full flex flex-col gap-6 min-w-0 ${
+                            displayImage
+                                ? 'max-w-7xl px-4 py-4'
+                                : 'max-w-7xl px-4 py-12 sm:px-6 lg:px-8'
+                        }`}
+                    >
+                        {/* Provider results - when direct trade with providers; hide if a message already shows diagnosis+providers (avoid duplicate) */}
+                        {(directTradeResult ||
+                            (directTradeSelection && isLoadingDirectProviders)) &&
+                            !messages.some(
+                                (m) =>
+                                    m.role === 'assistant' &&
+                                    m.diagnosis &&
+                                    (m.providers?.length ?? 0) > 0
+                            ) && (
+                                <DiagnosisResponseCard
+                                    conversationId={id}
+                                    diagnosis={{
+                                        thinking: '',
+                                        diagnosis: (directTradeResult || directTradeSelection)!
+                                            .diagnosis,
+                                        trade: (directTradeResult || directTradeSelection)!.trade,
+                                        action_required:
+                                            'In order to generate your Scandio Report, please upload a clear photo of the issue.',
+                                        estimated_cost: '',
+                                        confidence: 100,
+                                    }}
+                                    providers={directTradeResult?.providers ?? []}
+                                    emergingProviders={
+                                        directTradeResult?.emergingProviders ?? []
                                     }
-                                }}
-                            />
-                    )}
+                                    nearbyOnlyProviders={
+                                        directTradeResult?.nearbyOnlyProviders ?? []
+                                    }
+                                    isLoadingProviders={isLoadingDirectProviders}
+                                    userLocation={userLocation}
+                                    onRequestLocation={() =>
+                                        getCurrentLocation({
+                                            directTrade: {
+                                                trade: (directTradeResult ||
+                                                    directTradeSelection)!
+                                                    .trade,
+                                                diagnosis: (directTradeResult ||
+                                                    directTradeSelection)!
+                                                    .diagnosis,
+                                            },
+                                        })
+                                    }
+                                    onAddressSelect={(loc) => {
+                                        setUserLocation(loc);
+                                        setIsLoadingDirectProviders(true);
+                                        const dt = directTradeResult || directTradeSelection;
+                                        if (dt)
+                                            fetchDirectProviders(
+                                                dt.trade,
+                                                loc.lat,
+                                                loc.lng,
+                                                dt.diagnosis
+                                            );
+                                    }}
+                                    onConfirmYes={undefined}
+                                    onConfirmNo={undefined}
+                                    diagnosisConfirmed
+                                    trade={(directTradeResult || directTradeSelection)!.trade}
+                                    openPopoverId={openPopoverId}
+                                    setOpenPopoverId={setOpenPopoverId}
+                                    hasImage={false}
+                                    providerRadiusKm={providerRadiusKm}
+                                    onRadiusChange={(km) => {
+                                        setProviderRadiusKm(km);
+                                        const dt = directTradeResult || directTradeSelection;
+                                        if (dt && userLocation) {
+                                            fetchDirectProviders(
+                                                dt.trade,
+                                                userLocation.lat,
+                                                userLocation.lng,
+                                                dt.diagnosis,
+                                                km
+                                            );
+                                        }
+                                    }}
+                                />
+                            )}
 
-                    {/* Image on left (AI side), then thinking below it, then messages */}
-                    {displayImage && (
-                    <div className="flex flex-col gap-4 items-start">
-                        {/* Initial diagnosis image - left-aligned (AI side), half-width on desktop */}
+                        {/* Image on left (AI side), then thinking below it, then messages */}
                         {displayImage && (
-                            <div className="flex flex-col gap-2 w-full md:w-1/2 items-start">
-                                <a
-                                    href={displayImage}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="block w-full aspect-[16/10] md:aspect-[4/3] rounded-lg overflow-hidden border border-border/50 hover:opacity-95"
-                                >
-                                    <img
-                                        src={displayImage}
-                                        alt="Image being analysed"
-                                        className="w-full h-full object-cover bg-muted/30"
-                                    />
-                                </a>
+                            <div className="flex flex-col gap-4 items-start">
+                                {/* Initial diagnosis image - left-aligned (AI side), half-width on desktop */}
+                                {displayImage && (
+                                    <div className="flex flex-col gap-2 w-full md:w-1/2 items-start">
+                                        <a
+                                            href={displayImageHref || undefined}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="block w-full aspect-[16/10] md:aspect-[4/3] rounded-lg overflow-hidden border border-border/50 hover:opacity-95"
+                                            onClick={(e) => {
+                                                // Prefer the stored Supabase URL when available.
+                                                if (displayImageHref && !displayImageHref.startsWith('data:')) {
+                                                    return;
+                                                }
+                                                if (displayImage && displayImage.startsWith('data:')) {
+                                                    e.preventDefault();
+                                                    openInNewTab(displayImage);
+                                                }
+                                            }}
+                                        >
+                                            <img
+                                                src={displayImage}
+                                                alt="Image being analysed"
+                                                className="w-full h-full object-cover bg-muted/30"
+                                            />
+                                        </a>
+                                    </div>
+                                )}
+                                {/* Thinking appears below the image with clear spacing */}
+                                {(showThinking ||
+                                    (diagnosis?.thinking &&
+                                        !diagnosis?.requires_clarification)) && (
+                                    <blockquote className="border-l-2 border-input pl-3 w-full">
+                                        <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap">
+                                            {diagnosis?.thinking
+                                                ? thinkingForDisplay(diagnosis.thinking)
+                                                : 'Analysing…'}
+                                        </p>
+                                    </blockquote>
+                                )}
+                                <div className="flex flex-col gap-4 [&>*:first-child]:!mt-0">
+                                    {messages.map((msg, i) => (
+                                        <ChatMessage
+                                            key={i}
+                                            message={msg}
+                                            index={i}
+                                            isLast={i === messages.length - 1}
+                                            isResponding={isResponding}
+                                            onFeedback={(type) =>
+                                                handleMessageFeedback(i, type)
+                                            }
+                                            onCopy={() =>
+                                                handleCopy(
+                                                    typeof msg.content === 'string'
+                                                        ? msg.content
+                                                        : ''
+                                                )
+                                            }
+                                            onRegenerate={() => handleRegenerate(i)}
+                                            inlineDiagnosisProps={
+                                                msg.role === 'assistant' && msg.diagnosis
+                                                    ? {
+                                                          conversationId: id,
+                                                          userLocation,
+                                                          isLoadingProviders:
+                                                              isLoadingProvidersForMessage === i,
+                                                          openPopoverId,
+                                                          setOpenPopoverId,
+                                                          onRequestLocation: () =>
+                                                              getCurrentLocation({
+                                                                  messageIndex: i,
+                                                                  trade: msg.diagnosis!.trade,
+                                                                  msgContent: msg.content,
+                                                                  hasUpdatedDiagnosis:
+                                                                      msg.hasUpdatedDiagnosis ??
+                                                                      false,
+                                                                  diagnosis: msg.diagnosis!,
+                                                              }),
+                                                          onAddressSelect: (loc) => {
+                                                              setUserLocation(loc);
+                                                              saveConversation({ loc });
+                                                              fetchProvidersForMessage(
+                                                                  i,
+                                                                  msg.diagnosis!.trade ?? '',
+                                                                  loc.lat,
+                                                                  loc.lng,
+                                                                  msg.content,
+                                                                  msg.hasUpdatedDiagnosis ??
+                                                                      false,
+                                                                  msg.diagnosis!
+                                                              );
+                                                          },
+                                                          providerRadiusKm,
+                                                          onRadiusChange: (km) => {
+                                                              setProviderRadiusKm(km);
+                                                              if (userLocation)
+                                                                  fetchProvidersForMessage(
+                                                                      i,
+                                                                      msg.diagnosis!.trade ?? '',
+                                                                      userLocation.lat,
+                                                                      userLocation.lng,
+                                                                      msg.content ?? '',
+                                                                      msg.hasUpdatedDiagnosis ??
+                                                                          false,
+                                                                      msg.diagnosis!,
+                                                                      { radiusKm: km }
+                                                                  );
+                                                          },
+                                                      }
+                                                    : undefined
+                                            }
+                                        />
+                                    ))}
+                                    <div ref={messagesEndRef} />
+                                </div>
                             </div>
                         )}
-                        {/* Thinking appears below the image with clear spacing */}
-                        {(showThinking ||
-                            (diagnosis?.thinking && !diagnosis?.requires_clarification)) && (
-                            <blockquote className="border-l-2 border-input pl-3 w-full">
-                                <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap">
-                                    {diagnosis?.thinking
-                                        ? thinkingForDisplay(diagnosis.thinking)
-                                        : 'Analysing…'}
-                                </p>
-                            </blockquote>
-                        )}
-                        <div className="flex flex-col gap-4 [&>*:first-child]:!mt-0">
-                            {messages.map((msg, i) => (
-                                <ChatMessage
-                                    key={i}
-                                    message={msg}
-                                    index={i}
-                                    isLast={i === messages.length - 1}
-                                    isResponding={isResponding}
-                                    onFeedback={(type) => handleMessageFeedback(i, type)}
-                                    onCopy={() => handleCopy(typeof msg.content === 'string' ? msg.content : '')}
-                                    onRegenerate={() => handleRegenerate(i)}
-                                    inlineDiagnosisProps={
-                                        msg.role === 'assistant' && msg.diagnosis
-                                            ? {
-                                                  conversationId: id,
-                                                  userLocation,
-                                                  isLoadingProviders:
-                                                      isLoadingProvidersForMessage === i,
-                                                  openPopoverId,
-                                                  setOpenPopoverId,
-                                                  onRequestLocation: () =>
-                                                      getCurrentLocation({
-                                                          messageIndex: i,
-                                                          trade: msg.diagnosis!.trade,
-                                                          msgContent: msg.content,
-                                                          hasUpdatedDiagnosis:
-                                                              msg.hasUpdatedDiagnosis ?? false,
-                                                          diagnosis: msg.diagnosis!,
-                                                      }),
-                                                  onAddressSelect: (loc) => {
-                                                      setUserLocation(loc);
-                                                      saveConversation({ loc });
-                                                      fetchProvidersForMessage(
-                                                          i,
-                                                          msg.diagnosis!.trade ?? '',
-                                                          loc.lat,
-                                                          loc.lng,
-                                                          msg.content,
-                                                          msg.hasUpdatedDiagnosis ?? false,
-                                                          msg.diagnosis!
-                                                      );
-                                                  },
-                                                  providerRadiusKm,
-                                                  onRadiusChange: (km) => {
-                                                      setProviderRadiusKm(km);
-                                                      if (userLocation)
-                                                          fetchProvidersForMessage(
-                                                              i,
-                                                              msg.diagnosis!.trade ?? '',
-                                                              userLocation.lat,
-                                                              userLocation.lng,
-                                                              msg.content ?? '',
-                                                              msg.hasUpdatedDiagnosis ?? false,
-                                                              msg.diagnosis!,
-                                                              { radiusKm: km }
-                                                          );
-                                                  },
-                                              }
-                                            : undefined
-                                    }
-                                />
-                            ))}
-                            <div ref={messagesEndRef} />
-                        </div>
                     </div>
-                    )}
-                </div>
                 </div>
 
-                <ChatFooter
-                    message={message}
-                    setMessage={setMessage}
-                    handleSend={handleSend}
-                    isDiagnosing={isDiagnosing}
-                    isResponding={isResponding}
-                    hasDiagnosis={!!diagnosis || !!directTradeResult}
-                    pendingAttachments={displayImage ? pendingAttachments : []}
-                    onAddAttachments={
-                        displayImage
-                            ? async (files) => {
-                                  const remaining = 5 - pendingAttachments.length;
-                                  const toAdd = files.slice(0, remaining);
-                                  const dataUrls: string[] = [];
-                                  for (const file of toAdd) {
-                                      try {
-                                          const url = await new Promise<string>((resolve, reject) => {
-                                              const r = new FileReader();
-                                              r.onload = () => resolve(r.result as string);
-                                              r.onerror = () =>
-                                                  reject(new Error('Failed to read file'));
-                                              r.readAsDataURL(file);
-                                          });
-                                          const isImage = file.type.startsWith('image/');
-                                          let finalUrl: string;
-                                          if (isImage) {
-                                              try {
-                                                  finalUrl = await compressImage(url);
-                                              } catch {
-                                                  finalUrl = url;
-                                              }
-                                          } else {
-                                              finalUrl = url;
-                                          }
-                                          dataUrls.push(finalUrl);
-                                      } catch (e) {
-                                          console.error('Failed to process attachment:', e);
-                                          toast.error(
-                                              file.type.startsWith('video/')
-                                                  ? 'Could not process this video. Please try a different file.'
-                                                  : `Could not process ${file.name}. Please try a different image.`
-                                          );
-                                      }
-                                  }
-                                  if (dataUrls.length > 0) {
-                                      setPendingAttachments((prev) =>
-                                          [...prev, ...dataUrls].slice(0, 5)
-                                      );
-                                  }
-                              }
-                            : async (files) => {
-                                  const file = files.find(
-                                      (f) => f.type.startsWith('image/') || f.type.startsWith('video/')
-                                  );
-                                  if (file) handleWelcomeUpload(file);
-                              }
-                    }
-                    onRemoveAttachment={
-                        displayImage
-                            ? (i) => setPendingAttachments((prev) => prev.filter((_, j) => j !== i))
-                            : () => {}
-                    }
-                    welcomeMode={!displayImage}
-                    inputRef={welcomeFileInputRef}
-                />
+                {/* Chat footer removed */}
             </main>
         </div>
     );
