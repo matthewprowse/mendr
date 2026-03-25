@@ -7,11 +7,23 @@ export function useMatchMap(params: {
     providers: MatchProvider[];
     searchRadiusMeters: number;
     onMarkerClick?: (providerPlaceId: string) => void;
+    /** When false, the search-radius circle is not drawn (e.g. pro onboard: pin only). Default true. */
+    showSearchRadius?: boolean;
+    /** When true, drop a marker at `userLocation`. Default false (match flow uses the circle + provider pins). */
+    showUserPin?: boolean;
 }) {
-    const { userLocation, providers, searchRadiusMeters, onMarkerClick } = params;
+    const {
+        userLocation,
+        providers,
+        searchRadiusMeters,
+        onMarkerClick,
+        showSearchRadius = true,
+        showUserPin = false,
+    } = params;
     const mapHostRef = useRef<HTMLDivElement>(null);
     const mapRef = useRef<google.maps.Map | null>(null);
     const markersRef = useRef<google.maps.Marker[]>([]);
+    const userPinRef = useRef<google.maps.Marker | null>(null);
     const radiusCircleRef = useRef<google.maps.Circle | null>(null);
     const [isMapReady, setIsMapReady] = useState(false);
 
@@ -51,19 +63,23 @@ export function useMatchMap(params: {
         const map = mapRef.current;
         if (!map || !isMapReady || !userLocation) return;
 
-        if (!radiusCircleRef.current) {
-            radiusCircleRef.current = new google.maps.Circle({
-                strokeColor: '#4f46e5',
-                strokeOpacity: 0.45,
-                strokeWeight: 1.5,
-                fillColor: '#4f46e5',
-                fillOpacity: 0.08,
-                clickable: false,
-            });
+        if (showSearchRadius) {
+            if (!radiusCircleRef.current) {
+                radiusCircleRef.current = new google.maps.Circle({
+                    strokeColor: '#4f46e5',
+                    strokeOpacity: 0.45,
+                    strokeWeight: 1.5,
+                    fillColor: '#4f46e5',
+                    fillOpacity: 0.08,
+                    clickable: false,
+                });
+            }
+            radiusCircleRef.current.setMap(map);
+            radiusCircleRef.current.setCenter({ lat: userLocation.lat, lng: userLocation.lng });
+            radiusCircleRef.current.setRadius(searchRadiusMeters);
+        } else {
+            radiusCircleRef.current?.setMap(null);
         }
-        radiusCircleRef.current.setMap(map);
-        radiusCircleRef.current.setCenter({ lat: userLocation.lat, lng: userLocation.lng });
-        radiusCircleRef.current.setRadius(searchRadiusMeters);
 
         markersRef.current.forEach((m) => {
             try {
@@ -92,15 +108,45 @@ export function useMatchMap(params: {
             markersRef.current.push(marker);
         });
 
+        const pos = { lat: userLocation.lat, lng: userLocation.lng };
+        if (showUserPin) {
+            if (!userPinRef.current) {
+                userPinRef.current = new google.maps.Marker({
+                    map,
+                    position: pos,
+                    title: 'Your location',
+                });
+            } else {
+                userPinRef.current.setMap(map);
+                userPinRef.current.setPosition(pos);
+            }
+        } else {
+            userPinRef.current?.setMap(null);
+        }
+
+        const singleUserView =
+            !showSearchRadius && pts.length === 0 && showUserPin;
+
+        if (singleUserView) {
+            map.setCenter(pos);
+            map.setZoom(14);
+            return;
+        }
+
         const bounds = new google.maps.LatLngBounds();
-        const circleBounds = radiusCircleRef.current?.getBounds();
-        if (circleBounds) bounds.union(circleBounds);
-        else bounds.extend({ lat: userLocation.lat, lng: userLocation.lng });
-        pts.forEach(({ pos }) => bounds.extend(pos));
+        if (showSearchRadius) {
+            const circleBounds = radiusCircleRef.current?.getBounds();
+            if (circleBounds) bounds.union(circleBounds);
+            else bounds.extend(pos);
+        } else {
+            bounds.extend(pos);
+        }
+        pts.forEach(({ pos: p }) => bounds.extend(p));
+
         try {
             map.fitBounds(bounds, 48);
         } catch {}
-    }, [isMapReady, onMarkerClick, providers, searchRadiusMeters, userLocation]);
+    }, [isMapReady, onMarkerClick, providers, searchRadiusMeters, showSearchRadius, showUserPin, userLocation]);
 
     return {
         mapHostRef,

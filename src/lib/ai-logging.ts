@@ -1,4 +1,4 @@
-type AiEndpoint = 'diagnose' | 'providers' | 'reviews-sync' | 'whatsapp';
+type AiEndpoint = 'diagnose' | 'providers' | 'reviews-sync' | 'whatsapp' | 'contact-intent';
 
 export interface AiLogEvent {
     endpoint: AiEndpoint;

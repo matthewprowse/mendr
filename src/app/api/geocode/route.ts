@@ -1,0 +1,153 @@
+import { NextRequest, NextResponse } from 'next/server';
+
+type GeocodeRequestBody = {
+    lat?: number;
+    lng?: number;
+    address?: string;
+    westernCapeOnly?: boolean;
+};
+
+const WESTERN_CAPE_COMPONENTS = 'country:ZA|administrative_area:Western Cape';
+
+type GeocoderResult = {
+    geometry?: { location?: { lat?: number; lng?: number } };
+    formatted_address?: string;
+    address_components?: Array<{
+        long_name?: string;
+        short_name?: string;
+        types?: string[];
+    }>;
+};
+
+function resultIsInWesternCape(result: {
+    address_components?: Array<{
+        long_name?: string;
+        short_name?: string;
+        types?: string[];
+    }>;
+}): boolean {
+    const comps = result.address_components;
+    if (!Array.isArray(comps)) return false;
+    for (const c of comps) {
+        if (!c?.types?.includes('administrative_area_level_1')) continue;
+        const longName = (c.long_name ?? '').toLowerCase();
+        const shortName = c.short_name ?? '';
+        if (longName.includes('western cape')) return true;
+        if (shortName === 'WC') return true;
+    }
+    return false;
+}
+
+function getMapsApiKey(): string {
+    return (
+        process.env.GOOGLE_PLACES_API_KEY ||
+        process.env.GOOGLE_MAPS_API_KEY ||
+        process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ||
+        ''
+    );
+}
+
+export async function POST(req: NextRequest) {
+    const apiKey = getMapsApiKey();
+    if (!apiKey) {
+        return NextResponse.json({ error: 'Geocoding API not configured' }, { status: 500 });
+    }
+
+    const body = (await req.json().catch(() => null)) as GeocodeRequestBody | null;
+    if (!body) {
+        return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
+    }
+
+    const hasCoords = typeof body.lat === 'number' && typeof body.lng === 'number';
+    const hasAddress = typeof body.address === 'string' && body.address.trim().length > 0;
+    const westernCapeOnly = body.westernCapeOnly === true;
+
+    if (!hasCoords && !hasAddress) {
+        return NextResponse.json(
+            { error: 'Provide either lat/lng or address' },
+            { status: 400 }
+        );
+    }
+
+    try {
+        const params = new URLSearchParams();
+        params.set('key', apiKey);
+
+        if (hasCoords) {
+            params.set('latlng', `${body.lat},${body.lng}`);
+            if (westernCapeOnly) {
+                params.set('region', 'za');
+            }
+        } else {
+            params.set('address', body.address!.trim());
+            if (westernCapeOnly) {
+                params.set('components', WESTERN_CAPE_COMPONENTS);
+                params.set('region', 'za');
+            }
+        }
+
+        const url = `https://maps.googleapis.com/maps/api/geocode/json?${params.toString()}`;
+
+        const response = await fetch(url);
+        const data = await response.json();
+
+        if (!response.ok) {
+            return NextResponse.json(
+                { error: 'Geocoding request failed' },
+                { status: response.status }
+            );
+        }
+
+        if (data.status !== 'OK' || !Array.isArray(data.results) || data.results.length === 0) {
+            return NextResponse.json(
+                {
+                    error:
+                        westernCapeOnly && hasAddress
+                            ? 'No match in the Western Cape. Try a fuller street address in Western Cape, South Africa.'
+                            : data.error_message || 'No geocoding results found',
+                },
+                { status: 404 }
+            );
+        }
+
+        const wcMsg =
+            'That location is outside the Western Cape. Please use an address in Western Cape, South Africa.';
+        const wcAddressHint =
+            'No match in the Western Cape. Try a fuller street address in Western Cape, South Africa.';
+
+        let chosen = data.results[0] as GeocoderResult;
+
+        if (westernCapeOnly && hasCoords) {
+            const inWc = (data.results as GeocoderResult[]).find((r) => resultIsInWesternCape(r));
+            if (!inWc) {
+                return NextResponse.json({ error: wcMsg }, { status: 404 });
+            }
+            chosen = inWc;
+        } else if (westernCapeOnly && hasAddress) {
+            const inWc = (data.results as GeocoderResult[]).find((r) => resultIsInWesternCape(r));
+            if (!inWc) {
+                return NextResponse.json({ error: wcAddressHint }, { status: 404 });
+            }
+            chosen = inWc;
+        }
+
+        const lat = chosen?.geometry?.location?.lat;
+        const lng = chosen?.geometry?.location?.lng;
+        const address = chosen?.formatted_address;
+
+        if (typeof lat !== 'number' || typeof lng !== 'number') {
+            return NextResponse.json({ error: 'Invalid geocoding response' }, { status: 502 });
+        }
+
+        return NextResponse.json({
+            lat,
+            lng,
+            address: typeof address === 'string' ? address : undefined,
+        });
+    } catch (error: any) {
+        return NextResponse.json(
+            { error: error?.message || 'Failed to geocode request' },
+            { status: 500 }
+        );
+    }
+}

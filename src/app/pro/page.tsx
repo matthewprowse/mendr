@@ -43,6 +43,7 @@ export default function WelcomePage() {
         providerLat,
         providerLng,
         providerSummary,
+        providerSummaryLong,
         providerPhone,
         providerEmail,
         providerWebsiteRaw,
@@ -273,7 +274,9 @@ export default function WelcomePage() {
                     </Badge>
                 </div>
                 <p className="text-sm text-muted-foreground">
-                    Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore.
+                    {providerSummary?.trim()
+                        ? providerSummary.trim()
+                        : 'Short customer summary from reviews will appear here when available.'}
                 </p>
             </div>
 
@@ -314,6 +317,7 @@ export default function WelcomePage() {
                         mapEmbedSrc={mapEmbedSrc}
                         addressDisplayLine={addressDisplayLine}
                         directionsHref={directionsHref}
+                        profileSummaryLong={providerSummaryLong}
                     />
                 </TabsContent>
 

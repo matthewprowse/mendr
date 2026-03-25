@@ -7,7 +7,7 @@ import { getScanSessionHandoff, clearScanSessionHandoff } from '@/lib/scan-sessi
 import type { DiagnosisData } from '@/app/chat/_components/types';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
-import { AppHeader } from '@/components/app-header';
+import { FlowStepHeader } from '@/components/flow-header';
 import { toast } from 'sonner';
 import { compressImage } from '@/lib/image-compression';
 import { sanitizeAiContent } from '@/lib/utils';
@@ -35,7 +35,14 @@ function parseDiagnosisFromResponse(text: string): DiagnosisData | null {
     try {
         const parsed = JSON.parse(toParse);
         if (parsed && typeof parsed === 'object' && parsed.diagnosis) {
-            return parsed as DiagnosisData;
+            const d = parsed as DiagnosisData;
+            return {
+                ...d,
+                trade_detail:
+                    typeof d.trade_detail === 'string' && d.trade_detail.trim()
+                        ? d.trade_detail
+                        : d.trade,
+            };
         }
     } catch {
         // ignore
@@ -386,22 +393,16 @@ export function DiagnosisPageClient({ conversationId }: DiagnosisPageClientProps
 
     return (
         <main className="flex min-h-screen flex-col bg-background">
-            <AppHeader
-                showBack
-                showNewScan
-                onNewScanClick={() => router.push('/welcome')}
-            />
+            <FlowStepHeader step={2} onBack={() => router.back()} />
 
-            <div className="mx-auto flex w-full max-w-md flex-1 flex-col px-4 pb-24 pt-6 sm:max-w-lg">
+            <div className="mx-auto flex w-full max-w-xl flex-1 flex-col px-4 pb-32 pt-24 sm:px-6">
                 <section className="flex flex-1 flex-col gap-6">
                     <header className="flex flex-col gap-2">
-                        <h1 className="text-2xl text-foreground font-bold tracking-tight">
-                            Review Diagnosis
+                        <h1 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
+                            Here&apos;s what we found.
                         </h1>
-                        <p className="text-sm text-muted-foreground">
-                            Confirm that this looks correct, or help us improve it by adding more
-                            context. Once confirmed, we&apos;ll match you with the best providers in
-                            your area.
+                        <p className="text-base text-muted-foreground">
+                            Confirm this looks right, or add more context and we&apos;ll refine it. Once you&apos;re happy we&apos;ll match you with nearby specialists.
                         </p>
                     </header>
 
@@ -481,22 +482,21 @@ export function DiagnosisPageClient({ conversationId }: DiagnosisPageClientProps
             </div>
 
             {diagnosis && !diagnosis.requires_clarification && !diagnosis.rejected && !refineMode && (
-                <footer className="fixed inset-x-0 bottom-0 z-20">
-                    <div className="mx-auto flex w-full max-w-md items-center justify-between gap-3 px-4 py-3 sm:max-w-lg bg-background">
-                        <p className="text-sm text-muted-foreground font-medium truncate">
-                            Next: Provider Matches
-                        </p>
+                <footer className="fixed inset-x-0 bottom-0 z-40 border-t border-border/50 bg-background/95 px-4 py-4 backdrop-blur sm:px-6">
+                    <div className="mx-auto flex w-full max-w-xl flex-col gap-2">
                         <div className="flex items-center gap-2">
                             <Button
                                 type="button"
-                                variant="outline"
-                                
+                                variant="secondary"
+                                className="flex-1"
                                 onClick={() => setRefineMode(true)}
                             >
-                                Refine Diagnosis
+                                Refine
                             </Button>
                             <Button
                                 type="button"
+                                size="lg"
+                                className="flex-1"
                                 onClick={handleConfirmYes}
                                 disabled={confirming}
                             >
@@ -508,57 +508,59 @@ export function DiagnosisPageClient({ conversationId }: DiagnosisPageClientProps
             )}
 
             {diagnosis && (diagnosis.requires_clarification || diagnosis.rejected || refineMode) && (
-                <footer className="fixed inset-x-0 bottom-0 z-20">
-                    <div className="mx-auto flex w-full max-w-md flex-col gap-3 px-4 py-3 sm:max-w-lg bg-background">
-                        <Label className="text-sm text-foreground font-medium">Additional Information</Label>
-                        <div className="space-y-2">
-                            <Textarea
-                                value={refineText}
-                                onChange={(e) => setRefineText(e.target.value)}
-                                className="min-h-[96px] resize-none text-sm"
-                            />
-                            <div className="flex items-center justify-between gap-2 mt-3">
-                                <Button
-                                    type="button"
-                                    variant="outline"
-                                    onClick={() => {
-                                        setRefineMode(false);
-                                        setRefineText('');
-                                    }}
-                                    disabled={refining}
-                                >
-                                    Cancel
-                                </Button>
-                                <div className="flex items-center gap-2">
-                                    <Button
-                                        type="button"
-                                        variant="ghost"
-                                        onClick={() => refineFileInputRef.current?.click()}
-                                        disabled={refining}
-                                    >
-                                        Replace Photo
-                                    </Button>
-                                    <Button
-                                        type="button"
-                                        onClick={() => runRefinedDiagnosis(refineText)}
-                                        disabled={refining || !refineText.trim()}
-                                    >
-                                        {refining ? 'Sending…' : 'Send'}
-                                    </Button>
-                                </div>
-                            </div>
-                            <input
-                                ref={refineFileInputRef}
-                                type="file"
-                                accept="image/*,video/*"
-                                className="hidden"
-                                onChange={(e) => {
-                                    const file = e.target.files?.[0];
-                                    if (file) handleRefineUpload(file);
-                                    e.target.value = '';
+                <footer className="fixed inset-x-0 bottom-0 z-40 border-t border-border/50 bg-background/95 px-4 py-4 backdrop-blur sm:px-6">
+                    <div className="mx-auto flex w-full max-w-xl flex-col gap-3">
+                        <Label className="text-sm font-medium text-foreground">
+                            Add more context
+                        </Label>
+                        <Textarea
+                            value={refineText}
+                            onChange={(e) => setRefineText(e.target.value)}
+                            className="min-h-[80px] resize-none text-sm"
+                            placeholder="Describe what else you're seeing or where it's located…"
+                        />
+                        <div className="flex items-center gap-2">
+                            <Button
+                                type="button"
+                                variant="secondary"
+                                className="flex-1"
+                                onClick={() => {
+                                    setRefineMode(false);
+                                    setRefineText('');
                                 }}
-                            />
+                                disabled={refining}
+                            >
+                                Cancel
+                            </Button>
+                            <Button
+                                type="button"
+                                variant="ghost"
+                                onClick={() => refineFileInputRef.current?.click()}
+                                disabled={refining}
+                            >
+                                Replace photo
+                            </Button>
+                            <Button
+                                type="button"
+                                size="lg"
+                                className="flex-1"
+                                onClick={() => runRefinedDiagnosis(refineText)}
+                                disabled={refining || !refineText.trim()}
+                            >
+                                {refining ? 'Refining…' : 'Refine'}
+                            </Button>
                         </div>
+                        <input
+                            ref={refineFileInputRef}
+                            type="file"
+                            accept="image/*,video/*"
+                            className="hidden"
+                            onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file) handleRefineUpload(file);
+                                e.target.value = '';
+                            }}
+                        />
                     </div>
                 </footer>
             )}

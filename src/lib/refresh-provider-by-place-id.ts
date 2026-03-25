@@ -84,7 +84,7 @@ export async function refreshProviderByPlaceId(rawPlaceId: string): Promise<Refr
         website: (place.websiteUri as string) || null,
         latitude: place.location?.latitude ?? null,
         longitude: place.location?.longitude ?? null,
-        summary: null as string | null,
+        summary: '',
         services: [] as any[],
         last_updated: nowIso,
         updated_at: nowIso,

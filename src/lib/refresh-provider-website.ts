@@ -174,6 +174,22 @@ export async function refreshProviderWebsiteById(id: string): Promise<RefreshPro
 
     const updatedAbout = about || provider.about || null;
     const updatedPast = past || provider.past_work || null;
+    const narrative = [updatedAbout, updatedPast]
+        .filter((x): x is string => typeof x === 'string' && x.trim().length > 0)
+        .join('\n\n')
+        .trim()
+        .slice(0, 12_000);
+
+    const nowIso = new Date().toISOString();
+    await admin
+        .from('providers')
+        .update({
+            about: typeof updatedAbout === 'string' && updatedAbout.trim() ? updatedAbout.trim() : null,
+            past_work: typeof updatedPast === 'string' && updatedPast.trim() ? updatedPast.trim() : null,
+            summary_long: narrative.length > 0 ? narrative : null,
+            updated_at: nowIso,
+        })
+        .eq('id', provider.id);
 
     return {
         ok: true,

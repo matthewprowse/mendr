@@ -40,6 +40,10 @@ export interface ProviderItem {
     isOpen: boolean | null;
     weekdayDescriptions?: string[];
     scandioReviewCount?: number;
+    /** ISO timestamp of when this provider last appeared in a match result. Used for recency scoring. */
+    lastMatchedAt?: string | null;
+    /** Enrichment-derived profile depth score (0..3). */
+    profileCompleteness?: number;
 }
 
 export interface ProvidersResponseBody {

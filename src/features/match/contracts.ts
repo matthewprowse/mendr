@@ -24,6 +24,13 @@ export type MatchProvider = {
     scandioReviewCount?: number;
     isOpen?: boolean | null;
     weekdayDescriptions?: string[];
+    // Enrichment fields (populated from provider_cache after background enrichment)
+    bio?: string | null;
+    specialisations?: string[];
+    hasWorkPhotos?: boolean;
+    enrichmentReviewSummary?: string | null;
+    responseProfile?: string | null;
+    profileCompleteness?: number;
 };
 
 export type ProvidersRequest = {
@@ -48,6 +55,8 @@ export type GeocodeRequest = {
     lat?: number;
     lng?: number;
     address?: string;
+    /** When true, only accept results in the Western Cape, South Africa (onboard / ops). */
+    westernCapeOnly?: boolean;
 };
 
 export type GeocodeResponse = {

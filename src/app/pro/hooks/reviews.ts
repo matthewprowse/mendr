@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { REVIEWS_PAGE_SIZE } from '../_constants/page';
+import { REVIEWS_PAGE_SIZE, GOOGLE_REVIEWS_MAX_DISPLAY } from '../_constants/page';
 import { formatReviewDateLabel, getInitials } from '../_lib/review-formatters';
 import type { CategoryKey, ReviewCard } from '../_types/page';
 
@@ -74,21 +74,41 @@ export function useProReviews(placeId: string) {
                     .eq('status', 'approved');
                 if (!cancelled) setScandioReviewTotalFromScandio(scandioCountRes.count ?? 0);
 
-                const base = () =>
-                    (supabase as any)
+                const googleRes = await (supabase as any)
+                    .from('reviews')
+                    .select('*')
+                    .eq('provider_id', providerId)
+                    .eq('status', 'approved')
+                    .eq('source', 'google')
+                    .order('published_at', { ascending: false })
+                    .limit(GOOGLE_REVIEWS_MAX_DISPLAY);
+
+                const batch = 500;
+                const scandioAccum: any[] = [];
+                for (let offset = 0; ; offset += batch) {
+                    const scandioRes = await (supabase as any)
                         .from('reviews')
                         .select('*')
                         .eq('provider_id', providerId)
                         .eq('status', 'approved')
+                        .eq('source', 'scandio')
                         .order('published_at', { ascending: false })
-                        .limit(50);
-                const [googleRes, scandioRes] = await Promise.all([
-                    base().eq('source', 'google'),
-                    base().eq('source', 'scandio'),
-                ]);
+                        .range(offset, offset + batch - 1);
+                    if (cancelled) return;
+                    const chunk = Array.isArray(scandioRes.data) ? scandioRes.data : [];
+                    scandioAccum.push(...chunk);
+                    if (chunk.length < batch) break;
+                }
+
                 if (cancelled) return;
-                if (!googleRes.error && Array.isArray(googleRes.data)) setGoogleReviews(googleRes.data);
-                if (!scandioRes.error && Array.isArray(scandioRes.data)) setScandioReviews(scandioRes.data);
+                const gData =
+                    !googleRes.error && Array.isArray(googleRes.data) ? googleRes.data : [];
+                setGoogleReviews(gData);
+                setScandioReviews(scandioAccum);
+                if (!cancelled) {
+                    setGoogleReviewsVisibleCount(Math.min(GOOGLE_REVIEWS_MAX_DISPLAY, gData.length));
+                    setScandioReviewsVisibleCount(scandioAccum.length);
+                }
             } catch {
                 // keep page usable
             } finally {
@@ -102,7 +122,7 @@ export function useProReviews(placeId: string) {
     }, [placeId]);
 
     useEffect(() => {
-        setGoogleReviewsVisibleCount(REVIEWS_PAGE_SIZE);
+        setGoogleReviewsVisibleCount(GOOGLE_REVIEWS_MAX_DISPLAY);
         setScandioReviewsVisibleCount(REVIEWS_PAGE_SIZE);
     }, [placeId]);
 
@@ -208,6 +228,30 @@ export function useProReviews(placeId: string) {
                         error: typeof data?.error === 'string' ? data.error : 'Failed to submit',
                     };
                 }
+                const batch = 500;
+                const scandioAccum: any[] = [];
+                for (let offset = 0; ; offset += batch) {
+                    const scandioRes = await (supabase as any)
+                        .from('reviews')
+                        .select('*')
+                        .eq('provider_id', resolvedProviderId)
+                        .eq('status', 'approved')
+                        .eq('source', 'scandio')
+                        .order('published_at', { ascending: false })
+                        .range(offset, offset + batch - 1);
+                    const chunk = Array.isArray(scandioRes.data) ? scandioRes.data : [];
+                    scandioAccum.push(...chunk);
+                    if (chunk.length < batch) break;
+                }
+                setScandioReviews(scandioAccum);
+                setScandioReviewsVisibleCount(scandioAccum.length);
+                const scandioCountRes = await (supabase as any)
+                    .from('reviews')
+                    .select('id', { count: 'exact', head: true })
+                    .eq('provider_id', resolvedProviderId)
+                    .eq('source', 'scandio')
+                    .eq('status', 'approved');
+                setScandioReviewTotalFromScandio(scandioCountRes.count ?? scandioAccum.length);
                 return { ok: true as const };
             } catch {
                 return { ok: false as const, error: 'Network error' };

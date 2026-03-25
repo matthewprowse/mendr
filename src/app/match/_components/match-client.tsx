@@ -9,10 +9,18 @@ import { toWhatsAppPhone } from '@/lib/utils';
 import { setLastConversationIdForWhatsApp } from '@/lib/whatsapp-prefill';
 import { ArrowLeft, ArrowRight, Star } from 'lucide-react';
 import { toast } from 'sonner';
+import { FlowStepHeader } from '@/components/flow-header';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import type { MatchLocation, MatchProvider } from '@/features/match/contracts';
-import { geocodeApi, reviewsCountApi } from '@/features/match/api/client';
+import {
+    geocodeApi,
+    reviewsCountApi,
+    queueEnrichmentApi,
+    fetchEnrichmentApi,
+    restoreProviderTokenApi,
+} from '@/features/match/api/client';
+import type { EnrichmentCacheEntry } from '@/app/api/enrich/get/route';
 import { useMatchConversationContext } from '@/features/match/hooks/useMatchConversationContext';
 import { useMatchProviders } from '@/features/match/hooks/useMatchProviders';
 import { useMatchMap } from '@/features/match/hooks/useMatchMap';
@@ -40,6 +48,13 @@ function formatProviderAddress(raw: string | null | undefined): string {
     }
 
     return parts.join(', ');
+}
+
+function profileCompletenessLabel(level: number): string {
+    if (level >= 3) return 'Verified Profile';
+    if (level >= 2) return 'Detailed Profile';
+    if (level >= 1) return 'Basic Profile';
+    return 'Listing Profile';
 }
 
 export function MatchClient({ conversationId: initialConversationId }: { conversationId?: string }) {
@@ -86,6 +101,42 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
     const [scandioReviewCountByProviderId, setScandioReviewCountByProviderId] = useState<
         Record<string, number>
     >({});
+
+    // Enrichment cache: keyed by Google Place ID
+    const [enrichmentCache, setEnrichmentCache] = useState<Record<string, EnrichmentCacheEntry>>({});
+    const [isEnrichmentLoading, setIsEnrichmentLoading] = useState(false);
+    const enrichmentQueuedRef = useRef<string>('');
+
+    // Fire enrichment queue + fetch cache whenever the provider list changes
+    useEffect(() => {
+        if (providers.length === 0) return;
+        const placeIds = providers.map((p) => p.placeId).filter(Boolean);
+        if (placeIds.length === 0) return;
+
+        const key = placeIds.slice().sort().join(',');
+        if (enrichmentQueuedRef.current === key) return;
+        enrichmentQueuedRef.current = key;
+
+        // 1. Fire enrichment queue (fire-and-forget)
+        void resolveTradeContext().then(({ trade }) => {
+            queueEnrichmentApi(placeIds, trade || undefined);
+        });
+
+        // 2. Fetch existing cache entries for immediate display
+        let cancelled = false;
+        setIsEnrichmentLoading(true);
+        void fetchEnrichmentApi(placeIds).then((cache) => {
+            if (cancelled) return;
+            if (cache) setEnrichmentCache((prev) => ({ ...prev, ...cache }));
+        }).finally(() => {
+            if (!cancelled) setIsEnrichmentLoading(false);
+        });
+
+        return () => {
+            cancelled = true;
+        };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [providers]);
 
     useEffect(() => {
         const pid = selectedProvider?.providerId;
@@ -218,29 +269,35 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
 
     const showBottomSkeleton = isLoading || isProvidersLoading;
     const noProviders = !showBottomSkeleton && providers.length === 0;
+    const trackContactIntent = useCallback(
+        (channel: 'phone' | 'email' | 'whatsapp') => {
+            if (!conversationId || !selectedProvider?.providerId) return;
+            void restoreProviderTokenApi({
+                providerId: selectedProvider.providerId,
+                conversationId,
+                channel,
+            });
+        },
+        [conversationId, selectedProvider?.providerId]
+    );
 
     return (
-        <main className="flex flex-col h-dvh overflow-y-auto">
-            <div className="flex flex-row justify-between items-center p-4 h-18 bg-background w-full sticky top-0 z-50">
-                <Button variant="secondary" size="icon" className="h-10 w-10" onClick={() => router.back()}>
-                    <ArrowLeft className="size-5" />
-                </Button>
-                <h3 className="text-lg text-foreground font-semibold">Scandio</h3>
-                <Button variant="ghost" size="icon" className="hover:bg-transparent" />
-            </div>
+        <main className="flex flex-col h-dvh pt-16">
+            <FlowStepHeader step={3} onBack={() => router.back()} />
 
-            <div className="flex flex-col gap-6 p-4 flex-1 min-h-0">
-                <div className="flex flex-col gap-2">
-                    <h1 className="text-2xl text-foreground font-bold">Recommended Matches</h1>
+            <div className="flex flex-col gap-4 px-4 pt-4 flex-1 min-h-0 mb-3">
+                <div className="flex flex-col gap-1">
+                    <h1 className="text-2xl font-bold text-foreground">
+                        Recommended Matches
+                    </h1>
                     <p className="text-sm text-muted-foreground">
-                        We&apos;ve pulled together a list of local specialists who are a strong fit for this job. You
-                        can compare them, then reach out in the way that suits you best.
+                        Lorem ipsum dolor sit amet consectetur adipisicing elit. Quisquam, quos.
                     </p>
                 </div>
 
                 <Input
                     placeholder="Enter Address"
-                    className="text-sm h-10"
+                    className="text-sm h-10 mt-3"
                     value={addressInput}
                     onChange={(e) => setAddressInput(e.target.value)}
                     onKeyDown={(e) => {
@@ -250,7 +307,7 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
                     disabled={isUpdatingLocation || isLoading}
                 />
 
-                <div className="flex flex-row justify-between items-center">
+                <div className="flex flex-row justify-between items-center mb-3">
                     <label className="text-sm text-foreground font-medium">Service Radius</label>
                     <div className="flex flex-row items-center gap-2 overflow-x-auto">
                         {RADIUS_OPTIONS_KM.map((km) => {
@@ -299,7 +356,7 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
                 ) : null}
             </div>
 
-            <div className="flex flex-col gap-4 p-4 bg-background w-full sticky bottom-0 z-50">
+            <div className="flex flex-col gap-4 p-4 w-full sticky bottom-0 z-40">
                 <div className="flex flex-row justify-between items-center">
                     <Badge variant="secondary">
                         {showBottomSkeleton ? (
@@ -427,6 +484,76 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
                                 )}
                             </div>
 
+                            {/* Enrichment fields — shimmer until cache is fetched */}
+                            {(() => {
+                                const enrich = selectedProvider
+                                    ? enrichmentCache[selectedProvider.placeId]
+                                    : undefined;
+                                const showEnrichShimmer =
+                                    isEnrichmentLoading && !enrich && selectedProvider?.website;
+
+                                if (showEnrichShimmer) {
+                                    return (
+                                        <div className="flex flex-col gap-2">
+                                            <Skeleton className="h-4 w-full" />
+                                            <Skeleton className="h-4 w-5/6" />
+                                            <div className="flex flex-row gap-1 flex-wrap mt-1">
+                                                <Skeleton className="h-5 w-20 rounded-full" />
+                                                <Skeleton className="h-5 w-16 rounded-full" />
+                                                <Skeleton className="h-5 w-24 rounded-full" />
+                                            </div>
+                                        </div>
+                                    );
+                                }
+
+                                if (!enrich) return null;
+
+                                return (
+                                    <div className="flex flex-col gap-2">
+                                        <Badge
+                                            variant="secondary"
+                                            className="w-fit text-xs rounded-full font-normal"
+                                        >
+                                            {profileCompletenessLabel(enrich.profileCompleteness ?? 0)}
+                                        </Badge>
+                                        {enrich.bio?.trim() ? (
+                                            <p
+                                                className="text-xs text-muted-foreground"
+                                                style={{
+                                                    display: '-webkit-box',
+                                                    WebkitLineClamp: 3 as any,
+                                                    WebkitBoxOrient: 'vertical',
+                                                    overflow: 'hidden',
+                                                }}
+                                            >
+                                                {enrich.bio}
+                                            </p>
+                                        ) : null}
+                                        {enrich.specialisations.length > 0 ? (
+                                            <div className="flex flex-row gap-1 flex-wrap">
+                                                {enrich.specialisations.slice(0, 4).map((s) => (
+                                                    <Badge
+                                                        key={s}
+                                                        variant="secondary"
+                                                        className="text-xs rounded-full font-normal"
+                                                    >
+                                                        {s}
+                                                    </Badge>
+                                                ))}
+                                            </div>
+                                        ) : null}
+                                        {enrich.hasWorkPhotos ? (
+                                            <Badge
+                                                variant="secondary"
+                                                className="w-fit text-xs rounded-full font-normal"
+                                            >
+                                                Work photos available
+                                            </Badge>
+                                        ) : null}
+                                    </div>
+                                );
+                            })()}
+
                             <div className="flex flex-row gap-2">
                                 <Popover open={contactOpen} onOpenChange={setContactOpen}>
                                     <PopoverTrigger asChild>
@@ -451,6 +578,7 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
                                                 onClick={() => {
                                                     const phone = toWhatsAppPhone(selectedProvider?.phone);
                                                     if (phone) {
+                                                        trackContactIntent('whatsapp');
                                                         window.open(
                                                             `https://wa.me/${phone}`,
                                                             '_blank',
@@ -472,6 +600,7 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
                                                     className="flex-1 h-10"
                                                     onClick={() => {
                                                         if (selectedProvider?.phone) {
+                                                            trackContactIntent('phone');
                                                             window.location.href = `tel:${selectedProvider.phone}`;
                                                         }
                                                         setContactOpen(false);
@@ -485,6 +614,7 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
                                                     className="flex-1 h-10"
                                                     onClick={() => {
                                                         if (selectedProvider?.website) {
+                                                            trackContactIntent('email');
                                                             window.location.href = `mailto:${selectedProvider.website}`;
                                                         }
                                                         setContactOpen(false);

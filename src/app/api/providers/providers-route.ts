@@ -5,7 +5,7 @@ import { summarizeReviews, sanitizeCustomerSummary } from '@/lib/review-summary'
 import { formatWeekdayDescriptionsTo24h } from '@/lib/format-weekday-descriptions';
 import { isOpenNowFromWeekdayDescriptions } from '@/lib/open-status';
 import { buildProviderQuery } from './query-builder';
-import { rankProviders } from './ranking';
+import { rankProviders, getISOWeekKey, compositeScore } from './ranking';
 import type { ProviderItem, ProvidersRequestBody, ProvidersResponseBody } from './contracts';
 import { buildSearchCacheKey } from './cache';
 import { withTimeout } from './review-enrichment';
@@ -16,6 +16,7 @@ export async function POST(req: NextRequest) {
         const startedAt = Date.now();
         let searchCacheHit = false;
         let searchCacheExpired = false;
+        let textSearchExtraPagesFetched = 0;
         const body = (await req.json()) as ProvidersRequestBody;
         const {
             lat,
@@ -824,9 +825,61 @@ export async function POST(req: NextRequest) {
             places = filtered.map((f) => f.place);
             routingSummaries = filtered.map((f) => f.routing);
 
+            const seenPlaceIds = new Set<string>(places.map((p: any) => String(p?.id ?? '')));
+            let nextSearchToken = (data.nextPageToken as string | undefined) || null;
+            const MAX_EXTRA_SEARCH_PAGES = 2;
+            while (
+                nextSearchToken &&
+                !pageToken &&
+                textSearchExtraPagesFetched < MAX_EXTRA_SEARCH_PAGES &&
+                places.length < 55
+            ) {
+                textSearchExtraPagesFetched += 1;
+                const responseMore = await fetch(url, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Goog-Api-Key': apiKey,
+                        'X-Goog-FieldMask':
+                            'places.id,places.displayName,places.formattedAddress,places.rating,places.userRatingCount,places.nationalPhoneNumber,places.websiteUri,places.location,places.types,places.reviews,places.editorialSummary,places.reviewSummary,places.regularOpeningHours,places.currentOpeningHours,routingSummaries,nextPageToken',
+                    },
+                    body: JSON.stringify({
+                        textQuery: searchQuery,
+                        pageToken: nextSearchToken,
+                        routingParameters: {
+                            origin: {
+                                latitude: lat,
+                                longitude: lng,
+                            },
+                        },
+                        locationBias: {
+                            circle: {
+                                center: { latitude: lat, longitude: lng },
+                                radius: radius,
+                            },
+                        },
+                        pageSize: 20,
+                    }),
+                });
+                if (!responseMore.ok) break;
+                const dataMore = await responseMore.json();
+                const rawMore = dataMore.places || [];
+                const routeMore = dataMore.routingSummaries || [];
+                rawMore.forEach((p: any, i: number) => {
+                    const pid = String(p?.id ?? '');
+                    if (!pid || seenPlaceIds.has(pid)) return;
+                    const types = (p.types || []) as string[];
+                    const hasRetailType = types.some((t: string) => RETAIL_TYPES.has(t));
+                    if (hasRetailType) return;
+                    seenPlaceIds.add(pid);
+                    places.push(p);
+                    routingSummaries.push(routeMore[i] ?? {});
+                });
+                nextSearchToken = (dataMore.nextPageToken as string | undefined) || null;
+                data.nextPageToken = dataMore.nextPageToken ?? null;
+            }
+
             if (supabase && !pageToken && places.length > 0) {
-                const latR = Math.round(Number(lat) * 1000) / 1000;
-                const lngR = Math.round(Number(lng) * 1000) / 1000;
                 pendingCacheWrite = {
                     key: buildSearchCacheKey({
                         lat: Number(lat),
@@ -860,9 +913,12 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ providers: [] });
         }
 
+        const rawPlacesMergedCount = places.length;
+
         // 3. Fast-path mapping for MVP: skip enrichment and heavy caching.
-        const fastProviders = places
-            .map((place: any, index: number) => {
+        const mapPlacesToFastProviders = (minRatingCount: number) =>
+            places
+                .map((place: any, index: number) => {
                 if (!isProviderRelevantForTrade({ place, aiData: null, cached: null })) {
                     return null;
                 }
@@ -894,8 +950,7 @@ export async function POST(req: NextRequest) {
                 );
                 const ratingCount = place.userRatingCount ?? 0;
 
-                // Hard rule: never surface providers with fewer than 5 reviews.
-                if (ratingCount < 5) {
+                if (ratingCount < minRatingCount) {
                     return null;
                 }
                 const services = getPlaceServices(place.types);
@@ -932,7 +987,7 @@ export async function POST(req: NextRequest) {
                     weekdayDescriptions: weekdayDescriptionsFormatted,
                 };
             })
-            .filter(Boolean) as Array<{
+                .filter(Boolean) as Array<{
             placeId: string;
             place_id?: string;
             name: string;
@@ -950,6 +1005,35 @@ export async function POST(req: NextRequest) {
             services: { short: string; full: string }[];
             isOpen: boolean | null;
         }>;
+
+        let minRatingUsed = 5;
+        let fastProviders = mapPlacesToFastProviders(5);
+        if (fastProviders.length < 4) {
+            minRatingUsed = 3;
+            fastProviders = mapPlacesToFastProviders(3);
+        }
+
+        if (supabase && fastProviders.length > 0) {
+            const placeIds = fastProviders
+                .map((p) => toGooglePlaceId(p.placeId))
+                .filter(Boolean);
+            if (placeIds.length > 0) {
+                const { data: cacheRows } = await supabase
+                    .from('provider_cache')
+                    .select('google_place_id, profile_completeness')
+                    .in('google_place_id', placeIds);
+                const completenessByGoogleId = new Map<string, number>(
+                    (cacheRows || []).map((r: any) => [
+                        String(r.google_place_id),
+                        Number(r.profile_completeness ?? 0),
+                    ])
+                );
+                fastProviders.forEach((p) => {
+                    const completeness = completenessByGoogleId.get(toGooglePlaceId(p.placeId)) ?? 0;
+                    (p as any).profileCompleteness = Math.max(0, Math.min(3, completeness));
+                });
+            }
+        }
 
         if (fastProviders.length === 0) {
             const durationMs = Date.now() - startedAt;
@@ -969,10 +1053,14 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ providers: [] });
         }
 
-        // Sort by composite score: balance rating, review count, and distance (closer + higher rated first).
-        const distanceKmNum = (p: { distanceKm: number | null }) => (p.distanceKm != null ? p.distanceKm : 999);
-        const top25 = rankProviders(fastProviders as ProviderItem[], 25);
-        const limitedProviders = top25.map((p) => ({ ...p }));
+        // Rank by weighted composite: relevance 40%, Bayesian rating 30%, proximity 20%, recency 10%.
+        // Fetch 12 candidates (2× the carousel cap) so the rotation step has room to promote
+        // under-represented providers without running out of options.
+        const top12 = rankProviders(fastProviders as ProviderItem[], 12, {
+            tradeDetail: tradeDetailRaw,
+            trade: tradeNorm,
+        });
+        const limitedProviders = top12.map((p) => ({ ...p }));
 
         // AI summaries from real review text: use Supabase reviews when we have them; otherwise
         // Place Details (same request). This must run even when providers are not in Supabase yet
@@ -1046,6 +1134,111 @@ export async function POST(req: NextRequest) {
                             p.scandioReviewCount = 0;
                         });
                     }
+
+                    // ── Soft rotation (token bucket) ──────────────────────────────────────
+                    // Each provider starts each ISO week with 5 tokens. Being included in a
+                    // result set costs 1 token. Depleted providers (0 tokens) are moved to
+                    // the back of the list so under-exposed providers can surface instead.
+                    // We never fully exclude a depleted provider — if there are no
+                    // alternatives the carousel will still show them.
+                    {
+                        const weekKey = getISOWeekKey();
+                        const rotationPids = (limitedProviders as any[])
+                            .map((p) => p.providerId)
+                            .filter(Boolean) as string[];
+
+                        if (rotationPids.length > 0) {
+                            try {
+                                const { data: tokenRows } = await supabase
+                                    .from('provider_rotation_tokens')
+                                    .select('provider_id, tokens_remaining, last_shown_at')
+                                    .eq('week_key', weekKey)
+                                    .in('provider_id', rotationPids);
+
+                                if (tokenRows && tokenRows.length > 0) {
+                                    const tokenMap = new Map<string, number>(
+                                        tokenRows.map((r: any) => [
+                                            String(r.provider_id),
+                                            Number(r.tokens_remaining ?? 5),
+                                        ])
+                                    );
+                                    const lastShownMap = new Map<string, string>(
+                                        tokenRows
+                                            .filter((r: any) => r.last_shown_at)
+                                            .map((r: any) => [
+                                                String(r.provider_id),
+                                                String(r.last_shown_at),
+                                            ])
+                                    );
+
+                                    // Attach last_shown_at as lastMatchedAt for recency scoring
+                                    // on future requests (stored in the providers table later).
+                                    (limitedProviders as any[]).forEach((p) => {
+                                        const pid = p.providerId;
+                                        if (pid && lastShownMap.has(pid)) {
+                                            p.lastMatchedAt = lastShownMap.get(pid);
+                                        }
+                                    });
+
+                                    // Stable sort: depleted providers sink to the end while the
+                                    // original composite-score order is preserved within each tier.
+                                    (limitedProviders as any[]).sort((a, b) => {
+                                        const tA = tokenMap.get(a.providerId) ?? 5;
+                                        const tB = tokenMap.get(b.providerId) ?? 5;
+                                        // Both depleted or both healthy → preserve order
+                                        if (tA > 0 && tB > 0) return 0;
+                                        if (tA === 0 && tB === 0) return 0;
+                                        // Non-depleted before depleted
+                                        return tA > 0 ? -1 : 1;
+                                    });
+                                }
+
+                                // Async: deduct 1 token from each provider now being shown.
+                                // Also record last_shown_at so the recency signal stays current.
+                                createSupabaseAdminClient()
+                                    .then(async (adminClient) => {
+                                        const nowIso = new Date().toISOString();
+                                        const upsertRows = rotationPids.map((pid) => ({
+                                            provider_id: pid,
+                                            week_key: weekKey,
+                                            tokens_remaining: Math.max(
+                                                0,
+                                                (tokenRows?.find((r: any) => r.provider_id === pid)
+                                                    ?.tokens_remaining ?? 5) - 1
+                                            ),
+                                            last_shown_at: nowIso,
+                                        }));
+                                        await adminClient
+                                            .from('provider_rotation_tokens')
+                                            .upsert(upsertRows, {
+                                                onConflict: 'provider_id,week_key',
+                                            });
+                                        // Also update last_matched_at on the providers table so
+                                        // the recency signal persists across weeks.
+                                        await adminClient
+                                            .from('providers')
+                                            .upsert(
+                                                rotationPids.map((pid) => ({
+                                                    id: pid,
+                                                    last_matched_at: nowIso,
+                                                })),
+                                                { onConflict: 'id' }
+                                            );
+                                    })
+                                    .catch(() => {
+                                        // Best-effort; never block the response.
+                                    });
+                            } catch {
+                                // Rotation is best-effort. If the table doesn't exist yet
+                                // (e.g. migration not yet applied), silently skip.
+                            }
+                        }
+
+                        // Trim to carousel size (4–6 providers max).
+                        limitedProviders.splice(6);
+                    }
+                    // ─────────────────────────────────────────────────────────────────────
+
                     if (providerIds.length > 0) {
                         const cutoff = new Date(Date.now() - TWENTY_FOUR_MONTHS_MS).toISOString();
                         // Fetch up to 50 recent google reviews per provider_id.
@@ -1184,6 +1377,19 @@ export async function POST(req: NextRequest) {
                         summarySucceeded,
                         limitedProvidersCount: limitedProviders.length,
                         concurrency,
+                    rankingDecision: limitedProviders.map((p: any, idx: number) => ({
+                        rank: idx + 1,
+                        providerId: p.providerId ?? null,
+                        placeId: p.placeId,
+                        score: Number(
+                            compositeScore(
+                                p as ProviderItem,
+                                tradeDetailRaw,
+                                tradeNorm
+                            ).toFixed(4)
+                        ),
+                        profileCompleteness: p.profileCompleteness ?? 0,
+                    })),
                     },
                 });
             } catch {
@@ -1283,6 +1489,29 @@ export async function POST(req: NextRequest) {
                         const providerId = providerIdByGoogle.get(googlePlaceId);
                         if (providerId) p.providerId = providerId;
                     });
+
+                    // Background website enrichment for providers that have a website but
+                    // no enriched content yet (first ingestion path). This builds the rich
+                    // profile data (about, past work, AI-extracted specialisations) that
+                    // improves both the provider card and future relevance scoring.
+                    // Cap at 2 per request so we don't hammer external sites on busy periods.
+                    {
+                        const toEnrich = rows
+                            .filter((r) => r.website && !r.summary)
+                            .slice(0, 2)
+                            .map((r) => providerIdByGoogle.get(r.google_place_id))
+                            .filter(Boolean) as string[];
+
+                        if (toEnrich.length > 0) {
+                            import('@/lib/refresh-provider-website')
+                                .then(async ({ refreshProviderWebsiteById }) => {
+                                    for (const pid of toEnrich) {
+                                        await refreshProviderWebsiteById(pid).catch(() => {});
+                                    }
+                                })
+                                .catch(() => {});
+                        }
+                    }
 
                     const reviewPayload: any[] = [];
                     const cutoffMs = Date.now() - TWENTY_FOUR_MONTHS_MS;
@@ -1412,6 +1641,10 @@ export async function POST(req: NextRequest) {
                 searchCacheExpired,
                 usedSearchCache: searchCacheHit,
                 usedGoogleApi: !searchCacheHit,
+                rawPlacesMergedCount: rawPlacesMergedCount,
+                textSearchExtraPagesFetched,
+                minReviewThreshold: minRatingUsed,
+                fastProviderCountBeforeRank: fastProviders.length,
             },
         });
 

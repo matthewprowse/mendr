@@ -234,6 +234,9 @@ function enforceLanguageStyleInJson(text: string): string {
         }
         if (typeof parsed.trade_detail === 'string' && parsed.trade_detail.trim()) {
             parsed.trade_detail = toHeadlineStyle(parsed.trade_detail);
+        } else if (typeof parsed.trade === 'string' && parsed.trade.trim()) {
+            // Backward-compatible safety net: ensure trade_detail is always present.
+            parsed.trade_detail = toHeadlineStyle(parsed.trade);
         }
         if (typeof parsed.action_required === 'string' && parsed.action_required.trim()) {
             parsed.action_required = stripFillerSentenceStarts(parsed.action_required);

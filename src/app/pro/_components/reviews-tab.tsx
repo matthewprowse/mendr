@@ -289,22 +289,21 @@ export function ProReviewsTab(props: {
                                 <p className="text-sm text-muted-foreground leading-relaxed">{r.body}</p>
                             </div>
                         ))}
-                        <ReviewsPaginationFooter
-                            showingCount={googleReviewsVisibleCount}
-                            total={googleReviewCardsLength}
-                            categoryLabel="Google Reviews"
-                            onViewMore={() =>
-                                setGoogleReviewsVisibleCount((prev) => Math.min(prev + REVIEWS_PAGE_SIZE, googleReviewCardsLength))
-                            }
-                            viewAllHref={
-                                providerGooglePlaceId
-                                    ? `https://www.google.com/maps/place/?q=place_id:${providerGooglePlaceId.replace(
-                                          /^places\//,
-                                          ''
-                                      )}`
-                                    : null
-                            }
-                        />
+                        {providerGooglePlaceId ? (
+                            <p className="text-sm text-muted-foreground">
+                                <a
+                                    href={`https://www.google.com/maps/place/?q=place_id:${providerGooglePlaceId.replace(
+                                        /^places\//,
+                                        ''
+                                    )}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="underline underline-offset-2"
+                                >
+                                    Open listing on Google Maps
+                                </a>
+                            </p>
+                        ) : null}
                     </>
                 ) : (
                     <p className="text-sm text-muted-foreground">No Google reviews saved yet.</p>

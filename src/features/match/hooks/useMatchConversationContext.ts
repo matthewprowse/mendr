@@ -3,6 +3,13 @@ import { supabase } from '@/lib/supabase';
 import { geocodeApi } from '../api/client';
 import type { MatchLocation } from '../contracts';
 
+function isCoordinateLikeAddress(value: string | null | undefined): boolean {
+    if (typeof value !== 'string') return false;
+    const trimmed = value.trim();
+    if (!trimmed) return false;
+    return /^\s*-?\d+(?:\.\d+)?\s*[, ]\s*-?\d+(?:\.\d+)?\s*$/.test(trimmed);
+}
+
 export function useMatchConversationContext(conversationId: string) {
     const [userLocation, setUserLocation] = useState<MatchLocation | null>(null);
     const [addressInput, setAddressInput] = useState('');
@@ -17,7 +24,8 @@ export function useMatchConversationContext(conversationId: string) {
                 .maybeSingle();
             const d = data?.diagnosis;
             const t = typeof d?.trade === 'string' ? d.trade.trim() : '';
-            const td = typeof d?.trade_detail === 'string' ? d.trade_detail.trim() : '';
+            const tdRaw = typeof d?.trade_detail === 'string' ? d.trade_detail.trim() : '';
+            const td = tdRaw || t;
             return { trade: t, trade_detail: td };
         } catch {
             return { trade: '', trade_detail: '' };
@@ -75,13 +83,21 @@ export function useMatchConversationContext(conversationId: string) {
                 !Number.isNaN(data.customer_lat) &&
                 !Number.isNaN(data.customer_lng)
             ) {
+                const storedAddress = typeof data.customer_address === 'string' ? data.customer_address : '';
+                const shouldResolveAddress = !storedAddress.trim() || isCoordinateLikeAddress(storedAddress);
+                const resolvedAddress = shouldResolveAddress
+                    ? await reverseGeocodeLatLng(data.customer_lat, data.customer_lng)
+                    : storedAddress;
                 const loc = {
                     lat: data.customer_lat as number,
                     lng: data.customer_lng as number,
-                    address: (data.customer_address as string) || '',
+                    address: resolvedAddress || '',
                 };
                 setUserLocation(loc);
                 setAddressInput(loc.address || '');
+                if (shouldResolveAddress && resolvedAddress) {
+                    await persistConversationLocation(loc);
+                }
                 return loc;
             }
         } catch {

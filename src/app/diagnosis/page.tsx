@@ -16,9 +16,9 @@ import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ArrowLeft } from 'lucide-react';
 import type { DiagnosisData } from '@/app/chat/_components/types';
 import { toast } from 'sonner';
+import { FlowStepHeader } from '@/components/flow-header';
 
 export default function WelcomePage({ conversationId }: { conversationId?: string }) {
     const router = useRouter();
@@ -52,7 +52,14 @@ export default function WelcomePage({ conversationId }: { conversationId?: strin
         try {
             const parsed = JSON.parse(toParse);
             if (parsed && typeof parsed === 'object' && parsed.diagnosis) {
-                return parsed as DiagnosisData;
+                const d = parsed as DiagnosisData;
+                return {
+                    ...d,
+                    trade_detail:
+                        typeof d.trade_detail === 'string' && d.trade_detail.trim()
+                            ? d.trade_detail
+                            : d.trade,
+                };
             }
         } catch {
             // ignore
@@ -392,22 +399,18 @@ export default function WelcomePage({ conversationId }: { conversationId?: strin
               : '');
 
     return (
-        <main
-            className={`flex flex-col gap-6 p-4 pt-22 ${
-                isAddingInfo ? 'pb-49' : 'pb-22'
-            }`}
-        >
-            <div className="flex flex-row justify-between items-center p-4 h-18 bg-background w-full fixed inset-x-0 top-0 z-50">
-                <Button variant="secondary" size="icon" className="h-10 w-10" onClick={() => router.back()}>
-                    <ArrowLeft className="size-5" />
-                </Button>
-                <h3 className="text-lg text-foreground font-semibold">Scandio</h3>
-                <Button variant="ghost" size="icon" className="hover:bg-transparent" />
-            </div>
+        <div className="flex min-h-screen flex-col bg-background">
+            <FlowStepHeader step={2} onBack={() => router.back()} />
+
+            <div className={`flex flex-1 justify-center px-4 pt-20 sm:px-6 ${isAddingInfo ? 'pb-49' : 'pb-32'}`}>
+            <div className="flex w-full max-w-xl flex-col gap-6">
+
             <div className="flex flex-col gap-2">
-                <h1 className="text-2xl text-foreground font-bold">Right, Here&apos;s Something</h1>
+                <h1 className="text-2xl font-bold text-foreground">
+                    Right, Here's Something...
+                </h1>
                 <p className="text-sm text-muted-foreground">
-                    What&apos;re seeing based on your photo. You know your home better than we do, so let us know if something feels off.
+                    What we're seeing based on your photo. You know your home better than we do, so let us know if something seems off.
                 </p>
             </div>
 
@@ -429,9 +432,9 @@ export default function WelcomePage({ conversationId }: { conversationId?: strin
                 <div className="overflow-hidden rounded-lg border border-input bg-secondary">
                     {imageSrc ? (
                         // eslint-disable-next-line @next/next/no-img-element
-                        <img src={imageSrc} alt="" className="h-64 w-full object-cover" />
+                        <img src={imageSrc} alt="" className="h-56 w-full object-cover" />
                     ) : (
-                        <div className="h-64 w-full" />
+                        <div className="h-56 w-full" />
                     )}
                 </div>
                 {showSkeleton ? (
@@ -482,46 +485,44 @@ export default function WelcomePage({ conversationId }: { conversationId?: strin
                 </div>
             )}
 
+            </div>
+            </div>
+
             {!isAddingInfo ? (
-                <div className="flex flex-row gap-2 p-4 bg-background w-full fixed inset-x-0 bottom-0 z-50">
-                    <Button
-                        variant="ghost"
-                        className="flex flex-1 h-10"
-                        disabled={showSkeleton}
-                        onClick={() => {
-                            setIsAddingInfo(true);
-                            // Let the textarea mount before focusing.
-                            setTimeout(() => infoTextareaRef.current?.focus(), 0);
-                        }}
-                    >
-                        Add Information
-                    </Button>
-                    <Button
-                        variant="default"
-                        className="flex flex-1 h-10"
-                        disabled={!canContinueToMatch}
-                        onClick={() => {
-                            if (!conversationId) return;
-                            if (conversationId) {
+                <div className="fixed inset-x-0 bottom-0 p-4">
+                    <div className="mx-auto flex w-full max-w-xl gap-2">
+                        <Button
+                            variant="ghost"
+                            className="flex-1 h-10"
+                            disabled={showSkeleton}
+                            onClick={() => {
+                                setIsAddingInfo(true);
+                                setTimeout(() => infoTextareaRef.current?.focus(), 0);
+                            }}
+                        >
+                            Add Context
+                        </Button>
+                        <Button
+                            variant="default"
+                            className="flex-1 h-10"
+                            disabled={!canContinueToMatch}
+                            onClick={() => {
+                                if (!conversationId) return;
                                 const key = `pending_diagnosis_image_url:${conversationId}`;
-                                try {
-                                    sessionStorage.removeItem(key);
-                                } catch {}
-                                try {
-                                    localStorage.removeItem(key);
-                                } catch {}
-                            }
-                            router.push(`/match/${encodeURIComponent(conversationId)}`);
-                        }}
-                    >
-                        Find Someone Great
-                    </Button>
+                                try { sessionStorage.removeItem(key); } catch {}
+                                try { localStorage.removeItem(key); } catch {}
+                                router.push(`/match/${encodeURIComponent(conversationId)}`);
+                            }}
+                        >
+                            Find Someone Great
+                        </Button>
+                    </div>
                 </div>
             ) : (
-                <div className="flex flex-col gap-3 p-4 bg-background w-full fixed inset-x-0 bottom-0 z-50">
-                    <div className="flex flex-col gap-3">
-                        <Label htmlFor="diagnosis-info-text" className="text-sm text-foreground">
-                            Add Information
+                <div className="fixed inset-x-0 bottom-0 p-4 bg-background">
+                    <div className="mx-auto flex w-full max-w-xl flex-col gap-3">
+                        <Label htmlFor="diagnosis-info-text" className="text-sm font-medium text-foreground">
+                            Add Context
                         </Label>
                         <Textarea
                             id="diagnosis-info-text"
@@ -529,69 +530,61 @@ export default function WelcomePage({ conversationId }: { conversationId?: strin
                             value={infoText}
                             onChange={(e) => setInfoText(e.target.value)}
                             disabled={showSkeleton}
-                            className="text-sm min-h-[64px] resize-none"
+                            className="text-sm resize-none"
+                            rows={3}
                         />
-                    </div>
-
-                    <div className="flex flex-row gap-3">
-                        <Button
-                            variant="ghost"
-                            className="flex flex-1 h-10"
-                            disabled={showSkeleton}
-                            onClick={() => {
-                                setIsAddingInfo(false);
-                                setInfoText('');
-                            }}
-                        >
-                            Cancel
-                        </Button>
-                        <Button
-                            variant="default"
-                            className="flex flex-1 h-10"
-                            disabled={!infoText.trim() || isDiagnosing || showSkeleton}
-                            onClick={async () => {
-                                const trimmed = infoText.trim();
-                                if (!trimmed) return;
-
-                                const nextItems = [...customerInfoItems, trimmed];
-                                const joinedInfo = nextItems.join('\n\n').trim();
-                                setCustomerInfoItems(nextItems);
-                                setIsAddingInfo(false);
-                                setInfoText('');
-
-                                if (conversationId) {
-                                    try {
-                                        await supabase
-                                            .from('conversations')
-                                            .upsert({
-                                                id: conversationId,
-                                                initial_image_description: joinedInfo || null,
-                                            })
-                                            .select('id')
-                                            .single();
-                                    } catch {
-                                        // Non-fatal; keep UI responsive.
+                        <div className="flex gap-2">
+                            <Button
+                                variant="ghost"
+                                className="flex-1 h-10"
+                                disabled={showSkeleton}
+                                onClick={() => {
+                                    setIsAddingInfo(false);
+                                    setInfoText('');
+                                }}
+                            >
+                                Cancel
+                            </Button>
+                            <Button
+                                variant="default"
+                                className="flex-1 h-10"
+                                disabled={!infoText.trim() || isDiagnosing || showSkeleton}
+                                onClick={async () => {
+                                    const trimmed = infoText.trim();
+                                    if (!trimmed) return;
+                                    const nextItems = [...customerInfoItems, trimmed];
+                                    const joinedInfo = nextItems.join('\n\n').trim();
+                                    setCustomerInfoItems(nextItems);
+                                    setIsAddingInfo(false);
+                                    setInfoText('');
+                                    if (conversationId) {
+                                        try {
+                                            await supabase
+                                                .from('conversations')
+                                                .upsert({
+                                                    id: conversationId,
+                                                    initial_image_description: joinedInfo || null,
+                                                })
+                                                .select('id')
+                                                .single();
+                                        } catch {
+                                            // Non-fatal.
+                                        }
                                     }
-                                }
-
-                                if (imageSrc) {
-                                    // Allow intentional re-run for this same conversation.
-                                    didRunDiagnosisRef.current = null;
-                                    setDiagnosisTitle('Diagnosing…');
-                                    await runInitialDiagnosis(
-                                        imageSrc,
-                                        joinedInfo,
-                                        trade.trim() || null
-                                    );
-                                }
-                            }}
-                        >
-                            {isDiagnosing ? 'Updating…' : 'Send'}
-                        </Button>
+                                    if (imageSrc) {
+                                        didRunDiagnosisRef.current = null;
+                                        setDiagnosisTitle('Diagnosing…');
+                                        await runInitialDiagnosis(imageSrc, joinedInfo, trade.trim() || null);
+                                    }
+                                }}
+                            >
+                                {isDiagnosing ? 'Updating…' : 'Send'}
+                            </Button>
+                        </div>
                     </div>
                 </div>
             )}
-        </main>
+        </div>
     );
 }
 

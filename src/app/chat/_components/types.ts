@@ -19,6 +19,12 @@ export interface DiagnosisData {
     requires_clarification?: boolean;
     /** True when the need is home-related but we don't offer that service yet. */
     unserviced?: boolean;
+    /**
+     * Specific subcategory within the trade, extracted by the AI.
+     * e.g. trade = "Plumbing", trade_detail = "rising damp / waterproofing".
+     * Used to improve provider match relevance scoring.
+     */
+    trade_detail?: string;
     /** 0–100. Below 85: ask for more photos/context before showing providers. */
     confidence?: number;
 }

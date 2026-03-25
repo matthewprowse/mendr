@@ -18,6 +18,8 @@ export function ProAboutTab(props: {
     mapEmbedSrc: string | null;
     addressDisplayLine: string | null;
     directionsHref: string | null;
+    /** Long-form profile copy (website + reviews narrative). */
+    profileSummaryLong: string | null;
 }) {
     const {
         operatingHoursByDay,
@@ -33,15 +35,20 @@ export function ProAboutTab(props: {
         mapEmbedSrc,
         addressDisplayLine,
         directionsHref,
+        profileSummaryLong,
     } = props;
 
     return (
         <div className="flex flex-col gap-6 mt-6">
             <div className="flex flex-col gap-2">
                 <h3 className="text-lg text-foreground font-bold">Summary</h3>
-                <p className="text-sm text-foreground">
-                    Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo
-                </p>
+                {profileSummaryLong?.trim() ? (
+                    <p className="text-sm text-foreground whitespace-pre-wrap leading-relaxed">{profileSummaryLong.trim()}</p>
+                ) : (
+                    <p className="text-sm text-muted-foreground">
+                        We&apos;re still building this profile. Check back shortly for more about their services and past work.
+                    </p>
+                )}
             </div>
 
             <div className="flex flex-col gap-3">

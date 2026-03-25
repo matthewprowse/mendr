@@ -14,6 +14,7 @@ export function useProProvider(placeId: string) {
     const [providerLat, setProviderLat] = useState<number | null>(null);
     const [providerLng, setProviderLng] = useState<number | null>(null);
     const [providerSummary, setProviderSummary] = useState<string | null>(null);
+    const [providerSummaryLong, setProviderSummaryLong] = useState<string | null>(null);
     const [providerPhone, setProviderPhone] = useState<string | null>(null);
     const [providerEmail, setProviderEmail] = useState<string | null>(null);
     const [providerWebsiteRaw, setProviderWebsiteRaw] = useState<string | null>(null);
@@ -34,7 +35,7 @@ export function useProProvider(placeId: string) {
                     const { data: row } = await (supabase as any)
                         .from('providers')
                         .select(
-                            'name, summary, weekday_descriptions, address, latitude, longitude, phone, website'
+                            'name, summary, summary_long, about, past_work, weekday_descriptions, address, latitude, longitude, phone, website'
                         )
                         .eq('id', placeId)
                         .maybeSingle();
@@ -44,7 +45,7 @@ export function useProProvider(placeId: string) {
                     const { data: row } = await (supabase as any)
                         .from('providers')
                         .select(
-                            'name, summary, weekday_descriptions, address, latitude, longitude, phone, website'
+                            'name, summary, summary_long, about, past_work, weekday_descriptions, address, latitude, longitude, phone, website'
                         )
                         .eq('google_place_id', googlePlaceId)
                         .maybeSingle();
@@ -61,6 +62,18 @@ export function useProProvider(placeId: string) {
                     setProviderLat(typeof lat === 'number' && Number.isFinite(lat) ? lat : null);
                     setProviderLng(typeof lng === 'number' && Number.isFinite(lng) ? lng : null);
                     setProviderSummary(typeof data.summary === 'string' ? data.summary : null);
+                    const long =
+                        typeof data.summary_long === 'string' && data.summary_long.trim()
+                            ? data.summary_long.trim()
+                            : '';
+                    const about = typeof data.about === 'string' && data.about.trim() ? data.about.trim() : '';
+                    const past =
+                        typeof data.past_work === 'string' && data.past_work.trim()
+                            ? data.past_work.trim()
+                            : '';
+                    const composed =
+                        long || [about, past].filter(Boolean).join('\n\n') || null;
+                    setProviderSummaryLong(composed);
                     setProviderPhone(
                         typeof data.phone === 'string' && data.phone.trim() ? data.phone.trim() : null
                     );
@@ -76,6 +89,7 @@ export function useProProvider(placeId: string) {
                     setProviderLat(null);
                     setProviderLng(null);
                     setProviderSummary(null);
+                    setProviderSummaryLong(null);
                     setProviderPhone(null);
                     setProviderEmail(null);
                     setProviderWebsiteRaw(null);
@@ -107,6 +121,7 @@ export function useProProvider(placeId: string) {
         providerLat,
         providerLng,
         providerSummary,
+        providerSummaryLong,
         providerPhone,
         providerEmail,
         providerWebsiteRaw,
