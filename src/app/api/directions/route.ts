@@ -1,15 +1,34 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient, createSupabaseAdminClient } from '@/lib/supabase-server';
+import { checkRateLimit } from '@/lib/rate-limit-config';
 
 const DIRECTIONS_CACHE_DAYS = 7;
 
+/**
+ * Round a "lat,lng" coordinate string to 3 decimal places (~111 m precision).
+ * Non-coordinate strings (address text) are returned lowercased unchanged.
+ * This dramatically increases cache hit rate for users at the same address
+ * across sessions where GPS precision varies slightly. (R7)
+ */
+function roundCoordString(s: string): string {
+    const parts = s.trim().split(',');
+    if (parts.length !== 2) return s.trim().toLowerCase();
+    const lat = parseFloat(parts[0]);
+    const lng = parseFloat(parts[1]);
+    if (isNaN(lat) || isNaN(lng)) return s.trim().toLowerCase();
+    return `${Math.round(lat * 1000) / 1000},${Math.round(lng * 1000) / 1000}`;
+}
+
 function directionsCacheKey(origin: string, destination: string): string {
-    const o = origin.trim().toLowerCase();
-    const d = destination.trim().toLowerCase();
+    const o = roundCoordString(origin);
+    const d = roundCoordString(destination);
     return o <= d ? `${o}|${d}` : `${d}|${o}`;
 }
 
 export async function GET(req: NextRequest) {
+    const limited = checkRateLimit(req, 'directions');
+    if (limited) return limited;
+
     const apiKey = process.env.GOOGLE_PLACES_API_KEY;
     if (!apiKey) {
         return NextResponse.json({ error: 'Directions API not configured' }, { status: 500 });

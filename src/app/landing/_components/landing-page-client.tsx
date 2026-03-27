@@ -8,7 +8,6 @@ import { LandingHeader } from '@/components/landing-header';
 import { Placeholder } from '@/components/placeholder';
 import { StartDiagnosisButton } from '@/app/page/_components/start-diagnosis-button';
 import { Button } from '@/components/ui/button';
-import { ThemeToggle } from '@/components/theme-toggle';
 
 // ── Animation variants ────────────────────────────────────────────────────────
 
@@ -106,9 +105,9 @@ function BentoCell({
             variants={bentoItem}
             className={[
                 'group flex flex-col overflow-hidden rounded-xl',
-                'border border-black/[0.06] dark:border-white/[0.06]',
+                'border border-black/[0.06]',
                 'bg-background transition-colors duration-150',
-                'hover:bg-[#F8F8F8] dark:hover:bg-white/[0.025]',
+                'hover:bg-[#F8F8F8]',
                 className,
             ].join(' ')}
         >
@@ -119,7 +118,7 @@ function BentoCell({
 
 function BentoCellFooter({ title, description }: { title: string; description: string }) {
     return (
-        <div className="shrink-0 flex flex-col gap-1 p-4 border-t border-black/[0.06] dark:border-white/[0.06]">
+        <div className="shrink-0 flex flex-col gap-1 p-4 border-t border-black/[0.06]">
             <h3 className="text-sm font-semibold text-foreground">{title}</h3>
             <p className="text-xs text-muted-foreground leading-relaxed">{description}</p>
         </div>
@@ -162,8 +161,7 @@ export function LandingPageClient() {
                     ]}
                     logoHref="/landing"
                     showTrades={false}
-                    rightSlot={<ThemeToggle />}
-                />
+                    />
 
                 <main className="flex-1">
                     {/* ── Hero ──────────────────────────────────────────────── */}
@@ -746,11 +744,12 @@ export function LandingPageClient() {
                             </div>
                             <div className="flex flex-col gap-3">
                                 <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                                    Legal
+                                    Company
                                 </span>
                                 <nav className="flex flex-col gap-2">
                                     {(
                                         [
+                                            ['Contact', '/contact'],
                                             ['Privacy Policy', '#'],
                                             ['Terms of Service', '#'],
                                         ] as [string, string][]
@@ -771,9 +770,14 @@ export function LandingPageClient() {
                                 &copy; {new Date().getFullYear()} Scandio. All rights reserved.
                                 Western Cape, South Africa.
                             </p>
-                            <p className="text-xs text-muted-foreground">
-                                Built for homeowners, by people who&apos;ve been stuck on hold.
-                            </p>
+                            <div className="flex items-center gap-4">
+                                <p className="text-xs text-muted-foreground">
+                                    Built for homeowners, by people who&apos;ve been stuck on hold.
+                                </p>
+                                <Link href="/admin" className="text-xs text-muted-foreground/30 hover:text-muted-foreground/60 transition-colors">
+                                    Admin
+                                </Link>
+                            </div>
                         </div>
                     </div>
                 </footer>

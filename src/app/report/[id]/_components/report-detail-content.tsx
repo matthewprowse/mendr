@@ -1,18 +1,16 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/lib/supabase';
-import { AppHeader } from '@/components/app-header';
-import { sanitizeAiContent, parseRepairReplacementRanges } from '@/lib/utils';
-import { calculateCalloutFee, CALLOUT_RATE_PER_KM } from '@/lib/pricing';
+import { sanitizeAiContent } from '@/lib/utils';
 import { Spinner } from '@/components/ui/spinner';
-import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
+import { ArrowLeft, Share, Download } from 'lucide-react';
 import { UnrelatedImageCard } from '@/app/chat/_components/unrelated-image-card';
 import { UnservicedCategoryCard } from '@/app/chat/_components/unserviced-category-card';
-import { ProvidersMap } from '@/app/chat/_components/providers-map';
 
 type ReportData = {
     diagnosis: Record<string, unknown> | null;
@@ -20,7 +18,12 @@ type ReportData = {
     customer_address: string | null;
     customer_lat: number | null;
     customer_lng: number | null;
-    messages?: { content: string; role: string; attachments?: string[]; diagnosis?: Record<string, unknown> | null }[];
+    messages?: {
+        content: string;
+        role: string;
+        attachments?: string[];
+        diagnosis?: Record<string, unknown> | null;
+    }[];
 };
 
 export interface ReportDetailContentProps {
@@ -29,39 +32,34 @@ export interface ReportDetailContentProps {
 
 export function ReportDetailContent({ reportId }: ReportDetailContentProps) {
     const id = reportId;
+    const router = useRouter();
 
     const [loading, setLoading] = useState(true);
     const [reportData, setReportData] = useState<ReportData | null>(null);
     const [error, setError] = useState<string | null>(null);
 
-    const [directionsLoading, setDirectionsLoading] = useState(false);
-    const [providerLocation, setProviderLocation] = useState<{ lat: number; lng: number } | null>(
-        null
-    );
-    const [directionsAttempted, setDirectionsAttempted] = useState(false);
-    const [directions, setDirections] = useState<{
-        distance_text: string;
-        distance_meters: number | null;
-        duration_text: string;
-    } | null>(null);
-
+    // Persist to localStorage
     useEffect(() => {
-        if (typeof window === 'undefined' || !id?.trim() || error) return;
-        if (!reportData) return;
+        if (typeof window === 'undefined' || !id?.trim() || error || !reportData) return;
         try {
             const key = 'scandio_my_reports';
             const raw = window.localStorage.getItem(key);
-            const list: Array<{ conversationId: string; title: string; date: string }> = raw ? JSON.parse(raw) : [];
+            const list: Array<{ conversationId: string; title: string; date: string }> = raw
+                ? JSON.parse(raw)
+                : [];
             if (!list.some((r) => r.conversationId === id)) {
                 list.unshift({
                     conversationId: id,
-                    title: (reportData.diagnosis as any)?.diagnosis ? `Report: ${String((reportData.diagnosis as any).diagnosis).slice(0, 40)}…` : `Report ${new Date().toLocaleDateString()}`,
+                    title:
+                        (reportData.diagnosis as any)?.diagnosis
+                            ? `Report: ${String((reportData.diagnosis as any).diagnosis).slice(0, 40)}…`
+                            : `Report ${new Date().toLocaleDateString()}`,
                     date: new Date().toISOString(),
                 });
                 window.localStorage.setItem(key, JSON.stringify(list.slice(0, 50)));
             }
         } catch {
-            // Ignore
+            // ignore
         }
     }, [id, reportData, error]);
 
@@ -70,9 +68,7 @@ export function ReportDetailContent({ reportId }: ReportDetailContentProps) {
         setLoading(true);
         setError(null);
         try {
-            // Support both 'diagnosis' (new) and 'diagnosis_json' (legacy) column names
             let conv: Record<string, unknown> | null = null;
-            let convError: unknown = null;
 
             const { data: d1, error: e1 } = await supabase
                 .from('conversations')
@@ -127,8 +123,6 @@ export function ReportDetailContent({ reportId }: ReportDetailContentProps) {
                 diagnosis?: Record<string, unknown> | null;
             }>;
 
-            // If the conversation-level diagnosis is missing, fall back to the most
-            // recent assistant message that carries a diagnosis object.
             let resolvedDiagnosis = conv.diagnosis as Record<string, unknown> | null;
             if (!resolvedDiagnosis) {
                 const lastWithDiag = [...msgs]
@@ -172,64 +166,37 @@ export function ReportDetailContent({ reportId }: ReportDetailContentProps) {
         loadReport();
     }, [id, loadReport]);
 
-    const fetchDirections = useCallback(async () => {
-        const hasLoc = reportData?.customer_lat != null && reportData?.customer_lng != null;
-        if (!reportData?.customer_address && !hasLoc) return;
-        setDirectionsLoading(true);
-        try {
-            const pos = await new Promise<GeolocationPosition>((resolve, reject) =>
-                navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 10000 })
-            );
-            const lat = pos.coords.latitude;
-            const lng = pos.coords.longitude;
-            setProviderLocation({ lat, lng });
-            const origin = `${lat},${lng}`;
-            const destination = hasLoc
-                ? `${reportData!.customer_lat},${reportData!.customer_lng}`
-                : reportData!.customer_address!;
-            const res = await fetch(
-                `/api/directions?origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}`
-            );
-            const data = await res.json();
-            if (data.distance_text && data.duration_text) {
-                setDirections({
-                    distance_text: data.distance_text,
-                    distance_meters: data.distance_meters ?? null,
-                    duration_text: data.duration_text,
+    const handleShare = useCallback(async () => {
+        const url =
+            typeof window !== 'undefined'
+                ? `${window.location.origin}/report/${id}`
+                : `/report/${id}`;
+        if (navigator.share) {
+            try {
+                await navigator.share({
+                    title: 'My Scandio Diagnosis Report',
+                    text: 'Here is my home diagnosis report from Scandio.',
+                    url,
                 });
+                return;
+            } catch {
+                // fall through to clipboard
             }
+        }
+        try {
+            await navigator.clipboard.writeText(url);
+            toast.success('Report link copied to clipboard');
         } catch {
-            toast.error('Could not get your location or directions.');
-        } finally {
-            setDirectionsLoading(false);
+            toast.error('Could not copy link');
         }
-    }, [reportData]);
+    }, [id]);
 
-    useEffect(() => {
-        if (
-            reportData &&
-            (reportData.customer_address ||
-                (reportData.customer_lat != null && reportData.customer_lng != null)) &&
-            !directionsAttempted
-        ) {
-            setDirectionsAttempted(true);
-            fetchDirections();
-        }
-    }, [reportData, directionsAttempted, fetchDirections]);
+    const handlePrint = useCallback(() => {
+        window.print();
+    }, []);
 
-    const mapsKey =
-        process.env.NEXT_PUBLIC_GOOGLE_MAPS_EMBED_KEY ||
-        process.env.NEXT_PUBLIC_GOOGLE_PLACES_API_KEY;
-    const hasLocation = reportData?.customer_lat != null && reportData?.customer_lng != null;
-    const destinationForMap = hasLocation
-        ? `${reportData!.customer_lat},${reportData!.customer_lng}`
-        : reportData?.customer_address || '';
-    const directionsMapUrl =
-        providerLocation && hasLocation
-            ? mapsKey
-                ? `https://www.google.com/maps/embed/v1/directions?key=${mapsKey}&origin=${providerLocation.lat},${providerLocation.lng}&destination=${reportData!.customer_lat},${reportData!.customer_lng}`
-                : `https://www.google.com/maps?output=embed&saddr=${providerLocation.lat},${providerLocation.lng}&daddr=${reportData!.customer_lat},${reportData!.customer_lng}`
-            : null;
+    // ── Error / loading states ─────────────────────────────────────────────────
+
     if (!id) {
         return (
             <div className="flex min-h-screen items-center justify-center bg-background">
@@ -238,14 +205,7 @@ export function ReportDetailContent({ reportId }: ReportDetailContentProps) {
         );
     }
 
-    if (loading || !reportData) {
-        if (error && !loading) {
-            return (
-                <div className="flex min-h-screen items-center justify-center bg-background">
-                    <p className="text-muted-foreground">{error}</p>
-                </div>
-            );
-        }
+    if (loading || (!reportData && !error)) {
         return (
             <div className="flex min-h-screen items-center justify-center bg-background">
                 <Spinner className="size-8 text-muted-foreground" />
@@ -253,9 +213,20 @@ export function ReportDetailContent({ reportId }: ReportDetailContentProps) {
         );
     }
 
+    if (error || !reportData) {
+        return (
+            <div className="flex min-h-screen items-center justify-center bg-background">
+                <p className="text-muted-foreground">{error ?? 'Report not found.'}</p>
+            </div>
+        );
+    }
+
+    // ── Derived values ─────────────────────────────────────────────────────────
+
     const diag = reportData.diagnosis;
     const isRejected = diag?.rejected === true;
     const isUnserviced = diag?.unserviced === true && !diag?.rejected;
+
     const allImages: string[] = [];
     if (reportData.image_url) allImages.push(reportData.image_url);
     reportData.messages?.forEach((m) => {
@@ -263,304 +234,234 @@ export function ReportDetailContent({ reportId }: ReportDetailContentProps) {
             if (url && !allImages.includes(url)) allImages.push(url);
         });
     });
-    const mainImage = allImages[0];
-    const additionalImages = allImages.slice(1);
+    const bannerImage = allImages[0] ?? null;
+    const extraImages = allImages.slice(1);
+
+    const diagnosisTitle =
+        typeof diag?.diagnosis === 'string' && diag.diagnosis !== 'N/A'
+            ? diag.diagnosis
+            : null;
+    const trade =
+        typeof diag?.trade === 'string' && diag.trade !== 'N/A' ? diag.trade : null;
+    const tradeDetail =
+        typeof diag?.trade_detail === 'string' && diag.trade_detail.trim()
+            ? diag.trade_detail
+            : null;
+    const actionRequired =
+        typeof diag?.action_required === 'string' &&
+        diag.action_required !== 'N/A' &&
+        diag.action_required.trim()
+            ? sanitizeAiContent(String(diag.action_required))
+            : null;
+    const diagMessage =
+        typeof diag?.message === 'string' && diag.message.trim()
+            ? sanitizeAiContent(diag.message)
+            : null;
+
+    const hasLocation =
+        reportData.customer_lat != null && reportData.customer_lng != null;
+    const mapDestination = hasLocation
+        ? `${reportData.customer_lat},${reportData.customer_lng}`
+        : reportData.customer_address ?? null;
+    const directionsHref = mapDestination
+        ? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(mapDestination)}`
+        : null;
+    const mapEmbedSrc = mapDestination
+        ? `https://maps.google.com/maps?q=${encodeURIComponent(mapDestination)}&z=15&output=embed`
+        : null;
+
+    const mapsKey =
+        process.env.NEXT_PUBLIC_GOOGLE_MAPS_EMBED_KEY ||
+        process.env.NEXT_PUBLIC_GOOGLE_PLACES_API_KEY;
+
+    // ── Render ─────────────────────────────────────────────────────────────────
 
     return (
-        <div className="flex flex-col min-h-screen bg-background">
-            <AppHeader imageSrc={mainImage} showViewImage={false} showBack />
+        <>
+            {/* Print-only styles */}
+            <style>{`
+                @media print {
+                    .no-print { display: none !important; }
+                    body { background: white; }
+                }
+            `}</style>
 
-            <main className="flex flex-1 flex-col overflow-y-auto">
-                <div className="max-w-4xl mx-auto w-full px-4 md:px-12 py-4 flex flex-col gap-8">
-                    {/* Unrelated or unserviced notice */}
-                    {isRejected && (
-                        <UnrelatedImageCard
-                            conversationId={id}
-                            diagnosisMessage={reportData.messages?.[0]?.content}
-                            recordFeedback={false}
-                        />
-                    )}
-                    {isUnserviced && (
-                        <UnservicedCategoryCard
-                            conversationId={id}
-                            requestedService={String(diag?.trade ?? 'Unknown')}
-                            diagnosis={typeof diag?.diagnosis === 'string' ? diag.diagnosis : undefined}
-                            diagnosisFull={diag ?? undefined}
-                            recordFeedback={false}
-                        />
-                    )}
-                    {/* Map - no card; distance/duration in bottom right when directions available */}
-                    {(reportData.customer_address || hasLocation) && destinationForMap && (
-                        <section className="w-full">
-                            {mapsKey && hasLocation ? (
-                                <div className="relative w-full overflow-hidden rounded-xl border border-border bg-background">
-                                    <ProvidersMap
-                                        apiKey={mapsKey}
-                                        providers={[
-                                            {
-                                                name: 'Job Location',
-                                                address: reportData.customer_address || '',
-                                                summary: '',
-                                                services: [],
-                                                latitude: reportData.customer_lat as number,
-                                                longitude: reportData.customer_lng as number,
-                                            },
-                                        ]}
-                                        emergingProviders={[]}
-                                        userLocation={providerLocation}
-                                        hideFloatingCard
-                                    />
-                                    <div className="relative z-[110] mt-2 flex items-center justify-between gap-3 rounded-lg border border-border bg-card px-3 py-2">
-                                        <span className="text-sm text-muted-foreground">
-                                            {directions?.distance_text && directions?.duration_text
-                                                ? `${directions.distance_text} · ${directions.duration_text} drive`
-                                                : directions?.distance_text || directions?.duration_text || '\u00a0'}
-                                        </span>
-                                        <Button
-                                            variant="secondary"
-                                            size="sm"
-                                            onClick={() =>
-                                                window.open(
-                                                    `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(
-                                                        reportData.customer_address || destinationForMap
-                                                    )}`,
-                                                    '_blank'
-                                                )
-                                            }
-                                        >
-                                            Get Directions
-                                        </Button>
-                                    </div>
-                                </div>
-                            ) : (
-                                <div className="relative w-full overflow-hidden rounded-lg border border-border bg-card">
-                                    <div className="aspect-[16/10] min-h-[180px] w-full">
-                                        {directionsLoading && (
-                                            <div className="absolute inset-0 z-10 flex items-center justify-center bg-muted/50">
-                                                <div className="h-8 w-8 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent" />
-                                            </div>
-                                        )}
-                                        <iframe
-                                            title="Directions to job"
-                                            src={
-                                                directionsMapUrl ||
-                                                `https://www.google.com/maps?q=${encodeURIComponent(
-                                                    destinationForMap
-                                                )}&output=embed`
-                                            }
-                                            className="w-full h-full border-0 block"
-                                            allowFullScreen
-                                            loading="lazy"
-                                            referrerPolicy="no-referrer-when-downgrade"
-                                        />
-                                    </div>
-                                </div>
-                            )}
-                        </section>
-                    )}
+            <main className="flex flex-col gap-6 p-4 pt-22 pb-22 bg-background min-h-screen">
 
-                    {/* Diagnosis - structured for service provider (skip when rejected/unserviced) */}
-                    {!isRejected && !isUnserviced && (
-                        <section className="space-y-6">
-                            <div className="space-y-1">
-                                <h2 className="text-lg font-semibold text-foreground">
-                                    Job Summary
-                                </h2>
-                                <p className="text-sm text-muted-foreground leading-relaxed">
-                                    Overview of the reported issue, required service, and
-                                    recommended next steps.
+                {/* ── Fixed top header ── */}
+                <div className="no-print flex flex-row justify-between items-center p-4 h-18 bg-background w-full fixed inset-x-0 top-0 z-50">
+                    <Button
+                        variant="secondary"
+                        size="icon"
+                        className="h-10 w-10"
+                        onClick={() => router.back()}
+                    >
+                        <ArrowLeft className="size-5" />
+                    </Button>
+                    <h3 className="text-lg text-foreground font-semibold truncate max-w-[min(280px,55vw)] text-center">
+                        Scandio Report
+                    </h3>
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-10 w-10"
+                        onClick={handleShare}
+                        aria-label="Share report"
+                    >
+                        <Share className="size-4" />
+                    </Button>
+                </div>
+
+                {/* ── Banner image ── */}
+                {bannerImage ? (
+                    <div className="relative h-52 w-full overflow-hidden rounded-lg bg-secondary">
+                        <img
+                            src={bannerImage}
+                            alt=""
+                            className="h-full w-full object-cover"
+                        />
+                    </div>
+                ) : (
+                    <div className="flex h-52 bg-secondary rounded-lg" />
+                )}
+
+                {/* ── Title + trade badge ── */}
+                <div className="flex flex-col gap-2">
+                    <div className="flex flex-row justify-between items-start gap-3">
+                        <h1 className="text-2xl text-foreground font-bold leading-tight">
+                            {diagnosisTitle ?? 'Diagnosis Report'}
+                        </h1>
+                        {trade && (
+                            <Badge variant="secondary" className="shrink-0 mt-0.5">
+                                {trade}
+                            </Badge>
+                        )}
+                    </div>
+                    {tradeDetail && trade !== tradeDetail && (
+                        <p className="text-sm text-muted-foreground">{tradeDetail}</p>
+                    )}
+                    {reportData.customer_address && (
+                        <p className="text-sm text-muted-foreground">
+                            {reportData.customer_address}
+                        </p>
+                    )}
+                </div>
+
+                {/* ── Unrelated / unserviced notices ── */}
+                {isRejected && (
+                    <UnrelatedImageCard
+                        conversationId={id}
+                        diagnosisMessage={reportData.messages?.[0]?.content}
+                        recordFeedback={false}
+                    />
+                )}
+                {isUnserviced && (
+                    <UnservicedCategoryCard
+                        conversationId={id}
+                        requestedService={String(diag?.trade ?? 'Unknown')}
+                        diagnosis={typeof diag?.diagnosis === 'string' ? diag.diagnosis : undefined}
+                        diagnosisFull={diag ?? undefined}
+                        recordFeedback={false}
+                    />
+                )}
+
+                {/* ── Job summary ── */}
+                {!isRejected && !isUnserviced && (diagMessage || actionRequired) && (
+                    <div className="flex flex-col gap-4">
+                        {diagMessage && (
+                            <div className="flex flex-col gap-1.5">
+                                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                                    Diagnosis
+                                </p>
+                                <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">
+                                    {diagMessage}
                                 </p>
                             </div>
-                            <div className="grid gap-6">
-                                {typeof diag?.diagnosis === 'string' && diag.diagnosis !== 'N/A' && (
-                                    <div>
-                                        <p className="text-sm font-medium text-muted-foreground mb-2">
-                                            Diagnosis
-                                        </p>
-                                        <p className="text-sm font-medium text-foreground">
-                                            {diag.diagnosis}
-                                        </p>
-                                        {typeof diag?.message === 'string' && diag.message.trim() !== '' && (
-                                            <p className="text-sm text-muted-foreground mt-1 leading-relaxed">
-                                                {sanitizeAiContent(diag.message)}
-                                            </p>
-                                        )}
-                                    </div>
-                                )}
-                                <div>
-                                    <p className="text-sm font-medium text-muted-foreground mb-2">
-                                        Job Type
-                                    </p>
-                                    <Badge variant="secondary" className="text-sm font-medium">
-                                        {typeof diag?.trade === 'string' && diag.trade !== 'N/A'
-                                            ? diag.trade
-                                            : 'Not specified'}
-                                    </Badge>
-                                </div>
-                                <div>
-                                    <p className="text-sm font-medium text-muted-foreground mb-2">
-                                        Recommended Action
-                                    </p>
-                                    <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">
-                                        {typeof diag?.action_required === 'string' &&
-                                        diag.action_required !== 'N/A' &&
-                                        diag.action_required.trim() !== ''
-                                            ? sanitizeAiContent(String(diag.action_required))
-                                            : 'Not specified'}
-                                    </p>
-                                </div>
-                                {(() => {
-                                    const calloutExact =
-                                        directions?.distance_meters != null
-                                            ? calculateCalloutFee(directions.distance_meters)
-                                            : null;
-                                    const fallback = parseRepairReplacementRanges(
-                                        String(diag?.repair_or_replacement_fee ?? '')
-                                    );
-                                    const repairRange =
-                                        diag?.repair_cost_range &&
-                                        String(diag.repair_cost_range) !== 'N/A'
-                                            ? String(diag.repair_cost_range)
-                                            : fallback.repair;
-                                    const replacementRange =
-                                        diag?.replacement_cost_range &&
-                                        String(diag.replacement_cost_range) !== 'N/A'
-                                            ? String(diag.replacement_cost_range)
-                                            : fallback.replacement;
-                                    const equipmentPartsRange =
-                                        diag?.equipment_parts_range &&
-                                        String(diag.equipment_parts_range) !== 'N/A'
-                                            ? String(diag.equipment_parts_range)
-                                            : null;
-
-                                    // Simplified view: Call-out, Labour, Parts
-                                    const labourRange = repairRange || replacementRange || null;
-                                    const hasStructured =
-                                        calloutExact || labourRange || equipmentPartsRange;
-                                    const estimatedCostText =
-                                        typeof diag?.estimated_cost === 'string' &&
-                                        diag.estimated_cost !== 'N/A' &&
-                                        diag.estimated_cost.trim() !== ''
-                                            ? sanitizeAiContent(String(diag.estimated_cost))
-                                            : null;
-
-                                    const rows: { label: string; value: string }[] = [];
-                                    if (calloutExact && directions?.distance_meters != null) {
-                                        rows.push({
-                                            label: 'Call-Out Fee',
-                                            value: `${calloutExact} (${directions.distance_text} × R${CALLOUT_RATE_PER_KM}/km)`,
-                                        });
-                                    }
-                                    if (labourRange) {
-                                        rows.push({
-                                            label: 'Labour',
-                                            value: labourRange,
-                                        });
-                                    }
-                                    if (equipmentPartsRange) {
-                                        rows.push({
-                                            label: 'Parts',
-                                            value: equipmentPartsRange,
-                                        });
-                                    }
-
-                                    return (
-                                        <div className="space-y-3">
-                                            <p className="text-sm font-medium text-muted-foreground">
-                                                Estimated Price
-                                            </p>
-                                            {hasStructured && rows.length > 0 ? (
-                                                <>
-                                                    <div className="rounded-lg border border-border">
-                                                        <table className="w-full text-sm">
-                                                            <tbody>
-                                                                {rows.map((r, i) => (
-                                                                    <tr
-                                                                        key={i}
-                                                                        className="border-b border-border last:border-b-0"
-                                                                    >
-                                                                        <td className="px-3 py-2.5 text-muted-foreground">
-                                                                            {r.label}
-                                                                        </td>
-                                                                        <td className="px-3 py-2.5 text-right text-foreground">
-                                                                            {r.value}
-                                                                        </td>
-                                                                    </tr>
-                                                                ))}
-                                                            </tbody>
-                                                        </table>
-                                                    </div>
-                                                    <p className="text-xs text-muted-foreground leading-relaxed mt-2">
-                                                        Call-out based on distance. Labour and parts
-                                                        are estimated ranges. Final price may differ
-                                                        after on-site inspection.
-                                                    </p>
-                                                </>
-                                            ) : null}
-                                            {estimatedCostText && (
-                                                <p className="text-sm text-foreground leading-relaxed">
-                                                    {estimatedCostText}
-                                                </p>
-                                            )}
-                                            {!hasStructured && !estimatedCostText && (
-                                                <p className="text-sm text-muted-foreground">
-                                                    No price estimate available. Quote can be
-                                                    provided after on-site inspection.
-                                                </p>
-                                            )}
-                                        </div>
-                                    );
-                                })()}
-                            </div>
-                        </section>
-                    )}
-
-                    <Separator />
-
-                    {/* Images - main first, then additional */}
-                    <section className="space-y-4">
-                        <div className="flex items-center justify-between gap-2">
-                            <h2 className="text-lg font-semibold text-foreground">Photos</h2>
-                            {allImages.length > 0 && (
-                                <Badge variant="secondary" className="text-xs font-medium">
-                                    {allImages.length} Photo{allImages.length !== 1 ? 's' : ''}
-                                </Badge>
-                            )}
-                        </div>
-                        {allImages.length > 0 ? (
-                            <>
-                                {mainImage && (
-                                    <div className="rounded-lg border border-border overflow-hidden">
-                                        <img
-                                            src={mainImage}
-                                            alt=""
-                                            className="w-full object-cover max-h-[480px]"
-                                        />
-                                    </div>
-                                )}
-                                {additionalImages.length > 0 && (
-                                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                                        {additionalImages.map((url, i) => (
-                                            <div
-                                                key={i}
-                                                className="rounded-lg border border-border overflow-hidden aspect-square"
-                                            >
-                                                <img
-                                                    src={url}
-                                                    alt=""
-                                                    className="w-full h-full object-cover"
-                                                />
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
-                            </>
-                        ) : (
-                            <p className="text-sm text-muted-foreground">No photos</p>
                         )}
-                    </section>
+                        {actionRequired && (
+                            <div className="flex flex-col gap-1.5">
+                                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                                    Recommended Action
+                                </p>
+                                <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">
+                                    {actionRequired}
+                                </p>
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                {/* ── Extra photos ── */}
+                {extraImages.length > 0 && (
+                    <div className="flex flex-col gap-3">
+                        <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                            Photos
+                        </p>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                            {extraImages.map((url, i) => (
+                                <div
+                                    key={i}
+                                    className="aspect-square overflow-hidden rounded-lg bg-secondary"
+                                >
+                                    <img
+                                        src={url}
+                                        alt=""
+                                        className="h-full w-full object-cover"
+                                    />
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {/* ── Location / map ── */}
+                {mapEmbedSrc && (
+                    <div className="flex flex-col gap-3">
+                        <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                            Location
+                        </p>
+                        <div className="overflow-hidden rounded-lg border border-border bg-secondary">
+                            <div className="h-52 w-full">
+                                <iframe
+                                    title="Job location"
+                                    src={mapEmbedSrc}
+                                    className="h-full w-full border-0 block"
+                                    allowFullScreen
+                                    loading="lazy"
+                                    referrerPolicy="no-referrer-when-downgrade"
+                                />
+                            </div>
+                        </div>
+                        {directionsHref && (
+                            <Button variant="secondary" className="w-full" asChild>
+                                <a href={directionsHref} target="_blank" rel="noopener noreferrer">
+                                    Get Directions
+                                </a>
+                            </Button>
+                        )}
+                    </div>
+                )}
+
+                {/* ── Fixed bottom action bar ── */}
+                <div className="no-print flex flex-row gap-2 p-4 bg-background w-full fixed inset-x-0 bottom-0 z-50">
+                    <Button
+                        variant="ghost"
+                        className="flex flex-1 h-10 gap-2"
+                        onClick={handleShare}
+                    >
+                        <Share className="size-4" />
+                        Share
+                    </Button>
+                    <Button
+                        variant="secondary"
+                        className="flex flex-1 h-10 gap-2"
+                        onClick={handlePrint}
+                    >
+                        <Download className="size-4" />
+                        Download PDF
+                    </Button>
                 </div>
             </main>
-        </div>
+        </>
     );
 }

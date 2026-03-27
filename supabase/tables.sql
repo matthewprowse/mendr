@@ -233,3 +233,72 @@ CREATE TABLE IF NOT EXISTS ai_logs (
     meta        jsonb,
     created_at  timestamptz NOT NULL DEFAULT now()
 );
+
+-- ---------------------------------------------------------------------------
+-- profiles
+-- One row per authenticated user. Created automatically on first sign-in
+-- via the /auth/callback route. First name, surname, and address are
+-- collected at sign-up and stored in auth.users user_metadata, then
+-- copied here on callback.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS profiles (
+    id          uuid PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+    first_name  text NOT NULL DEFAULT '',
+    surname     text NOT NULL DEFAULT '',
+    address     text,
+    address_lat double precision,
+    address_lng double precision,
+    created_at  timestamptz NOT NULL DEFAULT now(),
+    updated_at  timestamptz NOT NULL DEFAULT now()
+);
+
+-- Link conversations to authenticated users (nullable — anonymous scans allowed).
+ALTER TABLE conversations ADD COLUMN IF NOT EXISTS user_id uuid REFERENCES auth.users(id) ON DELETE SET NULL;
+CREATE INDEX IF NOT EXISTS idx_conversations_user_id ON conversations (user_id);
+
+-- ---------------------------------------------------------------------------
+-- diagnosis_usage
+-- Per-day quota tracking for the /api/diagnose endpoint.
+-- Authenticated users: keyed by user_id, limit 10/day.
+-- Anonymous users:     keyed by anonymous_key (UUID cookie), limit 3/day.
+-- One deduction per conversation (on the first message only; follow-ups free).
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS diagnosis_usage (
+    id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id         uuid REFERENCES auth.users(id) ON DELETE CASCADE,
+    anonymous_key   text,
+    date            date NOT NULL DEFAULT current_date,
+    count           integer NOT NULL DEFAULT 0,
+    CONSTRAINT diagnosis_usage_user_date_key    UNIQUE (user_id, date),
+    CONSTRAINT diagnosis_usage_anon_date_key    UNIQUE (anonymous_key, date),
+    CONSTRAINT diagnosis_usage_has_key          CHECK (user_id IS NOT NULL OR anonymous_key IS NOT NULL)
+);
+
+CREATE INDEX IF NOT EXISTS idx_diagnosis_usage_date ON diagnosis_usage (date);
+
+-- ---------------------------------------------------------------------------
+-- provider_applications
+-- Direct sign-up submissions from the /pro/onboard flow.
+-- Separate from the providers table (which is built for Google Places data)
+-- so that pending applications can be reviewed before going live.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS provider_applications (
+    id                  uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    business_name       text NOT NULL,
+    contact_name        text NOT NULL,
+    address             text NOT NULL,
+    phone               text NOT NULL,
+    website             text,
+    trade               text NOT NULL,
+    trade_description   text NOT NULL,
+    service_areas       jsonb NOT NULL DEFAULT '[]',  -- [{address, lat, lng, radius_km}]
+    years_experience    integer,
+    team_size           integer,
+    registration_number text,
+    about               text,
+    referral            text,
+    status              text NOT NULL DEFAULT 'pending'
+                            CHECK (status IN ('pending', 'approved', 'rejected')),
+    created_at          timestamptz NOT NULL DEFAULT now(),
+    updated_at          timestamptz NOT NULL DEFAULT now()
+);

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getGeminiModel } from '@/lib/ai-client';
+import { checkRateLimit } from '@/lib/rate-limit-config';
 
 type Body = {
     diagnosis?: string;
@@ -47,6 +48,9 @@ function buildFallbackMessage(input: {
  * Builds a short WhatsApp-ready message (Gemini when configured, else template).
  */
 export async function POST(req: NextRequest) {
+    const limited = checkRateLimit(req, 'whatsappMessage');
+    if (limited) return limited;
+
     try {
         const body = (await req.json()) as Body;
         const provider_name = String(body.provider_name || 'the business').trim() || 'the business';

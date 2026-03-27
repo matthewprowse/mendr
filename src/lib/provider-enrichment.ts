@@ -2,18 +2,21 @@
  * Background enrichment pipeline for provider profiles.
  *
  * Stages:
- *   1. Website scraping   – 10 s timeout, need ≥ 100 chars of content
- *   2. Image collection   – up to 8 images downloaded; Gemini classifies each (cap 5)
- *   3. AI enrichment      – single Gemini call → bio, specialisations, …
- *   4. Cache write        – upserts provider_cache row (14-day TTL)
+ *   1. Website scraping      – 10 s timeout, need ≥ 100 chars of content
+ *   2. Image batch classify  – fetch up to 5 images, classify in ONE Gemini call (R2)
+ *   3. Reviews fetch         – load up to 40 approved reviews from Supabase
+ *   4. Combined AI call      – ONE Gemini call for bio, specialisations, review summary,
+ *                              about_business, past_work (replaces 3 separate calls) (R1)
+ *   5. Cache write           – upserts provider_cache row (14-day TTL)
+ *   6. Provider copy update  – writes about/past_work/summary_long to providers table
  *
+ * Net Gemini calls per provider: 2 (was up to 8).
  * Failed scrapes are retry-locked for 48 hours.
  */
 
 import { createSupabaseAdminClient } from '@/lib/supabase-server';
 import { getGeminiModel } from '@/lib/ai-client';
-import { summarizeReviews, sanitizeCustomerSummary } from '@/lib/review-summary';
-import { generateProviderSummaries } from '@/lib/provider-summaries';
+import { sanitizeCustomerSummary } from '@/lib/review-summary';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -21,9 +24,8 @@ const CACHE_TTL_MS        = 14 * 24 * 60 * 60 * 1000;
 const FAILED_RETRY_MS     = 48 * 60 * 60 * 1000;
 const SCRAPE_TIMEOUT_MS   = 10_000;
 const IMAGE_FETCH_TIMEOUT = 8_000;
-const CLASSIFY_TIMEOUT_MS = 8_000;
+const CLASSIFY_TIMEOUT_MS = 8_000; // per-call; batch gets 2× this
 const AI_ENRICH_TIMEOUT   = 20_000;
-const REVIEW_SUMMARY_MS   = 15_000;
 const MAX_IMAGES_FETCH    = 8;
 const MAX_IMAGES_CLASSIFY = 5;
 const MIN_IMAGE_BYTES     = 5_000;
@@ -131,49 +133,56 @@ const KEEP_CATEGORIES = new Set<ImageCategory>([
     'certificate',
 ]);
 
-async function classifyImage(
-    imageBytes: ArrayBuffer,
-    mimeType: string
-): Promise<ImageCategory> {
+/**
+ * R2: Classify all images in a single Gemini call instead of one call per image.
+ * Reduces image classification from up to 5 separate calls to 1 batch call.
+ * Falls back to 'discard' for any image that cannot be parsed from the response.
+ */
+async function classifyImagesBatch(
+    images: Array<{ bytes: ArrayBuffer; mimeType: string }>
+): Promise<ImageCategory[]> {
+    if (images.length === 0) return [];
     try {
         const model = getGeminiModel();
-        const base64 = Buffer.from(imageBytes).toString('base64');
+        const parts: Array<{ inlineData: { mimeType: string; data: string } } | { text: string }> =
+            images.map((img) => ({
+                inlineData: {
+                    mimeType: img.mimeType,
+                    data: Buffer.from(img.bytes).toString('base64'),
+                },
+            }));
+        parts.push({
+            text:
+                `Classify each of the ${images.length} image(s) above in order.\n\n` +
+                'Categories:\n' +
+                '- work_photo: actual work being done or completed (installations, repairs, finished projects)\n' +
+                '- team_photo: tradesperson, team members, or staff\n' +
+                '- equipment: tools, vehicles, or specialised equipment used for work\n' +
+                '- premises: workshop, office, or yard belonging to the business\n' +
+                '- certificate: certificate, award, or accreditation document\n' +
+                '- discard: logo, icon, banner, stock photo, decorative graphic, or anything unrelated\n\n' +
+                `Reply with a JSON array of exactly ${images.length} string(s) from the list above. Example: ["work_photo","discard"]`,
+        });
         const result = await withTimeout(
             model.generateContent({
-                contents: [
-                    {
-                        role: 'user',
-                        parts: [
-                            { inlineData: { mimeType, data: base64 } },
-                            {
-                                text:
-                                    'Classify this image into exactly one category.\n\n' +
-                                    'Categories:\n' +
-                                    '- work_photo: actual work being done or completed (installations, repairs, finished projects)\n' +
-                                    '- team_photo: tradesperson, team members, or staff\n' +
-                                    '- equipment: tools, vehicles, or specialised equipment used for work\n' +
-                                    '- premises: workshop, office, or yard belonging to the business\n' +
-                                    '- certificate: certificate, award, or accreditation document\n' +
-                                    '- discard: logo, icon, banner, stock photo, decorative graphic, or anything unrelated\n\n' +
-                                    'Reply with exactly one word from the list above.',
-                            },
-                        ],
-                    },
-                ],
-                generationConfig: { temperature: 0, maxOutputTokens: 20 },
+                contents: [{ role: 'user', parts }],
+                // Slightly longer timeout for batch — still much faster than N sequential calls
+                generationConfig: { temperature: 0, maxOutputTokens: 80 },
             }),
-            CLASSIFY_TIMEOUT_MS
+            CLASSIFY_TIMEOUT_MS * 2
         );
-        const text = result.response
-            .text()
-            .trim()
-            .toLowerCase()
-            .replace(/[^a-z_]/g, '');
-        return KEEP_CATEGORIES.has(text as ImageCategory) ||  text === 'discard'
-            ? (text as ImageCategory)
-            : 'discard';
+        const raw = result.response.text().trim();
+        const match = raw.match(/\[[\s\S]*?\]/);
+        if (!match) return images.map(() => 'discard' as ImageCategory);
+        const parsed = JSON.parse(match[0]) as string[];
+        return images.map((_, i) => {
+            const cat = ((parsed[i] ?? 'discard') as string)
+                .toLowerCase()
+                .replace(/[^a-z_]/g, '') as ImageCategory;
+            return KEEP_CATEGORIES.has(cat) || cat === 'discard' ? cat : ('discard' as ImageCategory);
+        });
     } catch {
-        return 'discard';
+        return images.map(() => 'discard' as ImageCategory);
     }
 }
 
@@ -187,6 +196,28 @@ interface AiEnrichmentOutput {
     certifications: string[];
     response_profile: string;
     website_quality: 'high' | 'medium' | 'low' | 'none';
+}
+
+/**
+ * R1: Unified enrichment output — combines what was previously three separate Gemini calls:
+ *   1. runAiEnrichment  (bio, specialisations, years_experience, …)
+ *   2. summarizeReviews (short customer-facing card summary)
+ *   3. generateProviderSummaries (aboutBusiness, pastWork, customerReviewSummary)
+ *
+ * Consolidating into one call reduces Gemini usage from 3–4 calls per provider to 1
+ * (plus the single batch image classification call), cutting latency and cost by ~75%.
+ *
+ * R11: Extended with years_in_business, founder_or_key_person, highlights, honest_note.
+ */
+interface CombinedEnrichmentOutput extends AiEnrichmentOutput {
+    review_summary: string;
+    customer_review_summary: string;
+    about_business: string;
+    past_work: string;
+    years_in_business: number | null;
+    founder_or_key_person: string | null;
+    highlights: string[];
+    honest_note: string | null;
 }
 
 function computeProfileCompleteness(params: {
@@ -206,59 +237,82 @@ function computeProfileCompleteness(params: {
     return hasDeepSignals ? 3 : 2;
 }
 
-async function runAiEnrichment(params: {
+async function runCombinedEnrichment(params: {
     providerName: string;
     websiteText: string;
     imageCategories: ImageCategory[];
     reviewsText: string;
     trade?: string;
-}): Promise<AiEnrichmentOutput | null> {
-    const prompt = `You are Scandio's provider enrichment engine. Analyse this data about a home services provider.
+    address?: string | null;
+    rating?: number | null;
+    reviewCount?: number;
+}): Promise<CombinedEnrichmentOutput | null> {
+    const prompt = `You are Scandio's provider enrichment engine. Extract everything useful about this South African home services business. Be aggressive — specific beats vague, concrete beats generic. Do not invent facts.
 
 Provider: ${params.providerName}
-${params.trade ? `Primary Trade: ${params.trade}` : ''}
+${params.trade ? `Trade: ${params.trade}` : ''}
+${params.address ? `Address: ${params.address}` : ''}
+${params.rating != null ? `Rating: ${params.rating} (${params.reviewCount ?? 0} reviews)` : ''}
 
-Website Content:
-${params.websiteText || '(no website content available)'}
+Website:
+${params.websiteText || '(none)'}
 
-Image Categories Found on Website: ${
-        params.imageCategories.length > 0 ? params.imageCategories.join(', ') : '(none)'
-    }
+Images: ${params.imageCategories.length > 0 ? params.imageCategories.join(', ') : '(none)'}
 
-Customer Reviews:
-${params.reviewsText || '(no reviews available)'}
+Reviews:
+${params.reviewsText || '(none)'}
 
-Return ONLY a valid JSON object — no markdown, no explanation, no code fences:
+Return ONLY valid JSON, no markdown:
 {
-  "bio": "2-3 sentence professional bio. Concise, factual, British English. Max 280 chars.",
-  "specialisations": ["up to 6 specific service specialisations as short noun phrases"],
-  "years_experience": null or integer years in business if explicitly mentioned,
-  "service_areas": ["area names they serve, max 8, only if explicitly stated"],
-  "certifications": ["certifications/accreditations mentioned, max 6"],
-  "response_profile": "one sentence describing typical response style. Max 80 chars.",
-  "website_quality": "high|medium|low|none"
+  "bio": "2-3 factual sentences: what they do, where, what sets them apart. British English. Max 300 chars. No hollow phrases.",
+  "specialisations": ["up to 8 specific services from actual content — noun phrases like 'burst pipe repair', not 'plumbing'"],
+  "years_experience": null,
+  "years_in_business": null,
+  "founder_or_key_person": null,
+  "service_areas": ["suburb/area names only if explicitly mentioned — not inferred from address. Max 10."],
+  "certifications": ["specific accreditations/memberships only — e.g. 'NHBRC Registered', 'PIRB Member'. Max 8."],
+  "response_profile": "One sentence on responsiveness from reviews. Max 100 chars. Empty string if unclear.",
+  "website_quality": "high|medium|low|none",
+  "highlights": ["3-5 concrete differentiators a homeowner cares about — emergency availability, qualifications, guarantees, turnaround. Never generic."],
+  "honest_note": null,
+  "review_summary": "Exactly 2 sentences from reviews. Max 140 chars total. British English. Warm, direct, no business name, no numbers.",
+  "customer_review_summary": "3-5 sentences: overall tone, consistent praise, recurring issues if any. No business name or ratings.",
+  "about_business": "2-3 sentences from website content only. Don't echo reviews.",
+  "past_work": "2-4 sentences: concrete job types and examples from reviews/website."
 }
 
-Rules:
-- bio: factual only; max 280 characters; omit if nothing meaningful to say → ""
-- specialisations: specific to what they do, not generic praise → [] if unknown
-- service_areas: [] unless explicitly named in content
-- website_quality: high = rich content with clear services and contact; medium = basic but useful; low = minimal/vague; none = no site or blocked
-- All string fields use British English spelling`.trim();
+Rules (British English throughout):
+- years_in_business: integer from founding year or stated experience ('since 1998' → 28, '15 years in the industry' → 15). null if absent.
+- founder_or_key_person: owner/founder name anywhere in content. null if absent.
+- highlights: scan for emergency callouts, pricing, qualifications, equipment, guarantees, turnaround times. Never use hollow phrases.
+- honest_note: one useful homeowner caveat — e.g. area limitations, commercial-focus, limited reviews. null if nothing relevant.
+- review_summary: hard cap 140 chars; trim to a sentence boundary if needed.`.trim();
 
     try {
         const model = getGeminiModel();
         const result = await withTimeout(
             model.generateContent({
                 contents: [{ role: 'user', parts: [{ text: prompt }] }],
-                generationConfig: { temperature: 0.3, maxOutputTokens: 1024 },
+                generationConfig: { temperature: 0.3, maxOutputTokens: 8192 },
             }),
             AI_ENRICH_TIMEOUT
         );
         const raw = result.response.text().trim();
-        const jsonMatch = raw.match(/\{[\s\S]*\}/);
-        if (!jsonMatch) return null;
-        return JSON.parse(jsonMatch[0]) as AiEnrichmentOutput;
+        // Strip markdown fences if model wraps output despite instructions
+        const stripped = raw
+            .replace(/^```(?:json)?\s*\n?/i, '')
+            .replace(/\n?```\s*$/, '')
+            .trim();
+        const start = stripped.indexOf('{');
+        if (start === -1) return null;
+        let depth = 0;
+        let end = -1;
+        for (let i = start; i < stripped.length; i++) {
+            if (stripped[i] === '{') depth++;
+            else if (stripped[i] === '}') { depth--; if (depth === 0) { end = i; break; } }
+        }
+        if (end === -1) return null;
+        return JSON.parse(stripped.slice(start, end + 1)) as CombinedEnrichmentOutput;
     } catch {
         return null;
     }
@@ -289,20 +343,31 @@ export async function enrichProvider(
 
     if (provErr || !provider) return { ok: false, reason: 'Provider not found' };
 
+    const logPrefix = `[enrichment:${provider.name ?? providerId}]`;
+    console.log(`${logPrefix} Starting enrichment (trade=${options?.trade ?? 'unknown'})`);
+
     // Check cache staleness
     const { data: cached } = await admin
         .from('provider_cache')
-        .select('scrape_status, scraped_at')
+        .select('scrape_status, scraped_at, enriched_at')
         .eq('provider_id', providerId)
         .maybeSingle();
 
     if (cached?.scraped_at) {
         const age = Date.now() - new Date(cached.scraped_at).getTime();
-        if (cached.scrape_status === 'ok' && age < CACHE_TTL_MS) {
+        // Only skip if BOTH the scrape AND the AI enrichment completed successfully.
+        // If enriched_at is null the AI call failed last time — we must retry even if
+        // the scrape itself was marked 'ok' and is within the 14-day TTL.
+        if (cached.scrape_status === 'ok' && cached.enriched_at && age < CACHE_TTL_MS) {
+            console.log(`${logPrefix} Skipping — cache fresh (scraped=${cached.scraped_at}, enriched=${cached.enriched_at})`);
             return { ok: true, skipped: true, reason: 'Cache fresh' };
         }
         if (cached.scrape_status === 'failed' && age < FAILED_RETRY_MS) {
+            console.log(`${logPrefix} Skipping — scrape failed recently, retry locked`);
             return { ok: true, skipped: true, reason: 'Failed recently, retry locked' };
+        }
+        if (cached.scrape_status === 'ok' && !cached.enriched_at) {
+            console.log(`${logPrefix} Retrying — scrape ok but enriched_at is null (previous AI call likely failed)`);
         }
     }
 
@@ -310,6 +375,8 @@ export async function enrichProvider(
     let websiteText = '';
     const website = typeof provider.website === 'string' ? provider.website.trim() : '';
     let rawHtml = '';
+
+    console.log(`${logPrefix} Stage 1: Scraping website — ${website || '(no website)'}`);
 
     if (website) {
         try {
@@ -327,18 +394,77 @@ export async function enrichProvider(
                 rawHtml = await res.text();
                 const text = stripHtmlForEnrichment(rawHtml);
                 if (text.length >= MIN_SCRAPE_CHARS) websiteText = text;
+                console.log(`${logPrefix} Stage 1: Scraped ${rawHtml.length} bytes → ${websiteText.length} chars of useful text`);
+            } else {
+                console.log(`${logPrefix} Stage 1: Non-HTML response (status=${res.status}, content-type=${res.headers.get('content-type')})`);
             }
-        } catch {
-            // Scrape failed — continue with empty text
+        } catch (err) {
+            console.log(`${logPrefix} Stage 1: Scrape failed — ${err instanceof Error ? err.message : String(err)}`);
         }
     }
 
-    // ── Stage 2: Image collection & classification ────────────────────────────
+    // ── Geographic filter ─────────────────────────────────────────────────────
+    // If we got website content, verify it contains South African geographic or
+    // currency signals before proceeding. This catches cases where a Google Place ID
+    // incorrectly resolves to a foreign business (e.g. a US pool company).
+    console.log(`${logPrefix} Stage 1: Geographic filter — websiteText.length=${websiteText.length}`);
+    if (websiteText.length >= MIN_SCRAPE_CHARS) {
+        const lower = websiteText.toLowerCase();
+        const saSignals = [
+            'western cape', 'cape town', 'south africa', '.co.za', 'south african',
+            'stellenbosch', 'paarl', 'george', 'knysna', 'mossel bay', 'cape peninsula',
+            'atlantic seaboard', 'city bowl', 'northern suburbs', 'southern suburbs',
+            'tableview', 'bellville', 'brackenfell', 'wynberg', 'mitchells plain',
+            'johannesburg', 'pretoria', 'durban', 'centurion', 'sandton',
+            // Rand pricing signals
+            'r 1', 'r 2', 'r 3', 'r 4', 'r 5', 'r1 ', 'r2 ', 'r3 ', 'r4 ', 'r5 ',
+            'r100', 'r200', 'r300', 'r400', 'r500', 'r600', 'r700', 'r800', 'r900',
+            'r1 000', 'r1,0', 'r2,0', 'r3,0',
+        ];
+        const isSouthAfrican = saSignals.some((signal) => lower.includes(signal));
+        if (!isSouthAfrican) {
+            console.log(`${logPrefix} Stage 1: No SA signals found in content — marking failed`);
+            // Content does not appear to be for a South African business — treat as failed.
+            await admin.from('provider_cache').upsert(
+                {
+                    provider_id: providerId,
+                    google_place_id: provider.google_place_id ?? '',
+                    scraped_at: new Date().toISOString(),
+                    scrape_status: 'failed',
+                    cache_version: 1,
+                    updated_at: new Date().toISOString(),
+                },
+                { onConflict: 'provider_id' }
+            );
+            return { ok: false, reason: 'Non-SA content detected — skipping enrichment' };
+        }
+    }
+
+    // ── Stage 3 (early): Fetch reviews in parallel with image classification ────
+    // Reviews are completely independent of the website scrape. Starting the DB
+    // query now means it overlaps with Stage 2 instead of running after it.
+    // The result is awaited just before the AI call in Stage 4.
+    console.log(`${logPrefix} Stage 3 (parallel): Starting review fetch`);
+    const reviewsPromise = admin
+        .from('reviews')
+        .select('rating, body, source')
+        .eq('provider_id', providerId)
+        .eq('status', 'approved')
+        .in('source', ['google', 'scandio'])
+        .order('published_at', { ascending: false })
+        .limit(40);
+
+    // ── Stage 2: Image collection & batch classification (R2) ─────────────────
+    // Previously: one Gemini call per image (up to 5 calls × 8 s timeout = 40 s).
+    // Now: fetch all images first, then classify in a single batched Gemini call.
+    console.log(`${logPrefix} Stage 2: Image collection`);
     const keptImages: { category: ImageCategory; path: string }[] = [];
     const imageCategories: ImageCategory[] = [];
 
     if (rawHtml) {
-        const imgRegex = /<img[^>]+src=["']?([^"'>\s]+)["']?/gi;
+        // Match src AND common lazy-load attributes (data-src, data-lazy-src, data-original).
+        // Many trade websites use lazy loading — without this, images are invisible to the scraper.
+        const imgRegex = /<img[^>]+(?:src|data-src|data-lazy-src|data-lazy|data-original|data-image)=["']?([^"'>\s]+)["']?/gi;
         const candidates: string[] = [];
         let m: RegExpExecArray | null;
 
@@ -352,29 +478,22 @@ export async function enrichProvider(
             if (abs && !candidates.includes(abs)) candidates.push(abs);
         }
 
-        let analysed = 0;
-        for (const imgUrl of candidates) {
-            if (analysed >= MAX_IMAGES_CLASSIFY) break;
-            try {
-                const imgRes = await withTimeout(
-                    fetch(imgUrl, {
-                        headers: { 'User-Agent': 'ScandioBot/1.0 (+https://scandio.app)' },
-                    }),
-                    IMAGE_FETCH_TIMEOUT
-                ).catch(() => null);
-
-                if (!imgRes?.ok) continue;
-                const ct = (imgRes.headers.get('content-type') ?? '').split(';')[0].trim();
-                if (!ct.startsWith('image/') || ct.includes('svg')) continue;
-
-                const bytes = await imgRes.arrayBuffer();
-                if (bytes.byteLength < MIN_IMAGE_BYTES) continue;
-
-                analysed++;
-                const category = await classifyImage(bytes, ct);
-                imageCategories.push(category);
-
-                if (KEEP_CATEGORIES.has(category)) {
+        // Fetch up to MAX_IMAGES_CLASSIFY images in parallel, then classify in one batch call.
+        const fetchedImages: Array<{ bytes: ArrayBuffer; mimeType: string; ext: string }> = [];
+        await Promise.allSettled(
+            candidates.slice(0, MAX_IMAGES_CLASSIFY).map(async (imgUrl) => {
+                try {
+                    const imgRes = await withTimeout(
+                        fetch(imgUrl, {
+                            headers: { 'User-Agent': 'ScandioBot/1.0 (+https://scandio.app)' },
+                        }),
+                        IMAGE_FETCH_TIMEOUT
+                    ).catch(() => null);
+                    if (!imgRes?.ok) return;
+                    const ct = (imgRes.headers.get('content-type') ?? '').split(';')[0].trim();
+                    if (!ct.startsWith('image/') || ct.includes('svg')) return;
+                    const bytes = await imgRes.arrayBuffer();
+                    if (bytes.byteLength < MIN_IMAGE_BYTES) return;
                     const ext = ct.includes('png')
                         ? 'png'
                         : ct.includes('webp')
@@ -382,29 +501,39 @@ export async function enrichProvider(
                           : ct.includes('gif')
                             ? 'gif'
                             : 'jpg';
+                    fetchedImages.push({ bytes, mimeType: ct, ext });
+                } catch {
+                    // Skip individual fetch errors
+                }
+            })
+        );
+
+        // Single batch Gemini call to classify all fetched images (R2)
+        console.log(`${logPrefix} Stage 2: Fetched ${fetchedImages.length} images, classifying in batch`);
+        if (fetchedImages.length > 0) {
+            const categories = await classifyImagesBatch(
+                fetchedImages.map((f) => ({ bytes: f.bytes, mimeType: f.mimeType }))
+            );
+            for (let i = 0; i < fetchedImages.length; i++) {
+                const category = categories[i] ?? 'discard';
+                imageCategories.push(category);
+                if (KEEP_CATEGORIES.has(category)) {
+                    const { bytes, mimeType, ext } = fetchedImages[i];
                     const path = `providers/${provider.id}/images/${Date.now()}-${keptImages.length}.${ext}`;
                     const { error: uploadErr } = await admin.storage
                         .from('gallery')
-                        .upload(path, bytes, { contentType: ct, upsert: true });
+                        .upload(path, bytes, { contentType: mimeType, upsert: true });
                     if (!uploadErr) keptImages.push({ category, path });
                 }
-            } catch {
-                // Skip individual image errors
             }
         }
     }
 
     const hasWorkPhotos = keptImages.some((img) => img.category === 'work_photo');
+    console.log(`${logPrefix} Stage 2: Kept ${keptImages.length} images (hasWorkPhotos=${hasWorkPhotos})`);
 
-    // ── Stage 3: AI enrichment ────────────────────────────────────────────────
-    const { data: reviewRows } = await admin
-        .from('reviews')
-        .select('rating, body, source')
-        .eq('provider_id', providerId)
-        .eq('status', 'approved')
-        .in('source', ['google', 'scandio'])
-        .order('published_at', { ascending: false })
-        .limit(40);
+    // ── Stage 3: Await the review fetch started in parallel above ────────────
+    const { data: reviewRows } = await reviewsPromise;
 
     const reviews = Array.isArray(reviewRows) ? reviewRows : [];
     const reviewsText = reviews
@@ -412,34 +541,49 @@ export async function enrichProvider(
         .filter((r) => r.length > 20)
         .join('\n\n');
 
-    // Generate review summary if reviews exist
-    let reviewSummary: string | null = null;
-    if (reviews.length > 0) {
-        try {
-            const summaryResult = await withTimeout(
-                summarizeReviews({
-                    providerName: provider.name,
-                    rating: null,
-                    ratingCount: reviews.length,
-                    reviews: reviews.slice(0, 15).map((r) => ({ rating: r.rating, text: r.body })),
-                }),
-                REVIEW_SUMMARY_MS
-            );
-            if (summaryResult?.summary) reviewSummary = summaryResult.summary;
-        } catch {
-            // Non-fatal
-        }
-    }
+    const serviceLabels = serviceLabelsFromProvider(provider);
+    const primaryTrade = options?.trade || serviceLabels[0] || null;
 
-    const enrichment = await runAiEnrichment({
+    console.log(`${logPrefix} Stage 3: Got ${reviews.length} reviews`);
+
+    // ── Stage 4: Combined AI enrichment (R1) ──────────────────────────────────
+    // Previously: runAiEnrichment + summarizeReviews + generateProviderSummaries = 3 Gemini calls.
+    // Now: one combined call returning all fields, reducing Gemini usage ~75% per provider.
+    console.log(`${logPrefix} Stage 4: Running combined AI enrichment (websiteText=${websiteText.length} chars, reviews=${reviews.length})`);
+    const combined = await runCombinedEnrichment({
         providerName: provider.name,
         websiteText,
         imageCategories,
         reviewsText,
-        trade: options?.trade,
+        trade: primaryTrade ?? undefined,
+        address: typeof provider.address === 'string' ? provider.address : null,
+        rating: typeof provider.rating === 'number' ? provider.rating : null,
+        reviewCount:
+            typeof provider.rating_count === 'number' ? provider.rating_count : reviews.length,
     }).catch(() => null);
 
-    // ── Stage 4: Cache write ──────────────────────────────────────────────────
+    console.log(`${logPrefix} Stage 4: AI enrichment ${combined ? 'succeeded' : 'failed/null'}`);
+    if (combined) {
+        console.log(`${logPrefix} Stage 4: bio="${combined.bio?.slice(0, 80) ?? ''}", specialisations=${JSON.stringify(combined.specialisations)}, years_in_business=${combined.years_in_business}, founder=${combined.founder_or_key_person ?? 'null'}, highlights=${combined.highlights?.length ?? 0}, honest_note="${combined.honest_note?.slice(0, 60) ?? 'null'}"`);
+    }
+
+    // Map combined output back to the shapes previously returned by separate calls.
+    const enrichment: AiEnrichmentOutput | null = combined
+        ? {
+              bio: combined.bio,
+              specialisations: combined.specialisations,
+              years_experience: combined.years_experience,
+              service_areas: combined.service_areas,
+              certifications: combined.certifications,
+              response_profile: combined.response_profile,
+              website_quality: combined.website_quality,
+          }
+        : null;
+
+    const reviewSummary: string | null =
+        combined?.review_summary?.trim() ? combined.review_summary.trim() : null;
+
+    // ── Stage 5: Cache write ───────────────────────────────────────────────────
     const now = new Date().toISOString();
     const scrapeStatus = !website ? 'skip' : websiteText.length >= MIN_SCRAPE_CHARS ? 'ok' : 'failed';
     const profileCompleteness = computeProfileCompleteness({
@@ -448,12 +592,14 @@ export async function enrichProvider(
         hasWorkPhotos,
     });
 
+    console.log(`${logPrefix} Stage 5: Writing cache (scrapeStatus=${scrapeStatus}, profileCompleteness=${profileCompleteness})`);
+
     await admin.from('provider_cache').upsert(
         {
             provider_id: providerId,
             google_place_id: provider.google_place_id ?? '',
             scraped_at: now,
-            enriched_at: enrichment ? now : null,
+            enriched_at: combined ? now : null,
             scrape_status: scrapeStatus,
             bio: enrichment?.bio ?? null,
             specialisations: enrichment?.specialisations ?? [],
@@ -467,34 +613,22 @@ export async function enrichProvider(
             has_work_photos: hasWorkPhotos,
             review_summary: reviewSummary,
             raw_scrape_text: websiteText ? websiteText.slice(0, 8_000) : null,
+            // R11: Extended fields
+            years_in_business: combined?.years_in_business ?? null,
+            founder_or_key_person: combined?.founder_or_key_person ?? null,
+            highlights: combined?.highlights?.length ? combined.highlights : null,
+            honest_note: combined?.honest_note ?? null,
             cache_version: 1,
             updated_at: now,
         },
         { onConflict: 'provider_id' }
     );
 
-    // ── Stage 5: Pro profile copy (short gap-fill + long narrative) ─────────
-    const reviewBodies = reviews
-        .map((r) => (typeof r.body === 'string' ? r.body.trim() : ''))
-        .filter((b) => b.length > 0);
-    const serviceLabels = serviceLabelsFromProvider(provider);
-    const primaryTrade = options?.trade || serviceLabels[0] || null;
-
+    // ── Stage 6: Update provider profile copy from combined output ─────────────
+    console.log(`${logPrefix} Stage 6: Updating providers table`);
     try {
-        const summaries = await generateProviderSummaries({
-            name: typeof provider.name === 'string' ? provider.name : 'Provider',
-            primaryTrade,
-            services: serviceLabels.length > 0 ? serviceLabels : undefined,
-            address: typeof provider.address === 'string' ? provider.address : null,
-            reviewBodies,
-            rating: typeof provider.rating === 'number' ? provider.rating : null,
-            reviewCount:
-                typeof provider.rating_count === 'number' ? provider.rating_count : reviewBodies.length,
-            websiteText,
-        });
-
-        const aboutBusiness = summaries?.aboutBusiness?.trim() ?? '';
-        const pastWork = summaries?.pastWork?.trim() ?? '';
+        const aboutBusiness = combined?.about_business?.trim() ?? '';
+        const pastWork = combined?.past_work?.trim() ?? '';
         const narrativeParts = [aboutBusiness, pastWork].filter(Boolean);
         const summaryLong = narrativeParts.join('\n\n').slice(0, 12_000);
 
@@ -502,22 +636,35 @@ export async function enrichProvider(
             about: aboutBusiness || null,
             past_work: pastWork || null,
             summary_long: summaryLong || null,
+            // R11: Extended display fields — written here so the client-side hook can
+            // read them from providers (public table) without needing provider_cache access.
+            specialisations: enrichment?.specialisations ?? [],
+            service_areas: enrichment?.service_areas ?? [],
+            certifications: enrichment?.certifications ?? [],
+            highlights: combined?.highlights?.length ? combined.highlights : null,
+            honest_note: combined?.honest_note ?? null,
+            years_in_business: combined?.years_in_business ?? null,
+            founder_or_key_person: combined?.founder_or_key_person ?? null,
             updated_at: now,
         };
 
         const existingSummary =
             typeof provider.summary === 'string' ? provider.summary.trim() : '';
-        if (!existingSummary && summaries?.customerReviewSummary?.trim()) {
-            patch.summary = sanitizeCustomerSummary(summaries.customerReviewSummary.trim());
+        const customerSummary = combined?.customer_review_summary?.trim();
+        if (!existingSummary && customerSummary) {
+            patch.summary = sanitizeCustomerSummary(customerSummary);
         }
 
-        if (summaryLong || aboutBusiness || pastWork || typeof patch.summary === 'string') {
+        if (summaryLong || aboutBusiness || pastWork || typeof patch.summary === 'string' || combined) {
             await admin.from('providers').update(patch).eq('id', providerId);
+            console.log(`${logPrefix} Stage 6: Providers table updated`);
         }
     } catch {
-        // Non-fatal: cache row already written
+        // Non-fatal: cache row already written; attempt a minimal fallback narrative.
         if (enrichment?.bio?.trim() || websiteText.length >= MIN_SCRAPE_CHARS) {
-            const fallbackLong = [enrichment?.bio?.trim(), websiteText.slice(0, 2_000)].filter(Boolean).join('\n\n');
+            const fallbackLong = [enrichment?.bio?.trim(), websiteText.slice(0, 2_000)]
+                .filter(Boolean)
+                .join('\n\n');
             if (fallbackLong.trim()) {
                 await admin
                     .from('providers')
@@ -530,5 +677,6 @@ export async function enrichProvider(
         }
     }
 
+    console.log(`${logPrefix} Enrichment complete`);
     return { ok: true };
 }

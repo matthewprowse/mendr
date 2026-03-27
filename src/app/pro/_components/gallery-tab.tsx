@@ -114,7 +114,7 @@ export function ProGalleryTab(props: {
                                     />
                                     <Badge
                                         variant="outline"
-                                        className="pointer-events-none absolute bottom-2 right-2 bg-white dark:bg-white"
+                                        className="pointer-events-none absolute bottom-2 right-2 bg-white"
                                     >
                                         {galleryImageSourceLabel(img.source, img.path)}
                                     </Badge>
@@ -251,6 +251,7 @@ export function ProGalleryTab(props: {
                 >
                     <DialogHeader className="sr-only">
                         <DialogTitle>Image preview</DialogTitle>
+                        <DialogDescription>Preview of selected gallery image</DialogDescription>
                     </DialogHeader>
                     {lightbox ? (
                         <div className="flex flex-col gap-4">

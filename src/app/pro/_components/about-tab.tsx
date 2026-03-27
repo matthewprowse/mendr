@@ -20,6 +20,14 @@ export function ProAboutTab(props: {
     directionsHref: string | null;
     /** Long-form profile copy (website + reviews narrative). */
     profileSummaryLong: string | null;
+    /** R11: Enrichment display fields */
+    specialisations?: string[];
+    serviceAreas?: string[];
+    certifications?: string[];
+    highlights?: string[];
+    honestNote?: string | null;
+    yearsInBusiness?: number | null;
+    founder?: string | null;
 }) {
     const {
         operatingHoursByDay,
@@ -36,14 +44,43 @@ export function ProAboutTab(props: {
         addressDisplayLine,
         directionsHref,
         profileSummaryLong,
+        specialisations = [],
+        serviceAreas = [],
+        certifications = [],
+        highlights = [],
+        honestNote,
+        yearsInBusiness,
+        founder,
     } = props;
+
+    const hasEnrichment = profileSummaryLong?.trim() || specialisations.length > 0 || highlights.length > 0;
 
     return (
         <div className="flex flex-col gap-6 mt-6">
+
+            {/* ── About ── */}
             <div className="flex flex-col gap-2">
-                <h3 className="text-lg text-foreground font-bold">Summary</h3>
+                <h3 className="text-lg text-foreground font-bold">About</h3>
                 {profileSummaryLong?.trim() ? (
-                    <p className="text-sm text-foreground whitespace-pre-wrap leading-relaxed">{profileSummaryLong.trim()}</p>
+                    <>
+                        <p className="text-sm text-foreground whitespace-pre-wrap leading-relaxed">
+                            {profileSummaryLong.trim()}
+                        </p>
+                        {(yearsInBusiness != null || founder) && (
+                            <div className="flex flex-wrap gap-2 mt-1">
+                                {yearsInBusiness != null && (
+                                    <span className="text-xs text-muted-foreground">
+                                        {yearsInBusiness} year{yearsInBusiness !== 1 ? 's' : ''} in business
+                                    </span>
+                                )}
+                                {founder && (
+                                    <span className="text-xs text-muted-foreground">
+                                        · Founded by {founder}
+                                    </span>
+                                )}
+                            </div>
+                        )}
+                    </>
                 ) : (
                     <p className="text-sm text-muted-foreground">
                         We&apos;re still building this profile. Check back shortly for more about their services and past work.
@@ -51,6 +88,80 @@ export function ProAboutTab(props: {
                 )}
             </div>
 
+            {/* ── Highlights ── */}
+            {highlights.length > 0 && (
+                <div className="flex flex-col gap-2">
+                    <h3 className="text-lg text-foreground font-bold">Highlights</h3>
+                    <ul className="flex flex-col gap-1.5">
+                        {highlights.map((h, i) => (
+                            <li key={i} className="flex items-start gap-2 text-sm text-foreground">
+                                <span className="mt-0.5 shrink-0 text-primary">✓</span>
+                                <span>{h}</span>
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+            )}
+
+            {/* ── Services & Specialisations ── */}
+            {specialisations.length > 0 && (
+                <div className="flex flex-col gap-2">
+                    <h3 className="text-lg text-foreground font-bold">Services &amp; Specialisations</h3>
+                    <div className="flex flex-wrap gap-2">
+                        {specialisations.map((s) => (
+                            <Badge key={s} variant="secondary">
+                                {s}
+                            </Badge>
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            {/* ── Service Areas ── */}
+            {serviceAreas.length > 0 && (
+                <div className="flex flex-col gap-2">
+                    <h3 className="text-lg text-foreground font-bold">Service Areas</h3>
+                    <div className="flex flex-wrap gap-2">
+                        {serviceAreas.map((a) => (
+                            <Badge key={a} variant="outline">
+                                {a}
+                            </Badge>
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            {/* ── Credentials ── */}
+            {certifications.length > 0 && (
+                <div className="flex flex-col gap-2">
+                    <h3 className="text-lg text-foreground font-bold">Credentials</h3>
+                    <div className="flex flex-wrap gap-2">
+                        {certifications.map((c) => (
+                            <Badge key={c} variant="secondary">
+                                {c}
+                            </Badge>
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            {/* ── Honest Note ── */}
+            {honestNote && (
+                <div className="rounded-lg border border-border bg-muted/40 p-3">
+                    <p className="text-xs text-muted-foreground leading-relaxed">{honestNote}</p>
+                </div>
+            )}
+
+            {/* ── No enrichment placeholder ── */}
+            {!hasEnrichment && !isOperatingHoursLoading && (
+                <div className="rounded-lg border border-dashed border-border p-4 text-center">
+                    <p className="text-xs text-muted-foreground">
+                        Profile details are being compiled. Check back shortly.
+                    </p>
+                </div>
+            )}
+
+            {/* ── Operating Hours ── */}
             <div className="flex flex-col gap-3">
                 <h3 className="text-lg text-foreground font-bold">Operating Hours</h3>
                 {(() => {
@@ -114,6 +225,7 @@ export function ProAboutTab(props: {
                 })()}
             </div>
 
+            {/* ── Directions ── */}
             <div className="flex flex-col gap-3">
                 <h3 className="text-lg text-foreground font-bold">Directions</h3>
                 {hasMapCoords && mapsApiKey && providerLat != null && providerLng != null ? (

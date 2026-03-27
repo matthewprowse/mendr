@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { trackEvent } from '@/lib/analytics';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -20,6 +21,7 @@ import {
     fetchEnrichmentApi,
     restoreProviderTokenApi,
 } from '@/features/match/api/client';
+import { ReportCard } from '@/app/chat/_components/report-card';
 import type { EnrichmentCacheEntry } from '@/app/api/enrich/get/route';
 import { useMatchConversationContext } from '@/features/match/hooks/useMatchConversationContext';
 import { useMatchProviders } from '@/features/match/hooks/useMatchProviders';
@@ -258,10 +260,14 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
         setAddressInput(userLocation.address || `${userLocation.lat}, ${userLocation.lng}`);
     }, [userLocation]);
 
+    // Debounce radius/location changes — rapid badge clicks settle before firing.
     useEffect(() => {
         if (!userLocation) return;
         if (isUpdatingLocation) return;
-        void refreshProvidersForLocation(userLocation);
+        const timer = setTimeout(() => {
+            void refreshProvidersForLocation(userLocation);
+        }, 300);
+        return () => clearTimeout(timer);
     }, [isUpdatingLocation, refreshProvidersForLocation, searchRadiusMeters, userLocation]);
 
     const goPrev = () => setCompanyIndex((v) => Math.max(1, v - 1));
@@ -269,9 +275,22 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
 
     const showBottomSkeleton = isLoading || isProvidersLoading;
     const noProviders = !showBottomSkeleton && providers.length === 0;
+    // Fire match_view once when providers first load.
+    const matchViewFiredRef = useRef(false);
+    useEffect(() => {
+        if (!matchViewFiredRef.current && providers.length > 0) {
+            matchViewFiredRef.current = true;
+            trackEvent('match_view', { diagnosis_id: conversationId || undefined });
+        }
+    }, [providers.length, conversationId]);
+
     const trackContactIntent = useCallback(
         (channel: 'phone' | 'email' | 'whatsapp') => {
             if (!conversationId || !selectedProvider?.providerId) return;
+            trackEvent('provider_contact', {
+                provider_id: selectedProvider.providerId,
+                diagnosis_id: conversationId,
+            });
             void restoreProviderTokenApi({
                 providerId: selectedProvider.providerId,
                 conversationId,
@@ -291,7 +310,7 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
                         Recommended Matches
                     </h1>
                     <p className="text-sm text-muted-foreground">
-                        Lorem ipsum dolor sit amet consectetur adipisicing elit. Quisquam, quos.
+                        Top-rated providers near you, matched to your diagnosis.
                     </p>
                 </div>
 
@@ -464,24 +483,32 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
                             </div>
                             <div className="flex flex-col gap-1">
                                 <p className="text-sm text-foreground font-medium">Scandio Summary</p>
-                                {selectedProvider?.summary?.trim() ? (
-                                    <p
-                                        className="text-sm text-muted-foreground"
-                                        style={{
-                                            display: '-webkit-box',
-                                            WebkitLineClamp: 4 as any,
-                                            WebkitBoxOrient: 'vertical',
-                                            overflow: 'hidden',
-                                        }}
-                                    >
-                                        {selectedProvider.summary}
-                                    </p>
-                                ) : (
-                                    <div className="flex flex-col gap-1">
-                                        <Skeleton className="h-4 w-full" />
-                                        <Skeleton className="h-4 w-3/4" />
-                                    </div>
-                                )}
+                                {(() => {
+                                    const reviewSummary = selectedProvider
+                                        ? (enrichmentCache[selectedProvider.placeId]?.reviewSummary ?? null)
+                                        : null;
+                                    if (reviewSummary?.trim()) {
+                                        return (
+                                            <p
+                                                className="text-sm text-muted-foreground"
+                                                style={{
+                                                    display: '-webkit-box',
+                                                    WebkitLineClamp: 4 as any,
+                                                    WebkitBoxOrient: 'vertical',
+                                                    overflow: 'hidden',
+                                                }}
+                                            >
+                                                {reviewSummary}
+                                            </p>
+                                        );
+                                    }
+                                    return (
+                                        <div className="flex flex-col gap-1">
+                                            <Skeleton className="h-4 w-full" />
+                                            <Skeleton className="h-4 w-3/4" />
+                                        </div>
+                                    );
+                                })()}
                             </div>
 
                             {/* Enrichment fields — shimmer until cache is fetched */}
@@ -553,6 +580,10 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
                                     </div>
                                 );
                             })()}
+
+                            {conversationId && (
+                                <ReportCard conversationId={conversationId} />
+                            )}
 
                             <div className="flex flex-row gap-2">
                                 <Popover open={contactOpen} onOpenChange={setContactOpen}>

@@ -8,12 +8,17 @@
  * Body: { placeIds: string[]; trade?: string }
  *
  * The client fires this without awaiting the response (fire-and-forget).
+ * maxDuration is set to 300s so Vercel Pro does not kill in-flight jobs.
  */
+
+// R3: Allow up to 5 minutes on Vercel Pro — prevents serverless function kills mid-enrichment.
+export const maxDuration = 300;
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseAdminClient } from '@/lib/supabase-server';
 import { enrichProvider } from '@/lib/provider-enrichment';
 import { toGooglePlaceId } from '@/app/api/providers/persistence';
+import { checkRateLimit } from '@/lib/rate-limit-config';
 
 const MAX_CONCURRENT = 10;
 const JOB_TIMEOUT_MS = 30_000;
@@ -51,6 +56,9 @@ function createSemaphore(max: number) {
 // ── Route handler ─────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
+    const limited = checkRateLimit(req, 'enrichQueue');
+    if (limited) return limited;
+
     try {
         const body = await req.json().catch(() => null) as {
             placeIds?: unknown;

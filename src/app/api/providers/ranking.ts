@@ -42,12 +42,16 @@ function relevanceScore(
 ): number {
     if (!tradeDetail && !trade) return 0.5; // neutral when no diagnosis context
 
+    // R5: Include AI-extracted specialisations from enrichment cache in the haystack.
+    // A roofing waterproofing specialist was previously scored the same as a general contractor
+    // because Google types don't reflect their speciality. Enrichment fixes this.
     const haystack = [
         (provider.name ?? '').toLowerCase(),
         ...(provider.services ?? []).flatMap((s) => [
             (s.short ?? '').toLowerCase(),
             (s.full ?? '').toLowerCase(),
         ]),
+        ...(provider.specialisations ?? []).map((s) => s.toLowerCase()),
     ].join(' ');
 
     // Subcategory match (most specific — highest reward)
@@ -91,24 +95,31 @@ function recencyScore(lastMatchedAt?: string | null): number {
 }
 
 /**
- * Composite score: Relevance 40%, Bayesian rating 30%, Proximity 20%, Recency 10%.
+ * Composite score: Relevance 40%, Bayesian rating 30%, Proximity 20%, Recency 10%,
+ * plus a small completeness bonus (max +0.02) for providers with richer profiles. (R9)
  *
  * Weights are intentional:
  *  - Relevance is the strongest signal — a specialist beats a generalist.
  *  - Bayesian rating rewards genuine track records over inflated scores.
  *  - Proximity is a tiebreaker, not the primary driver (15 km cap).
  *  - Recency nudges dormant providers down without fully excluding them.
+ *  - Completeness bonus: enriched providers with work photos/certs edge ahead
+ *    at equal competitive scores, incentivising complete profiles. Bounded at
+ *    +0.02 so it never overrides the primary signals.
  */
 export function compositeScore(
     p: ProviderItem,
     tradeDetail?: string,
     trade?: string
 ): number {
+    // R9: Fractional completeness bonus replaces the blunt integer tiebreaker.
+    const completenessBonus = ((p.profileCompleteness ?? 0) / 3) * 0.02;
     return (
         0.4 * relevanceScore(p, tradeDetail, trade) +
         0.3 * bayesianRatingScore(p.rating, p.ratingCount ?? 0) +
         0.2 * proximityScore(p.distanceKm) +
-        0.1 * recencyScore((p as any).lastMatchedAt)
+        0.1 * recencyScore((p as any).lastMatchedAt) +
+        completenessBonus
     );
 }
 

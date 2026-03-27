@@ -1,7 +1,6 @@
 'use client';
 
 import { ArrowLeft } from 'lucide-react';
-import { ThemeToggle } from '@/components/theme-toggle';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 

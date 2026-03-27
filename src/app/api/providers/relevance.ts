@@ -33,6 +33,8 @@ const BANNED_KEYWORDS = [
     'beauty',
 ];
 
+// R8: Expanded to cover trades that were incorrectly rejected by the service keyword gate.
+// Missing trades included: waterproofing, damp proofing, glazing, solar, irrigation, etc.
 const SERVICE_KEYWORDS = [
     'electric',
     'plumb',
@@ -63,6 +65,31 @@ const SERVICE_KEYWORDS = [
     'well',
     'drill',
     'pump',
+    // Added in R8:
+    'waterproof',
+    'damp',
+    'glazing',
+    'glass',
+    'solar',
+    'irrigation',
+    'insulation',
+    'scaffold',
+    'thatch',
+    'paving',
+    'concrete',
+    'hvac',
+    'air condition',
+    'pest',
+    'landscape',
+    'garden',
+    'fence',
+    'alarm',
+    'cctv',
+    'render',
+    'plaster',
+    'ceiling',
+    'gutter',
+    'awning',
 ];
 
 export function isProviderRelevantForTrade(params: {

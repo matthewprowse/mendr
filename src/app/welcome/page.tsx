@@ -13,6 +13,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { FlowStepHeader } from '@/components/flow-header';
+import { trackEvent } from '@/lib/analytics';
 
 export default function WelcomePage() {
     const router = useRouter();
@@ -259,6 +260,7 @@ export default function WelcomePage() {
                                 setIsUploading(false);
                             }
 
+                            trackEvent('welcome_start', { diagnosis_id: conversationId });
                             const qp = new URLSearchParams();
                             if (trade) qp.set('trade', trade);
                             const suffix = qp.toString() ? `?${qp.toString()}` : '';

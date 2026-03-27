@@ -50,17 +50,52 @@ export default function WelcomePage({ conversationId }: { conversationId?: strin
         const braceMatch = candidate.match(/\{[\s\S]*\}/);
         const toParse = braceMatch ? braceMatch[0] : candidate;
         try {
-            const parsed = JSON.parse(toParse);
-            if (parsed && typeof parsed === 'object' && parsed.diagnosis) {
-                const d = parsed as DiagnosisData;
-                return {
-                    ...d,
-                    trade_detail:
-                        typeof d.trade_detail === 'string' && d.trade_detail.trim()
-                            ? d.trade_detail
-                            : d.trade,
-                };
-            }
+            const parsed = JSON.parse(toParse) as any;
+            if (!parsed || typeof parsed !== 'object' || !parsed.diagnosis) return null;
+
+            // Be defensive about unexpected key casing / missing fields coming back from the model.
+            const diagnosis = typeof parsed.diagnosis === 'string' ? parsed.diagnosis.trim() : String(parsed.diagnosis ?? '');
+            const trade = typeof parsed.trade === 'string' ? parsed.trade.trim() : String(parsed.trade ?? '');
+            const action_required =
+                typeof parsed.action_required === 'string'
+                    ? parsed.action_required
+                    : typeof parsed.actionRequired === 'string'
+                      ? parsed.actionRequired
+                      : '';
+            const message =
+                typeof parsed.message === 'string'
+                    ? parsed.message
+                    : typeof parsed.Message === 'string'
+                      ? parsed.Message
+                      : '';
+            const estimated_cost =
+                typeof parsed.estimated_cost === 'string'
+                    ? parsed.estimated_cost
+                    : typeof parsed.estimatedCost === 'string'
+                      ? parsed.estimatedCost
+                      : typeof parsed.estimated_diagnosis_sentence === 'string'
+                        ? parsed.estimated_diagnosis_sentence
+                        : '';
+
+            const trade_detailRaw =
+                typeof parsed.trade_detail === 'string'
+                    ? parsed.trade_detail
+                    : typeof parsed.tradeDetail === 'string'
+                      ? parsed.tradeDetail
+                      : '';
+
+            return {
+                // Preserve all other fields, but ensure the required strings exist.
+                ...(parsed as DiagnosisData),
+                thinking: typeof parsed.thinking === 'string' ? parsed.thinking : '',
+                diagnosis,
+                trade,
+                action_required,
+                // If the model omitted action_required, we still allow message to render in the report.
+                message: message || undefined,
+                estimated_cost,
+                trade_detail: trade_detailRaw.trim().length > 0 ? trade_detailRaw : trade,
+            };
         } catch {
             // ignore
         }

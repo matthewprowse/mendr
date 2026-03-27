@@ -205,8 +205,8 @@ export function ChatMessage({
                             className={cn(
                                 'size-4 transition-colors',
                                 message.feedback === 'up'
-                                    ? 'text-black dark:text-white'
-                                    : 'text-muted-foreground group-hover:text-black dark:group-hover:text-white'
+                                    ? 'text-black'
+                                    : 'text-muted-foreground group-hover:text-black'
                             )}
                         />
                     </Button>
@@ -220,13 +220,13 @@ export function ChatMessage({
                             className={cn(
                                 'size-4 transition-colors',
                                 message.feedback === 'down'
-                                    ? 'text-black dark:text-white'
-                                    : 'text-muted-foreground group-hover:text-black dark:group-hover:text-white'
+                                    ? 'text-black'
+                                    : 'text-muted-foreground group-hover:text-black'
                             )}
                         />
                     </Button>
                     <Button variant="ghost" size="icon" className="size-9 group" onClick={onCopy}>
-                        <Copy className="size-4 text-muted-foreground transition-colors group-hover:text-black dark:group-hover:text-white" />
+                        <Copy className="size-4 text-muted-foreground transition-colors group-hover:text-black" />
                     </Button>
                     <Button
                         variant="ghost"
@@ -234,7 +234,7 @@ export function ChatMessage({
                         className="size-9 group"
                         onClick={onRegenerate}
                     >
-                        <RotateCcw className="size-4 text-muted-foreground transition-colors group-hover:text-black dark:group-hover:text-white" />
+                        <RotateCcw className="size-4 text-muted-foreground transition-colors group-hover:text-black" />
                     </Button>
                 </div>
             )}

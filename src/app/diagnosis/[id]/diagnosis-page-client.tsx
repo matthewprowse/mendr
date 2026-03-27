@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { getSupabase } from '@/lib/supabase';
+import { trackEvent } from '@/lib/analytics';
 import { getScanSessionHandoff, clearScanSessionHandoff } from '@/lib/scan-session-store';
 import type { DiagnosisData } from '@/app/chat/_components/types';
 import { Textarea } from '@/components/ui/textarea';
@@ -33,17 +34,51 @@ function parseDiagnosisFromResponse(text: string): DiagnosisData | null {
     const braceMatch = candidate.match(/\{[\s\S]*\}/);
     const toParse = braceMatch ? braceMatch[0] : candidate;
     try {
-        const parsed = JSON.parse(toParse);
-        if (parsed && typeof parsed === 'object' && parsed.diagnosis) {
-            const d = parsed as DiagnosisData;
-            return {
-                ...d,
-                trade_detail:
-                    typeof d.trade_detail === 'string' && d.trade_detail.trim()
-                        ? d.trade_detail
-                        : d.trade,
-            };
-        }
+        const parsed = JSON.parse(toParse) as any;
+        if (!parsed || typeof parsed !== 'object' || !parsed.diagnosis) return null;
+
+        // Be defensive about unexpected key casing / missing fields coming back from the model.
+        const diagnosis = typeof parsed.diagnosis === 'string' ? parsed.diagnosis.trim() : String(parsed.diagnosis ?? '');
+        const trade = typeof parsed.trade === 'string' ? parsed.trade.trim() : String(parsed.trade ?? '');
+        const action_required =
+            typeof parsed.action_required === 'string'
+                ? parsed.action_required
+                : typeof parsed.actionRequired === 'string'
+                  ? parsed.actionRequired
+                  : '';
+        const message =
+            typeof parsed.message === 'string'
+                ? parsed.message
+                : typeof parsed.Message === 'string'
+                  ? parsed.Message
+                  : '';
+
+        const estimated_cost =
+            typeof parsed.estimated_cost === 'string'
+                ? parsed.estimated_cost
+                : typeof parsed.estimatedCost === 'string'
+                  ? parsed.estimatedCost
+                  : typeof parsed.estimated_diagnosis_sentence === 'string'
+                    ? parsed.estimated_diagnosis_sentence
+                    : '';
+
+        const trade_detailRaw =
+            typeof parsed.trade_detail === 'string'
+                ? parsed.trade_detail
+                : typeof parsed.tradeDetail === 'string'
+                  ? parsed.tradeDetail
+                  : '';
+
+        return {
+            ...(parsed as DiagnosisData),
+            thinking: typeof parsed.thinking === 'string' ? parsed.thinking : '',
+            diagnosis,
+            trade,
+            action_required,
+            message: message || undefined,
+            estimated_cost,
+            trade_detail: trade_detailRaw.trim().length > 0 ? trade_detailRaw : trade,
+        };
     } catch {
         // ignore
     }
@@ -174,6 +209,7 @@ export function DiagnosisPageClient({ conversationId }: DiagnosisPageClientProps
                     return null;
                 }
                 setDiagnosis(diag);
+                trackEvent('diagnosis_complete', { diagnosis_id: conversationId });
                 await saveConversationDiagnosis(diag, img, prompt);
                 return diag;
             } catch (e) {

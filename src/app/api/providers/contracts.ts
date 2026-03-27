@@ -44,6 +44,8 @@ export interface ProviderItem {
     lastMatchedAt?: string | null;
     /** Enrichment-derived profile depth score (0..3). */
     profileCompleteness?: number;
+    /** AI-extracted service specialisations from enrichment cache. Used in relevance scoring (R5). */
+    specialisations?: string[];
 }
 
 export interface ProvidersResponseBody {

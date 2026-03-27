@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseAdminClient } from '@/lib/supabase-server';
 import { getISOWeekKey } from '../ranking';
 import { logAiEvent } from '@/lib/ai-logging';
+import { checkRateLimit } from '@/lib/rate-limit-config';
 
 type RestoreTokenBody = {
     providerId?: string;
@@ -14,6 +15,9 @@ const WEEKLY_CAP = 5;
 const DEDUPE_WINDOW_MS = 45_000;
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
+    const limited = checkRateLimit(req, 'restoreToken');
+    if (limited) return limited;
+
     try {
         const body = (await req.json().catch(() => null)) as RestoreTokenBody | null;
         const providerId = typeof body?.providerId === 'string' ? body.providerId.trim() : '';

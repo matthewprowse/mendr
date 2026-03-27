@@ -421,7 +421,7 @@ export default async function ProPage({ params }: PageProps) {
                                         <span
                                             className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-semibold ${
                                                 openStatus.startsWith('Open')
-                                                    ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400'
+                                                    ? 'bg-emerald-50 text-emerald-700'
                                                     : 'border border-border text-muted-foreground'
                                             }`}
                                         >

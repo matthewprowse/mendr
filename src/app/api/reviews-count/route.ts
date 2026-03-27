@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabase-server';
+import { checkRateLimit } from '@/lib/rate-limit-config';
 
 export async function POST(req: NextRequest) {
+    const limited = checkRateLimit(req, 'reviewsCount');
+    if (limited) return limited;
+
     try {
         const body = await req.json();
         const providerId = typeof body?.providerId === 'string' ? body.providerId.trim() : '';

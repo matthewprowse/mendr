@@ -11,6 +11,8 @@ export function useMatchMap(params: {
     showSearchRadius?: boolean;
     /** When true, drop a marker at `userLocation`. Default false (match flow uses the circle + provider pins). */
     showUserPin?: boolean;
+    /** Optional multi-zone overlay (used by pro onboard multi service areas). */
+    userAreas?: Array<{ location: MatchLocation; radiusMeters: number }>;
 }) {
     const {
         userLocation,
@@ -19,17 +21,24 @@ export function useMatchMap(params: {
         onMarkerClick,
         showSearchRadius = true,
         showUserPin = false,
+        userAreas = [],
     } = params;
     const mapHostRef = useRef<HTMLDivElement>(null);
     const mapRef = useRef<google.maps.Map | null>(null);
     const markersRef = useRef<google.maps.Marker[]>([]);
     const userPinRef = useRef<google.maps.Marker | null>(null);
     const radiusCircleRef = useRef<google.maps.Circle | null>(null);
+    const areaPinsRef = useRef<google.maps.Marker[]>([]);
+    const areaCirclesRef = useRef<google.maps.Circle[]>([]);
     const [isMapReady, setIsMapReady] = useState(false);
 
     useEffect(() => {
         if (!mapHostRef.current) return;
-        if (!userLocation) return;
+        if (mapRef.current) return;
+        const initialCenter =
+            userAreas[0]?.location ??
+            userLocation;
+        if (!initialCenter) return;
         const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || process.env.NEXT_PUBLIC_GOOGLE_PLACES_API_KEY;
         if (!apiKey) return;
 
@@ -45,7 +54,7 @@ export function useMatchMap(params: {
             await importLibrary('marker');
             if (cancelled || !mapHostRef.current) return;
             mapRef.current = new google.maps.Map(mapHostRef.current, {
-                center: { lat: userLocation.lat, lng: userLocation.lng },
+                center: { lat: initialCenter.lat, lng: initialCenter.lng },
                 zoom: 12,
                 mapId: 'scandio-match-map',
                 disableDefaultUI: true,
@@ -57,13 +66,34 @@ export function useMatchMap(params: {
         return () => {
             cancelled = true;
         };
-    }, [userLocation]);
+    }, [userAreas, userLocation]);
 
     useEffect(() => {
         const map = mapRef.current;
-        if (!map || !isMapReady || !userLocation) return;
+        if (!map || !isMapReady) return;
+        const hasUserAreas = userAreas.length > 0;
+        const effectiveUserLocation = hasUserAreas ? userAreas[0]?.location ?? null : userLocation;
+        if (!effectiveUserLocation) return;
 
-        if (showSearchRadius) {
+        // Clear previous multi-area overlays.
+        areaPinsRef.current.forEach((m) => {
+            try {
+                m.setMap(null);
+            } catch {}
+        });
+        areaPinsRef.current = [];
+        areaCirclesRef.current.forEach((c) => {
+            try {
+                c.setMap(null);
+            } catch {}
+        });
+        areaCirclesRef.current = [];
+
+        if (hasUserAreas) {
+            // Hide the single-radius/single-pin overlays when multi-area mode is active.
+            radiusCircleRef.current?.setMap(null);
+            userPinRef.current?.setMap(null);
+        } else if (showSearchRadius && userLocation) {
             if (!radiusCircleRef.current) {
                 radiusCircleRef.current = new google.maps.Circle({
                     strokeColor: '#4f46e5',
@@ -108,8 +138,8 @@ export function useMatchMap(params: {
             markersRef.current.push(marker);
         });
 
-        const pos = { lat: userLocation.lat, lng: userLocation.lng };
-        if (showUserPin) {
+        const pos = { lat: effectiveUserLocation.lat, lng: effectiveUserLocation.lng };
+        if (!hasUserAreas && showUserPin) {
             if (!userPinRef.current) {
                 userPinRef.current = new google.maps.Marker({
                     map,
@@ -124,8 +154,33 @@ export function useMatchMap(params: {
             userPinRef.current?.setMap(null);
         }
 
+        if (hasUserAreas) {
+            userAreas.forEach((area) => {
+                const areaPos = { lat: area.location.lat, lng: area.location.lng };
+                const circle = new google.maps.Circle({
+                    map,
+                    center: areaPos,
+                    radius: area.radiusMeters,
+                    strokeColor: '#4f46e5',
+                    strokeOpacity: 0.45,
+                    strokeWeight: 1.5,
+                    fillColor: '#4f46e5',
+                    fillOpacity: 0.08,
+                    clickable: false,
+                });
+                areaCirclesRef.current.push(circle);
+
+                const pin = new google.maps.Marker({
+                    map,
+                    position: areaPos,
+                    title: area.location.address || 'Service area',
+                });
+                areaPinsRef.current.push(pin);
+            });
+        }
+
         const singleUserView =
-            !showSearchRadius && pts.length === 0 && showUserPin;
+            !hasUserAreas && !showSearchRadius && pts.length === 0 && showUserPin;
 
         if (singleUserView) {
             map.setCenter(pos);
@@ -134,9 +189,23 @@ export function useMatchMap(params: {
         }
 
         const bounds = new google.maps.LatLngBounds();
-        if (showSearchRadius) {
-            const circleBounds = radiusCircleRef.current?.getBounds();
-            if (circleBounds) bounds.union(circleBounds);
+        if (hasUserAreas) {
+            let hasAnyCircleBounds = false;
+            areaCirclesRef.current.forEach((circle) => {
+                const b = circle.getBounds();
+                if (b) {
+                    bounds.union(b);
+                    hasAnyCircleBounds = true;
+                }
+            });
+            if (!hasAnyCircleBounds) {
+                userAreas.forEach((area) =>
+                    bounds.extend({ lat: area.location.lat, lng: area.location.lng }),
+                );
+            }
+        } else if (showSearchRadius) {
+            const singleCircleBounds = radiusCircleRef.current?.getBounds();
+            if (singleCircleBounds) bounds.union(singleCircleBounds);
             else bounds.extend(pos);
         } else {
             bounds.extend(pos);
@@ -146,7 +215,7 @@ export function useMatchMap(params: {
         try {
             map.fitBounds(bounds, 48);
         } catch {}
-    }, [isMapReady, onMarkerClick, providers, searchRadiusMeters, showSearchRadius, showUserPin, userLocation]);
+    }, [isMapReady, onMarkerClick, providers, searchRadiusMeters, showSearchRadius, showUserPin, userAreas, userLocation]);
 
     return {
         mapHostRef,

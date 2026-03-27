@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'crypto';
 import { createSupabaseAdminClient } from '@/lib/supabase-server';
+import { checkRateLimit } from '@/lib/rate-limit-config';
 
 export type ScandioCategoryRatings = {
     punctuality: number;
@@ -31,6 +32,9 @@ function isValidHalfStar(n: unknown): n is number {
  * category_ratings (jsonb), optional title (text), published_at, updated_at.
  */
 export async function POST(req: NextRequest) {
+    const limited = checkRateLimit(req, 'reviews');
+    if (limited) return limited;
+
     try {
         const body = await req.json();
         const providerId = typeof body?.providerId === 'string' ? body.providerId.trim() : '';
@@ -47,8 +51,17 @@ export async function POST(req: NextRequest) {
         if (!reviewerName) {
             return NextResponse.json({ error: 'Name is required' }, { status: 400 });
         }
+        if (reviewerName.length > 100) {
+            return NextResponse.json({ error: 'Name must be 100 characters or fewer' }, { status: 400 });
+        }
         if (!reviewBody) {
             return NextResponse.json({ error: 'Review body is required' }, { status: 400 });
+        }
+        if (reviewBody.length > 5000) {
+            return NextResponse.json({ error: 'Review must be 5,000 characters or fewer' }, { status: 400 });
+        }
+        if (reviewTitle && reviewTitle.length > 200) {
+            return NextResponse.json({ error: 'Title must be 200 characters or fewer' }, { status: 400 });
         }
         if (
             !cr ||

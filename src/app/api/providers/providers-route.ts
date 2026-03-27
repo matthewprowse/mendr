@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { logAiEvent } from '@/lib/ai-logging';
+import { checkRateLimit } from '@/lib/rate-limit-config';
 import { createSupabaseServerClient, createSupabaseAdminClient } from '@/lib/supabase-server';
-import { summarizeReviews, sanitizeCustomerSummary } from '@/lib/review-summary';
+import { sanitizeCustomerSummary } from '@/lib/review-summary';
 import { formatWeekdayDescriptionsTo24h } from '@/lib/format-weekday-descriptions';
 import { isOpenNowFromWeekdayDescriptions } from '@/lib/open-status';
 import { buildProviderQuery } from './query-builder';
@@ -10,8 +11,27 @@ import type { ProviderItem, ProvidersRequestBody, ProvidersResponseBody } from '
 import { buildSearchCacheKey } from './cache';
 import { withTimeout } from './review-enrichment';
 import { toGooglePlaceId } from './persistence';
+import { isProviderRelevantForTrade } from './relevance';
+import { normalizePlaceId } from './place-id';
+import { normalizeProviderName } from './provider-display-name';
+import { getPlaceServices } from './place-services';
+import {
+    fetchPlaceReviewsFromGoogle,
+    mapGoogleReviewsToInput,
+} from './google-place-reviews';
+import {
+    SEARCH_CACHE_TTL_MS,
+    TWENTY_FOUR_MONTHS_MS,
+    TEXT_SEARCH_MAX_EXTRA_PAGES,
+    RETAIL_TYPES,
+    REVIEW_SYNC_TTL_MS,
+} from './providers-route-constants';
 
 export async function POST(req: NextRequest) {
+    // ── Rate limit ─────────────────────────────────────────────────────────────
+    const limited = checkRateLimit(req, 'providers');
+    if (limited) return limited;
+
     try {
         const startedAt = Date.now();
         let searchCacheHit = false;
@@ -22,7 +42,7 @@ export async function POST(req: NextRequest) {
             lat,
             lng,
             trade,
-            radius: customRadius,
+            radius: customRadius,  // capped below
             pageToken,
             searchQuery: providedSearchQuery,
             /** Optional specialty line from AI diagnosis (same as `conversations.diagnosis.trade_detail`). Refines Google text search. */
@@ -84,7 +104,8 @@ export async function POST(req: NextRequest) {
             `Using Google Places API key from ${apiKeySource} (starts: ${apiKey.substring(0, 6)}..., length: ${apiKey.length})`
         );
 
-        const radius = customRadius || 50000; // Default 50km — wider search for rural/sparse areas
+        // Cap at 50 km (50,000 m) — callers cannot request unbounded searches.
+        const radius = Math.min(Number(customRadius) || 50_000, 50_000);
 
         // 1. Trade → Places search query (used for API call and response; set once so cache path has it)
         const {
@@ -99,364 +120,6 @@ export async function POST(req: NextRequest) {
             providedSearchQuery,
             tradeDetail,
         });
-
-        // Basic safety net: hard block obviously irrelevant categories (weed dispensaries, restaurants, etc.)
-        const BANNED_TYPES = new Set<string>([
-            'cannabis_store',
-            'marijuana_dispensary',
-            'liquor_store',
-            'bar',
-            'restaurant',
-            'cafe',
-            'coffee_shop',
-            'night_club',
-            'spa',
-            'hair_salon',
-            'beauty_salon',
-            'nail_salon',
-            'clothing_store',
-            'shoe_store',
-            'supermarket',
-            'grocery_or_supermarket',
-        ]);
-        const BANNED_KEYWORDS = [
-            'cannabis',
-            'marijuana',
-            'weed',
-            'dispensary',
-            'vape',
-            'coffee',
-            'restaurant',
-            'bar ',
-            ' bar',
-            'cocktail',
-            'nail bar',
-            'hair salon',
-            'beauty',
-        ];
-
-        // Home-service related keywords – anything that *doesn't* contain one of these is suspicious
-        const SERVICE_KEYWORDS = [
-            'electric',
-            'plumb',
-            'geyser',
-            'drain',
-            'sewer',
-            'gate',
-            'garage door',
-            'roof',
-            'gutter',
-            'tile',
-            'floor',
-            'flooring',
-            'paint',
-            'pool',
-            'locksmith',
-            'waste',
-            'rubble',
-            'removal',
-            'weld',
-            'carpentry',
-            'woodwork',
-            'builder',
-            'construction',
-            'contractor',
-            'handyman',
-            'borehole',
-            'well',
-            'drill',
-            'pump',
-        ];
-
-        function isProviderRelevantForTrade(params: {
-            place: any;
-            aiData: any;
-            cached: any;
-        }): boolean {
-            const { place, aiData, cached } = params;
-            const typesRaw: string[] = (place.types || []).map((t: string) =>
-                (t || '').toString().toLowerCase()
-            );
-            // Google types are typically underscore-separated (`garage_door_supplier`), but our
-            // keyword checks use spaces (`garage door`). Include both forms in the text haystack.
-            const typesText: string[] = typesRaw.map((t) => t.replace(/_/g, ' '));
-
-            // Hard block banned Google types (e.g. cannabis stores, restaurants)
-            if (typesRaw.some((t) => BANNED_TYPES.has(t))) return false;
-
-            const servicesFromAi = Array.isArray(aiData?.services)
-                ? (aiData.services as { short?: string; full?: string }[])
-                : [];
-            const servicesFromCache = Array.isArray(cached?.services)
-                ? (cached.services as { short?: string; full?: string }[])
-                : [];
-            const servicesText = [...servicesFromAi, ...servicesFromCache]
-                .flatMap((s) => [s.short, s.full])
-                .filter(Boolean)
-                .join(' ')
-                .toLowerCase();
-
-            const name = (aiData?.name || place.displayName?.text || cached?.name || '')
-                .toString()
-                .toLowerCase();
-
-            const haystack = [
-                name,
-                servicesText,
-                ...typesRaw,
-                ...typesText,
-                (place.formattedAddress || '').toString().toLowerCase(),
-            ]
-                .join(' ')
-                .replace(/_/g, ' ')
-                .replace(/\s+/g, ' ')
-                .trim();
-
-            // Hard block on banned textual keywords (weed shops, etc.)
-            if (BANNED_KEYWORDS.some((kw) => haystack.includes(kw))) {
-                return false;
-            }
-
-            // Require at least one home-service style keyword somewhere in the data
-            const hasServiceKeyword = SERVICE_KEYWORDS.some((kw) => haystack.includes(kw));
-            if (!hasServiceKeyword) return false;
-
-            // Light trade-specific check: when we know the trade, prefer matching text
-            if (tradeNorm) {
-                const t = tradeNorm;
-                if (t.includes('plumb')) {
-                    const specialtyNeedsWaterWell = isBoreholeLikeDetail;
-                    if (specialtyNeedsWaterWell) {
-                        const ok =
-                            haystack.includes('borehole') ||
-                            haystack.includes('well drill') ||
-                            haystack.includes('well-drill') ||
-                            (haystack.includes('well') && haystack.includes('drill')) ||
-                            haystack.includes('drill') ||
-                            haystack.includes('pump') ||
-                            haystack.includes('water well');
-                        if (!ok) return false;
-                    } else if (!haystack.includes('plumb') && !haystack.includes('geyser')) {
-                        return false;
-                    }
-                }
-                if (t.includes('electric') && !haystack.includes('electric')) {
-                    return false;
-                }
-                if (t.includes('locksmith') && !haystack.includes('lock')) {
-                    return false;
-                }
-                if ((t.includes('pool') || t.includes('swim')) && !haystack.includes('pool')) {
-                    return false;
-                }
-                if ((t.includes('paint') || t.includes('painting')) && !haystack.includes('paint')) {
-                    return false;
-                }
-
-                // If the user picked "Security & Access", do not surface generic security providers
-                // (alarm/CCTV/guards) unless the place is clearly about gates/garage doors.
-                if (t === 'security & access' || t.includes('security')) {
-                    const hasSecuritySignalInTypes = typesRaw.some((gt) => {
-                        const s = String(gt || '');
-                        return (
-                            s.includes('security') ||
-                            s.includes('alarm') ||
-                            s.includes('surveillance') ||
-                            s.includes('guard')
-                        );
-                    });
-
-                    const hasGateOrGarageSignalInTypes = typesRaw.some((gt) => {
-                        const s = String(gt || '');
-                        return s.includes('gate') || s.includes('garage_door');
-                    });
-
-                    // If it's a security-type place but no gate/garage types are present, reject.
-                    if (hasSecuritySignalInTypes && !hasGateOrGarageSignalInTypes) {
-                        return false;
-                    }
-                }
-            }
-
-            return true;
-        }
-
-        const normalizePlaceId = (id: string) => (id || '').replace(/^places\//, '');
-
-        const TWENTY_FOUR_MONTHS_MS = 24 * 30 * 24 * 60 * 60 * 1000; // approximate rolling window
-
-        function normalizeProviderName(name: string): string {
-            let s = (name || '').toString().trim();
-            if (!s) return s;
-
-            const originalLower = s.toLowerCase();
-            // Explicit overrides for known messy / incorrect names.
-            const OVERRIDES: Record<string, string> = {
-                'al garage door solutions - new | repairs | automations':
-                    'AL Garage Door Solutions',
-                'planet automation (pty)': 'Planet Automation',
-                'automationguru gate and garage door motor repair':
-                    'AutomationGURU Gate and Garage Repairs',
-                'brano cape garage doors - cape town': 'Brunco Cape Garage Doors',
-                'garage door repairs cbd - maintenance & motor automation installation services cape town':
-                    'Garage Door Repairs CBD',
-            };
-            if (OVERRIDES[originalLower]) {
-                return OVERRIDES[originalLower];
-            }
-
-            // Remove common legal suffixes (keep the brand name for display).
-            // Examples: "Acme (Pty) Ltd", "Acme Pty Ltd.", "Acme CC"
-            s = s
-                .replace(/\b(\(pty\)\s*ltd|pty\s*ltd|limited|ltd|inc|llc|cc)\b\.?/gi, '')
-                .replace(/\s*\((pty|cc|inc|ltd)\)\s*$/gi, '')
-                .replace(/\s{2,}/g, ' ')
-                .replace(/\s*,\s*$/g, '')
-                .trim();
-
-            // Drop long marketing tails after a hyphen, keeping the core brand.
-            // e.g. "X - New | Repairs | Automations" -> "X"
-            s = s.replace(/\s*-\s+.+$/, '').trim();
-
-            // Clean leftover punctuation / spacing around parentheses.
-            s = s.replace(/\s+\)/g, ')').replace(/\(\s+/g, '(').trim();
-            // Enforce Title Case for consistent provider naming across API + Supabase.
-            // We preserve "mixed case" brand tokens (e.g. "McDonald", "DeWalt") if Google already
-            // returned them with internal capitals.
-            const titleCaseWord = (word: string) => {
-                const raw = word.trim();
-                if (!raw) return raw;
-
-                // Keep acronyms/digit tokens as-is (e.g. "G4S", "BRANCO").
-                if (/^[A-Z0-9]{2,}$/.test(raw)) return raw;
-
-                // Preserve "mixed case" tokens when they already include meaningful internal capitals.
-                if (/[A-Z]/.test(raw.slice(1)) && /[a-z]/.test(raw)) {
-                    return raw[0].toUpperCase() + raw.slice(1);
-                }
-
-                const lower = raw.toLowerCase();
-                // Handle common "Mc"/"Mac" brands when the whole token is lowercased.
-                if (lower.startsWith('mc') && lower.length > 2) {
-                    const tail = lower.slice(2);
-                    return 'Mc' + tail[0].toUpperCase() + tail.slice(1);
-                }
-                if (lower.startsWith('mac') && lower.length > 3) {
-                    const tail = lower.slice(3);
-                    return 'Mac' + tail[0].toUpperCase() + tail.slice(1);
-                }
-
-                return lower[0].toUpperCase() + lower.slice(1);
-            };
-
-            const titleCaseToken = (token: string) => {
-                // Preserve separators like "-", "/", and "'" while titlecasing each part.
-                const parts = token.split(/([-\/])/); // keep delimiters
-                return parts
-                    .map((part) => {
-                        if (part === '-' || part === '/' || part === '') return part;
-                        const apostropheParts = part.split(/(')/); // keep delimiter
-                        return apostropheParts
-                            .map((ap) => {
-                                if (ap === "'") return ap;
-                                return titleCaseWord(ap);
-                            })
-                            .join('');
-                    })
-                    .join('');
-            };
-
-            s = s
-                .split(/\s+/g)
-                .map((w) => titleCaseToken(w))
-                .filter(Boolean)
-                .join(' ');
-
-            return s;
-        }
-
-        const GENERIC_PLACE_TYPES = new Set([
-            'point_of_interest',
-            'establishment',
-            'place',
-            'store',
-            'local_business',
-            'place_of_worship',
-            'food',
-        ]);
-        const TYPE_TO_LABEL: Record<string, string> = {
-            plumber: 'Plumber',
-            plumbing_contractor: 'Plumbing',
-            electrician: 'Electrician',
-            electrical_contractor: 'Electrical',
-            general_contractor: 'General Contractor',
-            roofing_contractor: 'Roofing',
-            painter: 'Painter',
-            moving_company: 'Moving',
-            locksmith: 'Locksmith',
-            handyman: 'Handyman',
-            carpenter: 'Carpenter',
-            real_estate_agency: 'Real Estate',
-            hvac_contractor: 'HVAC',
-            swimming_pool_contractor: 'Pool Service',
-            pest_control: 'Pest Control',
-            landscaping: 'Landscaping',
-            garage_door_repair: 'Garage Door',
-            appliance_repair: 'Appliance Repair',
-            flooring_store: 'Flooring',
-            tile_store: 'Tiling',
-            roofing: 'Roofing',
-            painter_decorator: 'Painting',
-            waste_management: 'Waste Removal',
-            rubbish_dump: 'Waste Removal',
-        };
-        function getPlaceServices(types: string[] | undefined): { short: string; full: string }[] {
-            if (!Array.isArray(types) || types.length === 0) return [];
-            const seen = new Set<string>();
-            return types
-                .filter((t) => t && !GENERIC_PLACE_TYPES.has(t))
-                .map((t: string) => {
-                    const key = t.toLowerCase().replace(/\s+/g, '_');
-                    const label = TYPE_TO_LABEL[key] || t.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
-                    return { short: label, full: label };
-                })
-                .filter((s) => {
-                    if (seen.has(s.short)) return false;
-                    seen.add(s.short);
-                    return true;
-                });
-        }
-
-        async function fetchPlaceReviewsFromGoogle(placeResourceName: string): Promise<any[]> {
-            if (!apiKey) return [];
-            const placeName = (placeResourceName || '').trim();
-            if (!placeName) return [];
-            const fullName = placeName.startsWith('places/') ? placeName : `places/${placeName}`;
-            const url = `https://places.googleapis.com/v1/${fullName}`;
-            try {
-                const ctrl = new AbortController();
-                const timeout = setTimeout(() => ctrl.abort(), 5000);
-                const res = await fetch(url, {
-                    method: 'GET',
-                    signal: ctrl.signal,
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-Goog-Api-Key': apiKey,
-                        'X-Goog-FieldMask':
-                            'id,reviews,reviews.name,reviews.rating,reviews.publishTime,reviews.relativePublishTimeDescription,reviews.originalText,reviews.text,reviews.authorAttribution',
-                    },
-                });
-                clearTimeout(timeout);
-                if (!res.ok) return [];
-                const place = await res.json().catch(() => null);
-                const reviews = place?.reviews;
-                return Array.isArray(reviews) ? reviews : [];
-            } catch {
-                return [];
-            }
-        }
-
-        const SEARCH_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
         // Search cache: (lat, lng, trade, radius) -> place_ids + routing (+ optional full providers JSON for fast hits).
         let places: any[] = [];
@@ -489,20 +152,18 @@ export async function POST(req: NextRequest) {
                     searchCacheHit = true;
                     // Fast path: use stored providers JSON so we skip the providers table lookup (one fewer DB round-trip).
                     const cachedProviders = searchRow.providers as any[] | null;
+                    // Summaries now come from enrichmentCache (loaded separately by the UI),
+                    // so the search cache is valid as long as it has providers with basic data.
                     const cacheHasRichFields =
                         !!(
                             cachedProviders &&
                             Array.isArray(cachedProviders) &&
                             cachedProviders.length > 0 &&
-                            cachedProviders.some((p) => {
-                                if (!p || typeof p !== 'object') return false;
-                                const summaryOk =
-                                    typeof (p as any).summary === 'string' &&
-                                    (p as any).summary.trim().length > 0;
-                                const summaryKindOk = (p as any)?.summaryMeta?.kind === 'reviews';
-                                // The chat UI expects a review-based summary. If it's missing or not review-based, refresh.
-                                return summaryOk && summaryKindOk;
-                            })
+                            cachedProviders.some(
+                                (p) =>
+                                    typeof (p as any)?.name === 'string' &&
+                                    (p as any).name.trim().length > 0
+                            )
                         );
 
                     if (cacheHasRichFields) {
@@ -669,19 +330,29 @@ export async function POST(req: NextRequest) {
                                 const isOpen = isOpenNowFromWeekdayDescriptions(hoursFormatted, now);
                                 return { ...p, isOpen };
                             });
+
+                            // R4: Re-rank using the current timestamp so recency scores are fresh.
+                            // The ranking function is pure (<1 ms) — stale cached scores are replaced
+                            // without any I/O cost.
+                            const reRankedCached = rankProviders(
+                                providersWithIds as ProviderItem[],
+                                6,
+                                { tradeDetail: tradeDetailRaw, trade: tradeNorm }
+                            );
+
                             logAiEvent({
                                 endpoint: 'providers',
                                 status: 'ok',
                                 durationMs,
                                 meta: {
                                     trade,
-                                    providersCount: cachedProviders.length,
+                                    providersCount: reRankedCached.length,
                                     searchCacheHit: true,
                                     usedCacheProvidersJson: true,
                                 },
                             });
                             return NextResponse.json({
-                                providers: providersWithIds,
+                                providers: reRankedCached,
                                 nextPageToken: searchRow.next_page_token || null,
                                 searchQuery,
                             });
@@ -807,15 +478,6 @@ export async function POST(req: NextRequest) {
             const rawRouting = data.routingSummaries || [];
 
             // Filter out retail stores (e.g. Builders Warehouse) — we want contractors/service providers, not shops that sell parts
-            const RETAIL_TYPES = new Set([
-                'hardware_store',
-                'home_goods_store',
-                'home_improvement_store',
-                'building_materials_store',
-                'department_store',
-                'warehouse_store',
-                'discount_store',
-            ]);
             const filtered: { place: any; routing: any }[] = [];
             rawPlaces.forEach((p: any, i: number) => {
                 const types = (p.types || []) as string[];
@@ -827,11 +489,10 @@ export async function POST(req: NextRequest) {
 
             const seenPlaceIds = new Set<string>(places.map((p: any) => String(p?.id ?? '')));
             let nextSearchToken = (data.nextPageToken as string | undefined) || null;
-            const MAX_EXTRA_SEARCH_PAGES = 2;
             while (
                 nextSearchToken &&
                 !pageToken &&
-                textSearchExtraPagesFetched < MAX_EXTRA_SEARCH_PAGES &&
+                textSearchExtraPagesFetched < TEXT_SEARCH_MAX_EXTRA_PAGES &&
                 places.length < 55
             ) {
                 textSearchExtraPagesFetched += 1;
@@ -919,7 +580,15 @@ export async function POST(req: NextRequest) {
         const mapPlacesToFastProviders = (minRatingCount: number) =>
             places
                 .map((place: any, index: number) => {
-                if (!isProviderRelevantForTrade({ place, aiData: null, cached: null })) {
+                if (
+                    !isProviderRelevantForTrade({
+                        place,
+                        aiData: null,
+                        cached: null,
+                        tradeNorm,
+                        isBoreholeLikeDetail,
+                    })
+                ) {
                     return null;
                 }
 
@@ -1013,24 +682,44 @@ export async function POST(req: NextRequest) {
             fastProviders = mapPlacesToFastProviders(3);
         }
 
+        // Pre-fetched providers rows — fired in parallel with provider_cache below to save a round-trip.
+        let prefetchedProvRows: { id: string; google_place_id: string }[] | null = null;
         if (supabase && fastProviders.length > 0) {
             const placeIds = fastProviders
                 .map((p) => toGooglePlaceId(p.placeId))
                 .filter(Boolean);
             if (placeIds.length > 0) {
-                const { data: cacheRows } = await supabase
-                    .from('provider_cache')
-                    .select('google_place_id, profile_completeness')
-                    .in('google_place_id', placeIds);
+                // 2.1: Fire provider_cache and providers in parallel — same input set, independent data.
+                const [cacheResult, provResult] = await Promise.all([
+                    supabase
+                        .from('provider_cache')
+                        .select('google_place_id, profile_completeness, specialisations')
+                        .in('google_place_id', placeIds),
+                    supabase
+                        .from('providers')
+                        .select('id, google_place_id')
+                        .in('google_place_id', placeIds),
+                ]);
+                const cacheRows = cacheResult.data;
+                prefetchedProvRows = (provResult.data as { id: string; google_place_id: string }[]) ?? null;
                 const completenessByGoogleId = new Map<string, number>(
                     (cacheRows || []).map((r: any) => [
                         String(r.google_place_id),
                         Number(r.profile_completeness ?? 0),
                     ])
                 );
+                // R5: map specialisations for relevance scoring
+                const specialisationsByGoogleId = new Map<string, string[]>(
+                    (cacheRows || [])
+                        .filter((r: any) => Array.isArray(r.specialisations) && r.specialisations.length > 0)
+                        .map((r: any) => [String(r.google_place_id), r.specialisations as string[]])
+                );
                 fastProviders.forEach((p) => {
-                    const completeness = completenessByGoogleId.get(toGooglePlaceId(p.placeId)) ?? 0;
+                    const gid = toGooglePlaceId(p.placeId);
+                    const completeness = completenessByGoogleId.get(gid) ?? 0;
                     (p as any).profileCompleteness = Math.max(0, Math.min(3, completeness));
+                    const specs = specialisationsByGoogleId.get(gid);
+                    if (specs) (p as any).specialisations = specs;
                 });
             }
         }
@@ -1074,13 +763,10 @@ export async function POST(req: NextRequest) {
                     .filter(Boolean);
 
                 let providerIdByGoogle = new Map<string, string>();
-                let byProvider = new Map<string, Array<{ rating: number | null; body: string }>>();
 
                 if (supabase) {
-                    const { data: provRows } = await supabase
-                        .from('providers')
-                        .select('id, google_place_id')
-                        .in('google_place_id', googleIds);
+                    // Use the providers result that was pre-fetched in parallel with provider_cache above.
+                    const provRows = prefetchedProvRows;
                     providerIdByGoogle = new Map<string, string>(
                         (provRows || []).map((r: any) => [String(r.google_place_id), String(r.id)])
                     );
@@ -1096,44 +782,52 @@ export async function POST(req: NextRequest) {
                     });
 
                     const providerIds = Array.from(providerIdByGoogle.values());
-                    const scandioReviewCountByProviderId = new Map<string, number>();
-                    if (providerIds.length > 0) {
-                        // For /match review counts: we need total Scandio reviews stored in backend.
-                        const providerIdList = providerIds.map((x) => String(x));
-                        try {
-                            const { data: scandioRows } = await supabase
+                    const providerIdList = providerIds.map((x) => String(x));
+                    const weekKey = getISOWeekKey();
+                    const rotationPids = (limitedProviders as any[])
+                        .map((p) => p.providerId)
+                        .filter(Boolean) as string[];
+
+                    // 2.1: Parallelise scandio review count + rotation tokens fetch — both need
+                    // providerIds but are independent of each other.
+                    const [scandioData, tokenRows] = await Promise.all([
+                        providerIdList.length > 0
+                            ? supabase
                                 .from('reviews')
                                 .select('provider_id')
                                 .eq('source', 'scandio')
                                 .eq('status', 'approved')
-                                .in('provider_id', providerIdList);
+                                .in('provider_id', providerIdList)
+                                .then((r) => r.data ?? null, () => null as null)
+                            : Promise.resolve(null as null),
+                        rotationPids.length > 0
+                            ? supabase
+                                .from('provider_rotation_tokens')
+                                .select('provider_id, tokens_remaining, last_shown_at')
+                                .eq('week_key', weekKey)
+                                .in('provider_id', rotationPids)
+                                .then((r) => r.data ?? null, () => null as null)
+                            : Promise.resolve(null as null),
+                    ]);
 
-                            if (Array.isArray(scandioRows)) {
-                                for (const r of scandioRows) {
-                                    const pid = typeof (r as any)?.provider_id === 'string' ? (r as any).provider_id : null;
-                                    if (!pid) continue;
-                                    scandioReviewCountByProviderId.set(
-                                        pid,
-                                        (scandioReviewCountByProviderId.get(pid) ?? 0) + 1
-                                    );
-                                }
-                            }
-                        } catch {
-                            // Best-effort only; keep counts at 0 on failure.
+                    // Attach Scandio review counts
+                    const scandioReviewCountByProviderId = new Map<string, number>();
+                    if (Array.isArray(scandioData)) {
+                        for (const r of scandioData) {
+                            const pid = typeof (r as any)?.provider_id === 'string' ? (r as any).provider_id : null;
+                            if (!pid) continue;
+                            scandioReviewCountByProviderId.set(
+                                pid,
+                                (scandioReviewCountByProviderId.get(pid) ?? 0) + 1
+                            );
                         }
-
-                        // Attach to every provider in the response so the frontend can show:
-                        // (Google total reviews) + (all Scandio reviews stored in backend).
-                        limitedProviders.forEach((p: any) => {
-                            const pid = typeof p?.providerId === 'string' ? p.providerId : null;
-                            p.scandioReviewCount =
-                                pid ? scandioReviewCountByProviderId.get(pid) ?? 0 : 0;
-                        });
-                    } else {
-                        limitedProviders.forEach((p: any) => {
-                            p.scandioReviewCount = 0;
-                        });
                     }
+                    // Attach to every provider in the response so the frontend can show:
+                    // (Google total reviews) + (all Scandio reviews stored in backend).
+                    (limitedProviders as any[]).forEach((p: any) => {
+                        const pid = typeof p?.providerId === 'string' ? p.providerId : null;
+                        p.scandioReviewCount = pid ? scandioReviewCountByProviderId.get(pid) ?? 0 : 0;
+                    });
 
                     // ── Soft rotation (token bucket) ──────────────────────────────────────
                     // Each provider starts each ISO week with 5 tokens. Being included in a
@@ -1142,96 +836,80 @@ export async function POST(req: NextRequest) {
                     // We never fully exclude a depleted provider — if there are no
                     // alternatives the carousel will still show them.
                     {
-                        const weekKey = getISOWeekKey();
-                        const rotationPids = (limitedProviders as any[])
-                            .map((p) => p.providerId)
-                            .filter(Boolean) as string[];
+                        if (tokenRows && tokenRows.length > 0) {
+                            const tokenMap = new Map<string, number>(
+                                tokenRows.map((r: any) => [
+                                    String(r.provider_id),
+                                    Number(r.tokens_remaining ?? 5),
+                                ])
+                            );
+                            const lastShownMap = new Map<string, string>(
+                                tokenRows
+                                    .filter((r: any) => r.last_shown_at)
+                                    .map((r: any) => [
+                                        String(r.provider_id),
+                                        String(r.last_shown_at),
+                                    ])
+                            );
 
-                        if (rotationPids.length > 0) {
-                            try {
-                                const { data: tokenRows } = await supabase
-                                    .from('provider_rotation_tokens')
-                                    .select('provider_id, tokens_remaining, last_shown_at')
-                                    .eq('week_key', weekKey)
-                                    .in('provider_id', rotationPids);
-
-                                if (tokenRows && tokenRows.length > 0) {
-                                    const tokenMap = new Map<string, number>(
-                                        tokenRows.map((r: any) => [
-                                            String(r.provider_id),
-                                            Number(r.tokens_remaining ?? 5),
-                                        ])
-                                    );
-                                    const lastShownMap = new Map<string, string>(
-                                        tokenRows
-                                            .filter((r: any) => r.last_shown_at)
-                                            .map((r: any) => [
-                                                String(r.provider_id),
-                                                String(r.last_shown_at),
-                                            ])
-                                    );
-
-                                    // Attach last_shown_at as lastMatchedAt for recency scoring
-                                    // on future requests (stored in the providers table later).
-                                    (limitedProviders as any[]).forEach((p) => {
-                                        const pid = p.providerId;
-                                        if (pid && lastShownMap.has(pid)) {
-                                            p.lastMatchedAt = lastShownMap.get(pid);
-                                        }
-                                    });
-
-                                    // Stable sort: depleted providers sink to the end while the
-                                    // original composite-score order is preserved within each tier.
-                                    (limitedProviders as any[]).sort((a, b) => {
-                                        const tA = tokenMap.get(a.providerId) ?? 5;
-                                        const tB = tokenMap.get(b.providerId) ?? 5;
-                                        // Both depleted or both healthy → preserve order
-                                        if (tA > 0 && tB > 0) return 0;
-                                        if (tA === 0 && tB === 0) return 0;
-                                        // Non-depleted before depleted
-                                        return tA > 0 ? -1 : 1;
-                                    });
+                            // Attach last_shown_at as lastMatchedAt for recency scoring
+                            // on future requests (stored in the providers table later).
+                            (limitedProviders as any[]).forEach((p) => {
+                                const pid = p.providerId;
+                                if (pid && lastShownMap.has(pid)) {
+                                    p.lastMatchedAt = lastShownMap.get(pid);
                                 }
+                            });
 
-                                // Async: deduct 1 token from each provider now being shown.
-                                // Also record last_shown_at so the recency signal stays current.
-                                createSupabaseAdminClient()
-                                    .then(async (adminClient) => {
-                                        const nowIso = new Date().toISOString();
-                                        const upsertRows = rotationPids.map((pid) => ({
-                                            provider_id: pid,
-                                            week_key: weekKey,
-                                            tokens_remaining: Math.max(
-                                                0,
-                                                (tokenRows?.find((r: any) => r.provider_id === pid)
-                                                    ?.tokens_remaining ?? 5) - 1
-                                            ),
-                                            last_shown_at: nowIso,
-                                        }));
-                                        await adminClient
-                                            .from('provider_rotation_tokens')
-                                            .upsert(upsertRows, {
-                                                onConflict: 'provider_id,week_key',
-                                            });
-                                        // Also update last_matched_at on the providers table so
-                                        // the recency signal persists across weeks.
-                                        await adminClient
-                                            .from('providers')
-                                            .upsert(
-                                                rotationPids.map((pid) => ({
-                                                    id: pid,
-                                                    last_matched_at: nowIso,
-                                                })),
-                                                { onConflict: 'id' }
-                                            );
-                                    })
-                                    .catch(() => {
-                                        // Best-effort; never block the response.
-                                    });
-                            } catch {
-                                // Rotation is best-effort. If the table doesn't exist yet
-                                // (e.g. migration not yet applied), silently skip.
-                            }
+                            // Stable sort: depleted providers sink to the end while the
+                            // original composite-score order is preserved within each tier.
+                            (limitedProviders as any[]).sort((a, b) => {
+                                const tA = tokenMap.get(a.providerId) ?? 5;
+                                const tB = tokenMap.get(b.providerId) ?? 5;
+                                // Both depleted or both healthy → preserve order
+                                if (tA > 0 && tB > 0) return 0;
+                                if (tA === 0 && tB === 0) return 0;
+                                // Non-depleted before depleted
+                                return tA > 0 ? -1 : 1;
+                            });
+                        }
+
+                        // Async: deduct 1 token from each provider now being shown.
+                        // Also record last_shown_at so the recency signal stays current.
+                        if (rotationPids.length > 0) {
+                            createSupabaseAdminClient()
+                                .then(async (adminClient) => {
+                                    const nowIso = new Date().toISOString();
+                                    const upsertRows = rotationPids.map((pid) => ({
+                                        provider_id: pid,
+                                        week_key: weekKey,
+                                        tokens_remaining: Math.max(
+                                            0,
+                                            ((tokenRows ?? []).find((r: any) => r.provider_id === pid)
+                                                ?.tokens_remaining ?? 5) - 1
+                                        ),
+                                        last_shown_at: nowIso,
+                                    }));
+                                    await adminClient
+                                        .from('provider_rotation_tokens')
+                                        .upsert(upsertRows, {
+                                            onConflict: 'provider_id,week_key',
+                                        });
+                                    // Also update last_matched_at on the providers table so
+                                    // the recency signal persists across weeks.
+                                    await adminClient
+                                        .from('providers')
+                                        .upsert(
+                                            rotationPids.map((pid) => ({
+                                                id: pid,
+                                                last_matched_at: nowIso,
+                                            })),
+                                            { onConflict: 'id' }
+                                        );
+                                })
+                                .catch(() => {
+                                    // Best-effort; never block the response.
+                                });
                         }
 
                         // Trim to carousel size (4–6 providers max).
@@ -1239,132 +917,7 @@ export async function POST(req: NextRequest) {
                     }
                     // ─────────────────────────────────────────────────────────────────────
 
-                    if (providerIds.length > 0) {
-                        const cutoff = new Date(Date.now() - TWENTY_FOUR_MONTHS_MS).toISOString();
-                        // Fetch up to 50 recent google reviews per provider_id.
-                        // We do this per-provider (with a small concurrency cap) so we don't
-                        // end up with reviews only for the "newest" providers when using a
-                        // single global LIMIT across all provider_ids.
-                        byProvider = new Map();
-                        const providerIdCursor = { v: 0 };
-                        const concurrency = 4;
-                        const providerIdList = providerIds.map((x) => String(x));
-
-                        const reviewWorker = async () => {
-                            while (providerIdCursor.v < providerIdList.length) {
-                                const pid = providerIdList[providerIdCursor.v];
-                                providerIdCursor.v += 1;
-
-                                try {
-                                    const { data: reviewRows } = await supabase
-                                        .from('reviews')
-                                        .select('provider_id, rating, body, published_at')
-                                        .eq('source', 'google')
-                                        .eq('provider_id', pid)
-                                        .gte('published_at', cutoff)
-                                        .order('published_at', { ascending: false })
-                                        .limit(50);
-
-                                    const arr = (reviewRows || []).map((r: any) => ({
-                                        rating: typeof r.rating === 'number' ? r.rating : null,
-                                        body: String(r.body || ''),
-                                    }));
-                                    byProvider.set(pid, arr);
-                                } catch {
-                                    // Leave missing/empty provider review buckets.
-                                }
-                            }
-                        };
-
-                        await Promise.allSettled(
-                            Array.from({ length: concurrency }, () => reviewWorker())
-                        );
-                    }
                 }
-
-                const mapGoogleReviewsToInput = (googleReviews: any[]) =>
-                    (googleReviews || [])
-                        .map((r: any) => {
-                            const rawBody =
-                                (typeof r?.originalText?.text === 'string' && r.originalText.text) ||
-                                (typeof r?.text?.text === 'string' && r.text.text) ||
-                                (typeof r?.text === 'string' && r.text) ||
-                                '';
-                            const body = String(rawBody || '').trim();
-                            if (!body) return null;
-                            return {
-                                rating: typeof r?.rating === 'number' ? r.rating : null,
-                                text: { text: body },
-                            };
-                        })
-                        .filter(Boolean) as Array<{ rating: number | null; text: { text: string } }>;
-
-                // Bound expensive AI work so the endpoint remains responsive.
-                // Previously we tried to summarise all `limitedProviders`, but in practice
-                // per-provider timeouts meant only the first couple ended up with summaries.
-                // Summarise the top chunk only so more providers actually get populated.
-                const providersToSummarize = limitedProviders.slice(0, 6) as any[];
-                // Gemini calls can be rate-limited; keep concurrency low so more than
-                // the first few providers succeed.
-                const concurrency = 2;
-                let cursor = 0;
-                let summaryAttempted = 0;
-                let summarySucceeded = 0;
-
-                const worker = async () => {
-                    while (cursor < providersToSummarize.length) {
-                        const currentIndex = cursor;
-                        cursor += 1;
-                        const p = providersToSummarize[currentIndex];
-                        if (!p) continue;
-
-                        try {
-                            const googlePlaceId =
-                                typeof p.placeId === 'string' && p.placeId.startsWith('places/')
-                                    ? p.placeId
-                                    : `places/${p.placeId}`;
-                            const pid = providerIdByGoogle.get(googlePlaceId);
-                            const rows = pid ? byProvider.get(pid) || [] : [];
-
-                            let summaryInputReviews: Array<{ rating: number | null; text: { text: string } }> = rows.map(
-                                (r) => ({
-                                    rating: r.rating,
-                                    text: { text: r.body },
-                                })
-                            );
-
-                            if (summaryInputReviews.length === 0) {
-                                const googleReviews = await fetchPlaceReviewsFromGoogle(googlePlaceId);
-                                summaryInputReviews = mapGoogleReviewsToInput(googleReviews);
-                            }
-
-                            if (summaryInputReviews.length === 0) continue;
-
-                            summaryAttempted += 1;
-                            const reviewSummary = await withTimeout(
-                                summarizeReviews({
-                                    providerName: normalizeProviderName(p.name || ''),
-                                    rating: p.rating ?? null,
-                                    ratingCount: p.ratingCount ?? 0,
-                                    reviews: summaryInputReviews,
-                                }),
-                                12000
-                            );
-
-                            if (reviewSummary?.summary?.trim()) {
-                                p.summary = sanitizeCustomerSummary(reviewSummary.summary.trim());
-                                p.summaryMeta = reviewSummary.meta;
-                                summarySucceeded += 1;
-                            }
-                        } catch {
-                            // Continue summarising other providers.
-                        }
-                    }
-                };
-
-                await Promise.allSettled(
-                    Array.from({ length: concurrency }, () => worker())
-                );
 
                 // Helpful diagnostics in response (UI ignores unknown fields).
                 logAiEvent({
@@ -1373,10 +926,7 @@ export async function POST(req: NextRequest) {
                     durationMs: Date.now() - startedAt,
                     meta: {
                         trade,
-                        summaryAttempted,
-                        summarySucceeded,
                         limitedProvidersCount: limitedProviders.length,
-                        concurrency,
                     rankingDecision: limitedProviders.map((p: any, idx: number) => ({
                         rank: idx + 1,
                         providerId: p.providerId ?? null,
@@ -1467,10 +1017,12 @@ export async function POST(req: NextRequest) {
                     if (upsertRes.error) return upsertRes;
 
                     // Load provider ids so we can upsert reviews (reviews.provider_id FK).
+                    // R6: also load reviews_synced_at to decide whether a fresh Google review
+                    // import is needed even when reviews already exist in the database.
                     const googleIds = rows.map((r) => r.google_place_id).filter(Boolean);
                     const { data: providerRows, error: provErr } = await adminSupabase
                         .from('providers')
-                        .select('id, google_place_id')
+                        .select('id, google_place_id, reviews_synced_at')
                         .in('google_place_id', googleIds);
                     if (provErr) {
                         console.warn('Reviews upsert skipped:', provErr.message);
@@ -1478,6 +1030,13 @@ export async function POST(req: NextRequest) {
                     }
                     const providerIdByGoogle = new Map<string, string>(
                         (providerRows || []).map((r: any) => [String(r.google_place_id), String(r.id)])
+                    );
+                    // R6: track when each provider last had a fresh Google review import.
+                    const reviewSyncedAtByGoogleId = new Map<string, string | null>(
+                        (providerRows || []).map((r: any) => [
+                            String(r.google_place_id),
+                            r.reviews_synced_at ?? null,
+                        ])
                     );
 
                     // Ensure the API response includes internal `providerId` so the frontend can
@@ -1521,10 +1080,17 @@ export async function POST(req: NextRequest) {
                         if (!providerId) continue;
                         const pl = placeById.get(normalizePlaceId(googlePlaceId));
                         let revs = (pl?.reviews || []) as any[];
-                        if (!Array.isArray(revs) || revs.length === 0) {
-                            // Fallback: Places search results can omit review bodies for some rows.
-                            // Pull place details directly so review sync still happens.
-                            revs = await fetchPlaceReviewsFromGoogle(googlePlaceId);
+                        // R6: also refresh when existing reviews are stale (> 7 days since last sync).
+                        const syncedAt = reviewSyncedAtByGoogleId.get(googlePlaceId);
+                        const isReviewStale =
+                            !syncedAt ||
+                            Date.now() - new Date(syncedAt).getTime() > REVIEW_SYNC_TTL_MS;
+                        if (!Array.isArray(revs) || revs.length === 0 || isReviewStale) {
+                            // Fallback / refresh: Places search results can omit review bodies for some
+                            // rows, or the stored data may be > 7 days old. Pull place details directly
+                            // so review sync is up-to-date.
+                            const freshRevs = await fetchPlaceReviewsFromGoogle(googlePlaceId, apiKey);
+                            if (freshRevs.length > 0) revs = freshRevs;
                         }
                         for (const rev of revs) {
                             const publishTime = rev?.publishTime ? new Date(rev.publishTime).getTime() : null;
@@ -1573,6 +1139,23 @@ export async function POST(req: NextRequest) {
                             });
                         if (reviewsErr) {
                             console.warn('Reviews upsert skipped:', reviewsErr.message);
+                        }
+
+                        // R6: stamp reviews_synced_at so future requests know when reviews were last
+                        // fetched from Google, enabling staleness-based refresh decisions.
+                        const syncedProviderIds = Array.from(
+                            new Set(reviewPayload.map((r) => r.provider_id))
+                        );
+                        if (syncedProviderIds.length > 0) {
+                            // Non-fatal — reviews are already stored; stamp is best-effort.
+                            try {
+                                await adminSupabase
+                                    .from('providers')
+                                    .update({ reviews_synced_at: nowIso })
+                                    .in('id', syncedProviderIds);
+                            } catch {
+                                // ignore
+                            }
                         }
 
                         // Enforce 24-month window & 50-review cap for all affected providers.

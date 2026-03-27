@@ -189,10 +189,6 @@ export function ContactPopover({
                                     We&apos;ll draft a short message for{' '}
                                     <span className="font-medium">{displayName}</span> using your latest
                                     Scandio scan when available, then open WhatsApp for you to send it.
-                                    <blockquote className="mt-2 border-l-2 border-input pl-3 text-muted-foreground text-sm">
-                                        Mobile numbers only — landlines can&apos;t receive WhatsApp. If
-                                        something fails, try calling them directly.
-                                    </blockquote>
                                 </>
                             ) : (
                                 <>
@@ -201,6 +197,12 @@ export function ContactPopover({
                                 </>
                             )}
                         </DialogDescription>
+                        {waCapable ? (
+                            <blockquote className="mt-1 border-l-2 border-input pl-3 text-muted-foreground text-sm">
+                                Mobile numbers only — landlines can&apos;t receive WhatsApp. If something
+                                fails, try calling them directly.
+                            </blockquote>
+                        ) : null}
                     </DialogHeader>
                     <DialogFooter>
                         <Button variant="outline" onClick={() => setWhatsappDialogOpen(false)}>

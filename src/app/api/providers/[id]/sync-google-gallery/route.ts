@@ -1,6 +1,7 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseAdminClient } from '@/lib/supabase-server';
 import { refreshProviderByPlaceId } from '@/lib/refresh-provider-by-place-id';
+import { checkRateLimit } from '@/lib/rate-limit-config';
 
 /**
  * POST /api/providers/[id]/sync-google-gallery
@@ -8,7 +9,9 @@ import { refreshProviderByPlaceId } from '@/lib/refresh-provider-by-place-id';
  * downloads photo media, uploads to the `gallery` bucket, and upserts `provider_images`.
  * Uses `refreshProviderByPlaceId` (same path as pro profile backfill).
  */
-export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+    const limited = checkRateLimit(req, 'syncGallery');
+    if (limited) return limited;
     try {
         const { id: providerId } = await params;
         if (!providerId) {

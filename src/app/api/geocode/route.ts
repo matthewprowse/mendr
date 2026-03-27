@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { checkRateLimit } from '@/lib/rate-limit-config';
 
 type GeocodeRequestBody = {
     lat?: number;
@@ -48,6 +49,9 @@ function getMapsApiKey(): string {
 }
 
 export async function POST(req: NextRequest) {
+    const limited = checkRateLimit(req, 'geocode');
+    if (limited) return limited;
+
     const apiKey = getMapsApiKey();
     if (!apiKey) {
         return NextResponse.json({ error: 'Geocoding API not configured' }, { status: 500 });

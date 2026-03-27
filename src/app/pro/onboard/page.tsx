@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
+import { Slider } from '@/components/ui/slider';
 import {
     Select,
     SelectContent,
@@ -24,6 +25,11 @@ import { useMatchMap } from '@/features/match/hooks/useMatchMap';
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type Service = { id: string; label: string };
+type ServiceArea = {
+    id: string;
+    location: MatchLocation;
+    radiusKm: number;
+};
 
 const TOTAL_STEPS = 6;
 
@@ -32,14 +38,13 @@ const TOTAL_STEPS = 6;
 type FormData = {
     businessName: string;
     contactName: string;
-    email: string;
+    address: string;
+    phoneCountryCode: string;
     phone: string;
     website: string;
-    // Trades: map of service label → sub-trades text (stored as entered)
-    selectedTrades: Record<string, string>;
-    // The trade the user last clicked (to add sub-trades for)
-    focusedTrade: string | null;
-    workLocation: MatchLocation | null;
+    trade: string;
+    tradeDescription: string;
+    serviceAreas: ServiceArea[];
     yearsExperience: string;
     teamSize: string;
     registrationNumber: string;
@@ -73,10 +78,10 @@ function Step1({
         <div className="flex flex-col gap-6">
             <div className="flex flex-col gap-2">
                 <h1 className="text-2xl font-bold text-foreground">
-                    Header Name
+                    Let&apos;s get started.
                 </h1>
                 <p className="text-sm text-muted-foreground">
-                    Lorem ipsum dolor sit amet consectetur adipisicing elit. Quisquam, quos.
+                    Tell us about your business and the person we&apos;ll be in touch with.
                 </p>
             </div>
             <div className="flex flex-col gap-6">
@@ -111,49 +116,170 @@ function Step2({
     data: FormData;
     onChange: (patch: Partial<FormData>) => void;
 }) {
+    const [addressInput, setAddressInput] = useState(data.address ?? '');
+    const [isFormattingAddress, setIsFormattingAddress] = useState(false);
+
+    const PHONE_PREFIX = '+27';
+
+    // Formats SA numbers into `81 595 6488` (without the +27 prefix).
+    function formatSaPhoneNationalDigits(raw: string): string {
+        const digitsOnly = raw.replace(/\D/g, '');
+        let digits = digitsOnly;
+
+        // Strip a user-typed country code, if present.
+        if (digits.startsWith('27')) digits = digits.slice(2);
+
+        // Strip a user-typed national leading `0` (common in SA mobile inputs).
+        if (digits.startsWith('0')) digits = digits.slice(1);
+
+        if (!digits) return '';
+
+        // Basic SA mobile formatting: `XX XXX XXXX` (9 digits)
+        // Example: 815956488 -> 81 595 6488
+        if (digits.length <= 2) return digits;
+        if (digits.length <= 5) return `${digits.slice(0, 2)} ${digits.slice(2)}`;
+
+        const a = digits.slice(0, 2);
+        const b = digits.slice(2, 5);
+        const c = digits.slice(5, 9);
+        const rest = digits.length > 9 ? digits.slice(9) : '';
+
+        return `${a} ${b} ${c}${rest ? ` ${rest}` : ''}`.trim();
+    }
+
+    function normalizeWebsiteToHttpsUrl(raw: string): string {
+        const trimmed = raw.trim();
+        if (!trimmed) return '';
+        const noProto = trimmed.replace(/^https?:\/\//i, '').replace(/\/+$/g, '');
+        return `https://${noProto}`;
+    }
+
+    const [websiteRemainderInputValue, setWebsiteRemainderInputValue] = useState(() => {
+        const raw = (data.website ?? '').trim();
+        return raw.replace(/^https?:\/\//i, '').replace(/\/+$/g, '');
+    });
+
+    useEffect(() => {
+        setAddressInput(data.address ?? '');
+    }, [data.address]);
+
+    useEffect(() => {
+        const raw = (data.website ?? '').trim();
+        setWebsiteRemainderInputValue(raw.replace(/^https?:\/\//i, '').replace(/\/+$/g, ''));
+    }, [data.website]);
+
+    const resolveAddress = useCallback(async () => {
+        const trimmed = addressInput.trim();
+        if (!trimmed) return;
+
+        setIsFormattingAddress(true);
+        try {
+            const coordMatch = trimmed.match(/^\s*(-?\d+(?:\.\d+)?)\s*[, ]\s*(-?\d+(?:\.\d+)?)\s*$/);
+            const isCoords = Boolean(coordMatch);
+
+            const geo = await geocodeApi(
+                isCoords
+                    ? {
+                          lat: Number(coordMatch?.[1]),
+                          lng: Number(coordMatch?.[2]),
+                          westernCapeOnly: true,
+                      }
+                    : { address: trimmed, westernCapeOnly: true },
+            );
+
+            if (!geo?.address || typeof geo.address !== 'string') {
+                toast.error(geo?.error || 'Failed to format address');
+                return;
+            }
+
+            onChange({ address: geo.address });
+            setAddressInput(geo.address);
+        } finally {
+            setIsFormattingAddress(false);
+        }
+    }, [addressInput, onChange]);
+
     return (
         <div className="flex flex-col gap-6">
             <div className="flex flex-col gap-2">
                 <h1 className="text-2xl font-bold text-foreground">
-                    Header Name
+                    Contact Details
                 </h1>
                 <p className="text-sm text-muted-foreground">
-                    Lorem ipsum dolor sit amet consectetur adipisicing elit. Quisquam, quos.
+                    Your business address, phone number, and website so homeowners can reach you.
                 </p>
             </div>
             <div className="flex flex-col gap-6">
                 <div className="flex flex-col gap-3">
-                    <Label htmlFor="email">Address</Label>
+                    <Label htmlFor="onboard-address">Address</Label>
                     <Input
-                        id="email"
-                        type="email"
+                        id="onboard-address"
                         className="h-10 w-full text-sm"
-                        value={data.email}
-                        onChange={(e) => onChange({ email: e.target.value })}
+                        value={addressInput}
+                        onChange={(e) => {
+                            setAddressInput(e.target.value);
+                            onChange({ address: e.target.value });
+                        }}
+                        onKeyDown={(e) => {
+                            if (e.key !== 'Enter') return;
+                            e.preventDefault();
+                            void resolveAddress();
+                        }}
+                        disabled={isFormattingAddress}
                         autoFocus
                     />
+                    <p className="text-xs text-muted-foreground">
+                        Press Enter to format the address with Google.
+                    </p>
                 </div>
+
                 <div className="flex flex-col gap-3">
                     <Label htmlFor="phone">Phone Number</Label>
                     <Input
                         id="phone"
                         type="tel"
-                        className="h-10 w-full text-sm"
-                        value={data.phone}
-                        onChange={(e) => onChange({ phone: e.target.value })}
+                        className="h-9 w-full text-sm"
+                        placeholder={`${PHONE_PREFIX} 81 595 6488`}
+                        value={data.phone ? `${PHONE_PREFIX} ${data.phone}` : `${PHONE_PREFIX} `}
+                        onChange={(e) => {
+                            const nationalFormatted = formatSaPhoneNationalDigits(
+                                e.target.value,
+                            );
+                            onChange({
+                                phoneCountryCode: PHONE_PREFIX,
+                                phone: nationalFormatted,
+                            });
+                        }}
                     />
+                    <p className="text-xs text-muted-foreground">
+                        We&apos;ll show the full number in the summary.
+                    </p>
                 </div>
                 <div className="flex flex-col gap-3">
                     <Label htmlFor="website">
                         Website
                     </Label>
-                    <Input
-                        id="website"
-                        type="url"
-                        className="h-10 w-full text-sm"
-                        value={data.website}
-                        onChange={(e) => onChange({ website: e.target.value })}
-                    />
+                    <div>
+                        <Input
+                            id="website"
+                            type="text"
+                            className="h-9 w-full text-sm"
+                            value={websiteRemainderInputValue}
+                            onChange={(e) => {
+                                const remainder = e.target.value
+                                    .trim()
+                                    .replace(/^https?:\/\//i, '')
+                                    .replace(/\/+$/g, '');
+                                setWebsiteRemainderInputValue(remainder);
+                                onChange({
+                                    website: remainder
+                                        ? normalizeWebsiteToHttpsUrl(remainder)
+                                        : '',
+                                });
+                            }}
+                            placeholder="example.com"
+                        />
+                    </div>
                 </div>
             </div>
         </div>
@@ -171,23 +297,14 @@ function Step3({
     services: Service[];
     servicesLoading: boolean;
 }) {
-    const focused = data.focusedTrade;
-
-    function updateSubTradesRaw(text: string) {
-        if (!focused) return;
-        onChange({ selectedTrades: { ...data.selectedTrades, [focused]: text } });
-    }
-
-    const focusedText = focused ? (data.selectedTrades[focused] ?? '') : '';
-
     return (
         <div className="flex flex-col gap-6">
             <div className="flex flex-col gap-2">
                 <h1 className="text-2xl font-bold text-foreground">
-                    Header Name
+                    What&apos;s your trade?
                 </h1>
                 <p className="text-sm text-muted-foreground">
-                    Lorem ipsum dolor sit amet consectetur adipisicing elit. Quisquam, quos.
+                    Select your primary service and describe the specific work you specialise in.
                 </p>
             </div>
 
@@ -197,19 +314,19 @@ function Step3({
                     <div className="h-10 w-full animate-pulse rounded-md border border-border/50 bg-muted/40" />
                 ) : (
                     <Select
-                        value={focused ?? undefined}
-                        onValueChange={(label) => onChange({ focusedTrade: label })}
+                        value={data.trade || undefined}
+                        onValueChange={(label) => onChange({ trade: label })}
                         disabled={services.length === 0}
                     >
                         <SelectTrigger
                             id="main-trade-select"
-                            className="w-full h-10 text-sm"
+                            className="w-full min-h-10 text-sm"
                         >
                             <SelectValue placeholder="Select Service" />
                         </SelectTrigger>
                         <SelectContent>
                             {services.map(({ id, label }) => (
-                                <SelectItem key={id} value={label}>
+                                <SelectItem key={id} value={label} className="min-h-9">
                                     {label}
                                 </SelectItem>
                             ))}
@@ -219,16 +336,14 @@ function Step3({
             </div>
 
             <div className="flex flex-col gap-3">
-                <Label htmlFor="sub-trades-input">
-                    {focused ? `Description` : 'Description'}
-                </Label>
+                <Label htmlFor="trade-description-input">Description</Label>
                 <Textarea
-                    id="sub-trades-input"
-                    value={focusedText}
-                    onChange={(e) => updateSubTradesRaw(e.target.value)}
+                    id="trade-description-input"
+                    value={data.tradeDescription}
+                    onChange={(e) => onChange({ tradeDescription: e.target.value })}
                     rows={3}
                     className="text-sm"
-                    disabled={!focused}
+                    disabled={!data.trade}
                 />
             </div>
         </div>
@@ -243,24 +358,34 @@ function Step4({
     onChange: (patch: Partial<FormData>) => void;
 }) {
     const [addressInput, setAddressInput] = useState('');
+    const [radiusKmInput, setRadiusKmInput] = useState(5);
     const [isResolving, setIsResolving] = useState(false);
+    const [activeAreaId, setActiveAreaId] = useState<string | null>(null);
+    const serviceAreas = Array.isArray(data.serviceAreas) ? data.serviceAreas : [];
 
-    useEffect(() => {
-        if (!data.workLocation) return;
-        setAddressInput(
-            data.workLocation.address || `${data.workLocation.lat}, ${data.workLocation.lng}`,
-        );
-    }, [data.workLocation]);
+    const activeArea =
+        serviceAreas.find((area) => area.id === activeAreaId) ??
+        serviceAreas[serviceAreas.length - 1] ??
+        null;
+    const mapAreas = useMemo(
+        () =>
+            serviceAreas.map((area) => ({
+                location: area.location,
+                radiusMeters: Math.round(area.radiusKm * 1000),
+            })),
+        [serviceAreas],
+    );
 
     const { mapHostRef } = useMatchMap({
-        userLocation: data.workLocation,
+        userLocation: activeArea?.location ?? null,
         providers: [],
-        searchRadiusMeters: 0,
-        showSearchRadius: false,
+        searchRadiusMeters: Math.round((activeArea?.radiusKm ?? 0) * 1000),
+        showSearchRadius: !mapAreas.length && Boolean(activeArea),
         showUserPin: true,
+        userAreas: mapAreas,
     });
 
-    const resolveAddress = useCallback(async () => {
+    const addServiceArea = useCallback(async () => {
         const trimmed = addressInput.trim();
         if (!trimmed) {
             toast.error('Enter an address first');
@@ -299,12 +424,35 @@ function Step4({
                 lng: geo.lng,
                 address: typeof geo.address === 'string' ? geo.address : trimmed,
             };
-            onChange({ workLocation: loc });
+            const area: ServiceArea = {
+                id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+                location: loc,
+                radiusKm: radiusKmInput,
+            };
+            onChange({ serviceAreas: [...serviceAreas, area] });
+            setActiveAreaId(area.id);
             setAddressInput(loc.address);
+            toast.success('Service area added');
         } finally {
             setIsResolving(false);
         }
-    }, [addressInput, onChange]);
+    }, [addressInput, onChange, radiusKmInput, serviceAreas]);
+
+    function updateAreaRadius(areaId: string, nextRadiusKm: number) {
+        onChange({
+            serviceAreas: serviceAreas.map((area) =>
+                area.id === areaId ? { ...area, radiusKm: nextRadiusKm } : area,
+            ),
+        });
+    }
+
+    function removeArea(areaId: string) {
+        const next = serviceAreas.filter((area) => area.id !== areaId);
+        onChange({ serviceAreas: next });
+        if (activeAreaId === areaId) {
+            setActiveAreaId(next[next.length - 1]?.id ?? null);
+        }
+    }
 
     return (
         <div className="flex flex-col gap-6">
@@ -314,33 +462,105 @@ function Step4({
                 </h1>
                 <p className="text-sm text-muted-foreground">
                     Address search is limited to Western Cape, South Africa. Press Enter to look up
-                    and show the map.
+                    and add a service radius.
                 </p>
             </div>
 
-            <div className="flex flex-col gap-3">
-                <Label htmlFor="onboard-work-address">Address</Label>
-                <Input
-                    id="onboard-work-address"
-                    className="h-10 text-sm"
-                    value={addressInput}
-                    onChange={(e) => setAddressInput(e.target.value)}
-                    onKeyDown={(e) => {
-                        if (e.key !== 'Enter') return;
-                        void resolveAddress();
-                    }}
-                    disabled={isResolving}
-                    autoFocus
-                />
+            <div className="flex flex-col gap-4 rounded-lg border border-border/60 p-4">
+                <div className="flex flex-col gap-3">
+                    <Label htmlFor="onboard-work-address">Service area address</Label>
+                    <Input
+                        id="onboard-work-address"
+                        className="h-10 text-sm"
+                        value={addressInput}
+                        onChange={(e) => setAddressInput(e.target.value)}
+                        onKeyDown={(e) => {
+                            if (e.key !== 'Enter') return;
+                            e.preventDefault();
+                            void addServiceArea();
+                        }}
+                        disabled={isResolving}
+                        autoFocus
+                    />
+                </div>
+                <div className="flex flex-col gap-2">
+                    <div className="flex items-center justify-between">
+                        <Label htmlFor="onboard-radius">Radius</Label>
+                        <span className="text-xs text-muted-foreground">{radiusKmInput} km</span>
+                    </div>
+                    <Slider
+                        value={[radiusKmInput]}
+                        onValueChange={(vals) => setRadiusKmInput(vals[0] ?? radiusKmInput)}
+                        min={1}
+                        max={50}
+                        step={1}
+                        id="onboard-radius"
+                    />
+                </div>
+                <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() => void addServiceArea()}
+                    disabled={isResolving || addressInput.trim().length === 0}
+                >
+                    {isResolving ? 'Adding area...' : 'Add service area'}
+                </Button>
             </div>
+
+            {serviceAreas.length > 0 ? (
+                <div className="flex flex-col gap-3">
+                    <Label>Saved service areas</Label>
+                    {serviceAreas.map((area) => (
+                        <div
+                            key={area.id}
+                            className="flex flex-col gap-3 rounded-lg border border-border/60 p-3"
+                        >
+                            <button
+                                type="button"
+                                className="text-left"
+                                onClick={() => setActiveAreaId(area.id)}
+                            >
+                                <p className="text-sm text-foreground">{area.location.address}</p>
+                                <p className="text-xs text-muted-foreground">
+                                    {area.location.lat.toFixed(5)}, {area.location.lng.toFixed(5)}
+                                </p>
+                            </button>
+                            <div className="flex flex-col gap-2">
+                                <div className="flex items-center justify-between">
+                                    <span className="text-xs text-muted-foreground">Radius</span>
+                                    <span className="text-xs text-muted-foreground">
+                                        {area.radiusKm} km
+                                    </span>
+                                </div>
+                                <Slider
+                                    value={[area.radiusKm]}
+                                    onValueChange={(vals) =>
+                                        updateAreaRadius(area.id, vals[0] ?? area.radiusKm)}
+                                    min={1}
+                                    max={50}
+                                    step={1}
+                                />
+                            </div>
+                            <Button
+                                type="button"
+                                variant="ghost"
+                                className="self-start text-xs"
+                                onClick={() => removeArea(area.id)}
+                            >
+                                Remove area
+                            </Button>
+                        </div>
+                    ))}
+                </div>
+            ) : null}
 
             <div className="relative flex min-h-[220px] w-full overflow-hidden rounded-lg bg-secondary sm:min-h-[280px]">
                 <div ref={mapHostRef} className="absolute inset-0 w-full h-full rounded-lg" />
-                {!data.workLocation || isResolving ? (
+                {!activeArea || isResolving ? (
                     <p className="relative z-10 m-auto max-w-[90%] text-center text-xs text-muted-foreground">
                         {isResolving
                             ? 'Searching'
-                            : 'Lorem ipsum dolor sit amet consectetur adipisicing elit. Quisquam, quos.'}
+                            : 'Add at least one service area to preview it on the map.'}
                     </p>
                 ) : null}
             </div>
@@ -441,16 +661,7 @@ function Step6({
 }: {
     data: FormData;
 }) {
-    const totalSubTrades = Object.values(data.selectedTrades).reduce((n, raw) => {
-        const parts = raw
-            .split(',')
-            .map((s) => s.trim())
-            .filter(Boolean);
-        return n + parts.length;
-    }, 0);
-    const trades = Object.entries(data.selectedTrades)
-        .filter(([, raw]) => raw.trim().length > 0)
-        .map(([trade]) => trade);
+    const serviceAreas = Array.isArray(data.serviceAreas) ? data.serviceAreas : [];
 
     return (
         <div className="flex flex-col gap-8">
@@ -472,40 +683,40 @@ function Step6({
 
                 {/* Contact */}
                 <SummaryCard label="Contact">
-                    <p className="text-sm text-foreground">{data.email || '—'}</p>
-                    <p className="text-sm text-muted-foreground">{data.phone || '—'}</p>
+                    <p className="text-sm text-foreground">{data.address || '—'}</p>
+                    <p className="text-sm text-muted-foreground">
+                        {data.phone
+                            ? `+27 ${data.phone}`.trim()
+                            : '—'}
+                    </p>
                     {data.website && (
                         <p className="text-sm text-muted-foreground">{data.website}</p>
                     )}
                 </SummaryCard>
 
-                {/* Trades */}
-                <SummaryCard label={`Trades & Sub-trades (${totalSubTrades} selected)`}>
-                    {trades.length === 0 ? (
-                        <p className="text-sm text-muted-foreground">None selected</p>
+                {/* Trade */}
+                <SummaryCard label="Trade">
+                    <p className="text-sm font-medium text-foreground">{data.trade || '—'}</p>
+                    <p className="whitespace-pre-wrap text-sm text-muted-foreground">
+                        {data.tradeDescription || '—'}
+                    </p>
+                </SummaryCard>
+
+                {/* Service areas */}
+                <SummaryCard label="Service areas">
+                    {serviceAreas.length === 0 ? (
+                        <p className="text-sm text-muted-foreground">—</p>
                     ) : (
-                        trades.map((trade) => (
-                            <div key={trade} className="flex flex-col gap-1">
-                                <p className="text-sm font-medium text-foreground">{trade}</p>
-                                <p className="whitespace-pre-wrap text-sm text-muted-foreground">
-                                    {data.selectedTrades[trade] ?? ''}
+                        serviceAreas.map((area) => (
+                            <div key={area.id} className="flex flex-col gap-1">
+                                <p className="text-sm text-foreground">
+                                    {area.location.address} ({area.radiusKm} km)
+                                </p>
+                                <p className="text-xs text-muted-foreground">
+                                    {area.location.lat.toFixed(5)}, {area.location.lng.toFixed(5)}
                                 </p>
                             </div>
                         ))
-                    )}
-                </SummaryCard>
-
-                {/* Work address */}
-                <SummaryCard label="Work address">
-                    {!data.workLocation ? (
-                        <p className="text-sm text-muted-foreground">—</p>
-                    ) : (
-                        <>
-                            <p className="text-sm text-foreground">{data.workLocation.address}</p>
-                            <p className="text-xs text-muted-foreground">
-                                {data.workLocation.lat.toFixed(5)}, {data.workLocation.lng.toFixed(5)}
-                            </p>
-                        </>
                     )}
                 </SummaryCard>
 
@@ -589,12 +800,13 @@ function SuccessScreen() {
 const EMPTY_FORM: FormData = {
     businessName: '',
     contactName: '',
-    email: '',
+    address: '',
+    phoneCountryCode: '+27',
     phone: '',
     website: '',
-    selectedTrades: {},
-    focusedTrade: null,
-    workLocation: null,
+    trade: '',
+    tradeDescription: '',
+    serviceAreas: [],
     yearsExperience: '',
     teamSize: '',
     registrationNumber: '',
@@ -638,10 +850,11 @@ export default function ProOnboardPage() {
     }
 
     function canContinue(): boolean {
+        const serviceAreas = Array.isArray(data.serviceAreas) ? data.serviceAreas : [];
         if (step === 1) return data.businessName.trim().length > 0 && data.contactName.trim().length > 0;
-        if (step === 2) return data.email.trim().length > 0 && data.phone.trim().length > 0;
-        if (step === 3) return Object.values(data.selectedTrades).some((s) => s.trim().length > 0);
-        if (step === 4) return data.workLocation != null;
+        if (step === 2) return data.address.trim().length > 0 && data.phone.trim().length > 0;
+        if (step === 3) return data.trade.trim().length > 0 && data.tradeDescription.trim().length > 0;
+        if (step === 4) return serviceAreas.length > 0;
         if (step === 5) return data.yearsExperience.trim().length > 0 && data.teamSize.trim().length > 0;
         return true;
     }
@@ -650,12 +863,27 @@ export default function ProOnboardPage() {
         if (step < TOTAL_STEPS) {
             setStep((s) => s + 1);
         } else {
-            // Submit
             setSubmitting(true);
-            // TODO: wire up to Supabase insert / API route
-            await new Promise((r) => setTimeout(r, 1200));
-            setSubmitting(false);
-            setSubmitted(true);
+            try {
+                const res = await fetch('/api/providers/apply', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data),
+                });
+                if (!res.ok) {
+                    const json = await res.json().catch(() => null);
+                    toast.error(
+                        (json as { error?: string } | null)?.error ??
+                            'Something went wrong. Please try again.'
+                    );
+                    return;
+                }
+                setSubmitted(true);
+            } catch {
+                toast.error('Could not submit your application. Check your connection and try again.');
+            } finally {
+                setSubmitting(false);
+            }
         }
     }
 
@@ -690,7 +918,7 @@ export default function ProOnboardPage() {
             </div>
 
             {/* Fixed bottom action bar */}
-            <div className="fixed inset-x-0 bottom-0 p-4 z-64">
+            <div className="fixed inset-x-0 bottom-0 z-64 bg-background p-4">
                 <div className="mx-auto flex w-full max-w-xl flex-col gap-3">
                     <Button
                         type="button"
@@ -711,7 +939,7 @@ export default function ProOnboardPage() {
                     )}
                     {!canContinue() && step === 4 && (
                         <p className="text-center text-xs text-muted-foreground">
-                            Enter Address to Continue
+                            Add at least one service area to continue
                         </p>
                     )}
                     {!canContinue() && step === 5 && (

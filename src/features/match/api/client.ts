@@ -13,11 +13,15 @@ function normalizePlaceIds(placeIds: string[]): string[] {
         .map((id) => toGooglePlaceId(id.trim()));
 }
 
-export async function fetchProvidersApi(payload: ProvidersRequest): Promise<ProvidersResponse | null> {
+export async function fetchProvidersApi(
+    payload: ProvidersRequest,
+    options?: { signal?: AbortSignal }
+): Promise<ProvidersResponse | null> {
     const res = await fetch('/api/providers', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
+        signal: options?.signal,
     });
     const data = (await res.json().catch(() => null)) as ProvidersResponse | null;
     if (!res.ok) return data;

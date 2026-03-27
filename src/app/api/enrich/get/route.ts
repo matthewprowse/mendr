@@ -9,6 +9,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseAdminClient } from '@/lib/supabase-server';
 import { toGooglePlaceId } from '@/app/api/providers/persistence';
+import { checkRateLimit } from '@/lib/rate-limit-config';
 
 export interface EnrichmentCacheEntry {
     googlePlaceId: string;
@@ -23,6 +24,9 @@ export interface EnrichmentCacheEntry {
 }
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
+    const limited = checkRateLimit(req, 'enrichGet');
+    if (limited) return limited;
+
     try {
         const body = await req.json().catch(() => null) as {
             placeIds?: unknown;

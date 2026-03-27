@@ -52,6 +52,13 @@ export default function WelcomePage() {
         showAllOperatingHours,
         setShowAllOperatingHours,
         providerIsOpen,
+        providerSpecialisations,
+        providerServiceAreas,
+        providerCertifications,
+        providerHighlights,
+        providerHonestNote,
+        providerYearsInBusiness,
+        providerFounder,
     } = useProProvider(placeId);
 
     const {
@@ -318,6 +325,13 @@ export default function WelcomePage() {
                         addressDisplayLine={addressDisplayLine}
                         directionsHref={directionsHref}
                         profileSummaryLong={providerSummaryLong}
+                        specialisations={providerSpecialisations}
+                        serviceAreas={providerServiceAreas}
+                        certifications={providerCertifications}
+                        highlights={providerHighlights}
+                        honestNote={providerHonestNote}
+                        yearsInBusiness={providerYearsInBusiness}
+                        founder={providerFounder}
                     />
                 </TabsContent>
 

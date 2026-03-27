@@ -1,12 +1,30 @@
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import type { Content as GeminiContent } from '@google/generative-ai';
 import { getGeminiModel } from '@/lib/ai-client';
 import { logAiEvent } from '@/lib/ai-logging';
+import { checkRateLimit } from '@/lib/rate-limit-config';
+import { createSupabaseServerClient, createSupabaseAdminClient } from '@/lib/supabase-server';
 import { buildSystemInstruction } from './prompts';
 import {
     buildUnrelatedImageMessage,
     buildUnsupportedHomeServiceMessage,
 } from './prompts/special-cases';
+
+// Image URLs are fetched server-side — restrict to known-safe origins to prevent SSRF.
+const ALLOWED_IMAGE_ORIGINS = [
+    process.env.NEXT_PUBLIC_SUPABASE_URL,
+].filter((s): s is string => typeof s === 'string' && s.length > 0);
+
+function isAllowedImageUrl(url: string): boolean {
+    try {
+        const parsed = new URL(url);
+        return ALLOWED_IMAGE_ORIGINS.some(
+            (origin) => parsed.origin === new URL(origin).origin,
+        );
+    } catch {
+        return false;
+    }
+}
 
 function enforceMinThoughtLength(text: string, minChars = 125): string {
     const match = text.match(/<thought>([\s\S]*?)<\/thought>/i);
@@ -249,6 +267,106 @@ function enforceLanguageStyleInJson(text: string): string {
 }
 
 export async function POST(req: NextRequest) {
+    // ── Rate limit ─────────────────────────────────────────────────────────────
+    const limited = checkRateLimit(req, 'diagnose');
+    if (limited) return limited;
+
+    // ── Diagnosis quota ─────────────────────────────────────────────────────────
+    // Only count the FIRST message in a conversation (follow-ups are free).
+    // Parse a peek of the body to check history length, then re-read below.
+    const quotaExtraHeaders: Record<string, string> = {};
+    let parsedBodyForQuota: Record<string, unknown> | null = null;
+    try {
+        // Clone the request so the body can be read again later
+        const cloned = req.clone();
+        parsedBodyForQuota = await cloned.json();
+    } catch {
+        // Non-fatal — body will be re-parsed below
+    }
+
+    const isFirstMessage =
+        !parsedBodyForQuota?.history ||
+        !Array.isArray(parsedBodyForQuota.history) ||
+        (parsedBodyForQuota.history as unknown[]).length === 0;
+
+    if (isFirstMessage) {
+        let quotaUserId: string | null = null;
+        let quotaAnonKey: string | null = null;
+
+        // Try to resolve authenticated user via cookie session
+        try {
+            const serverClient = await createSupabaseServerClient();
+            const {
+                data: { user },
+            } = await serverClient.auth.getUser();
+            if (user?.id) quotaUserId = user.id;
+        } catch {
+            // If SSR client fails, fall through to anonymous path
+        }
+
+        if (!quotaUserId) {
+            const cookieHeader = req.headers.get('cookie') || '';
+            const match = cookieHeader.match(/scandio_anon=([a-f0-9-]{36})/);
+            quotaAnonKey = match?.[1] ?? null;
+            if (!quotaAnonKey) {
+                quotaAnonKey = crypto.randomUUID();
+                quotaExtraHeaders['Set-Cookie'] =
+                    `scandio_anon=${quotaAnonKey}; Path=/; Max-Age=${60 * 60 * 24 * 365}; SameSite=Lax; HttpOnly`;
+            }
+        }
+
+        const limit = quotaUserId ? 10 : 3;
+        const today = new Date().toISOString().split('T')[0];
+
+        try {
+            const admin = await createSupabaseAdminClient();
+
+            let currentCount = 0;
+            if (quotaUserId) {
+                const { data } = await admin
+                    .from('diagnosis_usage')
+                    .select('count')
+                    .eq('user_id', quotaUserId)
+                    .eq('date', today)
+                    .maybeSingle();
+                currentCount = (data as { count: number } | null)?.count ?? 0;
+            } else {
+                const { data } = await admin
+                    .from('diagnosis_usage')
+                    .select('count')
+                    .eq('anonymous_key', quotaAnonKey)
+                    .eq('date', today)
+                    .maybeSingle();
+                currentCount = (data as { count: number } | null)?.count ?? 0;
+            }
+
+            if (currentCount >= limit) {
+                return new Response(
+                    JSON.stringify({
+                        error: 'quota_exceeded',
+                        limit,
+                        used: currentCount,
+                        message: quotaUserId
+                            ? `You have used all ${limit} diagnoses for today. Your quota resets at midnight.`
+                            : `You have used all ${limit} free diagnoses for today. Sign in for more.`,
+                    }),
+                    { status: 429, headers: { 'Content-Type': 'application/json', ...quotaExtraHeaders } }
+                );
+            }
+
+            // Increment — fire and forget; don't block the AI call
+            const upsertRow = quotaUserId
+                ? { user_id: quotaUserId, date: today, count: currentCount + 1 }
+                : { anonymous_key: quotaAnonKey, date: today, count: currentCount + 1 };
+            const onConflict = quotaUserId ? 'user_id,date' : 'anonymous_key,date';
+            void admin.from('diagnosis_usage').upsert(upsertRow, { onConflict });
+        } catch (quotaErr) {
+            // Non-fatal: if the usage table doesn't exist yet or query fails, allow through
+            console.warn('Quota check skipped (error):', quotaErr);
+        }
+    }
+    // ── End quota ───────────────────────────────────────────────────────────────
+
     const startedAt = Date.now();
     interface Provider {
         name: string;
@@ -292,6 +410,34 @@ export async function POST(req: NextRequest) {
             initial_image_description,
             serviceCatalog,
         } = body;
+
+        // ── Input guards ───────────────────────────────────────────────────────
+        if (Array.isArray(history) && history.length > 20) {
+            return new Response(
+                JSON.stringify({ error: 'History too long. Maximum 20 turns allowed.' }),
+                { status: 400 },
+            );
+        }
+        if (Array.isArray(attachments) && attachments.length > 3) {
+            return new Response(
+                JSON.stringify({ error: 'Too many attachments. Maximum 3 images per request.' }),
+                { status: 400 },
+            );
+        }
+        if (typeof textQuery === 'string' && textQuery.length > 2000) {
+            return new Response(
+                JSON.stringify({ error: 'Text query too long. Maximum 2000 characters.' }),
+                { status: 400 },
+            );
+        }
+        // SSRF guard: if image is a URL (not a data URI), ensure it is from an
+        // allowed origin. This prevents server-side requests to internal endpoints.
+        if (typeof image === 'string' && image.startsWith('http') && !isAllowedImageUrl(image)) {
+            return new Response(
+                JSON.stringify({ error: 'Invalid image URL.' }),
+                { status: 400 },
+            );
+        }
 
         const attachmentImages = Array.isArray(attachments)
             ? attachments.filter((a: unknown) => typeof a === 'string' && a.startsWith('data:'))
@@ -634,6 +780,7 @@ CRITICAL: Output <thought> FIRST (2–3 short sentences about the likely problem
                 headers: {
                     'Content-Type': 'text/plain; charset=utf-8',
                     'Transfer-Encoding': 'chunked',
+                    ...quotaExtraHeaders,
                 },
             });
         } catch (streamError: unknown) {
@@ -722,6 +869,7 @@ CRITICAL: Output <thought> FIRST (2–3 short sentences about the likely problem
             return new Response(adjusted, {
                 headers: {
                     'Content-Type': 'text/plain; charset=utf-8',
+                    ...quotaExtraHeaders,
                 },
             });
         }

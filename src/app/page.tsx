@@ -368,6 +368,24 @@ export default function LandingPage() {
                     <TestimonialsSection />
                 </section>
             </main>
+
+            <footer className="border-t border-border/50 bg-background py-8">
+                <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+                    <div className="flex flex-col items-center gap-4 sm:flex-row sm:justify-between">
+                        <p className="text-xs text-muted-foreground">
+                            &copy; {new Date().getFullYear()} Scandio. All rights reserved.
+                        </p>
+                        <nav className="flex gap-4">
+                            <Link href="/contact" className="text-xs text-muted-foreground hover:text-foreground transition-colors">
+                                Contact
+                            </Link>
+                            <Link href="/admin" className="text-xs text-muted-foreground/40 hover:text-muted-foreground transition-colors">
+                                Admin
+                            </Link>
+                        </nav>
+                    </div>
+                </div>
+            </footer>
         </div>
     );
 }

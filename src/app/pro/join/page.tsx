@@ -4,7 +4,6 @@ import Link from 'next/link';
 import { LandingHeader } from '@/components/landing-header';
 import { Placeholder } from '@/components/placeholder';
 import { Button } from '@/components/ui/button';
-import { ThemeToggle } from '@/components/theme-toggle';
 
 // ─── Static data ──────────────────────────────────────────────────────────────
 
@@ -74,48 +73,79 @@ const HOW_IT_WORKS = [
     },
 ];
 
-const PRICING_TIERS = [
+type PricingFeature = { text: string; sub?: string };
+type PricingTier = {
+    name: string;
+    timing: string;
+    price: string;
+    priceNote: string;
+    highlight: boolean;
+    features: PricingFeature[];
+    lockInNote?: string;
+    cta?: { label: string; href: string };
+    secondaryLink?: { label: string; href: string };
+};
+
+const PRICING_TIERS: PricingTier[] = [
     {
         name: 'Founding Member',
         timing: 'Now — Beta',
         price: 'Free',
         priceNote: 'No credit card required',
         highlight: true,
+        lockInNote: 'Founding members lock in at R249/mo — guaranteed.',
+        cta: { label: 'Get Started Free', href: '/pro/onboard' },
         features: [
-            'Full profile listing',
-            'Appears in search results',
-            'Receive Scandio Reports',
-            'Review collection',
-            'Work gallery',
-            'Locked-in at best rate on launch',
+            { text: 'Full profile listing' },
+            { text: 'Appears in search results' },
+            { text: 'Receive Scandio Reports' },
+            { text: 'Review collection' },
+            { text: 'Work gallery' },
+            { text: 'Priority placement at launch' },
         ],
     },
     {
-        name: 'Starter',
+        name: 'Solo',
         timing: 'Est. late 2026',
-        price: 'From R249/mo',
+        price: 'R249/mo',
         priceNote: 'For individual contractors',
         highlight: false,
+        secondaryLink: { label: 'Join founding network now →', href: '/pro/onboard' },
         features: [
-            'Basic profile listing',
-            'Appears in search results',
-            'Receive Scandio Reports',
-            'Review collection',
+            { text: 'Standard profile — name, trade, rating, contact' },
+            { text: 'Appears in search results' },
+            { text: 'Receive Scandio Reports' },
+            { text: 'Review collection' },
         ],
     },
     {
-        name: 'Professional',
+        name: 'Basic Team',
         timing: 'Est. late 2026',
-        price: '~R649',
-        priceNote: 'For small teams — estimate only',
+        price: 'R649/mo',
+        priceNote: 'For teams of 3 to 5',
         highlight: false,
+        secondaryLink: { label: 'Join founding network now →', href: '/pro/onboard' },
         features: [
-            'Everything in Starter',
-            'Priority placement',
-            'Verified badge',
-            'Lead priority routing',
-            'Advanced analytics',
-            'Direct WhatsApp integration',
+            { text: 'Everything in Solo' },
+            { text: 'Up to 5 team member profiles' },
+            { text: 'Priority placement in match results', sub: 'First in results for diagnoses matching your trade and area.' },
+            { text: 'Advanced analytics — profile views and lead data' },
+            { text: 'Direct WhatsApp contact from profile' },
+        ],
+    },
+    {
+        name: 'Enterprise',
+        timing: 'Est. late 2026',
+        price: 'R1,249/mo',
+        priceNote: 'For large operations and franchises',
+        highlight: false,
+        secondaryLink: { label: 'Join founding network now →', href: '/pro/onboard' },
+        features: [
+            { text: 'Everything in Basic Team' },
+            { text: 'Unlimited team seats' },
+            { text: 'White label Scandio Reports with your branding', sub: 'Your logo and colours alongside Scandio on every report you receive.' },
+            { text: 'Highest priority placement in all results' },
+            { text: 'Dedicated account support' },
         ],
     },
 ];
@@ -133,7 +163,6 @@ export default function ProJoinPage() {
                 ]}
                 logoHref="/pro/join"
                 showTrades={false}
-                rightSlot={<ThemeToggle />}
             />
 
             <main className="flex-1">
@@ -279,22 +308,23 @@ export default function ProJoinPage() {
 
                 {/* ── Pricing ── */}
                 <section id="pricing" className="mx-auto max-w-7xl px-4 py-20 sm:px-6 lg:px-8 scroll-mt-16">
-                    <div className="mb-4 text-center">
+                    <div className="mb-10 text-center">
                         <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">
-                            Pricing
+                            Simple pricing. No surprises.
                         </h2>
                         <p className="mx-auto mt-4 max-w-2xl text-muted-foreground">
-                            Scandio is free during our founding phase. We plan to introduce paid
-                            tiers in late 2026, once we have consistent lead flow across the Western
-                            Cape and can demonstrate clear return on investment for every contractor
-                            on the network. Joining now locks you in as a founding member at the
-                            best available rate. Pricing shown is indicative only and subject to
-                            change — all members will be notified well in advance.
+                            Free during our founding phase — no credit card, no commitment, no catch.
+                        </p>
+                        <p className="mx-auto mt-2 max-w-2xl text-muted-foreground">
+                            Paid tiers launch late 2026. Every founding member will be notified and locked in at the best available rate before anything changes.
+                        </p>
+                        <p className="mx-auto mt-3 max-w-xl text-xs text-muted-foreground/70">
+                            Pricing shown is indicative only and subject to change. All members notified at least 30 days before any changes.
                         </p>
                     </div>
 
-                    <div className="grid gap-6 sm:grid-cols-3">
-                        {PRICING_TIERS.map(({ name, timing, price, priceNote, highlight, features }) => (
+                    <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+                        {PRICING_TIERS.map(({ name, timing, price, priceNote, highlight, features, lockInNote, cta, secondaryLink }) => (
                             <div
                                 key={name}
                                 className={`relative flex flex-col gap-5 rounded-xl border p-6 transition-all duration-200 ${
@@ -324,9 +354,9 @@ export default function ProJoinPage() {
                                         {priceNote}
                                     </span>
                                 </div>
-                                <ul className="flex flex-col gap-2">
+                                <ul className="flex flex-col gap-2 flex-1">
                                     {features.map((f) => (
-                                        <li key={f} className="flex items-start gap-2">
+                                        <li key={f.text} className="flex items-start gap-2">
                                             <svg
                                                 xmlns="http://www.w3.org/2000/svg"
                                                 width="14"
@@ -341,20 +371,48 @@ export default function ProJoinPage() {
                                             >
                                                 <path d="M5 13l4 4L19 7" />
                                             </svg>
-                                            <span className={`text-sm ${highlight ? 'text-background/80' : 'text-muted-foreground'}`}>
-                                                {f}
+                                            <span className="flex flex-col gap-0.5">
+                                                <span className={`text-sm ${highlight ? 'text-background/80' : 'text-muted-foreground'}`}>
+                                                    {f.text}
+                                                </span>
+                                                {f.sub && (
+                                                    <span className={`text-xs leading-relaxed ${highlight ? 'text-background/50' : 'text-muted-foreground/60'}`}>
+                                                        {f.sub}
+                                                    </span>
+                                                )}
                                             </span>
                                         </li>
                                     ))}
                                 </ul>
-                                {highlight && (
-                                    <Button asChild variant="secondary" className="mt-auto w-full">
-                                        <Link href="/pro/onboard">Get Started Free</Link>
-                                    </Button>
+                                {cta && (
+                                    <div className="mt-auto flex flex-col gap-1.5">
+                                        <Button asChild variant="secondary" className="w-full">
+                                            <Link href={cta.href}>{cta.label}</Link>
+                                        </Button>
+                                        {lockInNote && (
+                                            <p className={`text-center text-xs ${highlight ? 'text-background/50' : 'text-muted-foreground/70'}`}>
+                                                {lockInNote}
+                                            </p>
+                                        )}
+                                    </div>
+                                )}
+                                {secondaryLink && (
+                                    <div className="mt-auto pt-2 text-center">
+                                        <Link
+                                            href={secondaryLink.href}
+                                            className="text-xs text-muted-foreground hover:underline"
+                                        >
+                                            {secondaryLink.label}
+                                        </Link>
+                                    </div>
                                 )}
                             </div>
                         ))}
                     </div>
+
+                    <p className="mt-8 text-center text-xs text-muted-foreground/70">
+                        All members notified at least 30 days before any pricing changes. No surprises, ever.
+                    </p>
                 </section>
 
                 {/* ── What to expect ── */}
@@ -394,6 +452,7 @@ export default function ProJoinPage() {
                         </div>
                     </div>
                 </section>
+
             </main>
 
             {/* ── Footer ── */}
@@ -450,10 +509,11 @@ export default function ProJoinPage() {
                         </div>
                         <div className="flex flex-col gap-3">
                             <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                                Legal
+                                Company
                             </span>
                             <nav className="flex flex-col gap-2">
                                 {[
+                                    ['Contact', '/contact'],
                                     ['Privacy Policy', '#'],
                                     ['Terms of Service', '#'],
                                 ].map(([label, href]) => (
