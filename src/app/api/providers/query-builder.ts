@@ -99,9 +99,35 @@ export function buildProviderQuery(input: {
 
     const securityQuery = resolveSecurityAccessQuery();
 
+    function overrideBaseQueryFromDetail(): string {
+        if (!tradeDetailNorm) return '';
+        // For plumbing diagnoses, generic "leak" wording is common and should
+        // not override away from plumber-focused search queries.
+        if (tradeNorm.includes('plumb')) return '';
+
+        const overrides: Array<{ keywords: string[]; query: string }> = [
+            { keywords: ['roof', 'roofer', 'gutter', 'guttering', 'thatch'], query: 'Roofing Contractor' },
+            { keywords: ['waterproof', 'damp proof', 'damp'], query: 'Waterproofing contractor' },
+            { keywords: ['glazing', 'glass', 'window', 'windows'], query: 'Glazier' },
+            { keywords: ['paving', 'concrete', 'slab', 'driveway'], query: 'Paving Contractor' },
+            { keywords: ['plaster', 'render', 'ceiling', 'drywall'], query: 'Plasterer' },
+            { keywords: ['solar', 'inverter', 'battery'], query: 'Solar installer' },
+            { keywords: ['irrigation', 'sprinkler', 'borehole pump', 'pump'], query: 'Irrigation contractor' },
+            { keywords: ['fence', 'fencing', 'gate'], query: 'Fencing contractor' },
+            { keywords: ['aircon', 'air conditioning', 'hvac'], query: 'Air conditioning contractor' },
+        ];
+
+        for (const o of overrides) {
+            if (o.keywords.some((k) => tradeDetailNorm.includes(k))) return o.query;
+        }
+        return '';
+    }
+
+    const detailOverrideQuery = overrideBaseQueryFromDetail();
+
     const baseSearchQuery = isBoreholeLikeDetail
         ? 'Borehole drilling contractor'
-        : securityQuery || TRADE_QUERY_MAP[tradeNorm] || input.trade;
+        : securityQuery || detailOverrideQuery || TRADE_QUERY_MAP[tradeNorm] || input.trade;
 
     let searchQuery = input.providedSearchQuery || baseSearchQuery;
     if (!input.providedSearchQuery && tradeDetailNorm) {

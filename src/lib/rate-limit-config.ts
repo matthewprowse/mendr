@@ -132,8 +132,18 @@ export function checkRateLimit(
 
     if (!result.ok) {
         const retryAfterSecs = Math.ceil((result.resetAt - Date.now()) / 1000);
+        const windowMinutes = Math.max(1, Math.round(config.windowMs / 60_000));
+        const waitMinutes = Math.ceil(retryAfterSecs / 60);
+        const minuteLabel = windowMinutes === 1 ? 'minute' : 'minutes';
+        const waitLabel = waitMinutes === 1 ? 'minute' : 'minutes';
         return NextResponse.json(
-            { error: 'Too many requests. Please wait before trying again.' },
+            {
+                error: 'rate_limited',
+                message: `You have reached the limit of ${config.max} requests in ${windowMinutes} ${minuteLabel}. Please wait about ${waitMinutes} ${waitLabel} and try again.`,
+                limit: config.max,
+                windowMinutes,
+                retryAfterSeconds: retryAfterSecs,
+            },
             {
                 status: 429,
                 headers: {

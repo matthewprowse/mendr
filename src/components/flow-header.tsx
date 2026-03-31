@@ -1,8 +1,8 @@
 'use client';
 
+import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
 import { Button } from './ui/button';
-import { Badge } from './ui/badge';
 
 /** Total steps in the homeowner scan flow: Upload → Diagnose → Match. */
 export const SCAN_FLOW_STEPS = 3;
@@ -14,18 +14,29 @@ export const SCAN_FLOW_STEPS = 3;
 export function FlowStepHeader({
     step,
     onBack,
+    backHref,
+    centerLabel = 'Scandio',
 }: {
     step: number;
     onBack: (() => void) | null;
+    backHref?: string;
+    centerLabel?: string;
 }) {
     return (
-        <div className="fixed inset-x-0 top-0 z-50 flex h-16 items-center justify-between bg-background px-4">
+        <div className="fixed inset-x-0 top-0 z-[200] flex h-16 items-center justify-between bg-background px-4">
             <div className="h-10 w-10">
-                {onBack ? (
+                {backHref ? (
+                    <Button asChild variant="secondary" className="size-10 touch-manipulation" aria-label="Go Back">
+                        <Link href={backHref}>
+                            <ArrowLeft className="size-5 text-foreground" />
+                        </Link>
+                    </Button>
+                ) : onBack ? (
                     <Button
+                        type="button"
                         variant="secondary"
                         onClick={onBack}
-                        className="size-10"
+                        className="size-10 touch-manipulation"
                         aria-label="Go Back"
                     >
                         <ArrowLeft className="size-5 text-foreground" />
@@ -36,9 +47,10 @@ export function FlowStepHeader({
                 )}
             </div>
 
-            <span className="text-lg font-semibold text-foreground">Scandio</span>
+            <span className="text-lg font-semibold text-foreground">{centerLabel}</span>
 
-            <Button className="size-10" variant="ghost" disabled />
+            {/* Balance the back button column; not an interactive control */}
+            <div className="size-10 shrink-0" aria-hidden="true" />
         </div>
     );
 }

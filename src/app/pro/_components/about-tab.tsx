@@ -4,6 +4,45 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { ProPageMap } from '@/app/pro/[id]/_components/page-map';
 import type { Dispatch, SetStateAction } from 'react';
 
+function toSentence(text: string): string {
+    const trimmed = text.trim().replace(/\s+/g, ' ');
+    if (!trimmed) return '';
+    const first = trimmed.charAt(0).toUpperCase() + trimmed.slice(1);
+    return /[.!?]$/.test(first) ? first : `${first}.`;
+}
+
+function toTwoSentences(text: string): string {
+    const normalized = toSentence(text);
+    if (!normalized) return '';
+    const parts = normalized
+        .split(/(?<=[.!?])\s+/)
+        .map((part) => part.trim())
+        .filter(Boolean);
+    return parts.slice(0, 2).join(' ');
+}
+
+function toExpandedHighlight(text: string): string {
+    const base = toTwoSentences(text);
+    if (!base) return '';
+    const wordCount = base.split(/\s+/).filter(Boolean).length;
+    if (wordCount >= 12) return base;
+    return `${base} This helps homeowners choose with more confidence before booking.`;
+}
+
+function toTitleCaseLabel(text: string): string {
+    const trimmed = text.trim().replace(/\s+/g, ' ');
+    if (!trimmed) return '';
+    const upperTokens = new Set(['ac', 'cctv', 'tv', 'hvac', 'gps', 'wifi', 'dc', 'db']);
+    return trimmed
+        .split(' ')
+        .map((word) => {
+            const clean = word.toLowerCase();
+            if (upperTokens.has(clean)) return clean.toUpperCase();
+            return clean.charAt(0).toUpperCase() + clean.slice(1);
+        })
+        .join(' ');
+}
+
 export function ProAboutTab(props: {
     operatingHoursByDay: Record<string, string>;
     isOperatingHoursLoading: boolean;
@@ -22,12 +61,10 @@ export function ProAboutTab(props: {
     profileSummaryLong: string | null;
     /** R11: Enrichment display fields */
     specialisations?: string[];
-    serviceAreas?: string[];
     certifications?: string[];
     highlights?: string[];
     honestNote?: string | null;
     yearsInBusiness?: number | null;
-    founder?: string | null;
 }) {
     const {
         operatingHoursByDay,
@@ -45,37 +82,33 @@ export function ProAboutTab(props: {
         directionsHref,
         profileSummaryLong,
         specialisations = [],
-        serviceAreas = [],
         certifications = [],
         highlights = [],
         honestNote,
         yearsInBusiness,
-        founder,
     } = props;
 
     const hasEnrichment = profileSummaryLong?.trim() || specialisations.length > 0 || highlights.length > 0;
+    const displayHighlights = highlights
+        .map((item) => toExpandedHighlight(item))
+        .filter(Boolean);
 
     return (
         <div className="flex flex-col gap-6 mt-6">
 
             {/* ── About ── */}
             <div className="flex flex-col gap-2">
-                <h3 className="text-lg text-foreground font-bold">About</h3>
+                <h3 className="text-lg text-foreground font-bold">Summary</h3>
                 {profileSummaryLong?.trim() ? (
                     <>
                         <p className="text-sm text-foreground whitespace-pre-wrap leading-relaxed">
                             {profileSummaryLong.trim()}
                         </p>
-                        {(yearsInBusiness != null || founder) && (
+                        {yearsInBusiness != null && (
                             <div className="flex flex-wrap gap-2 mt-1">
                                 {yearsInBusiness != null && (
                                     <span className="text-xs text-muted-foreground">
                                         {yearsInBusiness} year{yearsInBusiness !== 1 ? 's' : ''} in business
-                                    </span>
-                                )}
-                                {founder && (
-                                    <span className="text-xs text-muted-foreground">
-                                        · Founded by {founder}
                                     </span>
                                 )}
                             </div>
@@ -89,42 +122,27 @@ export function ProAboutTab(props: {
             </div>
 
             {/* ── Highlights ── */}
-            {highlights.length > 0 && (
+            {displayHighlights.length > 0 && (
                 <div className="flex flex-col gap-2">
                     <h3 className="text-lg text-foreground font-bold">Highlights</h3>
-                    <ul className="flex flex-col gap-1.5">
-                        {highlights.map((h, i) => (
-                            <li key={i} className="flex items-start gap-2 text-sm text-foreground">
-                                <span className="mt-0.5 shrink-0 text-primary">✓</span>
-                                <span>{h}</span>
+                    <ul className="flex flex-col gap-2">
+                        {displayHighlights.slice(0, 10).map((h, i) => (
+                            <li key={`${h}-${i}`} className="ml-4 list-disc text-sm leading-relaxed text-foreground">
+                                {h}
                             </li>
                         ))}
                     </ul>
                 </div>
             )}
 
-            {/* ── Services & Specialisations ── */}
+            {/* ── Specialisations ── */}
             {specialisations.length > 0 && (
                 <div className="flex flex-col gap-2">
-                    <h3 className="text-lg text-foreground font-bold">Services &amp; Specialisations</h3>
+                    <h3 className="text-lg text-foreground font-bold">Specialisations</h3>
                     <div className="flex flex-wrap gap-2">
                         {specialisations.map((s) => (
                             <Badge key={s} variant="secondary">
-                                {s}
-                            </Badge>
-                        ))}
-                    </div>
-                </div>
-            )}
-
-            {/* ── Service Areas ── */}
-            {serviceAreas.length > 0 && (
-                <div className="flex flex-col gap-2">
-                    <h3 className="text-lg text-foreground font-bold">Service Areas</h3>
-                    <div className="flex flex-wrap gap-2">
-                        {serviceAreas.map((a) => (
-                            <Badge key={a} variant="outline">
-                                {a}
+                                {toTitleCaseLabel(s)}
                             </Badge>
                         ))}
                     </div>

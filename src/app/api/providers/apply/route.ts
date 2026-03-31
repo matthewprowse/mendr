@@ -1,12 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseAdminClient } from '@/lib/supabase-server';
 
-type ServiceArea = {
-    id: string;
-    location: { lat: number; lng: number; address: string };
-    radiusKm: number;
-};
-
 type ApplyBody = {
     businessName?: string;
     contactName?: string;
@@ -15,7 +9,6 @@ type ApplyBody = {
     website?: string;
     trade?: string;
     tradeDescription?: string;
-    serviceAreas?: ServiceArea[];
     yearsExperience?: string;
     teamSize?: string;
     registrationNumber?: string;
@@ -48,26 +41,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         );
     }
 
-    const serviceAreas = Array.isArray(body?.serviceAreas) ? body.serviceAreas : [];
-    if (serviceAreas.length === 0) {
-        return NextResponse.json(
-            { error: 'At least one service area is required.' },
-            { status: 400 }
-        );
-    }
-
     const yearsRaw = typeof body?.yearsExperience === 'string' ? body.yearsExperience.trim() : '';
     const teamRaw = typeof body?.teamSize === 'string' ? body.teamSize.trim() : '';
     const yearsExperience = yearsRaw ? parseInt(yearsRaw, 10) : null;
     const teamSize = teamRaw ? parseInt(teamRaw, 10) : null;
-
-    // Normalise service areas to a clean serialisable shape.
-    const serviceAreasJson = serviceAreas.map((area) => ({
-        address: area.location?.address ?? '',
-        lat: area.location?.lat ?? 0,
-        lng: area.location?.lng ?? 0,
-        radius_km: area.radiusKm ?? 0,
-    }));
 
     try {
         const admin = await createSupabaseAdminClient();
@@ -79,7 +56,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
             website: typeof body?.website === 'string' ? body.website.trim() || null : null,
             trade,
             trade_description: tradeDescription,
-            service_areas: serviceAreasJson,
             years_experience: Number.isFinite(yearsExperience) ? yearsExperience : null,
             team_size: Number.isFinite(teamSize) ? teamSize : null,
             registration_number:

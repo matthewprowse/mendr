@@ -8,7 +8,6 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { Slider } from '@/components/ui/slider';
 import {
     Select,
     SelectContent,
@@ -18,20 +17,12 @@ import {
 } from '@/components/ui/select';
 import { FlowStepHeader } from '@/components/flow-header';
 import { getSupabase } from '@/lib/supabase';
-import { geocodeApi } from '@/features/match/api/client';
-import type { MatchLocation } from '@/features/match/contracts';
-import { useMatchMap } from '@/features/match/hooks/useMatchMap';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type Service = { id: string; label: string };
-type ServiceArea = {
-    id: string;
-    location: MatchLocation;
-    radiusKm: number;
-};
 
-const TOTAL_STEPS = 6;
+const TOTAL_STEPS = 5;
 
 // ─── Form data ────────────────────────────────────────────────────────────────
 
@@ -44,7 +35,6 @@ type FormData = {
     website: string;
     trade: string;
     tradeDescription: string;
-    serviceAreas: ServiceArea[];
     yearsExperience: string;
     teamSize: string;
     registrationNumber: string;
@@ -314,7 +304,7 @@ function Step3({
                     <div className="h-10 w-full animate-pulse rounded-md border border-border/50 bg-muted/40" />
                 ) : (
                     <Select
-                        value={data.trade || undefined}
+                        value={data.trade ?? ''}
                         onValueChange={(label) => onChange({ trade: label })}
                         disabled={services.length === 0}
                     >
@@ -351,224 +341,6 @@ function Step3({
 }
 
 function Step4({
-    data,
-    onChange,
-}: {
-    data: FormData;
-    onChange: (patch: Partial<FormData>) => void;
-}) {
-    const [addressInput, setAddressInput] = useState('');
-    const [radiusKmInput, setRadiusKmInput] = useState(5);
-    const [isResolving, setIsResolving] = useState(false);
-    const [activeAreaId, setActiveAreaId] = useState<string | null>(null);
-    const serviceAreas = Array.isArray(data.serviceAreas) ? data.serviceAreas : [];
-
-    const activeArea =
-        serviceAreas.find((area) => area.id === activeAreaId) ??
-        serviceAreas[serviceAreas.length - 1] ??
-        null;
-    const mapAreas = useMemo(
-        () =>
-            serviceAreas.map((area) => ({
-                location: area.location,
-                radiusMeters: Math.round(area.radiusKm * 1000),
-            })),
-        [serviceAreas],
-    );
-
-    const { mapHostRef } = useMatchMap({
-        userLocation: activeArea?.location ?? null,
-        providers: [],
-        searchRadiusMeters: Math.round((activeArea?.radiusKm ?? 0) * 1000),
-        showSearchRadius: !mapAreas.length && Boolean(activeArea),
-        showUserPin: true,
-        userAreas: mapAreas,
-    });
-
-    const addServiceArea = useCallback(async () => {
-        const trimmed = addressInput.trim();
-        if (!trimmed) {
-            toast.error('Enter an address first');
-            return;
-        }
-
-        setIsResolving(true);
-        try {
-            const coordMatch = trimmed.match(/^\s*(-?\d+(?:\.\d+)?)\s*[, ]\s*(-?\d+(?:\.\d+)?)\s*$/);
-            const isCoords = Boolean(coordMatch);
-
-            const geo = await geocodeApi(
-                isCoords
-                    ? {
-                          lat: Number(coordMatch?.[1]),
-                          lng: Number(coordMatch?.[2]),
-                          westernCapeOnly: true,
-                      }
-                    : { address: trimmed, westernCapeOnly: true },
-            );
-
-            if (
-                !geo ||
-                typeof geo.lat !== 'number' ||
-                typeof geo.lng !== 'number' ||
-                !Number.isFinite(geo.lat) ||
-                !Number.isFinite(geo.lng) ||
-                (typeof geo.address !== 'string' && typeof geo.address !== 'undefined')
-            ) {
-                toast.error(geo?.error || 'Failed to find that address');
-                return;
-            }
-
-            const loc: MatchLocation = {
-                lat: geo.lat,
-                lng: geo.lng,
-                address: typeof geo.address === 'string' ? geo.address : trimmed,
-            };
-            const area: ServiceArea = {
-                id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-                location: loc,
-                radiusKm: radiusKmInput,
-            };
-            onChange({ serviceAreas: [...serviceAreas, area] });
-            setActiveAreaId(area.id);
-            setAddressInput(loc.address);
-            toast.success('Service area added');
-        } finally {
-            setIsResolving(false);
-        }
-    }, [addressInput, onChange, radiusKmInput, serviceAreas]);
-
-    function updateAreaRadius(areaId: string, nextRadiusKm: number) {
-        onChange({
-            serviceAreas: serviceAreas.map((area) =>
-                area.id === areaId ? { ...area, radiusKm: nextRadiusKm } : area,
-            ),
-        });
-    }
-
-    function removeArea(areaId: string) {
-        const next = serviceAreas.filter((area) => area.id !== areaId);
-        onChange({ serviceAreas: next });
-        if (activeAreaId === areaId) {
-            setActiveAreaId(next[next.length - 1]?.id ?? null);
-        }
-    }
-
-    return (
-        <div className="flex flex-col gap-6">
-            <div className="flex flex-col gap-2">
-                <h1 className="text-2xl font-bold text-foreground">
-                    Where do you work?
-                </h1>
-                <p className="text-sm text-muted-foreground">
-                    Address search is limited to Western Cape, South Africa. Press Enter to look up
-                    and add a service radius.
-                </p>
-            </div>
-
-            <div className="flex flex-col gap-4 rounded-lg border border-border/60 p-4">
-                <div className="flex flex-col gap-3">
-                    <Label htmlFor="onboard-work-address">Service area address</Label>
-                    <Input
-                        id="onboard-work-address"
-                        className="h-10 text-sm"
-                        value={addressInput}
-                        onChange={(e) => setAddressInput(e.target.value)}
-                        onKeyDown={(e) => {
-                            if (e.key !== 'Enter') return;
-                            e.preventDefault();
-                            void addServiceArea();
-                        }}
-                        disabled={isResolving}
-                        autoFocus
-                    />
-                </div>
-                <div className="flex flex-col gap-2">
-                    <div className="flex items-center justify-between">
-                        <Label htmlFor="onboard-radius">Radius</Label>
-                        <span className="text-xs text-muted-foreground">{radiusKmInput} km</span>
-                    </div>
-                    <Slider
-                        value={[radiusKmInput]}
-                        onValueChange={(vals) => setRadiusKmInput(vals[0] ?? radiusKmInput)}
-                        min={1}
-                        max={50}
-                        step={1}
-                        id="onboard-radius"
-                    />
-                </div>
-                <Button
-                    type="button"
-                    variant="secondary"
-                    onClick={() => void addServiceArea()}
-                    disabled={isResolving || addressInput.trim().length === 0}
-                >
-                    {isResolving ? 'Adding area...' : 'Add service area'}
-                </Button>
-            </div>
-
-            {serviceAreas.length > 0 ? (
-                <div className="flex flex-col gap-3">
-                    <Label>Saved service areas</Label>
-                    {serviceAreas.map((area) => (
-                        <div
-                            key={area.id}
-                            className="flex flex-col gap-3 rounded-lg border border-border/60 p-3"
-                        >
-                            <button
-                                type="button"
-                                className="text-left"
-                                onClick={() => setActiveAreaId(area.id)}
-                            >
-                                <p className="text-sm text-foreground">{area.location.address}</p>
-                                <p className="text-xs text-muted-foreground">
-                                    {area.location.lat.toFixed(5)}, {area.location.lng.toFixed(5)}
-                                </p>
-                            </button>
-                            <div className="flex flex-col gap-2">
-                                <div className="flex items-center justify-between">
-                                    <span className="text-xs text-muted-foreground">Radius</span>
-                                    <span className="text-xs text-muted-foreground">
-                                        {area.radiusKm} km
-                                    </span>
-                                </div>
-                                <Slider
-                                    value={[area.radiusKm]}
-                                    onValueChange={(vals) =>
-                                        updateAreaRadius(area.id, vals[0] ?? area.radiusKm)}
-                                    min={1}
-                                    max={50}
-                                    step={1}
-                                />
-                            </div>
-                            <Button
-                                type="button"
-                                variant="ghost"
-                                className="self-start text-xs"
-                                onClick={() => removeArea(area.id)}
-                            >
-                                Remove area
-                            </Button>
-                        </div>
-                    ))}
-                </div>
-            ) : null}
-
-            <div className="relative flex min-h-[220px] w-full overflow-hidden rounded-lg bg-secondary sm:min-h-[280px]">
-                <div ref={mapHostRef} className="absolute inset-0 w-full h-full rounded-lg" />
-                {!activeArea || isResolving ? (
-                    <p className="relative z-10 m-auto max-w-[90%] text-center text-xs text-muted-foreground">
-                        {isResolving
-                            ? 'Searching'
-                            : 'Add at least one service area to preview it on the map.'}
-                    </p>
-                ) : null}
-            </div>
-        </div>
-    );
-}
-
-function Step5({
     data,
     onChange,
 }: {
@@ -656,13 +428,11 @@ function Step5({
     );
 }
 
-function Step6({
+function Step5({
     data,
 }: {
     data: FormData;
 }) {
-    const serviceAreas = Array.isArray(data.serviceAreas) ? data.serviceAreas : [];
-
     return (
         <div className="flex flex-col gap-8">
             <div className="flex flex-col gap-2">
@@ -700,24 +470,6 @@ function Step6({
                     <p className="whitespace-pre-wrap text-sm text-muted-foreground">
                         {data.tradeDescription || '—'}
                     </p>
-                </SummaryCard>
-
-                {/* Service areas */}
-                <SummaryCard label="Service areas">
-                    {serviceAreas.length === 0 ? (
-                        <p className="text-sm text-muted-foreground">—</p>
-                    ) : (
-                        serviceAreas.map((area) => (
-                            <div key={area.id} className="flex flex-col gap-1">
-                                <p className="text-sm text-foreground">
-                                    {area.location.address} ({area.radiusKm} km)
-                                </p>
-                                <p className="text-xs text-muted-foreground">
-                                    {area.location.lat.toFixed(5)}, {area.location.lng.toFixed(5)}
-                                </p>
-                            </div>
-                        ))
-                    )}
                 </SummaryCard>
 
                 {/* Business details */}
@@ -806,7 +558,6 @@ const EMPTY_FORM: FormData = {
     website: '',
     trade: '',
     tradeDescription: '',
-    serviceAreas: [],
     yearsExperience: '',
     teamSize: '',
     registrationNumber: '',
@@ -850,12 +601,10 @@ export default function ProOnboardPage() {
     }
 
     function canContinue(): boolean {
-        const serviceAreas = Array.isArray(data.serviceAreas) ? data.serviceAreas : [];
         if (step === 1) return data.businessName.trim().length > 0 && data.contactName.trim().length > 0;
         if (step === 2) return data.address.trim().length > 0 && data.phone.trim().length > 0;
         if (step === 3) return data.trade.trim().length > 0 && data.tradeDescription.trim().length > 0;
-        if (step === 4) return serviceAreas.length > 0;
-        if (step === 5) return data.yearsExperience.trim().length > 0 && data.teamSize.trim().length > 0;
+        if (step === 4) return data.yearsExperience.trim().length > 0 && data.teamSize.trim().length > 0;
         return true;
     }
 
@@ -912,8 +661,7 @@ export default function ProOnboardPage() {
                         />
                     )}
                     {step === 4 && <Step4 {...stepProps} />}
-                    {step === 5 && <Step5 {...stepProps} />}
-                    {step === 6 && <Step6 data={data} />}
+                    {step === 5 && <Step5 data={data} />}
                 </div>
             </div>
 
@@ -938,11 +686,6 @@ export default function ProOnboardPage() {
                         </p>
                     )}
                     {!canContinue() && step === 4 && (
-                        <p className="text-center text-xs text-muted-foreground">
-                            Add at least one service area to continue
-                        </p>
-                    )}
-                    {!canContinue() && step === 5 && (
                         <p className="text-center text-xs text-muted-foreground">
                             Enter years in business and team size (both required) to continue.
                         </p>

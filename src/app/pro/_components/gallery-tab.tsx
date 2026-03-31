@@ -69,7 +69,7 @@ export function ProGalleryTab(props: {
             <div className="flex flex-col gap-2">
                 <h3 className="text-lg text-foreground font-bold">Gallery</h3>
                 <p className="text-sm text-foreground">
-                    Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo
+                    Browse recent job photos, completed work, and before-and-after examples to get a feel for quality before you contact this pro.
                 </p>
             </div>
 
@@ -156,7 +156,7 @@ export function ProGalleryTab(props: {
                         <DialogHeader className="text-left gap-3">
                             <DialogTitle className="text-left leading-none">Share Images</DialogTitle>
                             <DialogDescription>
-                                Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.
+                                Add clear photos of completed work to help homeowners understand your quality, style, and scope of services.
                             </DialogDescription>
                         </DialogHeader>
 

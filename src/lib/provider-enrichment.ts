@@ -115,6 +115,79 @@ function stripHtmlForEnrichment(html: string): string {
         .slice(0, 12_000);
 }
 
+function toTitleCase(value: string): string {
+    const lower = value.toLowerCase();
+    return lower.replace(/\b[a-z]/g, (ch) => ch.toUpperCase());
+}
+
+function canonicalServiceKey(value: string): string {
+    return value
+        .toLowerCase()
+        .replace(/&/g, 'and')
+        .replace(/[^a-z0-9\s]/g, ' ')
+        .replace(/\bservices?\b/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function normalizeSpecialisations(input: unknown): string[] {
+    if (!Array.isArray(input)) return [];
+    const generic = new Set([
+        'service',
+        'services',
+        'home services',
+        'contractor',
+        'trade',
+        'trades',
+        'maintenance',
+        'general repairs',
+    ]);
+    const seen = new Set<string>();
+    const out: string[] = [];
+
+    for (const raw of input) {
+        if (typeof raw !== 'string') continue;
+        const cleaned = raw.trim().replace(/\s+/g, ' ').replace(/[.,;:]+$/g, '');
+        if (!cleaned) continue;
+        const title = toTitleCase(cleaned);
+        const key = canonicalServiceKey(title);
+        if (!key || generic.has(key) || key.length < 4 || key.length > 60) continue;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        out.push(title);
+        if (out.length >= 8) break;
+    }
+    return out;
+}
+
+function toSentence(value: string): string {
+    const cleaned = value.trim().replace(/\s+/g, ' ');
+    if (!cleaned) return '';
+    const first = cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+    return /[.!?]$/.test(first) ? first : `${first}.`;
+}
+
+function normalizeHighlights(input: unknown): string[] {
+    if (!Array.isArray(input)) return [];
+    const seen = new Set<string>();
+    const out: string[] = [];
+    for (const raw of input) {
+        if (typeof raw !== 'string') continue;
+        const sentence = toSentence(raw);
+        if (!sentence) continue;
+        const key = sentence
+            .toLowerCase()
+            .replace(/[^a-z0-9\s]/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+        if (!key || seen.has(key)) continue;
+        seen.add(key);
+        out.push(sentence);
+        if (out.length >= 5) break;
+    }
+    return out;
+}
+
 // ── Image classification ──────────────────────────────────────────────────────
 
 type ImageCategory =
@@ -265,7 +338,7 @@ ${params.reviewsText || '(none)'}
 Return ONLY valid JSON, no markdown:
 {
   "bio": "2-3 factual sentences: what they do, where, what sets them apart. British English. Max 300 chars. No hollow phrases.",
-  "specialisations": ["up to 8 specific services from actual content — noun phrases like 'burst pipe repair', not 'plumbing'"],
+  "specialisations": ["3-8 specific homeowner-facing services only. Format each as Title Case, max 4 words, no punctuation suffix, and no generic category-only terms (e.g. avoid 'Plumbing'). Keep one canonical phrase per service (no variants like 'Geyser Repair' and 'Hot Water Cylinder Repair')."],
   "years_experience": null,
   "years_in_business": null,
   "founder_or_key_person": null,
@@ -273,7 +346,7 @@ Return ONLY valid JSON, no markdown:
   "certifications": ["specific accreditations/memberships only — e.g. 'NHBRC Registered', 'PIRB Member'. Max 8."],
   "response_profile": "One sentence on responsiveness from reviews. Max 100 chars. Empty string if unclear.",
   "website_quality": "high|medium|low|none",
-  "highlights": ["3-5 concrete differentiators a homeowner cares about — emergency availability, qualifications, guarantees, turnaround. Never generic."],
+  "highlights": ["3-5 concrete differentiators a homeowner cares about. Each must be one full sentence in British English ending with punctuation. Never generic."],
   "honest_note": null,
   "review_summary": "Exactly 2 sentences from reviews. Max 140 chars total. British English. Warm, direct, no business name, no numbers.",
   "customer_review_summary": "3-5 sentences: overall tone, consistent praise, recurring issues if any. No business name or ratings.",
@@ -284,6 +357,7 @@ Return ONLY valid JSON, no markdown:
 Rules (British English throughout):
 - years_in_business: integer from founding year or stated experience ('since 1998' → 28, '15 years in the industry' → 15). null if absent.
 - founder_or_key_person: owner/founder name anywhere in content. null if absent.
+- specialisations: strict noun phrases only; Title Case output; remove near-duplicate wording and keep the clearest canonical phrase.
 - highlights: scan for emergency callouts, pricing, qualifications, equipment, guarantees, turnaround times. Never use hollow phrases.
 - honest_note: one useful homeowner caveat — e.g. area limitations, commercial-focus, limited reviews. null if nothing relevant.
 - review_summary: hard cap 140 chars; trim to a sentence boundary if needed.`.trim();
@@ -568,10 +642,13 @@ export async function enrichProvider(
     }
 
     // Map combined output back to the shapes previously returned by separate calls.
+    const normalizedSpecialisations = normalizeSpecialisations(combined?.specialisations ?? []);
+    const normalizedHighlights = normalizeHighlights(combined?.highlights ?? []);
+
     const enrichment: AiEnrichmentOutput | null = combined
         ? {
               bio: combined.bio,
-              specialisations: combined.specialisations,
+              specialisations: normalizedSpecialisations,
               years_experience: combined.years_experience,
               service_areas: combined.service_areas,
               certifications: combined.certifications,
@@ -616,7 +693,7 @@ export async function enrichProvider(
             // R11: Extended fields
             years_in_business: combined?.years_in_business ?? null,
             founder_or_key_person: combined?.founder_or_key_person ?? null,
-            highlights: combined?.highlights?.length ? combined.highlights : null,
+            highlights: normalizedHighlights.length ? normalizedHighlights : null,
             honest_note: combined?.honest_note ?? null,
             cache_version: 1,
             updated_at: now,
@@ -641,7 +718,7 @@ export async function enrichProvider(
             specialisations: enrichment?.specialisations ?? [],
             service_areas: enrichment?.service_areas ?? [],
             certifications: enrichment?.certifications ?? [],
-            highlights: combined?.highlights?.length ? combined.highlights : null,
+            highlights: normalizedHighlights.length ? normalizedHighlights : null,
             honest_note: combined?.honest_note ?? null,
             years_in_business: combined?.years_in_business ?? null,
             founder_or_key_person: combined?.founder_or_key_person ?? null,

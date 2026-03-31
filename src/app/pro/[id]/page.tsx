@@ -69,6 +69,20 @@ function isUuid(value: string): boolean {
     return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
 
+function toTitleCaseLabel(text: string): string {
+    const trimmed = text.trim().replace(/\s+/g, ' ');
+    if (!trimmed) return '';
+    const upperTokens = new Set(['ac', 'cctv', 'tv', 'hvac', 'gps', 'wifi', 'dc', 'db']);
+    return trimmed
+        .split(' ')
+        .map((word) => {
+            const clean = word.toLowerCase();
+            if (upperTokens.has(clean)) return clean.toUpperCase();
+            return clean.charAt(0).toUpperCase() + clean.slice(1);
+        })
+        .join(' ');
+}
+
 export default async function ProPage({ params }: PageProps) {
     const rawId = (await params).id;
     const id = typeof rawId === 'string' ? decodeURIComponent(rawId).trim() : '';
@@ -514,7 +528,7 @@ export default async function ProPage({ params }: PageProps) {
                                             variant="secondary"
                                             className="rounded-full text-xs font-medium"
                                         >
-                                            {label}
+                                            {toTitleCaseLabel(label)}
                                         </Badge>
                                     ))}
                                 </div>

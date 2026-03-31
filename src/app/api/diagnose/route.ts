@@ -14,6 +14,7 @@ import {
 const ALLOWED_IMAGE_ORIGINS = [
     process.env.NEXT_PUBLIC_SUPABASE_URL,
 ].filter((s): s is string => typeof s === 'string' && s.length > 0);
+const MAX_DIAGNOSE_IMAGE_BYTES = 2 * 1024 * 1024; // 2MB guardrail for model payload cost.
 
 function isAllowedImageUrl(url: string): boolean {
     try {
@@ -266,6 +267,23 @@ function enforceLanguageStyleInJson(text: string): string {
     }
 }
 
+function enforceUrgencyKey(text: string): string {
+    const jsonMatch = text.match(/<json>([\s\S]*?)<\/json>/i);
+    if (!jsonMatch?.[1]) return text;
+    try {
+        const parsed = JSON.parse(jsonMatch[1]) as Record<string, unknown>;
+        const allowed = new Set(['immediate', 'urgent', 'soon', 'planned']);
+        const current =
+            typeof parsed.urgency_key === 'string'
+                ? parsed.urgency_key.trim().toLowerCase()
+                : '';
+        parsed.urgency_key = allowed.has(current) ? current : 'soon';
+        return text.replace(jsonMatch[0], `<json>${JSON.stringify(parsed)}</json>`);
+    } catch {
+        return text;
+    }
+}
+
 export async function POST(req: NextRequest) {
     // ── Rate limit ─────────────────────────────────────────────────────────────
     const limited = checkRateLimit(req, 'diagnose');
@@ -492,6 +510,8 @@ export async function POST(req: NextRequest) {
                 const base64Data = img.split(',')[1];
                 const mimeType = img.split(';')[0].split(':')[1];
                 if (!base64Data || !mimeType) return null;
+                const approxBytes = Math.floor((base64Data.length * 3) / 4);
+                if (approxBytes > MAX_DIAGNOSE_IMAGE_BYTES) return null;
                 return { inlineData: { data: base64Data, mimeType } };
             }
 
@@ -501,6 +521,7 @@ export async function POST(req: NextRequest) {
                 if (!res.ok) return null;
                 const mimeType = res.headers.get('content-type') || 'image/jpeg';
                 const bytes = await res.arrayBuffer();
+                if (bytes.byteLength > MAX_DIAGNOSE_IMAGE_BYTES) return null;
                 const base64Data = arrayBufferToBase64(bytes);
                 return { inlineData: { data: base64Data, mimeType } };
             } catch {
@@ -642,13 +663,21 @@ Analyse this description and provide a diagnosis. Output <thought> (2–3 short 
 
             const hasImagesToAnalyse = imageParts.length > 0;
             const userTextQuery = (textQuery as string | undefined)?.trim() || '';
+            /** First-image requests previously omitted textQuery entirely — user corrections were invisible to the model. */
+            const userWordsPriority =
+                userTextQuery.length > 0
+                    ? `USER'S OWN WORDS ABOUT THE ISSUE (read first; if these disagree with a visual guess, trust the user on equipment type and job context):\n${JSON.stringify(userTextQuery)}\n\n`
+                    : '';
             const imagePrompt = !history?.length
                 ? hasUserContext
                     ? instructionPrefix +
-                      `The user selected "${userSelectedTrade.diagnosis}" (${userSelectedTrade.trade}) and has now uploaded ${imageParts.length > 1 ? 'these images' : 'this image'}. Analyse quickly.
+                      userWordsPriority +
+                      `The user selected "${userSelectedTrade.diagnosis}" (${userSelectedTrade.trade}) and has now uploaded ${imageParts.length > 1 ? 'these images' : 'this image'}. If their words above contradict that selection or the look of the photo (e.g. "it's a borehole pump not a pool pump", "actually irrigation"), you MUST set diagnosis, trade, trade_detail, and action_required to match what they said. Analyse quickly.
 
 CRITICAL: Output <thought> FIRST (2–3 short sentences), then </thought>, then <json>. Never skip the thought block.`
-                    : instructionPrefix + `Analyse ${imageParts.length > 1 ? 'these images' : 'this image'}.
+                    : instructionPrefix +
+                      userWordsPriority +
+                      `Analyse ${imageParts.length > 1 ? 'these images' : 'this image'}.
 
 CRITICAL: Output <thought> FIRST (2–3 short sentences about the likely problem only in plain language). Never skip the thought block; the user sees it in real time.`
                 : hasImagesToAnalyse
@@ -758,14 +787,14 @@ CRITICAL: Output <thought> FIRST (2–3 short sentences about the likely problem
                             /<thought>([\s\S]*?)<\/thought>/i,
                             (_m, t) => `<thought>${stripFillerSentenceStarts(String(t || ''))}</thought>`
                         );
-                        const adjusted = enforceLanguageStyleInJson(
+                        const adjusted = enforceUrgencyKey(enforceLanguageStyleInJson(
                             enforceUnsupportedHomeServiceResponse(
                                 enforceUnrelatedImageResponse(
                                     enforceTradeFromServiceCatalog(withThoughtStyle, serviceList)
                                 ),
                                 serviceList
                             )
-                        );
+                        ));
                         controller.enqueue(encoder.encode(adjusted));
                     } catch (e) {
                         controller.error(e);
@@ -858,14 +887,14 @@ CRITICAL: Output <thought> FIRST (2–3 short sentences about the likely problem
                 /<thought>([\s\S]*?)<\/thought>/i,
                 (_m, t) => `<thought>${stripFillerSentenceStarts(String(t || ''))}</thought>`
             );
-            const adjusted = enforceLanguageStyleInJson(
+            const adjusted = enforceUrgencyKey(enforceLanguageStyleInJson(
                 enforceUnsupportedHomeServiceResponse(
                     enforceUnrelatedImageResponse(
                         enforceTradeFromServiceCatalog(withThoughtStyle, serviceList)
                     ),
                     serviceList
                 )
-            );
+            ));
             return new Response(adjusted, {
                 headers: {
                     'Content-Type': 'text/plain; charset=utf-8',

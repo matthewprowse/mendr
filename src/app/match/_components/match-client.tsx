@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { toWhatsAppPhone } from '@/lib/utils';
 import { setLastConversationIdForWhatsApp } from '@/lib/whatsapp-prefill';
-import { ArrowLeft, ArrowRight, Star } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Car, Loader2, Star } from 'lucide-react';
 import { toast } from 'sonner';
 import { FlowStepHeader } from '@/components/flow-header';
 import { Input } from '@/components/ui/input';
@@ -21,11 +21,11 @@ import {
     fetchEnrichmentApi,
     restoreProviderTokenApi,
 } from '@/features/match/api/client';
-import { ReportCard } from '@/app/chat/_components/report-card';
 import type { EnrichmentCacheEntry } from '@/app/api/enrich/get/route';
 import { useMatchConversationContext } from '@/features/match/hooks/useMatchConversationContext';
 import { useMatchProviders } from '@/features/match/hooks/useMatchProviders';
 import { useMatchMap } from '@/features/match/hooks/useMatchMap';
+import { loadMatchPageCache, saveMatchPageCache } from '@/features/match/cache/match-page-cache';
 
 const RADIUS_OPTIONS_KM = [5, 10, 20, 50] as const;
 
@@ -52,11 +52,43 @@ function formatProviderAddress(raw: string | null | undefined): string {
     return parts.join(', ');
 }
 
-function profileCompletenessLabel(level: number): string {
-    if (level >= 3) return 'Verified Profile';
-    if (level >= 2) return 'Detailed Profile';
-    if (level >= 1) return 'Basic Profile';
-    return 'Listing Profile';
+function enrichmentEntryForProvider(
+    cache: Record<string, EnrichmentCacheEntry>,
+    provider: MatchProvider
+): EnrichmentCacheEntry | undefined {
+    const byPlaceId = cache[provider.placeId];
+    if (byPlaceId) return byPlaceId;
+    const raw = (provider.place_id ?? provider.placeId.replace(/^places\//, '')).trim();
+    if (raw) return cache[raw];
+    return undefined;
+}
+
+function hasEnrichedSummary(
+    cache: Record<string, EnrichmentCacheEntry>,
+    provider: MatchProvider | null
+): boolean {
+    if (!provider) return false;
+    const entry = enrichmentEntryForProvider(cache, provider);
+    const summary = (entry?.reviewSummary ?? '').trim();
+    return summary.length > 0;
+}
+
+function sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** Keep summary concise and avoid repeating provider name at the start. */
+function formatCustomerSummary(summary: string, providerName: string): string {
+    if (!summary?.trim()) return summary || '';
+    let text = summary.trim();
+    const name = (providerName || '').trim();
+    if (name) {
+        const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+');
+        text = text.replace(new RegExp(`^${escaped}[\\s.,]+`, 'i'), '').trim();
+    }
+    const sentences = text.split(/(?<=[.!?])\s+/).filter(Boolean);
+    if (sentences.length <= 5) return text;
+    return sentences.slice(0, 5).join(' ').trim();
 }
 
 export function MatchClient({ conversationId: initialConversationId }: { conversationId?: string }) {
@@ -86,6 +118,7 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
         companyIndex,
         setCompanyIndex,
         isProvidersLoading,
+        isLoadingMoreForExpandedRadius,
         refreshProvidersForLocation,
     } = useMatchProviders({
         searchRadiusMeters,
@@ -107,9 +140,58 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
     // Enrichment cache: keyed by Google Place ID
     const [enrichmentCache, setEnrichmentCache] = useState<Record<string, EnrichmentCacheEntry>>({});
     const [isEnrichmentLoading, setIsEnrichmentLoading] = useState(false);
+    const [isDetailsWaiting, setIsDetailsWaiting] = useState(false);
+    const [detailsWaitingProviderName, setDetailsWaitingProviderName] = useState<string>('');
     const enrichmentQueuedRef = useRef<string>('');
+    const hydratedFromCacheRef = useRef(false);
+    const skipNextAutoRefreshRef = useRef(false);
 
-    // Fire enrichment queue + fetch cache whenever the provider list changes
+    useEffect(() => {
+        if (!conversationId) return;
+        const cached = loadMatchPageCache(conversationId);
+        if (!cached) return;
+
+        hydratedFromCacheRef.current = true;
+        skipNextAutoRefreshRef.current = true;
+        setSearchRadiusKm(cached.searchRadiusKm);
+        setUserLocation(cached.userLocation);
+        setAddressInput(cached.addressInput);
+        setProviders(cached.providers);
+        setCompanyIndex((prev) => {
+            const maxIndex = Math.max(cached.providers.length, 1);
+            const requested = cached.companyIndex || prev || 1;
+            return Math.min(Math.max(requested, 1), maxIndex);
+        });
+        setEnrichmentCache(cached.enrichmentCache || {});
+        setScandioReviewCountByProviderId(cached.scandioReviewCountByProviderId || {});
+        setIsLoading(false);
+    }, [conversationId, setAddressInput, setCompanyIndex, setProviders, setUserLocation]);
+
+    useEffect(() => {
+        if (!conversationId) return;
+        saveMatchPageCache(conversationId, {
+            providers,
+            companyIndex,
+            searchRadiusKm,
+            userLocation,
+            addressInput,
+            enrichmentCache,
+            scandioReviewCountByProviderId,
+            savedAt: Date.now(),
+        });
+    }, [
+        addressInput,
+        companyIndex,
+        conversationId,
+        enrichmentCache,
+        providers,
+        scandioReviewCountByProviderId,
+        searchRadiusKm,
+        userLocation,
+    ]);
+
+    // Fire enrichment queue + fetch cache whenever the provider list changes.
+    // Also poll briefly so newly enriched summaries become visible without reload.
     useEffect(() => {
         if (providers.length === 0) return;
         const placeIds = providers.map((p) => p.placeId).filter(Boolean);
@@ -124,13 +206,33 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
             queueEnrichmentApi(placeIds, trade || undefined);
         });
 
-        // 2. Fetch existing cache entries for immediate display
+        // 2. Fetch existing cache entries for immediate display, then short polling.
         let cancelled = false;
         setIsEnrichmentLoading(true);
-        void fetchEnrichmentApi(placeIds).then((cache) => {
-            if (cancelled) return;
-            if (cache) setEnrichmentCache((prev) => ({ ...prev, ...cache }));
-        }).finally(() => {
+        void (async () => {
+            const mergeCache = (cache: Record<string, EnrichmentCacheEntry> | null) => {
+                if (cancelled || !cache) return;
+                setEnrichmentCache((prev) => ({ ...prev, ...cache }));
+            };
+
+            const initial = await fetchEnrichmentApi(placeIds);
+            mergeCache(initial);
+
+            const MAX_POLL_ROUNDS = 10;
+            for (let round = 0; round < MAX_POLL_ROUNDS; round += 1) {
+                if (cancelled) break;
+                await sleep(2000);
+                if (cancelled) break;
+                const pendingProviders = providers.filter(
+                    (p) => !hasEnrichedSummary(enrichmentCache, p)
+                );
+                if (pendingProviders.length === 0) break;
+                const pendingIds = pendingProviders.map((p) => p.placeId).filter(Boolean);
+                if (pendingIds.length === 0) break;
+                const next = await fetchEnrichmentApi(pendingIds);
+                mergeCache(next);
+            }
+        })().finally(() => {
             if (!cancelled) setIsEnrichmentLoading(false);
         });
 
@@ -138,7 +240,7 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
             cancelled = true;
         };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [providers]);
+    }, [providers, enrichmentCache]);
 
     useEffect(() => {
         const pid = selectedProvider?.providerId;
@@ -215,7 +317,10 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
                     !Number.isFinite(geo.lng) ||
                     (typeof geo.address !== 'string' && typeof geo.address !== 'undefined')
                 ) {
-                    toast.error(geo?.error || 'Failed to find that address');
+                    toast.error(
+                        geo?.error ||
+                            'We could not find that address. Try street and suburb, for example "12 Main Road, Claremont".'
+                    );
                     return;
                 }
 
@@ -242,6 +347,9 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
     useEffect(() => {
         let cancelled = false;
         const load = async () => {
+            if (hydratedFromCacheRef.current && providers.length > 0) {
+                return;
+            }
             setIsLoading(true);
             try {
                 await fetchProviders();
@@ -253,17 +361,21 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
         return () => {
             cancelled = true;
         };
-    }, [fetchProviders]);
+    }, [fetchProviders, providers.length]);
 
     useEffect(() => {
         if (!userLocation) return;
         setAddressInput(userLocation.address || `${userLocation.lat}, ${userLocation.lng}`);
     }, [userLocation]);
 
-    // Debounce radius/location changes — rapid badge clicks settle before firing.
+    // Debounce radius/location changes so rapid badge clicks settle before firing.
     useEffect(() => {
         if (!userLocation) return;
         if (isUpdatingLocation) return;
+        if (skipNextAutoRefreshRef.current) {
+            skipNextAutoRefreshRef.current = false;
+            return;
+        }
         const timer = setTimeout(() => {
             void refreshProvidersForLocation(userLocation);
         }, 300);
@@ -273,7 +385,8 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
     const goPrev = () => setCompanyIndex((v) => Math.max(1, v - 1));
     const goNext = () => setCompanyIndex((v) => Math.min(totalCompanies, v + 1));
 
-    const showBottomSkeleton = isLoading || isProvidersLoading;
+    // Keep current providers visible while we fetch more (e.g. radius expansion).
+    const showBottomSkeleton = (isLoading || isProvidersLoading) && providers.length === 0;
     const noProviders = !showBottomSkeleton && providers.length === 0;
     // Fire match_view once when providers first load.
     const matchViewFiredRef = useRef(false);
@@ -300,22 +413,73 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
         [conversationId, selectedProvider?.providerId]
     );
 
+    const openProviderDetails = useCallback(async () => {
+        if (!selectedProvider?.providerId) return;
+        const alreadyEnriched = hasEnrichedSummary(enrichmentCache, selectedProvider);
+        if (alreadyEnriched) {
+            router.push(`/pro/${encodeURIComponent(selectedProvider.providerId)}`);
+            return;
+        }
+
+        setDetailsWaitingProviderName(selectedProvider.name || 'this provider');
+        setIsDetailsWaiting(true);
+        try {
+            queueEnrichmentApi([selectedProvider.placeId], (await resolveTradeContext()).trade || undefined);
+            for (let attempt = 0; attempt < 20; attempt += 1) {
+                const cache = await fetchEnrichmentApi([selectedProvider.placeId]);
+                if (cache) {
+                    setEnrichmentCache((prev) => ({ ...prev, ...cache }));
+                    const refreshedProvider = {
+                        ...selectedProvider,
+                    };
+                    if (hasEnrichedSummary({ ...enrichmentCache, ...cache }, refreshedProvider)) {
+                        router.push(`/pro/${encodeURIComponent(selectedProvider.providerId)}`);
+                        return;
+                    }
+                }
+                await sleep(1500);
+            }
+            toast.message('We are still preparing this profile. Please try again in a moment.');
+        } finally {
+            setIsDetailsWaiting(false);
+        }
+    }, [enrichmentCache, resolveTradeContext, router, selectedProvider]);
+
+    if (isDetailsWaiting) {
+        return (
+            <main className="flex min-h-screen flex-col items-center justify-center gap-4 bg-background px-6 text-center">
+                <Loader2 className="size-7 animate-spin text-muted-foreground" aria-hidden="true" />
+                <div className="space-y-2">
+                    <h2 className="text-lg font-semibold text-foreground">
+                        Preparing Contractor Details
+                    </h2>
+                    <p className="text-sm text-muted-foreground">
+                        We are still preparing details for {detailsWaitingProviderName}. This can take a few seconds.
+                    </p>
+                </div>
+                <Button variant="secondary" onClick={() => setIsDetailsWaiting(false)}>
+                    Back to Matches
+                </Button>
+            </main>
+        );
+    }
+
     return (
         <main className="flex flex-col h-dvh pt-16">
             <FlowStepHeader step={3} onBack={() => router.back()} />
 
             <div className="flex flex-col gap-4 px-4 pt-4 flex-1 min-h-0 mb-3">
                 <div className="flex flex-col gap-1">
-                    <h1 className="text-2xl font-bold text-foreground">
-                        Recommended Matches
+                    <h1 className="text-2xl font-bold text-foreground tracking-tight">
+                        Vetted Contractors Near You
                     </h1>
                     <p className="text-sm text-muted-foreground">
-                        Top-rated providers near you, matched to your diagnosis.
+                        These contractors match your Scandio Report and are close to your address.
                     </p>
                 </div>
 
                 <Input
-                    placeholder="Enter Address"
+                    placeholder="Enter your address"
                     className="text-sm h-10 mt-3"
                     value={addressInput}
                     onChange={(e) => setAddressInput(e.target.value)}
@@ -327,7 +491,7 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
                 />
 
                 <div className="flex flex-row justify-between items-center mb-3">
-                    <label className="text-sm text-foreground font-medium">Service Radius</label>
+                    <label className="text-sm text-foreground font-medium">Search Radius</label>
                     <div className="flex flex-row items-center gap-2 overflow-x-auto">
                         {RADIUS_OPTIONS_KM.map((km) => {
                             const isActive = searchRadiusKm === km;
@@ -346,12 +510,17 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
                         })}
                     </div>
                 </div>
+                {!showBottomSkeleton && isLoadingMoreForExpandedRadius ? (
+                    <p className="text-xs text-muted-foreground -mt-1">
+                        Expanding your search radius and loading more contractors...
+                    </p>
+                ) : null}
 
                 <div className="relative flex flex-col flex-1 text-center px-4 items-center justify-center bg-secondary rounded-lg w-full overflow-hidden">
                     <div ref={mapHostRef} className="absolute inset-0 w-full h-full rounded-lg" />
                     {!userLocation || isLoading ? (
                         <p className="relative z-10 text-xs text-muted-foreground">
-                            {isLoading ? 'Finding Nearby Providers...' : null}
+                            {isLoading ? 'Finding nearby contractors...' : null}
                         </p>
                     ) : null}
                 </div>
@@ -364,18 +533,19 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
                 ) : selectedProvider ? (
                     <div className="flex flex-row gap-4 items-center justify-between truncate">
                         <p className="text-sm truncate">
-                            {formatProviderAddress(selectedProvider.address) || 'Address Not Available'}
+                            {formatProviderAddress(selectedProvider.address) || 'Address not available'}
                         </p>
-                        <span className="text-sm text-muted-foreground">
+                        <span className="text-sm text-muted-foreground inline-flex items-center gap-1.5">
+                            <Car className="size-4" aria-hidden="true" />
                             {selectedProvider.durationText
                                 ? selectedProvider.durationText.replace(/\bmin\b/gi, 'Minutes')
-                                : '—'}
+                                : 'Not available'}
                         </span>
                     </div>
                 ) : null}
             </div>
 
-            <div className="flex flex-col gap-4 p-4 w-full sticky bottom-0 z-40">
+            <div className="flex flex-col gap-4 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] w-full sticky bottom-0 z-40">
                 <div className="flex flex-row justify-between items-center">
                     <Badge variant="secondary">
                         {showBottomSkeleton ? (
@@ -390,7 +560,7 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
                         <Button
                             variant="secondary"
                             className="h-10 w-10"
-                            aria-label="Previous Provider"
+                            aria-label="Previous contractor"
                             onClick={goPrev}
                             disabled={showBottomSkeleton || companyIndex === 1}
                         >
@@ -399,7 +569,7 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
                         <Button
                             variant="secondary"
                             className="h-10 w-10"
-                            aria-label="Next Provider"
+                            aria-label="Next contractor"
                             onClick={goNext}
                             disabled={showBottomSkeleton || companyIndex === totalCompanies}
                         >
@@ -427,21 +597,17 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
                     ) : noProviders ? (
                         <div className="flex flex-col gap-4">
                             <div className="flex flex-col gap-2">
-                                <h3 className="text-lg text-foreground font-bold truncate">No matches nearby</h3>
+                                <h3 className="text-lg text-foreground font-bold truncate">No contractors found nearby</h3>
                                 <p className="text-sm text-muted-foreground">
-                                    Try adjusting your address and we&apos;ll pull a fresh set of providers.
+                                    Try updating your address and we will pull a fresh set of contractors.
                                 </p>
-                            </div>
-                            <div className="flex flex-col gap-1">
-                                <p className="text-sm text-foreground font-medium">Scandio Summary</p>
-                                <p className="text-sm text-muted-foreground">—</p>
                             </div>
                             <div className="flex flex-row gap-2">
                                 <Button variant="default" className="flex flex-1 h-10" disabled>
-                                    Contact
+                                    Contact Contractor
                                 </Button>
                                 <Button variant="ghost" className="flex flex-1 h-10" disabled>
-                                    View Details
+                                    View Profile
                                 </Button>
                             </div>
                         </div>
@@ -454,7 +620,7 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
                                 <div className="flex flex-row items-center gap-2">
                                     <Star className="size-5 text-yellow-500 fill-yellow-500" aria-hidden="true" />
                                     <p className="text-sm text-foreground font-bold">
-                                        {selectedProvider?.rating != null ? selectedProvider.rating.toFixed(1) : '—'}
+                                        {selectedProvider?.rating != null ? selectedProvider.rating.toFixed(1) : 'Not available'}
                                     </p>
                                     <p className="text-xs text-muted-foreground">
                                         {(() => {
@@ -469,7 +635,7 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
                                                     : 0;
                                             const scandioCount = scandioCountFromProvider || scandioCountFromMap;
                                             const googleCount = selectedProvider?.ratingCount ?? 0;
-                                            return `(${googleCount + scandioCount} Reviews)`;
+                                            return `(${googleCount + scandioCount} reviews)`;
                                         })()}
                                     </p>
                                     {typeof selectedProvider?.isOpen === 'boolean' ? (
@@ -481,109 +647,42 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
                                     ) : null}
                                 </div>
                             </div>
-                            <div className="flex flex-col gap-1">
-                                <p className="text-sm text-foreground font-medium">Scandio Summary</p>
-                                {(() => {
-                                    const reviewSummary = selectedProvider
-                                        ? (enrichmentCache[selectedProvider.placeId]?.reviewSummary ?? null)
-                                        : null;
-                                    if (reviewSummary?.trim()) {
-                                        return (
-                                            <p
-                                                className="text-sm text-muted-foreground"
-                                                style={{
-                                                    display: '-webkit-box',
-                                                    WebkitLineClamp: 4 as any,
-                                                    WebkitBoxOrient: 'vertical',
-                                                    overflow: 'hidden',
-                                                }}
-                                            >
-                                                {reviewSummary}
-                                            </p>
-                                        );
-                                    }
-                                    return (
-                                        <div className="flex flex-col gap-1">
-                                            <Skeleton className="h-4 w-full" />
-                                            <Skeleton className="h-4 w-3/4" />
-                                        </div>
-                                    );
-                                })()}
-                            </div>
 
-                            {/* Enrichment fields — shimmer until cache is fetched */}
                             {(() => {
-                                const enrich = selectedProvider
-                                    ? enrichmentCache[selectedProvider.placeId]
-                                    : undefined;
-                                const showEnrichShimmer =
-                                    isEnrichmentLoading && !enrich && selectedProvider?.website;
-
-                                if (showEnrichShimmer) {
-                                    return (
-                                        <div className="flex flex-col gap-2">
-                                            <Skeleton className="h-4 w-full" />
-                                            <Skeleton className="h-4 w-5/6" />
-                                            <div className="flex flex-row gap-1 flex-wrap mt-1">
-                                                <Skeleton className="h-5 w-20 rounded-full" />
-                                                <Skeleton className="h-5 w-16 rounded-full" />
-                                                <Skeleton className="h-5 w-24 rounded-full" />
-                                            </div>
-                                        </div>
-                                    );
-                                }
-
-                                if (!enrich) return null;
+                                if (!selectedProvider) return null;
+                                const enrich = enrichmentEntryForProvider(
+                                    enrichmentCache,
+                                    selectedProvider
+                                );
+                                const scandioSummary = (enrich?.reviewSummary ?? '').trim();
+                                const fallbackSummary = (selectedProvider.summary ?? '').trim();
+                                const displaySummary = formatCustomerSummary(
+                                    scandioSummary || fallbackSummary,
+                                    selectedProvider.name
+                                );
+                                const pendingText = isEnrichmentLoading
+                                    ? 'Scandio summary is being prepared now.'
+                                    : 'Scandio summary will appear once ready.';
 
                                 return (
-                                    <div className="flex flex-col gap-2">
-                                        <Badge
-                                            variant="secondary"
-                                            className="w-fit text-xs rounded-full font-normal"
+                                    <div className="flex flex-col gap-1">
+                                        <p className="text-sm text-foreground font-medium">
+                                            Why Scandio Matched Them
+                                        </p>
+                                        <p
+                                            className="text-sm text-muted-foreground"
+                                            style={{
+                                                display: '-webkit-box',
+                                                WebkitLineClamp: 4 as any,
+                                                WebkitBoxOrient: 'vertical',
+                                                overflow: 'hidden',
+                                            }}
                                         >
-                                            {profileCompletenessLabel(enrich.profileCompleteness ?? 0)}
-                                        </Badge>
-                                        {enrich.bio?.trim() ? (
-                                            <p
-                                                className="text-xs text-muted-foreground"
-                                                style={{
-                                                    display: '-webkit-box',
-                                                    WebkitLineClamp: 3 as any,
-                                                    WebkitBoxOrient: 'vertical',
-                                                    overflow: 'hidden',
-                                                }}
-                                            >
-                                                {enrich.bio}
-                                            </p>
-                                        ) : null}
-                                        {enrich.specialisations.length > 0 ? (
-                                            <div className="flex flex-row gap-1 flex-wrap">
-                                                {enrich.specialisations.slice(0, 4).map((s) => (
-                                                    <Badge
-                                                        key={s}
-                                                        variant="secondary"
-                                                        className="text-xs rounded-full font-normal"
-                                                    >
-                                                        {s}
-                                                    </Badge>
-                                                ))}
-                                            </div>
-                                        ) : null}
-                                        {enrich.hasWorkPhotos ? (
-                                            <Badge
-                                                variant="secondary"
-                                                className="w-fit text-xs rounded-full font-normal"
-                                            >
-                                                Work photos available
-                                            </Badge>
-                                        ) : null}
+                                            {displaySummary || pendingText}
+                                        </p>
                                     </div>
                                 );
                             })()}
-
-                            {conversationId && (
-                                <ReportCard conversationId={conversationId} />
-                            )}
 
                             <div className="flex flex-row gap-2">
                                 <Popover open={contactOpen} onOpenChange={setContactOpen}>
@@ -593,7 +692,7 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
                                             className="flex flex-1 h-10"
                                             disabled={!selectedProvider}
                                         >
-                                            Contact
+                                            Contact Contractor
                                         </Button>
                                     </PopoverTrigger>
                                     <PopoverContent
@@ -623,7 +722,7 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
                                                 WhatsApp
                                             </Button>
                                             <p className="text-xs text-muted-foreground text-center">
-                                                Start the conversation on WhatsApp, phone, or send them an email.
+                                                Start on WhatsApp, call them, or send an email.
                                             </p>
                                             <div className="flex flex-row gap-2">
                                                 <Button
@@ -662,13 +761,11 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
                                     variant="ghost"
                                     className="flex flex-1 h-10"
                                     onClick={() => {
-                                        if (!selectedProvider?.providerId) return;
-                                        // Pro profile route expects a path param (/pro/[id]) using providers.id.
-                                        router.push(`/pro/${encodeURIComponent(selectedProvider.providerId)}`);
+                                        void openProviderDetails();
                                     }}
                                     disabled={!selectedProvider?.providerId}
                                 >
-                                    View Details
+                                    View Profile
                                 </Button>
                             </div>
                         </>

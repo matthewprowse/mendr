@@ -14,11 +14,26 @@ import { getSupabase } from '@/lib/supabase';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import { DiagnosisMetaPanel } from '@/components/diagnosis-meta-panel';
 import type { DiagnosisData } from '@/app/chat/_components/types';
-import { toast } from 'sonner';
 import { FlowStepHeader } from '@/components/flow-header';
+import { DiagnosisLeaveDialog } from '@/components/diagnosis-leave-dialog';
+import { cleanThoughtSentenceStarts, splitDetailAndHazard } from '@/lib/diagnosis-display';
+import { createClientId } from '@/lib/client-random-id';
+
+const URGENCY_LABELS: Record<string, string> = {
+    immediate: 'Immediate',
+    urgent: 'Urgent',
+    soon: 'Soon',
+    planned: 'Planned',
+};
+
+const DIAGNOSIS_MAX_RETRIES = 3;
+
+function sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 export default function WelcomePage({ conversationId }: { conversationId?: string }) {
     const router = useRouter();
@@ -38,11 +53,18 @@ export default function WelcomePage({ conversationId }: { conversationId?: strin
     const [diagnosisDetailText, setDiagnosisDetailText] = useState('');
     const [hazardText, setHazardText] = useState('');
     const [tradeLabel, setTradeLabel] = useState('');
+    const [tradeDetailLabel, setTradeDetailLabel] = useState('');
+    const [urgencyKey, setUrgencyKey] = useState<'immediate' | 'urgent' | 'soon' | 'planned'>('soon');
+    const [requiresClarification, setRequiresClarification] = useState(false);
+    const [actionRequiredRaw, setActionRequiredRaw] = useState('');
     const [serviceCatalog, setServiceCatalog] = useState<string[]>([]);
     const [isDiagnosing, setIsDiagnosing] = useState(false);
+    const [isDiagnosingRetrying, setIsDiagnosingRetrying] = useState(false);
+    const [diagnosisFailureMessage, setDiagnosisFailureMessage] = useState<string | null>(null);
     const [isPageLoading, setIsPageLoading] = useState(true);
     const didRunDiagnosisRef = useRef<string | null>(null);
     const [imageSrc, setImageSrc] = useState<string | null>(null);
+    const [leaveDialogOpen, setLeaveDialogOpen] = useState(false);
 
     const parseDiagnosisFromResponse = (text: string): DiagnosisData | null => {
         const jsonBlockMatch = text.match(/<json>([\s\S]*?)<\/json>/i);
@@ -83,6 +105,13 @@ export default function WelcomePage({ conversationId }: { conversationId?: strin
                     : typeof parsed.tradeDetail === 'string'
                       ? parsed.tradeDetail
                       : '';
+            const urgencyRaw =
+                typeof parsed.urgency_key === 'string'
+                    ? parsed.urgency_key
+                    : typeof parsed.urgencyKey === 'string'
+                      ? parsed.urgencyKey
+                      : '';
+            const urgency_key = urgencyRaw.trim().toLowerCase();
 
             return {
                 // Preserve all other fields, but ensure the required strings exist.
@@ -95,6 +124,13 @@ export default function WelcomePage({ conversationId }: { conversationId?: strin
                 message: message || undefined,
                 estimated_cost,
                 trade_detail: trade_detailRaw.trim().length > 0 ? trade_detailRaw : trade,
+                urgency_key:
+                    urgency_key === 'immediate' ||
+                    urgency_key === 'urgent' ||
+                    urgency_key === 'soon' ||
+                    urgency_key === 'planned'
+                        ? urgency_key
+                        : 'soon',
             };
         } catch {
             // ignore
@@ -123,46 +159,6 @@ export default function WelcomePage({ conversationId }: { conversationId?: strin
         return '';
     };
 
-    const cleanThoughtSentenceStarts = (text: string): string => {
-        const fillers = /^[("'`\s-]*(a|an|the|this|it|there)\b[\s,:-]*/i;
-        return text
-            .split(/(?<=[.!?])\s+/)
-            .map((s) => s.trim())
-            .filter(Boolean)
-            .map((s) => {
-                const cleaned = s.replace(fillers, '').trim();
-                if (!cleaned) return s;
-                return cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
-            })
-            .join(' ')
-            .trim();
-    };
-
-    const splitDetailAndHazard = (text: string): { detail: string; hazard: string } => {
-        const raw = (text || '').trim();
-        if (!raw) return { detail: '', hazard: '' };
-
-        const sentences = raw
-            .split(/(?<=[.!?])\s+/)
-            .map((s) => s.trim())
-            .filter(Boolean);
-
-        const hazardPattern =
-            /\b(avoid|do not|don't|dont|never|risk|danger|unsafe|shock|fire|flood|leak|gas|switch off|turn off|isolate|unplug|stop using)\b/i;
-
-        const hazardSentences = sentences.filter((s) => hazardPattern.test(s));
-        if (hazardSentences.length === 0) {
-            return { detail: raw, hazard: '' };
-        }
-
-        const hazardSet = new Set(hazardSentences);
-        const detailSentences = sentences.filter((s) => !hazardSet.has(s));
-        return {
-            detail: detailSentences.join(' ').trim(),
-            hazard: hazardSentences.slice(0, 3).join(' ').trim(),
-        };
-    };
-
     const runInitialDiagnosis = useCallback(
         async (img: string, prompt: string, selectedService: string | null) => {
             const cid = conversationId ?? null;
@@ -171,111 +167,157 @@ export default function WelcomePage({ conversationId }: { conversationId?: strin
             if (didRunDiagnosisRef.current === cid) return null;
             didRunDiagnosisRef.current = cid;
             setIsDiagnosing(true);
+            setIsDiagnosingRetrying(false);
+            setDiagnosisFailureMessage(null);
             try {
-                let catalog = serviceCatalog;
-                if (catalog.length === 0) {
-                    const { data } = await supabase
-                        .from('services')
-                        .select('label')
-                        .eq('active', true)
-                        .order('sort_order', { ascending: true });
-                    catalog = Array.isArray(data)
-                        ? data
-                              .map((r: any) => String(r?.label ?? '').trim())
-                              .filter((x: string) => x.length > 0)
-                        : [];
-                    if (catalog.length > 0) setServiceCatalog(catalog);
-                }
-                if (catalog.length === 0) {
-                    toast.error('Could not load services catalog.');
-                    return null;
-                }
-
-                const res = await fetch('/api/diagnose', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    image: img,
-                    serviceCatalog: catalog,
-                    ...(prompt.trim() ? { textQuery: prompt.trim() } : {}),
-                    ...(selectedService
-                        ? {
-                              userSelectedTrade: {
-                                  trade: selectedService,
-                                  diagnosis: `${selectedService} services`,
-                              },
-                          }
-                        : {}),
-                }),
-                });
-
-                const text = await res.text();
-                if (!res.ok) {
-                    try {
-                        const parsed = JSON.parse(text);
-                        if (parsed?.error) toast.error(String(parsed.error));
-                    } catch {
-                        // ignore parse failures
+                for (let attempt = 1; attempt <= DIAGNOSIS_MAX_RETRIES; attempt += 1) {
+                    setIsDiagnosingRetrying(attempt > 1);
+                    let catalog = serviceCatalog;
+                    if (catalog.length === 0) {
+                        const { data } = await supabase
+                            .from('services')
+                            .select('label')
+                            .eq('active', true)
+                            .order('sort_order', { ascending: true });
+                        catalog = Array.isArray(data)
+                            ? data
+                                  .map((r: any) => String(r?.label ?? '').trim())
+                                  .filter((x: string) => x.length > 0)
+                            : [];
+                        if (catalog.length > 0) setServiceCatalog(catalog);
                     }
-                    return null;
+                    if (catalog.length === 0) {
+                        if (attempt < DIAGNOSIS_MAX_RETRIES) {
+                            await sleep(500 * attempt);
+                            continue;
+                        }
+                        setDiagnosisFailureMessage(
+                            'We could not load the service list for your Scandio Report. Please retry now.'
+                        );
+                        return null;
+                    }
+
+                    const res = await fetch('/api/diagnose', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            image: img,
+                            serviceCatalog: catalog,
+                            ...(prompt.trim() ? { textQuery: prompt.trim() } : {}),
+                            ...(selectedService
+                                ? {
+                                      userSelectedTrade: {
+                                          trade: selectedService,
+                                          diagnosis: `${selectedService} services`,
+                                      },
+                                  }
+                                : {}),
+                        }),
+                    });
+
+                    const text = await res.text();
+                    if (!res.ok) {
+                        // Quota/rate-limit should surface immediately; retries won't help.
+                        if (res.status === 429) {
+                            try {
+                                const parsed = JSON.parse(text);
+                                setDiagnosisFailureMessage(
+                                    String(
+                                        parsed?.message ||
+                                            parsed?.error ||
+                                            'Scandio is busy right now. Please try again shortly.'
+                                    )
+                                );
+                            } catch {
+                                setDiagnosisFailureMessage(
+                                    'Scandio is busy right now. Please try again shortly.'
+                                );
+                            }
+                            return null;
+                        }
+                        if (attempt < DIAGNOSIS_MAX_RETRIES) {
+                            await sleep(700 * attempt);
+                            continue;
+                        }
+                        setDiagnosisFailureMessage(
+                            'We could not finish your Scandio Report automatically. Please retry now.'
+                        );
+                        return null;
+                    }
+
+                    const diag = parseDiagnosisFromResponse(text);
+                    if (!diag) {
+                        if (attempt < DIAGNOSIS_MAX_RETRIES) {
+                            await sleep(700 * attempt);
+                            continue;
+                        }
+                        setDiagnosisFailureMessage(
+                            'We could not read that response correctly. Please retry now.'
+                        );
+                        return null;
+                    }
+
+                    const thoughtFromJson =
+                        Array.isArray((diag as any)?.image_descriptions) &&
+                        typeof (diag as any).image_descriptions[0] === 'string'
+                            ? String((diag as any).image_descriptions[0]).trim()
+                            : '';
+                    const thought =
+                        parseThoughtFromResponse(text) ||
+                        (diag.thinking ?? '').trim() ||
+                        thoughtFromJson;
+                    setThoughtText(cleanThoughtSentenceStarts(thought));
+                    const diagWithThought: DiagnosisData = { ...diag, thinking: thought };
+                    const detail =
+                        (diagWithThought.action_required ?? '').trim() ||
+                        (diagWithThought.message ?? '').trim() ||
+                        '';
+                    const split = splitDetailAndHazard(detail);
+                    setDiagnosisDetailText(split.detail);
+                    setHazardText(split.hazard);
+                    setTradeLabel((diagWithThought.trade ?? '').trim());
+                    setTradeDetailLabel((diagWithThought.trade_detail ?? '').trim());
+                    setUrgencyKey((diagWithThought.urgency_key as any) ?? 'soon');
+                    setRequiresClarification(Boolean((diagWithThought as DiagnosisData).requires_clarification));
+                    setActionRequiredRaw((diagWithThought.action_required ?? '').trim());
+                    setDiagnosisTitle(diagWithThought.diagnosis);
+                    setDiagnosisFailureMessage(null);
+
+                    try {
+                        const deviceType =
+                            typeof navigator !== 'undefined' && /Mobi|Android/i.test(navigator.userAgent)
+                                ? 'mobile'
+                                : 'desktop';
+                        await supabase
+                            .from('conversations')
+                            .upsert({
+                                id: conversationId,
+                                title: diagWithThought.diagnosis || 'New Diagnosis',
+                                image_url: img,
+                                diagnosis: diagWithThought,
+                                urgency_key: diagWithThought.urgency_key ?? null,
+                                initial_image_description: (prompt ?? '').trim() || null,
+                                device: deviceType,
+                                user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : '',
+                            })
+                            .select('id')
+                            .single();
+                    } catch {
+                        // Non-fatal: still show diagnosis even if persistence fails.
+                    }
+
+                    return diagWithThought;
                 }
-
-                const diag = parseDiagnosisFromResponse(text);
-                if (!diag) {
-                    toast.error('Could not understand the diagnosis response.');
-                    return null;
-                }
-
-                const thoughtFromJson =
-                    Array.isArray((diag as any)?.image_descriptions) &&
-                    typeof (diag as any).image_descriptions[0] === 'string'
-                        ? String((diag as any).image_descriptions[0]).trim()
-                        : '';
-                const thought =
-                    parseThoughtFromResponse(text) ||
-                    (diag.thinking ?? '').trim() ||
-                    thoughtFromJson;
-                setThoughtText(cleanThoughtSentenceStarts(thought));
-                const diagWithThought: DiagnosisData = { ...diag, thinking: thought };
-                const detail =
-                    (diagWithThought.action_required ?? '').trim() ||
-                    (diagWithThought.message ?? '').trim() ||
-                    '';
-                const split = splitDetailAndHazard(detail);
-                setDiagnosisDetailText(split.detail);
-                setHazardText(split.hazard);
-                setTradeLabel((diagWithThought.trade ?? '').trim());
-
-                setDiagnosisTitle(diagWithThought.diagnosis);
-
-                try {
-                    const deviceType =
-                        typeof navigator !== 'undefined' && /Mobi|Android/i.test(navigator.userAgent)
-                            ? 'mobile'
-                            : 'desktop';
-                    await supabase
-                        .from('conversations')
-                        .upsert({
-                            id: conversationId,
-                            title: diagWithThought.diagnosis || 'New Diagnosis',
-                            image_url: img,
-                            diagnosis: diagWithThought,
-                            initial_image_description: (prompt ?? '').trim() || null,
-                            device: deviceType,
-                            user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : '',
-                        })
-                        .select('id')
-                        .single();
-                } catch {
-                    // Non-fatal: still show title even if persistence fails.
-                }
-
-                return diagWithThought;
+                setDiagnosisFailureMessage(
+                    'We could not complete your Scandio Report right now. Please retry now.'
+                );
+                return null;
             } finally {
                 setIsDiagnosing(false);
+                setIsDiagnosingRetrying(false);
             }
         },
-        [conversationId, supabase]
+        [conversationId, serviceCatalog, supabase]
     );
 
     useEffect(() => {
@@ -333,6 +375,8 @@ export default function WelcomePage({ conversationId }: { conversationId?: strin
 
             if (existingDiagnosis?.diagnosis) {
                 setDiagnosisTitle(existingDiagnosis.diagnosis);
+                setRequiresClarification(Boolean(existingDiagnosis.requires_clarification));
+                setActionRequiredRaw((existingDiagnosis.action_required ?? '').trim());
                 const persistedThinking = (existingDiagnosis.thinking ?? '').trim();
                 const persistedImageDescriptions =
                     Array.isArray((existingDiagnosis as any)?.image_descriptions) &&
@@ -350,11 +394,15 @@ export default function WelcomePage({ conversationId }: { conversationId?: strin
                 setDiagnosisDetailText(persistedSplit.detail);
                 setHazardText(persistedSplit.hazard);
                 setTradeLabel((existingDiagnosis.trade ?? '').trim());
+                setTradeDetailLabel((existingDiagnosis.trade_detail ?? '').trim());
+                setUrgencyKey(((existingDiagnosis.urgency_key as any) ?? 'soon') as any);
                 return;
             }
 
             if (!img) {
-                toast.error('No uploaded image found for this diagnosis.');
+                setDiagnosisFailureMessage(
+                    'No uploaded photo was found for this report. Please choose a new photo.'
+                );
                 return;
             }
             const selectedService = trade.trim() || null;
@@ -385,7 +433,7 @@ export default function WelcomePage({ conversationId }: { conversationId?: strin
                 });
 
                 const finalDataUrl = isImage ? await compressImage(dataUrl) : dataUrl;
-                const conversationId = crypto.randomUUID();
+                const conversationId = createClientId();
                 setImageData(conversationId, finalDataUrl, file.name);
 
                 const qp = new URLSearchParams();
@@ -407,45 +455,126 @@ export default function WelcomePage({ conversationId }: { conversationId?: strin
     };
 
     const showSkeleton = isPageLoading || isDiagnosing;
+    const hasDiagnosisFailure = !showSkeleton && Boolean(diagnosisFailureMessage);
+    const fullDiagnosisContext = `${diagnosisTitle}\n${diagnosisDetailText}\n${thoughtText}`;
+    const mentionsNonHomePhoto =
+        /not related to home maintenance|does not appear related to a home maintenance|photo not related to home|photo does not appear related/i.test(
+            fullDiagnosisContext
+        );
+    const isUnrelatedDiagnosis =
+        diagnosisTitle.toLowerCase().includes('not related to home maintenance') ||
+        /\bphoto not related\b/i.test(diagnosisTitle) ||
+        mentionsNonHomePhoto;
     const isUnsupportedDiagnosis =
         tradeLabel.trim().toLowerCase() === 'n/a' ||
         diagnosisTitle.toLowerCase().includes('not currently supported') ||
         diagnosisTitle.toLowerCase().includes('not on scandio');
-    const isUnrelatedDiagnosis =
-        diagnosisTitle.toLowerCase().includes('not related to home maintenance');
+    /** Off-topic or non-home photo: show unrelated UX even if the model labelled it “unsupported”. */
+    const isUnsupportedOnly = isUnsupportedDiagnosis && !isUnrelatedDiagnosis;
+    const isServiceBlocked = isUnsupportedDiagnosis || isUnrelatedDiagnosis;
+
+    const scanForMatchEligibility = `${diagnosisTitle}\n${thoughtText}\n${diagnosisDetailText}\n${hazardText}`.toLowerCase();
+    const suggestsNoClearRepair =
+        /\bappears functional\b|\bno (visible |clear )?fault\b|\bno (specific |obvious )?fault\b|\bgood condition\b|\bin good (working )?order\b|\boperating normally\b|\bno repair (needed|required)\b|\bnothing (seems |looks )?wrong\b|\bunable to (identify|see) (a |any )?(fault|problem|damage)\b|\bdoes not (appear |seem )?to (need|require) (repair|work)\b|\b(system|equipment|unit|motor) appears (fine|okay|ok|normal)\b/i.test(
+            scanForMatchEligibility
+        ) &&
+        !/\b(non-functional|not functional|faulty|broken|damaged|leaking|tripping|failed|error|fault code)\b/i.test(
+            scanForMatchEligibility
+        );
+
+    const actionRequiredIsPlaceholder = /^n\/a$/i.test(actionRequiredRaw.trim());
+
+    const isMatchBlocked =
+        isServiceBlocked ||
+        hasDiagnosisFailure ||
+        requiresClarification ||
+        actionRequiredIsPlaceholder ||
+        suggestsNoClearRepair;
+
+    const needsMoreBeforeMatch = isMatchBlocked && !isServiceBlocked;
+
     const canContinueToMatch =
         !showSkeleton &&
-        !isUnsupportedDiagnosis &&
-        !isUnrelatedDiagnosis &&
+        !isMatchBlocked &&
         diagnosisTitle.trim().length > 0 &&
         !diagnosisTitle.toLowerCase().includes('diagnosing');
     const fallbackUnsupportedDetail =
         serviceCatalog.length > 0
-            ? `Issue appears outside currently supported services on Scandio. Services currently available are: ${serviceCatalog.join(', ')}. If this seems incorrect, add more information below and send it so we can reassess.`
-            : 'Issue appears outside currently supported services on Scandio. If this seems incorrect, add more information below and send it so we can reassess.';
+            ? `This job does not look like a service Scandio supports yet. Right now we support: ${serviceCatalog.join(', ')}. If that seems wrong, add more detail below and we will take another look.`
+            : 'This job does not look like a service Scandio supports yet. If that seems wrong, add more detail below and we will take another look.';
     const fallbackUnrelatedDetail =
-        'Uploaded photo does not appear related to a home maintenance issue. Please upload a clear image of the problem area and add extra information below if needed so we can reassess.';
-    const resolvedDetailText =
-        diagnosisDetailText ||
-        (isUnrelatedDiagnosis
-            ? fallbackUnrelatedDetail
-            : isUnsupportedDiagnosis
-              ? fallbackUnsupportedDetail
-              : '');
+        'This photo does not look like a home repair or maintenance issue. Share a photo of the actual problem, or tell us what is wrong below, and we will try again.';
+    /** Model sometimes returns “unsupported” boilerplate for off-topic photos; don’t show that next to ironing, etc. */
+    const unrelatedOverridesConflictingApiCopy =
+        isUnrelatedDiagnosis &&
+        (mentionsNonHomePhoto ||
+            diagnosisTitle.toLowerCase().includes('service not currently supported'));
+    const resolvedDetailText = unrelatedOverridesConflictingApiCopy
+        ? fallbackUnrelatedDetail
+        : isUnrelatedDiagnosis
+          ? diagnosisDetailText || fallbackUnrelatedDetail
+          : diagnosisDetailText || (isUnsupportedOnly ? fallbackUnsupportedDetail : '');
+
+    const diagnosisHeadline = isUnsupportedOnly
+        ? 'This Type of Job Is Not on Scandio Yet'
+        : diagnosisTitle;
+
+    const welcomeHref = trade.trim()
+        ? `/welcome?trade=${encodeURIComponent(trade.trim())}`
+        : '/welcome';
 
     return (
-        <div className="flex min-h-screen flex-col bg-background">
-            <FlowStepHeader step={2} onBack={() => router.back()} />
+        <main className="flex min-h-screen flex-col bg-background">
+            <FlowStepHeader step={2} onBack={() => setLeaveDialogOpen(true)} />
 
-            <div className={`flex flex-1 justify-center px-4 pt-20 sm:px-6 ${isAddingInfo ? 'pb-49' : 'pb-32'}`}>
+            <DiagnosisLeaveDialog
+                open={leaveDialogOpen}
+                onOpenChange={setLeaveDialogOpen}
+                onLeave={() => router.back()}
+            />
+
+            <div
+                className={`flex flex-1 justify-center px-4 pt-20 sm:px-6 ${
+                    isAddingInfo
+                        ? 'pb-[calc(13rem+env(safe-area-inset-bottom))]'
+                        : 'pb-[calc(7rem+env(safe-area-inset-bottom))]'
+                }`}
+            >
             <div className="flex w-full max-w-xl flex-col gap-6">
 
             <div className="flex flex-col gap-2">
-                <h1 className="text-2xl font-bold text-foreground">
-                    Right, Here's Something...
+                <h1 className="text-2xl font-bold text-foreground tracking-tight">
+                    {isMatchBlocked && !showSkeleton ? (
+                        isUnrelatedDiagnosis ? (
+                            <>This Photo Does Not Show a Home Repair Issue</>
+                        ) : (
+                            <>Your Scandio Report Needs a Bit More Detail</>
+                        )
+                    ) : (
+                        <>Your Scandio Report</>
+                    )}
                 </h1>
                 <p className="text-sm text-muted-foreground">
-                    What we're seeing based on your photo. You know your home better than we do, so let us know if something seems off.
+                    {hasDiagnosisFailure ? (
+                        <>We could not finish your report this time, but you can retry now.</>
+                    ) : isMatchBlocked && !showSkeleton ? (
+                        isUnrelatedDiagnosis ? (
+                            <>
+                                Scandio can only help with home maintenance faults. Share a clearer photo of the
+                                issue, or describe what is wrong below.
+                            </>
+                        ) : (
+                            <>
+                                We could not confidently match this to a trade yet. Add a bit more detail below, or
+                                go back and choose a new photo.
+                            </>
+                        )
+                    ) : (
+                        <>
+                            Here is what we found from your photo and notes. You know your home best, so tell us if
+                            anything looks off.
+                        </>
+                    )}
                 </p>
             </div>
 
@@ -463,11 +592,27 @@ export default function WelcomePage({ conversationId }: { conversationId?: strin
             ) : null}
 
             <div className="flex flex-col gap-3">
-                {showSkeleton ? <Skeleton className="h-7 w-1/2" /> : <h3 className="text-lg text-foreground font-bold">{diagnosisTitle}</h3>}
+                {showSkeleton ? (
+                    <Skeleton className="h-7 w-1/2" />
+                ) : isUnrelatedDiagnosis ? null : (
+                    <h2 className="text-lg text-foreground font-bold">{diagnosisHeadline}</h2>
+                )}
                 <div className="overflow-hidden rounded-lg border border-input bg-secondary">
                     {imageSrc ? (
                         // eslint-disable-next-line @next/next/no-img-element
-                        <img src={imageSrc} alt="" className="h-56 w-full object-cover" />
+                        <img
+                            src={imageSrc}
+                            alt={
+                                showSkeleton
+                                    ? 'Photo you shared for this diagnosis'
+                                    : isUnrelatedDiagnosis
+                                      ? 'Photo you shared'
+                                      : diagnosisHeadline
+                            }
+                            className="h-56 w-full object-cover"
+                            loading="eager"
+                            fetchPriority="high"
+                        />
                     ) : (
                         <div className="h-56 w-full" />
                     )}
@@ -477,41 +622,48 @@ export default function WelcomePage({ conversationId }: { conversationId?: strin
                         <Skeleton className="h-4 w-full" />
                         <Skeleton className="h-4 w-11/12" />
                         <Skeleton className="h-4 w-4/5" />
+                        {isDiagnosingRetrying ? (
+                            <p className="text-xs text-muted-foreground">
+                                We are retrying automatically...
+                            </p>
+                        ) : null}
                     </div>
-                ) : (
+                ) : isUnrelatedDiagnosis ? null : (
                     <p className="text-xs text-muted-foreground">{thoughtText || ''}</p>
                 )}
             </div>
 
             {showSkeleton ? (
                 <>
-                    <div className="rounded-lg border border-input p-3 space-y-4">
-                        <div className="flex items-center gap-2">
-                            <Skeleton className="h-6 w-28 rounded-full" />
-                        </div>
-                        <div className="flex flex-col gap-2">
+                    <div className="flex flex-col gap-5 sm:flex-row sm:justify-between">
+                        <div className="flex flex-1 flex-col gap-2">
+                            <Skeleton className="h-3 w-14" />
+                            <Skeleton className="h-5 w-2/3" />
                             <Skeleton className="h-4 w-full" />
-                            <Skeleton className="h-4 w-11/12" />
                         </div>
-                        <div className="flex flex-col gap-2">
-                            <Skeleton className="h-4 w-full" />
-                            <Skeleton className="h-4 w-10/12" />
-                        </div>
-                        <div className="flex flex-col gap-2">
-                            <Skeleton className="h-4 w-3/4" />
+                        <div className="flex flex-col gap-2 sm:items-end">
+                            <Skeleton className="h-3 w-16 sm:ml-auto" />
+                            <Skeleton className="h-8 w-24 rounded-full" />
                         </div>
                     </div>
                 </>
             ) : (
                 <div className="flex flex-col gap-3">
-                    {!isUnsupportedDiagnosis && !isUnrelatedDiagnosis ? (
-                        <div className="flex items-center gap-2">
-                            <Badge variant="secondary">{tradeLabel || 'Not Specified'}</Badge>
-                        </div>
+                    {!isMatchBlocked ? (
+                        <DiagnosisMetaPanel
+                            trade={tradeLabel || 'Not specified'}
+                            tradeDetail={tradeDetailLabel}
+                            urgencyKey={urgencyKey}
+                            urgencyLabel={URGENCY_LABELS[urgencyKey] ?? 'Soon'}
+                        />
                     ) : null}
 
-                    <p className="text-sm text-foreground">{resolvedDetailText}</p>
-                    {isUnsupportedDiagnosis && serviceCatalog.length > 0 ? (
+                    {hasDiagnosisFailure ? (
+                        <p className="text-sm text-foreground">{diagnosisFailureMessage}</p>
+                    ) : !isUnrelatedDiagnosis ? (
+                        <p className="text-sm text-foreground">{resolvedDetailText}</p>
+                    ) : null}
+                    {isUnsupportedOnly && serviceCatalog.length > 0 ? (
                         <p className="text-sm text-muted-foreground">
                             Supported services on Scandio: {serviceCatalog.join(', ')}.
                         </p>
@@ -524,40 +676,128 @@ export default function WelcomePage({ conversationId }: { conversationId?: strin
             </div>
 
             {!isAddingInfo ? (
-                <div className="fixed inset-x-0 bottom-0 p-4">
-                    <div className="mx-auto flex w-full max-w-xl gap-2">
-                        <Button
-                            variant="ghost"
-                            className="flex-1 h-10"
-                            disabled={showSkeleton}
-                            onClick={() => {
-                                setIsAddingInfo(true);
-                                setTimeout(() => infoTextareaRef.current?.focus(), 0);
-                            }}
-                        >
-                            Add Context
-                        </Button>
-                        <Button
-                            variant="default"
-                            className="flex-1 h-10"
-                            disabled={!canContinueToMatch}
-                            onClick={() => {
-                                if (!conversationId) return;
-                                const key = `pending_diagnosis_image_url:${conversationId}`;
-                                try { sessionStorage.removeItem(key); } catch {}
-                                try { localStorage.removeItem(key); } catch {}
-                                router.push(`/match/${encodeURIComponent(conversationId)}`);
-                            }}
-                        >
-                            Find Someone Great
-                        </Button>
+                <div className="fixed inset-x-0 bottom-0 z-40 bg-background/95 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur supports-[backdrop-filter]:bg-background/80">
+                    <div
+                        className={`mx-auto flex w-full max-w-xl ${
+                            isMatchBlocked && !showSkeleton ? 'flex-col gap-3' : 'flex-col gap-3'
+                        }`}
+                    >
+                        {isMatchBlocked && !showSkeleton ? (
+                            <>
+                                {!isUnrelatedDiagnosis && !hasDiagnosisFailure ? (
+                                    <p className="text-center text-xs leading-relaxed text-muted-foreground">
+                                        We can match you to a contractor once this lines up with a supported trade.
+                                        Add more detail if we misunderstood, or start over with a new photo.
+                                    </p>
+                                ) : null}
+                                <div className="flex gap-2">
+                                    <Button
+                                        variant="ghost"
+                                        className="flex-1 h-10"
+                                        onClick={() => router.push(welcomeHref)}
+                                    >
+                                        Choose New Photo
+                                    </Button>
+                                    <Button
+                                        variant="default"
+                                        className="flex-1 h-10"
+                                        disabled={showSkeleton}
+                                        onClick={async () => {
+                                            if (hasDiagnosisFailure) {
+                                                if (!imageSrc) return;
+                                                didRunDiagnosisRef.current = null;
+                                                setDiagnosisTitle('Diagnosing…');
+                                                await runInitialDiagnosis(
+                                                    imageSrc,
+                                                    customerInfoItems.join('\n\n').trim(),
+                                                    trade.trim() || null
+                                                );
+                                                return;
+                                            }
+                                            setIsAddingInfo(true);
+                                            setTimeout(() => infoTextareaRef.current?.focus(), 0);
+                                        }}
+                                    >
+                                        {hasDiagnosisFailure ? 'Retry Report' : 'Add More Detail'}
+                                    </Button>
+                                </div>
+                            </>
+                        ) : (
+                            <>
+                                <div className="space-y-2">
+                                    <Label htmlFor="diagnosis-refine-text" className="text-sm font-medium text-foreground">
+                                        Add More Detail (optional)
+                                    </Label>
+                                    <Textarea
+                                        id="diagnosis-refine-text"
+                                        ref={infoTextareaRef}
+                                        value={infoText}
+                                        onChange={(e) => setInfoText(e.target.value)}
+                                        disabled={showSkeleton || isDiagnosing}
+                                        className="text-sm resize-none"
+                                        rows={3}
+                                        placeholder="Example: The leak only starts when we run hot water."
+                                    />
+                                </div>
+                                <div className="flex gap-2">
+                                    <Button
+                                        variant="secondary"
+                                        className="flex-1 h-10"
+                                        disabled={!infoText.trim() || isDiagnosing || showSkeleton}
+                                        onClick={async () => {
+                                            const trimmed = infoText.trim();
+                                            if (!trimmed) return;
+                                            const nextItems = [...customerInfoItems, trimmed];
+                                            const joinedInfo = nextItems.join('\n\n').trim();
+                                            setCustomerInfoItems(nextItems);
+                                            setInfoText('');
+                                            if (conversationId) {
+                                                try {
+                                                    await supabase
+                                                        .from('conversations')
+                                                        .upsert({
+                                                            id: conversationId,
+                                                            initial_image_description: joinedInfo || null,
+                                                        })
+                                                        .select('id')
+                                                        .single();
+                                                } catch {
+                                                    // Non-fatal.
+                                                }
+                                            }
+                                            if (imageSrc) {
+                                                didRunDiagnosisRef.current = null;
+                                                setDiagnosisTitle('Diagnosing…');
+                                                await runInitialDiagnosis(imageSrc, joinedInfo, trade.trim() || null);
+                                            }
+                                        }}
+                                    >
+                                        {isDiagnosing ? 'Updating Report...' : 'Update Report'}
+                                    </Button>
+                                    <Button
+                                        variant="default"
+                                        className="flex-1 h-10"
+                                        disabled={!canContinueToMatch || isDiagnosing}
+                                        onClick={() => {
+                                            if (!conversationId) return;
+                                            const key = `pending_diagnosis_image_url:${conversationId}`;
+                                            try { sessionStorage.removeItem(key); } catch {}
+                                            try { localStorage.removeItem(key); } catch {}
+                                            router.push(`/match/${encodeURIComponent(conversationId)}`);
+                                        }}
+                                    >
+                                        Find a Contractor
+                                    </Button>
+                                </div>
+                            </>
+                        )}
                     </div>
                 </div>
             ) : (
-                <div className="fixed inset-x-0 bottom-0 p-4 bg-background">
+                <div className="fixed inset-x-0 bottom-0 z-40 bg-background/95 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur supports-[backdrop-filter]:bg-background/80">
                     <div className="mx-auto flex w-full max-w-xl flex-col gap-3">
                         <Label htmlFor="diagnosis-info-text" className="text-sm font-medium text-foreground">
-                            Add Context
+                            Add More Detail
                         </Label>
                         <Textarea
                             id="diagnosis-info-text"
@@ -613,13 +853,13 @@ export default function WelcomePage({ conversationId }: { conversationId?: strin
                                     }
                                 }}
                             >
-                                {isDiagnosing ? 'Updating…' : 'Send'}
+                                {isDiagnosing ? 'Updating Report...' : 'Update Report'}
                             </Button>
                         </div>
                     </div>
                 </div>
             )}
-        </div>
+        </main>
     );
 }
 

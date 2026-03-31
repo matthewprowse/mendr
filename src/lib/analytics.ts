@@ -5,6 +5,8 @@
  * Never throws, never delays the calling code.
  */
 
+import { createClientId } from '@/lib/client-random-id';
+
 const SESSION_KEY = 'scandio_session_id';
 
 function getSessionId(): string {
@@ -12,7 +14,7 @@ function getSessionId(): string {
     try {
         let id = sessionStorage.getItem(SESSION_KEY);
         if (!id) {
-            id = crypto.randomUUID();
+            id = createClientId();
             sessionStorage.setItem(SESSION_KEY, id);
         }
         return id;

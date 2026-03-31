@@ -7,7 +7,7 @@ export async function GET(request: NextRequest) {
     const next = searchParams.get('next') ?? '/';
 
     if (!code) {
-        return NextResponse.redirect(`${origin}/auth?error=missing_code`);
+        return NextResponse.redirect(`${origin}/?error=auth_missing_code`);
     }
 
     try {
@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
 
         if (exchangeError) {
             console.error('Auth callback exchange error:', exchangeError.message);
-            return NextResponse.redirect(`${origin}/auth?error=exchange_failed`);
+            return NextResponse.redirect(`${origin}/?error=auth_exchange_failed`);
         }
 
         const {
@@ -47,6 +47,6 @@ export async function GET(request: NextRequest) {
         return NextResponse.redirect(redirectUrl);
     } catch (err) {
         console.error('Auth callback error:', err);
-        return NextResponse.redirect(`${origin}/auth?error=server_error`);
+        return NextResponse.redirect(`${origin}/?error=auth_server_error`);
     }
 }

@@ -6,14 +6,35 @@
 
 'use client';
 
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { ImagePlus, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { FlowStepHeader } from '@/components/flow-header';
 import { trackEvent } from '@/lib/analytics';
+import { createClientId } from '@/lib/client-random-id';
+import { compressImage } from '@/lib/image-compression';
+
+const ACCEPTED_FILE_TYPES_TEXT = 'Accepted file types: JPG, JPEG, PNG, WEBP, GIF, HEIC, HEIF';
+const MAX_FILE_SIZE_TEXT = 'Max file size: 10MB';
+const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;
+
+function dataUrlToFile(dataUrl: string, fallbackName = 'upload.jpg'): File {
+    const [meta, base64] = dataUrl.split(',');
+    const mimeMatch = meta?.match(/data:(.*?);base64/);
+    const mime = mimeMatch?.[1] || 'image/jpeg';
+    const binStr = atob(base64 || '');
+    const len = binStr.length;
+    const bytes = new Uint8Array(len);
+    for (let i = 0; i < len; i += 1) bytes[i] = binStr.charCodeAt(i);
+    const ext = mime.includes('png') ? 'png' : mime.includes('webp') ? 'webp' : 'jpg';
+    const baseName = fallbackName.replace(/\.[^.]+$/, '') || 'upload';
+    return new File([bytes], `${baseName}.${ext}`, { type: mime });
+}
 
 export default function WelcomePage() {
     const router = useRouter();
@@ -29,17 +50,45 @@ export default function WelcomePage() {
     const [uploadError, setUploadError] = useState<string | null>(null);
     const [conversationId, setConversationId] = useState<string | null>(null);
     const [helpfulInfo, setHelpfulInfo] = useState('');
+    const fileInputId = 'welcome-photo-input';
+    const pageTitleRef = useRef<HTMLHeadingElement>(null);
+    const mainScrollRef = useRef<HTMLElement>(null);
+    const [showPageTitleInHeader, setShowPageTitleInHeader] = useState(false);
 
-    const canPickFile = !isUploading && !pickedPreviewUrl;
+    const canPickFile = !isUploading;
     const canContinue = !isUploading && !!conversationId && !!selectedFile;
 
+    const setPreviewUrl = (nextUrl: string | null) => {
+        if (pickedPreviewUrl?.startsWith('blob:')) {
+            URL.revokeObjectURL(pickedPreviewUrl);
+        }
+        setPickedPreviewUrl(nextUrl);
+    };
+
     const processFile = useCallback(async (file: File) => {
-        if (!file.type.startsWith('image/')) {
-            setUploadError('Please upload an image.');
+        const type = (file.type || '').toLowerCase();
+        const name = (file.name || '').toLowerCase();
+        const looksLikeImage =
+            type.startsWith('image/') || /\.(png|jpe?g|webp|gif|heic|heif|bmp|tiff?)$/i.test(name);
+        if (!looksLikeImage) {
+            setUploadError('Please upload a clear photo of the issue.');
+            return;
+        }
+        if (file.size > MAX_FILE_SIZE_BYTES) {
+            setUploadError('That photo is too large. Please use a file under 10MB.');
             return;
         }
         setIsUploading(true);
         setUploadError(null);
+
+        // Show a preview immediately so the UI never appears to "reset"
+        // while compression/processing is still running.
+        const immediatePreview = URL.createObjectURL(file);
+        setPickedFileName(file.name || 'upload');
+        setPreviewUrl(immediatePreview);
+        setConversationId(createClientId());
+        setSelectedFile(file);
+
         try {
             const dataUrl = await new Promise<string>((resolve, reject) => {
                 const reader = new FileReader();
@@ -47,10 +96,15 @@ export default function WelcomePage() {
                 reader.onerror = reject;
                 reader.readAsDataURL(file);
             });
-            setPickedFileName(file.name);
-            setPickedPreviewUrl(dataUrl);
-            setConversationId(crypto.randomUUID());
-            setSelectedFile(file);
+            const compressed = await compressImage(dataUrl);
+            const compressedFile = dataUrlToFile(compressed, file.name);
+            setPickedFileName(compressedFile.name);
+            setPreviewUrl(compressed);
+            setSelectedFile(compressedFile);
+        } catch {
+            // iPhone HEIC/HEIF images can fail canvas decoding on some browsers.
+            // Fall back to the original file so upload still works.
+            setUploadError('Using your original photo so we can keep going.');
         } finally {
             setIsUploading(false);
         }
@@ -65,157 +119,144 @@ export default function WelcomePage() {
     const clearPicked = () => {
         setConversationId(null);
         setPickedFileName(null);
-        setPickedPreviewUrl(null);
+        setPreviewUrl(null);
         setSelectedFile(null);
         setUploadError(null);
         if (inputRef.current) inputRef.current.value = '';
     };
 
+    useEffect(() => {
+        const mainEl = mainScrollRef.current;
+        const titleEl = pageTitleRef.current;
+        if (!mainEl || !titleEl) return;
+
+        const updateHeaderTitle = () => {
+            const headerHeight = 64;
+            const titleBottom = titleEl.getBoundingClientRect().bottom;
+            setShowPageTitleInHeader(titleBottom <= headerHeight);
+        };
+
+        updateHeaderTitle();
+        mainEl.addEventListener('scroll', updateHeaderTitle, { passive: true });
+        window.addEventListener('resize', updateHeaderTitle);
+
+        return () => {
+            mainEl.removeEventListener('scroll', updateHeaderTitle);
+            window.removeEventListener('resize', updateHeaderTitle);
+        };
+    }, []);
+
+    useEffect(() => {
+        const html = document.documentElement;
+        const body = document.body;
+        html.classList.add('welcome-scroll-lock');
+        body.classList.add('welcome-scroll-lock');
+
+        return () => {
+            html.classList.remove('welcome-scroll-lock');
+            body.classList.remove('welcome-scroll-lock');
+        };
+    }, []);
+
     return (
-        <div className="flex h-[100dvh] flex-col overflow-hidden bg-background">
+        <div className="h-dvh overflow-hidden overscroll-none flex flex-col bg-background">
             <FlowStepHeader
                 step={1}
-                onBack={() => {
-                    if (typeof window !== 'undefined' && window.history.length > 1) {
-                        router.back();
-                        return;
-                    }
-                    router.push('/landing');
-                }}
+                onBack={null}
+                backHref="/"
+                centerLabel={showPageTitleInHeader ? 'Start Diagnosis' : 'Scandio'}
             />
 
             {/* Hidden file input */}
             <Input
                 ref={inputRef}
-                id="welcome-photo-input"
+                id={fileInputId}
                 type="file"
                 accept="image/*"
-                className="sr-only"
+                className="absolute -left-[9999px] h-px w-px opacity-0"
+                aria-label="Choose a photo from your device"
                 onChange={handleChange}
             />
 
             {/* Scrollable content */}
-            <div className="flex flex-1 justify-center overflow-y-auto px-4 pt-20 pb-32 sm:px-6">
+            <main
+                ref={mainScrollRef}
+                className="min-h-0 flex flex-1 justify-center overflow-y-auto overscroll-contain px-4 pt-20 pb-[calc(5.5rem+env(safe-area-inset-bottom))] sm:px-6"
+            >
                 <div className="flex w-full max-w-xl flex-col gap-8">
 
                     {/* Step heading */}
                     <div className="flex flex-col gap-2">
-                        <h1 className="text-2xl font-bold text-foreground">
-                            What's Happening?
-                        </h1>
+                        <h1 ref={pageTitleRef} className="text-2xl font-bold text-foreground">Start Diagnosis</h1>
                         <p className="text-sm text-muted-foreground">
-                            You don't need to know what the problem is. Select an image for diagnosis, and we'll figure out the rest.
+                            Something acting up? Take a photo and tell us what you are seeing. We will figure out
+                            what is going on.
                         </p>
                     </div>
 
-                    {/* Photo upload area */}
-                    <div className="flex flex-col gap-3">
-                        <button
-                            type="button"
-                            disabled={!canPickFile}
-                            onClick={() => {
-                                if (!canPickFile) return;
-                                const input = inputRef.current;
-                                if (!input) return;
-                                // iOS Safari can block click() on display:none file inputs.
-                                if (typeof (input as any).showPicker === 'function') {
-                                    (input as any).showPicker();
-                                } else {
-                                    input.click();
-                                }
-                            }}
-                            onDragEnter={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                if (!canPickFile) return;
-                                setIsDragActive(true);
-                            }}
-                            onDragOver={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                if (!canPickFile) return;
-                                setIsDragActive(true);
-                            }}
-                            onDragLeave={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                setIsDragActive(false);
-                            }}
-                            onDrop={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                setIsDragActive(false);
-                                if (!canPickFile) return;
-                                const file = e.dataTransfer.files?.[0];
-                                if (file) void processFile(file);
-                            }}
-                            className={[
-                                'relative w-full overflow-hidden rounded-lg bg-secondary transition-all',
-                                'focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
-                                isDragActive ? 'ring-2 ring-ring' : 'ring-0',
-                                canPickFile
-                                    ? 'cursor-pointer'
-                                    : 'cursor-not-allowed',
-                                pickedPreviewUrl ? 'border border-input min-h-56' : 'min-h-56',
-                            ].join(' ')}
-                            aria-label="Select Photo"
-                        >
-                            {pickedPreviewUrl ? (
-                                <div className="absolute inset-0">
+                    
+                    <div className="flex flex-col gap-4 p-4 text-center border border-input rounded-lg shadow-xs">
+                        {pickedPreviewUrl ? (
+                            <div className="flex flex-col gap-4">
+                                <div className="overflow-hidden rounded-lg border border-input bg-secondary">
                                     {/* eslint-disable-next-line @next/next/no-img-element */}
                                     <img
                                         src={pickedPreviewUrl}
-                                        alt=""
-                                        className="h-full w-full object-cover"
+                                        alt={pickedFileName ? `Selected photo: ${pickedFileName}` : 'Selected photo'}
+                                        className="h-56 w-full object-cover"
                                     />
                                 </div>
-                            ) : (
-                                <div className="relative z-10 flex h-56 flex-col items-center justify-center gap-1 p-4 text-center">
-                                    <p className="text-sm font-medium text-foreground">
-                                        {isUploading ? 'Preparing…' : 'Select Photo'}
-                                    </p>
-                                    <p className="text-xs text-muted-foreground">
-                                        Lorem ipsum dolor sit amet consectetur adipisicing elit. Quisquam, quos.
-                                    </p>
+                                <Button
+                                    type="button"
+                                    variant="secondary"
+                                    className="h-10 w-full"
+                                    disabled={isUploading}
+                                    onClick={clearPicked}
+                                >
+                                    Choose Different Photo
+                                </Button>
+                            </div>
+                        ) : (
+                            <>
+                                <Button
+                                    variant="secondary"
+                                    className="h-10 w-full"
+                                    type="button"
+                                    disabled={!canPickFile}
+                                    onClick={() => inputRef.current?.click()}
+                                >
+                                    Choose Photo
+                                </Button>
+                                <div className="text-sm text-muted-foreground space-y-1">
+                                    <p>{ACCEPTED_FILE_TYPES_TEXT}</p>
+                                    <p>{MAX_FILE_SIZE_TEXT}</p>
                                 </div>
-                            )}
-                        </button>
-
-                        {pickedPreviewUrl ? (
-                            <Button
-                                variant="secondary"
-                                className="h-10 w-full"
-                                onClick={clearPicked}
-                                disabled={isUploading}
-                            >
-                                Remove Photo
-                            </Button>
-                        ) : null}
-
+                            </>
+                        )}
                         {uploadError ? (
-                            <p className="text-xs text-destructive">{uploadError}</p>
+                            <p className="text-sm text-destructive">{uploadError}</p>
                         ) : null}
                     </div>
 
                     {/* Optional context */}
-                    <div className="flex flex-col gap-3">
-                        <Label htmlFor="info">
-                            Helpful Information
+                    <div className="flex flex-col gap-4">
+                        <Label htmlFor="helpful-info">
+                            What should we know? (optional)
                         </Label>
                         <Textarea
                             id="helpful-info"
-                            className="resize-none text-sm"
-                            rows={3}
+                            className="h-18 resize-none"
                             value={helpfulInfo}
                             onChange={(e) => setHelpfulInfo(e.target.value)}
+                            placeholder="Example: Leak is under the kitchen sink and it gets worse at night."
                         />
                     </div>
 
                 </div>
-            </div>
+            </main>
 
             {/* Fixed bottom action bar */}
-            <div className="fixed inset-x-0 bottom-0 z-40 bg-background/95 px-4 py-4 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+            <div className="fixed inset-x-0 bottom-0 z-40 bg-background/95 p-4 backdrop-blur supports-[backdrop-filter]:bg-background/80">
                 <div className="mx-auto w-full max-w-xl">
                     <Button
                         size="lg"
@@ -239,7 +280,7 @@ export default function WelcomePage() {
 
                                 if (!res.ok) {
                                     const data = await res.json().catch(() => ({}));
-                                    throw new Error((data as any)?.error || 'Upload failed');
+                                    throw new Error((data as any)?.error || 'We could not upload that photo. Please try again.');
                                 }
 
                                 const data = await res.json().catch(() => ({}));
@@ -254,7 +295,7 @@ export default function WelcomePage() {
                                     }
                                 }
                             } catch (e) {
-                                setUploadError(e instanceof Error ? e.message : 'Upload failed');
+                                setUploadError(e instanceof Error ? e.message : 'We could not upload that photo. Please try again.');
                                 return;
                             } finally {
                                 setIsUploading(false);
@@ -267,13 +308,8 @@ export default function WelcomePage() {
                             router.push(`/diagnosis/${conversationId}${suffix}`);
                         }}
                     >
-                        {isUploading ? 'Preparing…' : 'Continue'}
+                        {isUploading ? 'Uploading Photo...' : canContinue ? 'Get My Report' : 'Choose Photo to Continue'}
                     </Button>
-                    {!canContinue && !isUploading && (
-                        <p className="mt-3 text-xs text-muted-foreground text-center">
-                            Select Photo to Continue
-                        </p>
-                    )}
                 </div>
             </div>
         </div>

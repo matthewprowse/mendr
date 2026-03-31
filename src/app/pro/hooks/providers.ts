@@ -2,6 +2,11 @@ import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { isOpenNowFromWeekdayDescriptions } from '@/lib/open-status';
 import { parseWeekdayDescriptions } from '../_lib/hours';
+import {
+    sanitizeProfileText,
+    isLowSignalProfileText,
+    normalizeProfileTextForStorage,
+} from '@/lib/provider-profile-clean';
 
 export function useProProvider(placeId: string) {
     const isUuid = (value: string) =>
@@ -23,7 +28,6 @@ export function useProProvider(placeId: string) {
     const [showAllOperatingHours, setShowAllOperatingHours] = useState(false);
     // R11: Enrichment display fields
     const [providerSpecialisations, setProviderSpecialisations] = useState<string[]>([]);
-    const [providerServiceAreas, setProviderServiceAreas] = useState<string[]>([]);
     const [providerCertifications, setProviderCertifications] = useState<string[]>([]);
     const [providerHighlights, setProviderHighlights] = useState<string[]>([]);
     const [providerHonestNote, setProviderHonestNote] = useState<string | null>(null);
@@ -44,9 +48,9 @@ export function useProProvider(placeId: string) {
                 // returns `400 Bad Request`. Retry with a minimal column set so the
                 // page still loads.
                 const selectBase =
-                    'name, summary, weekday_descriptions, address, latitude, longitude, phone, website';
+                    'id, google_place_id, name, summary, weekday_descriptions, address, latitude, longitude, phone, website';
                 const selectExtended =
-                    'name, summary, summary_long, about, past_work, specialisations, service_areas, certifications, highlights, honest_note, years_in_business, founder_or_key_person, weekday_descriptions, address, latitude, longitude, phone, website';
+                    'id, google_place_id, name, summary, summary_long, about, past_work, specialisations, certifications, highlights, honest_note, years_in_business, founder_or_key_person, weekday_descriptions, address, latitude, longitude, phone, website';
 
                 const fetchRow = async (select: string) => {
                     if (isUuid(placeId)) {
@@ -76,6 +80,12 @@ export function useProProvider(placeId: string) {
                 }
                 if (cancelled) return;
                 if (data) {
+                    const providerId =
+                        typeof data.id === 'string' && data.id.trim() ? data.id.trim() : null;
+                    const googlePlaceId =
+                        typeof data.google_place_id === 'string' && data.google_place_id.trim()
+                            ? data.google_place_id.trim()
+                            : null;
                     if (typeof data.name === 'string') setProviderName(data.name);
                     setProviderAddress(
                         typeof data.address === 'string' && data.address.trim() ? data.address.trim() : null
@@ -84,21 +94,50 @@ export function useProProvider(placeId: string) {
                     const lng = data.longitude;
                     setProviderLat(typeof lat === 'number' && Number.isFinite(lat) ? lat : null);
                     setProviderLng(typeof lng === 'number' && Number.isFinite(lng) ? lng : null);
-                    setProviderSummary(typeof data.summary === 'string' ? data.summary : null);
+                    const summaryRaw = typeof data.summary === 'string' ? data.summary : '';
+                    const summaryLongRaw = typeof data.summary_long === 'string' ? data.summary_long : '';
+                    const aboutRaw = typeof data.about === 'string' ? data.about : '';
+                    const pastWorkRaw = typeof data.past_work === 'string' ? data.past_work : '';
+
+                    const summary = sanitizeProfileText(summaryRaw);
                     const long =
-                        typeof data.summary_long === 'string' && data.summary_long.trim()
-                            ? data.summary_long.trim()
+                        summaryLongRaw.trim()
+                            ? sanitizeProfileText(summaryLongRaw)
                             : '';
-                    const about = typeof data.about === 'string' && data.about.trim() ? data.about.trim() : '';
-                    const past =
-                        typeof data.past_work === 'string' && data.past_work.trim()
-                            ? data.past_work.trim()
-                            : '';
-                    const fallbackLong =
-                        typeof data.summary === 'string' && data.summary.trim() ? data.summary.trim() : null;
+                    const about = aboutRaw.trim() ? sanitizeProfileText(aboutRaw) : '';
+                    const past = pastWorkRaw.trim() ? sanitizeProfileText(pastWorkRaw) : '';
+                    const longCandidate = long || [about, past].filter(Boolean).join('\n\n');
+                    const longIsLowSignal = isLowSignalProfileText(longCandidate);
+                    const summaryIsLowSignal = isLowSignalProfileText(summary);
                     const composed =
-                        long || [about, past].filter(Boolean).join('\n\n') || fallbackLong;
+                        (!longIsLowSignal && longCandidate) ||
+                        (!summaryIsLowSignal && summary) ||
+                        null;
+
+                    setProviderSummary(summaryIsLowSignal ? null : summary);
                     setProviderSummaryLong(composed);
+
+                    const summaryForStorage = normalizeProfileTextForStorage(summaryRaw);
+                    const summaryLongForStorage = normalizeProfileTextForStorage(summaryLongRaw);
+                    const aboutForStorage = normalizeProfileTextForStorage(aboutRaw);
+                    const pastWorkForStorage = normalizeProfileTextForStorage(pastWorkRaw);
+
+                    const needsBackendCleanup =
+                        (summaryRaw.trim() || null) !== summaryForStorage ||
+                        (summaryLongRaw.trim() || null) !== summaryLongForStorage ||
+                        (aboutRaw.trim() || null) !== aboutForStorage ||
+                        (pastWorkRaw.trim() || null) !== pastWorkForStorage;
+
+                    if (needsBackendCleanup && (providerId || googlePlaceId)) {
+                        // Best-effort write-back so noisy scraped content is repaired in the DB too.
+                        void fetch('/api/providers/clean-profile', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ providerId, googlePlaceId }),
+                        }).catch(() => {
+                            // Ignore cleanup failures; UI already shows sanitized text.
+                        });
+                    }
                     setProviderPhone(
                         typeof data.phone === 'string' && data.phone.trim() ? data.phone.trim() : null
                     );
@@ -110,7 +149,6 @@ export function useProProvider(placeId: string) {
                     setShowAllOperatingHours(false);
                     // R11: Enrichment display fields
                     setProviderSpecialisations(Array.isArray(data.specialisations) ? (data.specialisations as string[]) : []);
-                    setProviderServiceAreas(Array.isArray(data.service_areas) ? (data.service_areas as string[]) : []);
                     setProviderCertifications(Array.isArray(data.certifications) ? (data.certifications as string[]) : []);
                     setProviderHighlights(Array.isArray(data.highlights) ? (data.highlights as string[]) : []);
                     setProviderHonestNote(typeof data.honest_note === 'string' && data.honest_note.trim() ? data.honest_note.trim() : null);
@@ -127,7 +165,6 @@ export function useProProvider(placeId: string) {
                     setProviderEmail(null);
                     setProviderWebsiteRaw(null);
                     setProviderSpecialisations([]);
-                    setProviderServiceAreas([]);
                     setProviderCertifications([]);
                     setProviderHighlights([]);
                     setProviderHonestNote(null);
@@ -172,7 +209,6 @@ export function useProProvider(placeId: string) {
         providerIsOpen,
         // R11: Enrichment display fields
         providerSpecialisations,
-        providerServiceAreas,
         providerCertifications,
         providerHighlights,
         providerHonestNote,

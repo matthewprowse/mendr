@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ContactPopover } from '@/components/contact-popover';
+import { createClientId } from '@/lib/client-random-id';
 import { normalizeWebsiteUrl } from '@/lib/utils';
 import { compressImage } from '@/lib/image-compression';
 import { setImageData } from '@/lib/image-store';
@@ -53,12 +54,10 @@ export default function WelcomePage() {
         setShowAllOperatingHours,
         providerIsOpen,
         providerSpecialisations,
-        providerServiceAreas,
         providerCertifications,
         providerHighlights,
         providerHonestNote,
         providerYearsInBusiness,
-        providerFounder,
     } = useProProvider(placeId);
 
     const {
@@ -142,7 +141,7 @@ export default function WelcomePage() {
                 });
 
                 const finalDataUrl = isImage ? await compressImage(dataUrl) : dataUrl;
-                const conversationId = crypto.randomUUID();
+                const conversationId = createClientId();
                 setImageData(conversationId, finalDataUrl, file.name);
 
                 const qp = new URLSearchParams();
@@ -287,23 +286,23 @@ export default function WelcomePage() {
                 </p>
             </div>
 
-            <Tabs defaultValue="about">
-                <TabsList className="grid grid-cols-3 h-10">
+            <Tabs defaultValue="about" className="w-full">
+                <TabsList className="grid h-10 w-full grid-cols-3">
                     <TabsTrigger
                         value="about"
-                        className="h-8"
+                        className="h-10"
                     >
                         About
                     </TabsTrigger>
                     <TabsTrigger
                         value="reviews"
-                        className="h-8"
+                        className="h-10"
                     >
                         Reviews
                     </TabsTrigger>
                     <TabsTrigger
                         value="gallery"
-                        className="h-8"
+                        className="h-10"
                     >
                         Gallery
                     </TabsTrigger>
@@ -326,12 +325,10 @@ export default function WelcomePage() {
                         directionsHref={directionsHref}
                         profileSummaryLong={providerSummaryLong}
                         specialisations={providerSpecialisations}
-                        serviceAreas={providerServiceAreas}
                         certifications={providerCertifications}
                         highlights={providerHighlights}
                         honestNote={providerHonestNote}
                         yearsInBusiness={providerYearsInBusiness}
-                        founder={providerFounder}
                     />
                 </TabsContent>
 

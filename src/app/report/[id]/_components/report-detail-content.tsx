@@ -8,9 +8,14 @@ import { sanitizeAiContent } from '@/lib/utils';
 import { Spinner } from '@/components/ui/spinner';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
-import { ArrowLeft, Share, Download } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 import { UnrelatedImageCard } from '@/app/chat/_components/unrelated-image-card';
 import { UnservicedCategoryCard } from '@/app/chat/_components/unserviced-category-card';
+import {
+    diagnosisSectionsDuplicate,
+    reportThoughtsParagraph,
+    splitDetailAndHazard,
+} from '@/lib/diagnosis-display';
 
 type ReportData = {
     diagnosis: Record<string, unknown> | null;
@@ -18,6 +23,7 @@ type ReportData = {
     customer_address: string | null;
     customer_lat: number | null;
     customer_lng: number | null;
+    initial_image_description: string | null;
     messages?: {
         content: string;
         role: string;
@@ -72,7 +78,9 @@ export function ReportDetailContent({ reportId }: ReportDetailContentProps) {
 
             const { data: d1, error: e1 } = await supabase
                 .from('conversations')
-                .select('diagnosis, image_url, customer_address, customer_lat, customer_lng')
+                .select(
+                    'diagnosis, image_url, customer_address, customer_lat, customer_lng, initial_image_description'
+                )
                 .eq('id', id)
                 .maybeSingle();
 
@@ -89,7 +97,7 @@ export function ReportDetailContent({ reportId }: ReportDetailContentProps) {
                     const { data: d2, error: e2 } = await supabase
                         .from('conversations')
                         .select(
-                            'diagnosis_json, image_url, customer_address, customer_lat, customer_lng'
+                            'diagnosis_json, image_url, customer_address, customer_lat, customer_lng, initial_image_description'
                         )
                         .eq('id', id)
                         .maybeSingle();
@@ -145,6 +153,10 @@ export function ReportDetailContent({ reportId }: ReportDetailContentProps) {
                 customer_address: conv.customer_address as string | null,
                 customer_lat: conv.customer_lat as number | null,
                 customer_lng: conv.customer_lng as number | null,
+                initial_image_description:
+                    typeof (conv as { initial_image_description?: unknown }).initial_image_description === 'string'
+                        ? (conv as { initial_image_description: string }).initial_image_description
+                        : null,
                 messages: msgs || [],
             });
         } catch (e: unknown) {
@@ -258,6 +270,25 @@ export function ReportDetailContent({ reportId }: ReportDetailContentProps) {
             ? sanitizeAiContent(diag.message)
             : null;
 
+    const thoughtParagraph = reportThoughtsParagraph(
+        diag,
+        reportData.initial_image_description ?? undefined
+    );
+
+    const { detail: diagnosisDetailBody, hazard: diagnosisHazard } = splitDetailAndHazard(
+        diagMessage ?? ''
+    );
+    const diagnosisDisplayBody =
+        (diagnosisDetailBody || diagMessage || '').trim() || null;
+
+    const hasMessage = Boolean(diagMessage?.trim());
+    const hasAction = Boolean(actionRequired?.trim());
+    const sectionsDup = hasMessage && hasAction && diagnosisSectionsDuplicate(diagMessage, actionRequired);
+    const showDiagnosisSection =
+        !isRejected && !isUnserviced && hasMessage && Boolean(diagnosisDisplayBody);
+    const showRecommendedSection =
+        !isRejected && !isUnserviced && hasAction && !sectionsDup;
+
     const hasLocation =
         reportData.customer_lat != null && reportData.customer_lng != null;
     const mapDestination = hasLocation
@@ -269,10 +300,6 @@ export function ReportDetailContent({ reportId }: ReportDetailContentProps) {
     const mapEmbedSrc = mapDestination
         ? `https://maps.google.com/maps?q=${encodeURIComponent(mapDestination)}&z=15&output=embed`
         : null;
-
-    const mapsKey =
-        process.env.NEXT_PUBLIC_GOOGLE_MAPS_EMBED_KEY ||
-        process.env.NEXT_PUBLIC_GOOGLE_PLACES_API_KEY;
 
     // ── Render ─────────────────────────────────────────────────────────────────
 
@@ -293,37 +320,34 @@ export function ReportDetailContent({ reportId }: ReportDetailContentProps) {
                     <Button
                         variant="secondary"
                         size="icon"
-                        className="h-10 w-10"
+                        className="h-10 w-10 shrink-0"
                         onClick={() => router.back()}
+                        aria-label="Back"
                     >
-                        <ArrowLeft className="size-5" />
+                        <ArrowLeft className="size-5" aria-hidden />
                     </Button>
                     <h3 className="text-lg text-foreground font-semibold truncate max-w-[min(280px,55vw)] text-center">
                         Scandio Report
                     </h3>
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-10 w-10"
-                        onClick={handleShare}
-                        aria-label="Share report"
-                    >
-                        <Share className="size-4" />
-                    </Button>
+                    <div className="h-10 w-10 shrink-0" aria-hidden />
                 </div>
 
-                {/* ── Banner image ── */}
+                {/* ── Banner image (matches diagnosis page frame) ── */}
                 {bannerImage ? (
-                    <div className="relative h-52 w-full overflow-hidden rounded-lg bg-secondary">
+                    <div className="overflow-hidden rounded-lg border border-input bg-secondary">
                         <img
                             src={bannerImage}
                             alt=""
-                            className="h-full w-full object-cover"
+                            className="h-56 w-full object-cover"
                         />
                     </div>
                 ) : (
-                    <div className="flex h-52 bg-secondary rounded-lg" />
+                    <div className="flex h-56 rounded-lg border border-input bg-secondary" />
                 )}
+
+                {thoughtParagraph ? (
+                    <p className="text-xs text-muted-foreground leading-relaxed">{thoughtParagraph}</p>
+                ) : null}
 
                 {/* ── Title + trade badge ── */}
                 <div className="flex flex-col gap-2">
@@ -365,38 +389,37 @@ export function ReportDetailContent({ reportId }: ReportDetailContentProps) {
                     />
                 )}
 
-                {/* ── Job summary ── */}
-                {!isRejected && !isUnserviced && (diagMessage || actionRequired) && (
+                {/* ── Diagnosis & recommended action (aligned with match-page section labels) ── */}
+                {!isRejected && !isUnserviced && (showDiagnosisSection || showRecommendedSection) ? (
                     <div className="flex flex-col gap-4">
-                        {diagMessage && (
-                            <div className="flex flex-col gap-1.5">
-                                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                                    Diagnosis
-                                </p>
+                        {showDiagnosisSection ? (
+                            <div className="flex flex-col gap-2">
+                                <p className="text-sm text-foreground font-medium">Diagnosis</p>
                                 <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">
-                                    {diagMessage}
+                                    {diagnosisDisplayBody}
                                 </p>
+                                {diagnosisHazard ? (
+                                    <p className="text-sm text-foreground font-medium leading-relaxed border-l-2 border-primary/40 pl-3">
+                                        {diagnosisHazard}
+                                    </p>
+                                ) : null}
                             </div>
-                        )}
-                        {actionRequired && (
-                            <div className="flex flex-col gap-1.5">
-                                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                                    Recommended Action
-                                </p>
+                        ) : null}
+                        {showRecommendedSection ? (
+                            <div className="flex flex-col gap-2">
+                                <p className="text-sm text-foreground font-medium">Recommended Action</p>
                                 <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">
                                     {actionRequired}
                                 </p>
                             </div>
-                        )}
+                        ) : null}
                     </div>
-                )}
+                ) : null}
 
                 {/* ── Extra photos ── */}
                 {extraImages.length > 0 && (
                     <div className="flex flex-col gap-3">
-                        <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                            Photos
-                        </p>
+                        <p className="text-sm text-foreground font-medium">Photos</p>
                         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                             {extraImages.map((url, i) => (
                                 <div
@@ -417,9 +440,7 @@ export function ReportDetailContent({ reportId }: ReportDetailContentProps) {
                 {/* ── Location / map ── */}
                 {mapEmbedSrc && (
                     <div className="flex flex-col gap-3">
-                        <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                            Location
-                        </p>
+                        <p className="text-sm text-foreground font-medium">Location</p>
                         <div className="overflow-hidden rounded-lg border border-border bg-secondary">
                             <div className="h-52 w-full">
                                 <iframe
@@ -433,7 +454,7 @@ export function ReportDetailContent({ reportId }: ReportDetailContentProps) {
                             </div>
                         </div>
                         {directionsHref && (
-                            <Button variant="secondary" className="w-full" asChild>
+                            <Button variant="secondary" className="w-full h-10" asChild>
                                 <a href={directionsHref} target="_blank" rel="noopener noreferrer">
                                     Get Directions
                                 </a>
@@ -442,22 +463,12 @@ export function ReportDetailContent({ reportId }: ReportDetailContentProps) {
                     </div>
                 )}
 
-                {/* ── Fixed bottom action bar ── */}
-                <div className="no-print flex flex-row gap-2 p-4 bg-background w-full fixed inset-x-0 bottom-0 z-50">
-                    <Button
-                        variant="ghost"
-                        className="flex flex-1 h-10 gap-2"
-                        onClick={handleShare}
-                    >
-                        <Share className="size-4" />
+                {/* ── Fixed bottom action bar (text-only; PDF primary) ── */}
+                <div className="no-print flex flex-row gap-2 p-4 bg-background border-t border-border w-full fixed inset-x-0 bottom-0 z-50">
+                    <Button variant="secondary" className="flex-1 h-10" onClick={handleShare} type="button">
                         Share
                     </Button>
-                    <Button
-                        variant="secondary"
-                        className="flex flex-1 h-10 gap-2"
-                        onClick={handlePrint}
-                    >
-                        <Download className="size-4" />
+                    <Button variant="default" className="flex-1 h-10" onClick={handlePrint} type="button">
                         Download PDF
                     </Button>
                 </div>

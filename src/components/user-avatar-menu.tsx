@@ -6,9 +6,7 @@ import { useRouter } from 'next/navigation';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { Separator } from '@/components/ui/separator';
 import { useAuth } from '@/context/auth-context';
-import { LogOut } from '@/lib/icons';
 
 export function UserAvatarMenu() {
     const [open, setOpen] = useState(false);
@@ -21,16 +19,23 @@ export function UserAvatarMenu() {
         router.push('/');
     };
 
-    const initials = user?.email
-        ? user.email.slice(0, 2).toUpperCase()
-        : user?.user_metadata?.full_name
-          ? (user.user_metadata.full_name as string)
-                .split(' ')
-                .map((n: string) => n[0])
-                .join('')
-                .slice(0, 2)
-                .toUpperCase()
-          : null;
+    const fullName = user?.user_metadata?.full_name;
+    const displayName =
+        typeof fullName === 'string' && fullName.trim()
+            ? fullName.trim()
+            : (user?.email?.split('@')[0] ?? 'Account');
+
+    const initials =
+        typeof fullName === 'string' && fullName.trim()
+            ? fullName
+                  .split(' ')
+                  .map((n: string) => n[0])
+                  .join('')
+                  .slice(0, 2)
+                  .toUpperCase()
+            : user?.email
+              ? user.email.slice(0, 2).toUpperCase()
+              : null;
 
     // Do not render avatar/menu at all while auth is loading or when user is not logged in.
     if (isLoading || !user) return null;
@@ -59,7 +64,7 @@ export function UserAvatarMenu() {
 
                 <div className="flex items-center gap-0.5 p-1 -mx-2 pb-3 -mt-2 border-b border-input/75 mb-3">
                     <div className="flex flex-col gap-1">
-                        <p className="text-sm font-medium text-foreground">Matthew Prowse</p>
+                        <p className="text-sm font-medium text-foreground">{displayName}</p>
                         <p className="truncate text-xs text-muted-foreground">
                             {user.email ?? 'Account'}
                         </p>

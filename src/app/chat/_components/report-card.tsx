@@ -1,9 +1,9 @@
 'use client';
 
 import { useState } from 'react';
+import { ExternalLink, Share } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
-import { Share } from '@/lib/icons';
 
 interface ReportCardProps {
     conversationId: string;
@@ -54,28 +54,37 @@ export function ReportCard({ conversationId }: ReportCardProps) {
     };
 
     return (
-        <div className="flex flex-col overflow-hidden">
-            <div className="flex flex-1 flex-col gap-1">
-                <p className="text-base font-semibold text-foreground">
+        <div className="flex flex-row items-center gap-4 overflow-hidden mt-3 pt-6 border-t border-border">
+            <div className="w-14 h-18 bg-secondary rounded-lg" />
+            <div className="flex flex-1 flex-col gap-0.5">
+                <p className="text-lg font-semibold text-foreground">
                     Scandio Report
                 </p>
                 <p className="text-sm text-muted-foreground">
-                    Send the link to your provider before they come. They can quote accurately and show up with the right parts. Sharing your Scandio Report helps them prepare the right materials and give you a clearer quote.
+                    What&apos;s a Scandio Report?
                 </p>
             </div>
-            <div className="flex h-9 items-center gap-2 mt-3">
-                <Button onClick={handleOpenReport} variant="secondary" size="sm">
-                    Open Report
-                </Button>
-                <button
+            <div className="flex h-9 items-center gap-2">
+                <Button
                     type="button"
-                    onClick={handleShareReport}
-                    className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:text-foreground"
-                    title={copied ? 'Copied' : 'Share report'}
-                    aria-label={copied ? 'Copied' : 'Share report'}
+                    className="h-10 w-10"
+                    variant="secondary"
+                    size="icon"
+                    onClick={handleOpenReport}
+                    aria-label="Open report in new tab"
                 >
-                    <Share className="size-4" />
-                </button>
+                    <ExternalLink className="size-5" aria-hidden />
+                </Button>
+                <Button
+                    type="button"
+                    className="h-10 w-10"
+                    variant="secondary"
+                    size="icon"
+                    onClick={handleShareReport}
+                    aria-label="Share report"
+                >
+                    <Share className="size-5" aria-hidden />
+                </Button>
             </div>
         </div>
     );

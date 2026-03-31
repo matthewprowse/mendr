@@ -1,4 +1,6 @@
 import type { Metadata, Viewport } from 'next';
+import { GeistSans } from 'geist/font/sans';
+import { GeistMono } from 'geist/font/mono';
 import './globals.css';
 import { Toaster } from '@/components/ui/sonner';
 import { TooltipProvider } from '@/components/ui/tooltip';
@@ -16,7 +18,7 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
     width: 'device-width',
     initialScale: 1,
-    maximumScale: 1,
+    maximumScale: 5,
 };
 
 export default async function RootLayout({
@@ -25,7 +27,11 @@ export default async function RootLayout({
     children: React.ReactNode;
 }>) {
     return (
-        <html lang="en" data-scroll-behavior="smooth">
+        <html
+            lang="en"
+            data-scroll-behavior="smooth"
+            className={`${GeistSans.variable} ${GeistMono.variable}`}
+        >
             <body className="font-sans antialiased">
                 <AuthProvider>
                     <TooltipProvider>

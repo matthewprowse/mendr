@@ -27,6 +27,11 @@ export interface DiagnosisData {
     trade_detail?: string;
     /** 0–100. Below 85: ask for more photos/context before showing providers. */
     confidence?: number;
+    /**
+     * Normalized urgency key from SQL reference data.
+     * Links to diagnosis_urgencies.key, e.g. 'immediate', 'urgent', 'soon', 'planned'.
+     */
+    urgency_key?: string;
 }
 
 export interface Message {

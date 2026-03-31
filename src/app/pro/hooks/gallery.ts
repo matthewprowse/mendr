@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createClientId } from '@/lib/client-random-id';
 import { supabase } from '@/lib/supabase';
 import type { GalleryDraftItem, GalleryImage } from '../_types/page';
 
@@ -116,7 +117,7 @@ export function useProGallery(params: {
             for (const file of Array.from(list)) {
                 if (!file.type.startsWith('image/')) continue;
                 next.push({
-                    id: crypto.randomUUID(),
+                    id: createClientId(),
                     file,
                     caption: '',
                     preview: URL.createObjectURL(file),

@@ -159,7 +159,7 @@ export function LandingPageClient() {
                         { href: '#faq', label: 'FAQ' },
                         { href: '/pro/join', label: 'For Pros' },
                     ]}
-                    logoHref="/landing"
+                    logoHref="/"
                     showTrades={false}
                     />
 
@@ -188,7 +188,7 @@ export function LandingPageClient() {
                                         initial="hidden"
                                         animate="visible"
                                         custom={0.25}
-                                        className="text-3xl font-bold"
+                                        className="text-2xl font-bold tracking-tight"
                                     >
                                         Something Broken?
                                         <br></br>

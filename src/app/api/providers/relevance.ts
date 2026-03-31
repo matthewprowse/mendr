@@ -98,8 +98,9 @@ export function isProviderRelevantForTrade(params: {
     cached: any;
     tradeNorm: string;
     isBoreholeLikeDetail: boolean;
+    mode?: 'strict' | 'relaxed';
 }): boolean {
-    const { place, aiData, cached, tradeNorm, isBoreholeLikeDetail } = params;
+    const { place, aiData, cached, tradeNorm, isBoreholeLikeDetail, mode = 'strict' } = params;
     const typesRaw: string[] = (place.types || []).map((t: string) =>
         (t || '').toString().toLowerCase()
     );
@@ -135,7 +136,7 @@ export function isProviderRelevantForTrade(params: {
         .trim();
 
     if (BANNED_KEYWORDS.some((kw) => haystack.includes(kw))) return false;
-    if (!SERVICE_KEYWORDS.some((kw) => haystack.includes(kw))) return false;
+    if (mode === 'strict' && !SERVICE_KEYWORDS.some((kw) => haystack.includes(kw))) return false;
 
     if (tradeNorm) {
         if (tradeNorm.includes('plumb')) {
@@ -149,14 +150,27 @@ export function isProviderRelevantForTrade(params: {
                     haystack.includes('pump') ||
                     haystack.includes('water well');
                 if (!ok) return false;
-            } else if (!haystack.includes('plumb') && !haystack.includes('geyser')) {
+            } else if (
+                mode === 'strict' &&
+                !haystack.includes('plumb') &&
+                !haystack.includes('geyser') &&
+                !haystack.includes('pipe') &&
+                !haystack.includes('drain') &&
+                !haystack.includes('leak')
+            ) {
                 return false;
             }
         }
-        if (tradeNorm.includes('electric') && !haystack.includes('electric')) return false;
-        if (tradeNorm.includes('locksmith') && !haystack.includes('lock')) return false;
-        if ((tradeNorm.includes('pool') || tradeNorm.includes('swim')) && !haystack.includes('pool')) return false;
-        if ((tradeNorm.includes('paint') || tradeNorm.includes('painting')) && !haystack.includes('paint')) return false;
+        if (mode === 'strict' && tradeNorm.includes('electric') && !haystack.includes('electric')) return false;
+        if (mode === 'strict' && tradeNorm.includes('locksmith') && !haystack.includes('lock')) return false;
+        if (
+            mode === 'strict' &&
+            (tradeNorm.includes('pool') || tradeNorm.includes('swim')) &&
+            !haystack.includes('pool')
+        )
+            return false;
+        if (mode === 'strict' && (tradeNorm.includes('paint') || tradeNorm.includes('painting')) && !haystack.includes('paint'))
+            return false;
 
         if (tradeNorm === 'security & access' || tradeNorm.includes('security')) {
             const hasSecuritySignalInTypes = typesRaw.some((gt) => {
@@ -172,7 +186,7 @@ export function isProviderRelevantForTrade(params: {
                 const s = String(gt || '');
                 return s.includes('gate') || s.includes('garage_door');
             });
-            if (hasSecuritySignalInTypes && !hasGateOrGarageSignalInTypes) return false;
+            if (mode === 'strict' && hasSecuritySignalInTypes && !hasGateOrGarageSignalInTypes) return false;
         }
     }
 

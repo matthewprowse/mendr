@@ -1,0 +1,1563 @@
+npm warn Unknown env config "devdir". This will stop working in the next major version of npm.
+
+> scandio@0.1.0 build
+> next build
+
+▲ Next.js 16.1.7 (Turbopack)
+- Environments: .env
+- Experiments (use with caution):
+  · optimizePackageImports
+
+  Creating an optimized production build ...
+
+> Build error occurred
+Error: Turbopack build failed with 63 errors:
+./src/app/pro/[id]/page.tsx:24:1
+Module not found: Can't resolve './_components/pro-gallery-upload'
+[0m [90m 22 |[39m [36mimport[39m { [33mProStickyFooter[39m } [36mfrom[39m [32m'./_components/pro-sticky-footer'[39m[33m;[39m
+ [90m 23 |[39m [36mimport[39m { [33mProReviewForm[39m } [36mfrom[39m [32m'./_components/pro-review-form'[39m[33m;[39m
+[31m[1m>[22m[39m[90m 24 |[39m [36mimport[39m { [33mProGalleryUpload[39m } [36mfrom[39m [32m'./_components/pro-gallery-upload'[39m[33m;[39m
+ [90m    |[39m [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+ [90m 25 |[39m [36mimport[39m { refreshProviderWebsiteById } [36mfrom[39m [32m'@/lib/refresh-provider-website'[39m[33m;[39m
+ [90m 26 |[39m [36mimport[39m { getOpenStatusTextFromWeekdayDescriptions } [36mfrom[39m [32m'@/lib/open-status'[39m[33m;[39m
+ [90m 27 |[39m [36mimport[39m { formatWeekdayDescriptionsTo24h } [36mfrom[39m [32m'@/lib/format-weekday-descriptions'[39m[33m;[39m[0m
+
+
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+./src/app/pro/[id]/page.tsx:23:1
+Module not found: Can't resolve './_components/pro-review-form'
+[0m [90m 21 |[39m [36mimport[39m { [33mProPageMap[39m } [36mfrom[39m [32m'./_components/pro-page-map'[39m[33m;[39m
+ [90m 22 |[39m [36mimport[39m { [33mProStickyFooter[39m } [36mfrom[39m [32m'./_components/pro-sticky-footer'[39m[33m;[39m
+[31m[1m>[22m[39m[90m 23 |[39m [36mimport[39m { [33mProReviewForm[39m } [36mfrom[39m [32m'./_components/pro-review-form'[39m[33m;[39m
+ [90m    |[39m [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+ [90m 24 |[39m [36mimport[39m { [33mProGalleryUpload[39m } [36mfrom[39m [32m'./_components/pro-gallery-upload'[39m[33m;[39m
+ [90m 25 |[39m [36mimport[39m { refreshProviderWebsiteById } [36mfrom[39m [32m'@/lib/refresh-provider-website'[39m[33m;[39m
+ [90m 26 |[39m [36mimport[39m { getOpenStatusTextFromWeekdayDescriptions } [36mfrom[39m [32m'@/lib/open-status'[39m[33m;[39m[0m
+
+
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+./src/app/pro/[id]/page.tsx:22:1
+Module not found: Can't resolve './_components/pro-sticky-footer'
+[0m [90m 20 |[39m } [36mfrom[39m [32m'@/components/ui/dialog'[39m[33m;[39m
+ [90m 21 |[39m [36mimport[39m { [33mProPageMap[39m } [36mfrom[39m [32m'./_components/pro-page-map'[39m[33m;[39m
+[31m[1m>[22m[39m[90m 22 |[39m [36mimport[39m { [33mProStickyFooter[39m } [36mfrom[39m [32m'./_components/pro-sticky-footer'[39m[33m;[39m
+ [90m    |[39m [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+ [90m 23 |[39m [36mimport[39m { [33mProReviewForm[39m } [36mfrom[39m [32m'./_components/pro-review-form'[39m[33m;[39m
+ [90m 24 |[39m [36mimport[39m { [33mProGalleryUpload[39m } [36mfrom[39m [32m'./_components/pro-gallery-upload'[39m[33m;[39m
+ [90m 25 |[39m [36mimport[39m { refreshProviderWebsiteById } [36mfrom[39m [32m'@/lib/refresh-provider-website'[39m[33m;[39m[0m
+
+
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+./src/app/pro/[id]/page.tsx:9:1
+Module not found: Can't resolve '@/components/app-header'
+[0m [90m  7 |[39m [36mimport[39m { refreshProviderByPlaceId } [36mfrom[39m [32m'@/lib/refresh-provider-by-place-id'[39m[33m;[39m
+ [90m  8 |[39m [36mimport[39m { generateProviderSummaries } [36mfrom[39m [32m'@/lib/provider-summaries'[39m[33m;[39m
+[31m[1m>[22m[39m[90m  9 |[39m [36mimport[39m { [33mAppHeader[39m } [36mfrom[39m [32m'@/components/app-header'[39m[33m;[39m
+ [90m    |[39m [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+ [90m 10 |[39m [36mimport[39m { [33mBadge[39m } [36mfrom[39m [32m'@/components/ui/badge'[39m[33m;[39m
+ [90m 11 |[39m [36mimport[39m { [33mButton[39m } [36mfrom[39m [32m'@/components/ui/button'[39m[33m;[39m
+ [90m 12 |[39m [36mimport[39m { [33mTabs[39m[33m,[39m [33mTabsContent[39m[33m,[39m [33mTabsList[39m[33m,[39m [33mTabsTrigger[39m } [36mfrom[39m [32m'@/components/ui/tabs'[39m[33m;[39m[0m
+
+Import map: aliased to relative './src/components/app-header' inside of [project]/
+
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+./src/app/chat/_components/providers-map.tsx:8:1
+Module not found: Can't resolve '@/components/ui/badge'
+[0m [90m  6 |[39m [36mimport[39m { formatBusinessName } [36mfrom[39m [32m'@/lib/utils'[39m[33m;[39m
+ [90m  7 |[39m [36mimport[39m { [33mSkeleton[39m } [36mfrom[39m [32m'@/components/ui/skeleton'[39m[33m;[39m
+[31m[1m>[22m[39m[90m  8 |[39m [36mimport[39m { [33mBadge[39m } [36mfrom[39m [32m'@/components/ui/badge'[39m[33m;[39m
+ [90m    |[39m [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+ [90m  9 |[39m [36mimport[39m type { [33mProvider[39m } [36mfrom[39m [32m'./types'[39m[33m;[39m
+ [90m 10 |[39m
+ [90m 11 |[39m type [33mProvidersMapProps[39m [33m=[39m {[0m
+
+Import map: aliased to relative './src/components/ui/badge' inside of [project]/
+
+
+Import traces:
+  Client Component Browser:
+    ./src/app/chat/_components/providers-map.tsx [Client Component Browser]
+    ./src/app/pro/[id]/_components/pro-page-map.tsx [Client Component Browser]
+    ./src/app/pro/page.tsx [Client Component Browser]
+    ./src/app/pro/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/chat/_components/providers-map.tsx [Client Component SSR]
+    ./src/app/pro/[id]/_components/pro-page-map.tsx [Client Component SSR]
+    ./src/app/pro/page.tsx [Client Component SSR]
+    ./src/app/pro/page.tsx [Server Component]
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+./src/app/diagnosis/[id]/_components/diagnosis-client.tsx:6:1
+Module not found: Can't resolve '@/components/ui/badge'
+[0m [90m 4 |[39m [36mimport[39m { useRouter[33m,[39m useSearchParams } [36mfrom[39m [32m'next/navigation'[39m[33m;[39m
+ [90m 5 |[39m [36mimport[39m { [33mButton[39m } [36mfrom[39m [32m'@/components/ui/button'[39m[33m;[39m
+[31m[1m>[22m[39m[90m 6 |[39m [36mimport[39m { [33mBadge[39m } [36mfrom[39m [32m'@/components/ui/badge'[39m[33m;[39m
+ [90m   |[39m [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+ [90m 7 |[39m [36mimport[39m { [33mLabel[39m } [36mfrom[39m [32m'@/components/ui/label'[39m[33m;[39m
+ [90m 8 |[39m [36mimport[39m { [33mTextarea[39m } [36mfrom[39m [32m'@/components/ui/textarea'[39m[33m;[39m
+ [90m 9 |[39m [36mimport[39m { [33mSkeleton[39m } [36mfrom[39m [32m'@/components/ui/skeleton'[39m[33m;[39m[0m
+
+Import map: aliased to relative './src/components/ui/badge' inside of [project]/
+
+
+Import trace:
+  Client Component Browser:
+    ./src/app/diagnosis/[id]/_components/diagnosis-client.tsx [Client Component Browser]
+    ./src/app/diagnosis/[id]/_components/diagnosis-client-loader.tsx [Client Component Browser]
+    ./src/app/diagnosis/[id]/_components/diagnosis-client-loader.tsx [Server Component]
+    ./src/app/diagnosis/[id]/page.tsx [Server Component]
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+./src/app/match/_components/match-client.tsx:6:1
+Module not found: Can't resolve '@/components/ui/badge'
+[0m [90m 4 |[39m [36mimport[39m { useRouter[33m,[39m useSearchParams } [36mfrom[39m [32m'next/navigation'[39m[33m;[39m
+ [90m 5 |[39m [36mimport[39m { [33mButton[39m } [36mfrom[39m [32m'@/components/ui/button'[39m[33m;[39m
+[31m[1m>[22m[39m[90m 6 |[39m [36mimport[39m { [33mBadge[39m } [36mfrom[39m [32m'@/components/ui/badge'[39m[33m;[39m
+ [90m   |[39m [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+ [90m 7 |[39m [36mimport[39m { [33mPopover[39m[33m,[39m [33mPopoverContent[39m[33m,[39m [33mPopoverTrigger[39m } [36mfrom[39m [32m'@/components/ui/popover'[39m[33m;[39m
+ [90m 8 |[39m [36mimport[39m { supabase } [36mfrom[39m [32m'@/lib/supabase'[39m[33m;[39m
+ [90m 9 |[39m [36mimport[39m { toWhatsAppPhone } [36mfrom[39m [32m'@/lib/utils'[39m[33m;[39m[0m
+
+Import map: aliased to relative './src/components/ui/badge' inside of [project]/
+
+
+Import trace:
+  Server Component:
+    ./src/app/match/_components/match-client.tsx
+    ./src/app/match/[id]/page.tsx
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+./src/app/match/page.tsx:11:1
+Module not found: Can't resolve '@/components/ui/badge'
+[0m [90m  9 |[39m [36mimport[39m { useRouter[33m,[39m useSearchParams } [36mfrom[39m [32m'next/navigation'[39m[33m;[39m
+ [90m 10 |[39m [36mimport[39m { [33mButton[39m } [36mfrom[39m [32m'@/components/ui/button'[39m[33m;[39m
+[31m[1m>[22m[39m[90m 11 |[39m [36mimport[39m { [33mBadge[39m } [36mfrom[39m [32m'@/components/ui/badge'[39m[33m;[39m
+ [90m    |[39m [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+ [90m 12 |[39m [36mimport[39m { [33mSeparator[39m } [36mfrom[39m [32m'@/components/ui/separator'[39m[33m;[39m
+ [90m 13 |[39m [36mimport[39m { [33mPopover[39m[33m,[39m [33mPopoverContent[39m[33m,[39m [33mPopoverTrigger[39m } [36mfrom[39m [32m'@/components/ui/popover'[39m[33m;[39m
+ [90m 14 |[39m [36mimport[39m { supabase } [36mfrom[39m [32m'@/lib/supabase'[39m[33m;[39m[0m
+
+Import map: aliased to relative './src/components/ui/badge' inside of [project]/
+
+
+Import traces:
+  Client Component Browser:
+    ./src/app/match/page.tsx [Client Component Browser]
+    ./src/app/match/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/match/page.tsx [Client Component SSR]
+    ./src/app/match/page.tsx [Server Component]
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+./src/app/pro/[id]/page.tsx:10:1
+Module not found: Can't resolve '@/components/ui/badge'
+[0m [90m  8 |[39m [36mimport[39m { generateProviderSummaries } [36mfrom[39m [32m'@/lib/provider-summaries'[39m[33m;[39m
+ [90m  9 |[39m [36mimport[39m { [33mAppHeader[39m } [36mfrom[39m [32m'@/components/app-header'[39m[33m;[39m
+[31m[1m>[22m[39m[90m 10 |[39m [36mimport[39m { [33mBadge[39m } [36mfrom[39m [32m'@/components/ui/badge'[39m[33m;[39m
+ [90m    |[39m [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+ [90m 11 |[39m [36mimport[39m { [33mButton[39m } [36mfrom[39m [32m'@/components/ui/button'[39m[33m;[39m
+ [90m 12 |[39m [36mimport[39m { [33mTabs[39m[33m,[39m [33mTabsContent[39m[33m,[39m [33mTabsList[39m[33m,[39m [33mTabsTrigger[39m } [36mfrom[39m [32m'@/components/ui/tabs'[39m[33m;[39m
+ [90m 13 |[39m [36mimport[39m {[0m
+
+Import map: aliased to relative './src/components/ui/badge' inside of [project]/
+
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+./src/app/pro/page.tsx:14:1
+Module not found: Can't resolve '@/components/ui/badge'
+[0m [90m 12 |[39m [36mimport[39m { setImageData } [36mfrom[39m [32m'@/lib/image-store'[39m[33m;[39m
+ [90m 13 |[39m [36mimport[39m { [33mTabs[39m[33m,[39m [33mTabsContent[39m[33m,[39m [33mTabsList[39m[33m,[39m [33mTabsTrigger[39m } [36mfrom[39m [32m'@/components/ui/tabs'[39m[33m;[39m
+[31m[1m>[22m[39m[90m 14 |[39m [36mimport[39m { [33mBadge[39m } [36mfrom[39m [32m'@/components/ui/badge'[39m[33m;[39m
+ [90m    |[39m [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+ [90m 15 |[39m [36mimport[39m { [33mSeparator[39m } [36mfrom[39m [32m'@/components/ui/separator'[39m[33m;[39m
+ [90m 16 |[39m [36mimport[39m {
+ [90m 17 |[39m     [33mDialog[39m[33m,[39m[0m
+
+Import map: aliased to relative './src/components/ui/badge' inside of [project]/
+
+
+Import traces:
+  Client Component Browser:
+    ./src/app/pro/page.tsx [Client Component Browser]
+    ./src/app/pro/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/pro/page.tsx [Client Component SSR]
+    ./src/app/pro/page.tsx [Server Component]
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+./src/app/diagnosis/[id]/_components/diagnosis-client.tsx:5:1
+Module not found: Can't resolve '@/components/ui/button'
+[0m [90m 3 |[39m [36mimport[39m { useEffect[33m,[39m useMemo[33m,[39m useRef[33m,[39m useState } [36mfrom[39m [32m'react'[39m[33m;[39m
+ [90m 4 |[39m [36mimport[39m { useRouter[33m,[39m useSearchParams } [36mfrom[39m [32m'next/navigation'[39m[33m;[39m
+[31m[1m>[22m[39m[90m 5 |[39m [36mimport[39m { [33mButton[39m } [36mfrom[39m [32m'@/components/ui/button'[39m[33m;[39m
+ [90m   |[39m [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+ [90m 6 |[39m [36mimport[39m { [33mBadge[39m } [36mfrom[39m [32m'@/components/ui/badge'[39m[33m;[39m
+ [90m 7 |[39m [36mimport[39m { [33mLabel[39m } [36mfrom[39m [32m'@/components/ui/label'[39m[33m;[39m
+ [90m 8 |[39m [36mimport[39m { [33mTextarea[39m } [36mfrom[39m [32m'@/components/ui/textarea'[39m[33m;[39m[0m
+
+Import map: aliased to relative './src/components/ui/button' inside of [project]/
+
+
+Import trace:
+  Client Component Browser:
+    ./src/app/diagnosis/[id]/_components/diagnosis-client.tsx [Client Component Browser]
+    ./src/app/diagnosis/[id]/_components/diagnosis-client-loader.tsx [Client Component Browser]
+    ./src/app/diagnosis/[id]/_components/diagnosis-client-loader.tsx [Server Component]
+    ./src/app/diagnosis/[id]/page.tsx [Server Component]
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+./src/app/match/_components/match-client.tsx:5:1
+Module not found: Can't resolve '@/components/ui/button'
+[0m [90m 3 |[39m [36mimport[39m { useCallback[33m,[39m useEffect[33m,[39m useMemo[33m,[39m useRef[33m,[39m useState } [36mfrom[39m [32m'react'[39m[33m;[39m
+ [90m 4 |[39m [36mimport[39m { useRouter[33m,[39m useSearchParams } [36mfrom[39m [32m'next/navigation'[39m[33m;[39m
+[31m[1m>[22m[39m[90m 5 |[39m [36mimport[39m { [33mButton[39m } [36mfrom[39m [32m'@/components/ui/button'[39m[33m;[39m
+ [90m   |[39m [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+ [90m 6 |[39m [36mimport[39m { [33mBadge[39m } [36mfrom[39m [32m'@/components/ui/badge'[39m[33m;[39m
+ [90m 7 |[39m [36mimport[39m { [33mPopover[39m[33m,[39m [33mPopoverContent[39m[33m,[39m [33mPopoverTrigger[39m } [36mfrom[39m [32m'@/components/ui/popover'[39m[33m;[39m
+ [90m 8 |[39m [36mimport[39m { supabase } [36mfrom[39m [32m'@/lib/supabase'[39m[33m;[39m[0m
+
+Import map: aliased to relative './src/components/ui/button' inside of [project]/
+
+
+Import trace:
+  Server Component:
+    ./src/app/match/_components/match-client.tsx
+    ./src/app/match/[id]/page.tsx
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+./src/app/match/page.tsx:10:1
+Module not found: Can't resolve '@/components/ui/button'
+[0m [90m  8 |[39m [36mimport[39m { useCallback[33m,[39m useEffect[33m,[39m useMemo[33m,[39m useRef[33m,[39m useState } [36mfrom[39m [32m'react'[39m[33m;[39m
+ [90m  9 |[39m [36mimport[39m { useRouter[33m,[39m useSearchParams } [36mfrom[39m [32m'next/navigation'[39m[33m;[39m
+[31m[1m>[22m[39m[90m 10 |[39m [36mimport[39m { [33mButton[39m } [36mfrom[39m [32m'@/components/ui/button'[39m[33m;[39m
+ [90m    |[39m [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+ [90m 11 |[39m [36mimport[39m { [33mBadge[39m } [36mfrom[39m [32m'@/components/ui/badge'[39m[33m;[39m
+ [90m 12 |[39m [36mimport[39m { [33mSeparator[39m } [36mfrom[39m [32m'@/components/ui/separator'[39m[33m;[39m
+ [90m 13 |[39m [36mimport[39m { [33mPopover[39m[33m,[39m [33mPopoverContent[39m[33m,[39m [33mPopoverTrigger[39m } [36mfrom[39m [32m'@/components/ui/popover'[39m[33m;[39m[0m
+
+Import map: aliased to relative './src/components/ui/button' inside of [project]/
+
+
+Import traces:
+  Client Component Browser:
+    ./src/app/match/page.tsx [Client Component Browser]
+    ./src/app/match/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/match/page.tsx [Client Component SSR]
+    ./src/app/match/page.tsx [Server Component]
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+./src/app/pro/[id]/page.tsx:11:1
+Module not found: Can't resolve '@/components/ui/button'
+[0m [90m  9 |[39m [36mimport[39m { [33mAppHeader[39m } [36mfrom[39m [32m'@/components/app-header'[39m[33m;[39m
+ [90m 10 |[39m [36mimport[39m { [33mBadge[39m } [36mfrom[39m [32m'@/components/ui/badge'[39m[33m;[39m
+[31m[1m>[22m[39m[90m 11 |[39m [36mimport[39m { [33mButton[39m } [36mfrom[39m [32m'@/components/ui/button'[39m[33m;[39m
+ [90m    |[39m [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+ [90m 12 |[39m [36mimport[39m { [33mTabs[39m[33m,[39m [33mTabsContent[39m[33m,[39m [33mTabsList[39m[33m,[39m [33mTabsTrigger[39m } [36mfrom[39m [32m'@/components/ui/tabs'[39m[33m;[39m
+ [90m 13 |[39m [36mimport[39m {
+ [90m 14 |[39m     [33mDialog[39m[33m,[39m[0m
+
+Import map: aliased to relative './src/components/ui/button' inside of [project]/
+
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+./src/app/pro/page.tsx:10:1
+Module not found: Can't resolve '@/components/ui/button'
+[0m [90m  8 |[39m [36mimport[39m { useCallback[33m,[39m useEffect[33m,[39m useMemo[33m,[39m useRef[33m,[39m useState } [36mfrom[39m [32m'react'[39m[33m;[39m
+ [90m  9 |[39m [36mimport[39m { usePathname[33m,[39m useRouter[33m,[39m useSearchParams } [36mfrom[39m [32m'next/navigation'[39m[33m;[39m
+[31m[1m>[22m[39m[90m 10 |[39m [36mimport[39m { [33mButton[39m } [36mfrom[39m [32m'@/components/ui/button'[39m[33m;[39m
+ [90m    |[39m [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+ [90m 11 |[39m [36mimport[39m { compressImage } [36mfrom[39m [32m'@/lib/image-compression'[39m[33m;[39m
+ [90m 12 |[39m [36mimport[39m { setImageData } [36mfrom[39m [32m'@/lib/image-store'[39m[33m;[39m
+ [90m 13 |[39m [36mimport[39m { [33mTabs[39m[33m,[39m [33mTabsContent[39m[33m,[39m [33mTabsList[39m[33m,[39m [33mTabsTrigger[39m } [36mfrom[39m [32m'@/components/ui/tabs'[39m[33m;[39m[0m
+
+Import map: aliased to relative './src/components/ui/button' inside of [project]/
+
+
+Import traces:
+  Client Component Browser:
+    ./src/app/pro/page.tsx [Client Component Browser]
+    ./src/app/pro/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/pro/page.tsx [Client Component SSR]
+    ./src/app/pro/page.tsx [Server Component]
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+./src/app/welcome/page.tsx:10:1
+Module not found: Can't resolve '@/components/ui/button'
+[0m [90m  8 |[39m [36mimport[39m { useCallback[33m,[39m useRef[33m,[39m useState } [36mfrom[39m [32m'react'[39m[33m;[39m
+ [90m  9 |[39m [36mimport[39m { useRouter[33m,[39m useSearchParams } [36mfrom[39m [32m'next/navigation'[39m[33m;[39m
+[31m[1m>[22m[39m[90m 10 |[39m [36mimport[39m { [33mButton[39m } [36mfrom[39m [32m'@/components/ui/button'[39m[33m;[39m
+ [90m    |[39m [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+ [90m 11 |[39m [36mimport[39m { compressImage } [36mfrom[39m [32m'@/lib/image-compression'[39m[33m;[39m
+ [90m 12 |[39m [36mimport[39m { setImageData } [36mfrom[39m [32m'@/lib/image-store'[39m[33m;[39m
+ [90m 13 |[39m [36mimport[39m { [33mLabel[39m } [36mfrom[39m [32m'@/components/ui/label'[39m[33m;[39m[0m
+
+Import map: aliased to relative './src/components/ui/button' inside of [project]/
+
+
+Import traces:
+  Client Component Browser:
+    ./src/app/welcome/page.tsx [Client Component Browser]
+    ./src/app/welcome/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/welcome/page.tsx [Client Component SSR]
+    ./src/app/welcome/page.tsx [Server Component]
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+./src/components/contact-popover.tsx:4:1
+Module not found: Can't resolve '@/components/ui/button'
+[0m [90m 2 |[39m
+ [90m 3 |[39m [36mimport[39m { useState } [36mfrom[39m [32m'react'[39m[33m;[39m
+[31m[1m>[22m[39m[90m 4 |[39m [36mimport[39m { [33mButton[39m } [36mfrom[39m [32m'@/components/ui/button'[39m[33m;[39m
+ [90m   |[39m [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+ [90m 5 |[39m [36mimport[39m { [33mPopover[39m[33m,[39m [33mPopoverContent[39m[33m,[39m [33mPopoverTrigger[39m } [36mfrom[39m [32m'@/components/ui/popover'[39m[33m;[39m
+ [90m 6 |[39m [36mimport[39m { [33mSeparator[39m } [36mfrom[39m [32m'@/components/ui/separator'[39m[33m;[39m
+ [90m 7 |[39m [36mimport[39m {[0m
+
+Import map: aliased to relative './src/components/ui/button' inside of [project]/
+
+
+Import traces:
+  Client Component Browser:
+    ./src/components/contact-popover.tsx [Client Component Browser]
+    ./src/app/pro/page.tsx [Client Component Browser]
+    ./src/app/pro/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/components/contact-popover.tsx [Client Component SSR]
+    ./src/app/pro/page.tsx [Client Component SSR]
+    ./src/app/pro/page.tsx [Server Component]
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+./src/app/pro/[id]/page.tsx:13:1
+Module not found: Can't resolve '@/components/ui/dialog'
+[0m [90m 11 |[39m [36mimport[39m { [33mButton[39m } [36mfrom[39m [32m'@/components/ui/button'[39m[33m;[39m
+ [90m 12 |[39m [36mimport[39m { [33mTabs[39m[33m,[39m [33mTabsContent[39m[33m,[39m [33mTabsList[39m[33m,[39m [33mTabsTrigger[39m } [36mfrom[39m [32m'@/components/ui/tabs'[39m[33m;[39m
+[31m[1m>[22m[39m[90m 13 |[39m [36mimport[39m {
+ [90m    |[39m [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+[31m[1m>[22m[39m[90m 14 |[39m     [33mDialog[39m[33m,[39m
+ [90m    |[39m [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+[31m[1m>[22m[39m[90m 15 |[39m     [33mDialogContent[39m[33m,[39m
+ [90m    |[39m [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+[31m[1m>[22m[39m[90m 16 |[39m     [33mDialogDescription[39m[33m,[39m
+ [90m    |[39m [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+[31m[1m>[22m[39m[90m 17 |[39m     [33mDialogHeader[39m[33m,[39m
+ [90m    |[39m [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+[31m[1m>[22m[39m[90m 18 |[39m     [33mDialogTitle[39m[33m,[39m
+ [90m    |[39m [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+[31m[1m>[22m[39m[90m 19 |[39m     [33mDialogTrigger[39m[33m,[39m
+ [90m    |[39m [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+[31m[1m>[22m[39m[90m 20 |[39m } [36mfrom[39m [32m'@/components/ui/dialog'[39m[33m;[39m
+ [90m    |[39m [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+ [90m 21 |[39m [36mimport[39m { [33mProPageMap[39m } [36mfrom[39m [32m'./_components/pro-page-map'[39m[33m;[39m
+ [90m 22 |[39m [36mimport[39m { [33mProStickyFooter[39m } [36mfrom[39m [32m'./_components/pro-sticky-footer'[39m[33m;[39m
+ [90m 23 |[39m [36mimport[39m { [33mProReviewForm[39m } [36mfrom[39m [32m'./_components/pro-review-form'[39m[33m;[39m[0m
+
+Import map: aliased to relative './src/components/ui/dialog' inside of [project]/
+
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+./src/app/pro/page.tsx:16:1
+Module not found: Can't resolve '@/components/ui/dialog'
+[0m [90m 14 |[39m [36mimport[39m { [33mBadge[39m } [36mfrom[39m [32m'@/components/ui/badge'[39m[33m;[39m
+ [90m 15 |[39m [36mimport[39m { [33mSeparator[39m } [36mfrom[39m [32m'@/components/ui/separator'[39m[33m;[39m
+[31m[1m>[22m[39m[90m 16 |[39m [36mimport[39m {
+ [90m    |[39m [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+[31m[1m>[22m[39m[90m 17 |[39m     [33mDialog[39m[33m,[39m
+ [90m    |[39m [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+[31m[1m>[22m[39m[90m 18 |[39m     [33mDialogContent[39m[33m,[39m
+ [90m    |[39m [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+[31m[1m>[22m[39m[90m 19 |[39m     [33mDialogDescription[39m[33m,[39m
+ [90m    |[39m [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+[31m[1m>[22m[39m[90m 20 |[39m     [33mDialogFooter[39m[33m,[39m
+ [90m    |[39m [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+[31m[1m>[22m[39m[90m 21 |[39m     [33mDialogHeader[39m[33m,[39m
+ [90m    |[39m [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+[31m[1m>[22m[39m[90m 22 |[39m     [33mDialogTitle[39m[33m,[39m
+ [90m    |[39m [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+[31m[1m>[22m[39m[90m 23 |[39m } [36mfrom[39m [32m'@/components/ui/dialog'[39m[33m;[39m
+ [90m    |[39m [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+ [90m 24 |[39m [36mimport[39m { [33mInput[39m } [36mfrom[39m [32m'@/components/ui/input'[39m[33m;[39m
+ [90m 25 |[39m [36mimport[39m { [33mLabel[39m } [36mfrom[39m [32m'@/components/ui/label'[39m[33m;[39m
+ [90m 26 |[39m [36mimport[39m { [33mTextarea[39m } [36mfrom[39m [32m'@/components/ui/textarea'[39m[33m;[39m[0m
+
+Import map: aliased to relative './src/components/ui/dialog' inside of [project]/
+
+
+Import traces:
+  Client Component Browser:
+    ./src/app/pro/page.tsx [Client Component Browser]
+    ./src/app/pro/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/pro/page.tsx [Client Component SSR]
+    ./src/app/pro/page.tsx [Server Component]
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+./src/components/contact-popover.tsx:7:1
+Module not found: Can't resolve '@/components/ui/dialog'
+[0m [90m  5 |[39m [36mimport[39m { [33mPopover[39m[33m,[39m [33mPopoverContent[39m[33m,[39m [33mPopoverTrigger[39m } [36mfrom[39m [32m'@/components/ui/popover'[39m[33m;[39m
+ [90m  6 |[39m [36mimport[39m { [33mSeparator[39m } [36mfrom[39m [32m'@/components/ui/separator'[39m[33m;[39m
+[31m[1m>[22m[39m[90m  7 |[39m [36mimport[39m {
+ [90m    |[39m [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+[31m[1m>[22m[39m[90m  8 |[39m     [33mDialog[39m[33m,[39m
+ [90m    |[39m [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+[31m[1m>[22m[39m[90m  9 |[39m     [33mDialogContent[39m[33m,[39m
+ [90m    |[39m [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+[31m[1m>[22m[39m[90m 10 |[39m     [33mDialogDescription[39m[33m,[39m
+ [90m    |[39m [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+[31m[1m>[22m[39m[90m 11 |[39m     [33mDialogFooter[39m[33m,[39m
+ [90m    |[39m [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+[31m[1m>[22m[39m[90m 12 |[39m     [33mDialogHeader[39m[33m,[39m
+ [90m    |[39m [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+[31m[1m>[22m[39m[90m 13 |[39m     [33mDialogTitle[39m[33m,[39m
+ [90m    |[39m [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+[31m[1m>[22m[39m[90m 14 |[39m } [36mfrom[39m [32m'@/components/ui/dialog'[39m[33m;[39m
+ [90m    |[39m [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+ [90m 15 |[39m [36mimport[39m { toWhatsAppPhone[33m,[39m isWhatsAppCapablePhone } [36mfrom[39m [32m'@/lib/utils'[39m[33m;[39m
+ [90m 16 |[39m [36mimport[39m { resolveWhatsAppPrefill } [36mfrom[39m [32m'@/lib/whatsapp-prefill'[39m[33m;[39m
+ [90m 17 |[39m [36mimport[39m { toast } [36mfrom[39m [32m'sonner'[39m[33m;[39m[0m
+
+Import map: aliased to relative './src/components/ui/dialog' inside of [project]/
+
+
+Import traces:
+  Client Component Browser:
+    ./src/components/contact-popover.tsx [Client Component Browser]
+    ./src/app/pro/page.tsx [Client Component Browser]
+    ./src/app/pro/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/components/contact-popover.tsx [Client Component SSR]
+    ./src/app/pro/page.tsx [Client Component SSR]
+    ./src/app/pro/page.tsx [Server Component]
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+./src/app/match/_components/match-client.tsx:13:1
+Module not found: Can't resolve '@/components/ui/input'
+[0m [90m 11 |[39m [36mimport[39m { importLibrary[33m,[39m setOptions } [36mfrom[39m [32m'@googlemaps/js-api-loader'[39m[33m;[39m
+ [90m 12 |[39m [36mimport[39m { [33mArrowLeft[39m[33m,[39m [33mArrowRight[39m[33m,[39m [33mStar[39m } [36mfrom[39m [32m'lucide-react'[39m[33m;[39m
+[31m[1m>[22m[39m[90m 13 |[39m [36mimport[39m { [33mInput[39m } [36mfrom[39m [32m'@/components/ui/input'[39m[33m;[39m
+ [90m    |[39m [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+ [90m 14 |[39m [36mimport[39m { toast } [36mfrom[39m [32m'sonner'[39m[33m;[39m
+ [90m 15 |[39m [36mimport[39m { [33mSkeleton[39m } [36mfrom[39m [32m'@/components/ui/skeleton'[39m[33m;[39m
+ [90m 16 |[39m[0m
+
+Import map: aliased to relative './src/components/ui/input' inside of [project]/
+
+
+Import trace:
+  Server Component:
+    ./src/app/match/_components/match-client.tsx
+    ./src/app/match/[id]/page.tsx
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+./src/app/pro/page.tsx:24:1
+Module not found: Can't resolve '@/components/ui/input'
+[0m [90m 22 |[39m     [33mDialogTitle[39m[33m,[39m
+ [90m 23 |[39m } [36mfrom[39m [32m'@/components/ui/dialog'[39m[33m;[39m
+[31m[1m>[22m[39m[90m 24 |[39m [36mimport[39m { [33mInput[39m } [36mfrom[39m [32m'@/components/ui/input'[39m[33m;[39m
+ [90m    |[39m [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+ [90m 25 |[39m [36mimport[39m { [33mLabel[39m } [36mfrom[39m [32m'@/components/ui/label'[39m[33m;[39m
+ [90m 26 |[39m [36mimport[39m { [33mTextarea[39m } [36mfrom[39m [32m'@/components/ui/textarea'[39m[33m;[39m
+ [90m 27 |[39m [36mimport[39m { [33mSlider[39m } [36mfrom[39m [32m'@/components/ui/slider'[39m[33m;[39m[0m
+
+Import map: aliased to relative './src/components/ui/input' inside of [project]/
+
+
+Import traces:
+  Client Component Browser:
+    ./src/app/pro/page.tsx [Client Component Browser]
+    ./src/app/pro/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/pro/page.tsx [Client Component SSR]
+    ./src/app/pro/page.tsx [Server Component]
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+./src/app/welcome/page.tsx:15:1
+Module not found: Can't resolve '@/components/ui/input'
+[0m [90m 13 |[39m [36mimport[39m { [33mLabel[39m } [36mfrom[39m [32m'@/components/ui/label'[39m[33m;[39m
+ [90m 14 |[39m [36mimport[39m { [33mTextarea[39m } [36mfrom[39m [32m'@/components/ui/textarea'[39m[33m;[39m
+[31m[1m>[22m[39m[90m 15 |[39m [36mimport[39m { [33mInput[39m } [36mfrom[39m [32m'@/components/ui/input'[39m[33m;[39m
+ [90m    |[39m [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+ [90m 16 |[39m [36mimport[39m { [33mArrowLeft[39m } [36mfrom[39m [32m'lucide-react'[39m[33m;[39m
+ [90m 17 |[39m
+ [90m 18 |[39m [36mexport[39m [36mdefault[39m [36mfunction[39m [33mWelcomePage[39m() {[0m
+
+Import map: aliased to relative './src/components/ui/input' inside of [project]/
+
+
+Import traces:
+  Client Component Browser:
+    ./src/app/welcome/page.tsx [Client Component Browser]
+    ./src/app/welcome/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/welcome/page.tsx [Client Component SSR]
+    ./src/app/welcome/page.tsx [Server Component]
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+./src/app/diagnosis/[id]/_components/diagnosis-client.tsx:7:1
+Module not found: Can't resolve '@/components/ui/label'
+[0m [90m  5 |[39m [36mimport[39m { [33mButton[39m } [36mfrom[39m [32m'@/components/ui/button'[39m[33m;[39m
+ [90m  6 |[39m [36mimport[39m { [33mBadge[39m } [36mfrom[39m [32m'@/components/ui/badge'[39m[33m;[39m
+[31m[1m>[22m[39m[90m  7 |[39m [36mimport[39m { [33mLabel[39m } [36mfrom[39m [32m'@/components/ui/label'[39m[33m;[39m
+ [90m    |[39m [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+ [90m  8 |[39m [36mimport[39m { [33mTextarea[39m } [36mfrom[39m [32m'@/components/ui/textarea'[39m[33m;[39m
+ [90m  9 |[39m [36mimport[39m { [33mSkeleton[39m } [36mfrom[39m [32m'@/components/ui/skeleton'[39m[33m;[39m
+ [90m 10 |[39m [36mimport[39m { [33mArrowLeft[39m } [36mfrom[39m [32m'lucide-react'[39m[33m;[39m[0m
+
+Import map: aliased to relative './src/components/ui/label' inside of [project]/
+
+
+Import trace:
+  Client Component Browser:
+    ./src/app/diagnosis/[id]/_components/diagnosis-client.tsx [Client Component Browser]
+    ./src/app/diagnosis/[id]/_components/diagnosis-client-loader.tsx [Client Component Browser]
+    ./src/app/diagnosis/[id]/_components/diagnosis-client-loader.tsx [Server Component]
+    ./src/app/diagnosis/[id]/page.tsx [Server Component]
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+./src/app/pro/page.tsx:25:1
+Module not found: Can't resolve '@/components/ui/label'
+[0m [90m 23 |[39m } [36mfrom[39m [32m'@/components/ui/dialog'[39m[33m;[39m
+ [90m 24 |[39m [36mimport[39m { [33mInput[39m } [36mfrom[39m [32m'@/components/ui/input'[39m[33m;[39m
+[31m[1m>[22m[39m[90m 25 |[39m [36mimport[39m { [33mLabel[39m } [36mfrom[39m [32m'@/components/ui/label'[39m[33m;[39m
+ [90m    |[39m [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+ [90m 26 |[39m [36mimport[39m { [33mTextarea[39m } [36mfrom[39m [32m'@/components/ui/textarea'[39m[33m;[39m
+ [90m 27 |[39m [36mimport[39m { [33mSlider[39m } [36mfrom[39m [32m'@/components/ui/slider'[39m[33m;[39m
+ [90m 28 |[39m [36mimport[39m { [33mArrowLeft[39m[33m,[39m [33mImagePlus[39m[33m,[39m [33mStar[39m[33m,[39m [33mStarHalf[39m[33m,[39m [33mX[39m } [36mfrom[39m [32m'lucide-react'[39m[33m;[39m[0m
+
+Import map: aliased to relative './src/components/ui/label' inside of [project]/
+
+
+Import traces:
+  Client Component Browser:
+    ./src/app/pro/page.tsx [Client Component Browser]
+    ./src/app/pro/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/pro/page.tsx [Client Component SSR]
+    ./src/app/pro/page.tsx [Server Component]
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+./src/app/welcome/page.tsx:13:1
+Module not found: Can't resolve '@/components/ui/label'
+[0m [90m 11 |[39m [36mimport[39m { compressImage } [36mfrom[39m [32m'@/lib/image-compression'[39m[33m;[39m
+ [90m 12 |[39m [36mimport[39m { setImageData } [36mfrom[39m [32m'@/lib/image-store'[39m[33m;[39m
+[31m[1m>[22m[39m[90m 13 |[39m [36mimport[39m { [33mLabel[39m } [36mfrom[39m [32m'@/components/ui/label'[39m[33m;[39m
+ [90m    |[39m [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+ [90m 14 |[39m [36mimport[39m { [33mTextarea[39m } [36mfrom[39m [32m'@/components/ui/textarea'[39m[33m;[39m
+ [90m 15 |[39m [36mimport[39m { [33mInput[39m } [36mfrom[39m [32m'@/components/ui/input'[39m[33m;[39m
+ [90m 16 |[39m [36mimport[39m { [33mArrowLeft[39m } [36mfrom[39m [32m'lucide-react'[39m[33m;[39m[0m
+
+Import map: aliased to relative './src/components/ui/label' inside of [project]/
+
+
+Import traces:
+  Client Component Browser:
+    ./src/app/welcome/page.tsx [Client Component Browser]
+    ./src/app/welcome/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/welcome/page.tsx [Client Component SSR]
+    ./src/app/welcome/page.tsx [Server Component]
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+./src/app/match/_components/match-client.tsx:7:1
+Module not found: Can't resolve '@/components/ui/popover'
+[0m [90m  5 |[39m [36mimport[39m { [33mButton[39m } [36mfrom[39m [32m'@/components/ui/button'[39m[33m;[39m
+ [90m  6 |[39m [36mimport[39m { [33mBadge[39m } [36mfrom[39m [32m'@/components/ui/badge'[39m[33m;[39m
+[31m[1m>[22m[39m[90m  7 |[39m [36mimport[39m { [33mPopover[39m[33m,[39m [33mPopoverContent[39m[33m,[39m [33mPopoverTrigger[39m } [36mfrom[39m [32m'@/components/ui/popover'[39m[33m;[39m
+ [90m    |[39m [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+ [90m  8 |[39m [36mimport[39m { supabase } [36mfrom[39m [32m'@/lib/supabase'[39m[33m;[39m
+ [90m  9 |[39m [36mimport[39m { toWhatsAppPhone } [36mfrom[39m [32m'@/lib/utils'[39m[33m;[39m
+ [90m 10 |[39m [36mimport[39m { setLastConversationIdForWhatsApp } [36mfrom[39m [32m'@/lib/whatsapp-prefill'[39m[33m;[39m[0m
+
+Import map: aliased to relative './src/components/ui/popover' inside of [project]/
+
+
+Import trace:
+  Server Component:
+    ./src/app/match/_components/match-client.tsx
+    ./src/app/match/[id]/page.tsx
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+./src/app/match/page.tsx:13:1
+Module not found: Can't resolve '@/components/ui/popover'
+[0m [90m 11 |[39m [36mimport[39m { [33mBadge[39m } [36mfrom[39m [32m'@/components/ui/badge'[39m[33m;[39m
+ [90m 12 |[39m [36mimport[39m { [33mSeparator[39m } [36mfrom[39m [32m'@/components/ui/separator'[39m[33m;[39m
+[31m[1m>[22m[39m[90m 13 |[39m [36mimport[39m { [33mPopover[39m[33m,[39m [33mPopoverContent[39m[33m,[39m [33mPopoverTrigger[39m } [36mfrom[39m [32m'@/components/ui/popover'[39m[33m;[39m
+ [90m    |[39m [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+ [90m 14 |[39m [36mimport[39m { supabase } [36mfrom[39m [32m'@/lib/supabase'[39m[33m;[39m
+ [90m 15 |[39m [36mimport[39m { toWhatsAppPhone } [36mfrom[39m [32m'@/lib/utils'[39m[33m;[39m
+ [90m 16 |[39m [36mimport[39m { importLibrary[33m,[39m setOptions } [36mfrom[39m [32m'@googlemaps/js-api-loader'[39m[33m;[39m[0m
+
+Import map: aliased to relative './src/components/ui/popover' inside of [project]/
+
+
+Import traces:
+  Client Component Browser:
+    ./src/app/match/page.tsx [Client Component Browser]
+    ./src/app/match/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/match/page.tsx [Client Component SSR]
+    ./src/app/match/page.tsx [Server Component]
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+./src/components/contact-popover.tsx:5:1
+Module not found: Can't resolve '@/components/ui/popover'
+[0m [90m 3 |[39m [36mimport[39m { useState } [36mfrom[39m [32m'react'[39m[33m;[39m
+ [90m 4 |[39m [36mimport[39m { [33mButton[39m } [36mfrom[39m [32m'@/components/ui/button'[39m[33m;[39m
+[31m[1m>[22m[39m[90m 5 |[39m [36mimport[39m { [33mPopover[39m[33m,[39m [33mPopoverContent[39m[33m,[39m [33mPopoverTrigger[39m } [36mfrom[39m [32m'@/components/ui/popover'[39m[33m;[39m
+ [90m   |[39m [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+ [90m 6 |[39m [36mimport[39m { [33mSeparator[39m } [36mfrom[39m [32m'@/components/ui/separator'[39m[33m;[39m
+ [90m 7 |[39m [36mimport[39m {
+ [90m 8 |[39m     [33mDialog[39m[33m,[39m[0m
+
+Import map: aliased to relative './src/components/ui/popover' inside of [project]/
+
+
+Import traces:
+  Client Component Browser:
+    ./src/components/contact-popover.tsx [Client Component Browser]
+    ./src/app/pro/page.tsx [Client Component Browser]
+    ./src/app/pro/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/components/contact-popover.tsx [Client Component SSR]
+    ./src/app/pro/page.tsx [Client Component SSR]
+    ./src/app/pro/page.tsx [Server Component]
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+./src/app/pro/page.tsx:15:1
+Module not found: Can't resolve '@/components/ui/separator'
+[0m [90m 13 |[39m [36mimport[39m { [33mTabs[39m[33m,[39m [33mTabsContent[39m[33m,[39m [33mTabsList[39m[33m,[39m [33mTabsTrigger[39m } [36mfrom[39m [32m'@/components/ui/tabs'[39m[33m;[39m
+ [90m 14 |[39m [36mimport[39m { [33mBadge[39m } [36mfrom[39m [32m'@/components/ui/badge'[39m[33m;[39m
+[31m[1m>[22m[39m[90m 15 |[39m [36mimport[39m { [33mSeparator[39m } [36mfrom[39m [32m'@/components/ui/separator'[39m[33m;[39m
+ [90m    |[39m [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+ [90m 16 |[39m [36mimport[39m {
+ [90m 17 |[39m     [33mDialog[39m[33m,[39m
+ [90m 18 |[39m     [33mDialogContent[39m[33m,[39m[0m
+
+Import map: aliased to relative './src/components/ui/separator' inside of [project]/
+
+
+Import traces:
+  Client Component Browser:
+    ./src/app/pro/page.tsx [Client Component Browser]
+    ./src/app/pro/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/pro/page.tsx [Client Component SSR]
+    ./src/app/pro/page.tsx [Server Component]
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+./src/components/contact-popover.tsx:6:1
+Module not found: Can't resolve '@/components/ui/separator'
+[0m [90m 4 |[39m [36mimport[39m { [33mButton[39m } [36mfrom[39m [32m'@/components/ui/button'[39m[33m;[39m
+ [90m 5 |[39m [36mimport[39m { [33mPopover[39m[33m,[39m [33mPopoverContent[39m[33m,[39m [33mPopoverTrigger[39m } [36mfrom[39m [32m'@/components/ui/popover'[39m[33m;[39m
+[31m[1m>[22m[39m[90m 6 |[39m [36mimport[39m { [33mSeparator[39m } [36mfrom[39m [32m'@/components/ui/separator'[39m[33m;[39m
+ [90m   |[39m [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+ [90m 7 |[39m [36mimport[39m {
+ [90m 8 |[39m     [33mDialog[39m[33m,[39m
+ [90m 9 |[39m     [33mDialogContent[39m[33m,[39m[0m
+
+Import map: aliased to relative './src/components/ui/separator' inside of [project]/
+
+
+Import traces:
+  Client Component Browser:
+    ./src/components/contact-popover.tsx [Client Component Browser]
+    ./src/app/pro/page.tsx [Client Component Browser]
+    ./src/app/pro/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/components/contact-popover.tsx [Client Component SSR]
+    ./src/app/pro/page.tsx [Client Component SSR]
+    ./src/app/pro/page.tsx [Server Component]
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+./src/app/chat/_components/providers-map.tsx:7:1
+Module not found: Can't resolve '@/components/ui/skeleton'
+[0m [90m  5 |[39m [36mimport[39m { [33mArrowLeft[39m[33m,[39m [33mArrowRight[39m } [36mfrom[39m [32m'@/lib/icons'[39m[33m;[39m
+ [90m  6 |[39m [36mimport[39m { formatBusinessName } [36mfrom[39m [32m'@/lib/utils'[39m[33m;[39m
+[31m[1m>[22m[39m[90m  7 |[39m [36mimport[39m { [33mSkeleton[39m } [36mfrom[39m [32m'@/components/ui/skeleton'[39m[33m;[39m
+ [90m    |[39m [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+ [90m  8 |[39m [36mimport[39m { [33mBadge[39m } [36mfrom[39m [32m'@/components/ui/badge'[39m[33m;[39m
+ [90m  9 |[39m [36mimport[39m type { [33mProvider[39m } [36mfrom[39m [32m'./types'[39m[33m;[39m
+ [90m 10 |[39m[0m
+
+Import map: aliased to relative './src/components/ui/skeleton' inside of [project]/
+
+
+Import traces:
+  Client Component Browser:
+    ./src/app/chat/_components/providers-map.tsx [Client Component Browser]
+    ./src/app/pro/[id]/_components/pro-page-map.tsx [Client Component Browser]
+    ./src/app/pro/page.tsx [Client Component Browser]
+    ./src/app/pro/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/chat/_components/providers-map.tsx [Client Component SSR]
+    ./src/app/pro/[id]/_components/pro-page-map.tsx [Client Component SSR]
+    ./src/app/pro/page.tsx [Client Component SSR]
+    ./src/app/pro/page.tsx [Server Component]
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+./src/app/diagnosis/[id]/_components/diagnosis-client-loader.tsx:5:1
+Module not found: Can't resolve '@/components/ui/skeleton'
+[0m [90m 3 |[39m [36mimport[39m { [33mSuspense[39m } [36mfrom[39m [32m'react'[39m[33m;[39m
+ [90m 4 |[39m [36mimport[39m dynamic [36mfrom[39m [32m'next/dynamic'[39m[33m;[39m
+[31m[1m>[22m[39m[90m 5 |[39m [36mimport[39m { [33mSkeleton[39m } [36mfrom[39m [32m'@/components/ui/skeleton'[39m[33m;[39m
+ [90m   |[39m [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+ [90m 6 |[39m
+ [90m 7 |[39m [36mfunction[39m [33mDiagnosisLoading[39m() {
+ [90m 8 |[39m     [36mreturn[39m ([0m
+
+Import map: aliased to relative './src/components/ui/skeleton' inside of [project]/
+
+
+Import trace:
+  Server Component:
+    ./src/app/diagnosis/[id]/_components/diagnosis-client-loader.tsx
+    ./src/app/diagnosis/[id]/page.tsx
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+./src/app/diagnosis/[id]/_components/diagnosis-client.tsx:9:1
+Module not found: Can't resolve '@/components/ui/skeleton'
+[0m [90m  7 |[39m [36mimport[39m { [33mLabel[39m } [36mfrom[39m [32m'@/components/ui/label'[39m[33m;[39m
+ [90m  8 |[39m [36mimport[39m { [33mTextarea[39m } [36mfrom[39m [32m'@/components/ui/textarea'[39m[33m;[39m
+[31m[1m>[22m[39m[90m  9 |[39m [36mimport[39m { [33mSkeleton[39m } [36mfrom[39m [32m'@/components/ui/skeleton'[39m[33m;[39m
+ [90m    |[39m [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+ [90m 10 |[39m [36mimport[39m { [33mArrowLeft[39m } [36mfrom[39m [32m'lucide-react'[39m[33m;[39m
+ [90m 11 |[39m [36mimport[39m { getImageData } [36mfrom[39m [32m'@/lib/image-store'[39m[33m;[39m
+ [90m 12 |[39m [36mimport[39m { supabase } [36mfrom[39m [32m'@/lib/supabase'[39m[33m;[39m[0m
+
+Import map: aliased to relative './src/components/ui/skeleton' inside of [project]/
+
+
+Import trace:
+  Client Component Browser:
+    ./src/app/diagnosis/[id]/_components/diagnosis-client.tsx [Client Component Browser]
+    ./src/app/diagnosis/[id]/_components/diagnosis-client-loader.tsx [Client Component Browser]
+    ./src/app/diagnosis/[id]/_components/diagnosis-client-loader.tsx [Server Component]
+    ./src/app/diagnosis/[id]/page.tsx [Server Component]
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+./src/app/match/_components/match-client.tsx:15:1
+Module not found: Can't resolve '@/components/ui/skeleton'
+[0m [90m 13 |[39m [36mimport[39m { [33mInput[39m } [36mfrom[39m [32m'@/components/ui/input'[39m[33m;[39m
+ [90m 14 |[39m [36mimport[39m { toast } [36mfrom[39m [32m'sonner'[39m[33m;[39m
+[31m[1m>[22m[39m[90m 15 |[39m [36mimport[39m { [33mSkeleton[39m } [36mfrom[39m [32m'@/components/ui/skeleton'[39m[33m;[39m
+ [90m    |[39m [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+ [90m 16 |[39m
+ [90m 17 |[39m type [33mProvider[39m [33m=[39m {
+ [90m 18 |[39m     placeId[33m:[39m string[33m;[39m[0m
+
+Import map: aliased to relative './src/components/ui/skeleton' inside of [project]/
+
+
+Import trace:
+  Server Component:
+    ./src/app/match/_components/match-client.tsx
+    ./src/app/match/[id]/page.tsx
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+./src/app/match/page.tsx:17:1
+Module not found: Can't resolve '@/components/ui/skeleton'
+[0m [90m 15 |[39m [36mimport[39m { toWhatsAppPhone } [36mfrom[39m [32m'@/lib/utils'[39m[33m;[39m
+ [90m 16 |[39m [36mimport[39m { importLibrary[33m,[39m setOptions } [36mfrom[39m [32m'@googlemaps/js-api-loader'[39m[33m;[39m
+[31m[1m>[22m[39m[90m 17 |[39m [36mimport[39m { [33mSkeleton[39m } [36mfrom[39m [32m'@/components/ui/skeleton'[39m[33m;[39m
+ [90m    |[39m [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+ [90m 18 |[39m
+ [90m 19 |[39m [36mimport[39m { [33mArrowLeft[39m[33m,[39m [33mArrowRight[39m } [36mfrom[39m [32m'lucide-react'[39m[33m;[39m
+ [90m 20 |[39m[0m
+
+Import map: aliased to relative './src/components/ui/skeleton' inside of [project]/
+
+
+Import traces:
+  Client Component Browser:
+    ./src/app/match/page.tsx [Client Component Browser]
+    ./src/app/match/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/match/page.tsx [Client Component SSR]
+    ./src/app/match/page.tsx [Server Component]
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+./src/app/pro/page.tsx:30:1
+Module not found: Can't resolve '@/components/ui/skeleton'
+[0m [90m 28 |[39m [36mimport[39m { [33mArrowLeft[39m[33m,[39m [33mImagePlus[39m[33m,[39m [33mStar[39m[33m,[39m [33mStarHalf[39m[33m,[39m [33mX[39m } [36mfrom[39m [32m'lucide-react'[39m[33m;[39m
+ [90m 29 |[39m [36mimport[39m { supabase } [36mfrom[39m [32m'@/lib/supabase'[39m[33m;[39m
+[31m[1m>[22m[39m[90m 30 |[39m [36mimport[39m { [33mSkeleton[39m } [36mfrom[39m [32m'@/components/ui/skeleton'[39m[33m;[39m
+ [90m    |[39m [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+ [90m 31 |[39m [36mimport[39m { isOpenNowFromWeekdayDescriptions } [36mfrom[39m [32m'@/lib/open-status'[39m[33m;[39m
+ [90m 32 |[39m [36mimport[39m { [33mProPageMap[39m } [36mfrom[39m [32m'@/app/pro/[id]/_components/pro-page-map'[39m[33m;[39m
+ [90m 33 |[39m [36mimport[39m { [33mContactPopover[39m } [36mfrom[39m [32m'@/components/contact-popover'[39m[33m;[39m[0m
+
+Import map: aliased to relative './src/components/ui/skeleton' inside of [project]/
+
+
+Import traces:
+  Client Component Browser:
+    ./src/app/pro/page.tsx [Client Component Browser]
+    ./src/app/pro/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/pro/page.tsx [Client Component SSR]
+    ./src/app/pro/page.tsx [Server Component]
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+./src/app/pro/[id]/page.tsx:12:1
+Module not found: Can't resolve '@/components/ui/tabs'
+[0m [90m 10 |[39m [36mimport[39m { [33mBadge[39m } [36mfrom[39m [32m'@/components/ui/badge'[39m[33m;[39m
+ [90m 11 |[39m [36mimport[39m { [33mButton[39m } [36mfrom[39m [32m'@/components/ui/button'[39m[33m;[39m
+[31m[1m>[22m[39m[90m 12 |[39m [36mimport[39m { [33mTabs[39m[33m,[39m [33mTabsContent[39m[33m,[39m [33mTabsList[39m[33m,[39m [33mTabsTrigger[39m } [36mfrom[39m [32m'@/components/ui/tabs'[39m[33m;[39m
+ [90m    |[39m [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+ [90m 13 |[39m [36mimport[39m {
+ [90m 14 |[39m     [33mDialog[39m[33m,[39m
+ [90m 15 |[39m     [33mDialogContent[39m[33m,[39m[0m
+
+Import map: aliased to relative './src/components/ui/tabs' inside of [project]/
+
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+./src/app/pro/page.tsx:13:1
+Module not found: Can't resolve '@/components/ui/tabs'
+[0m [90m 11 |[39m [36mimport[39m { compressImage } [36mfrom[39m [32m'@/lib/image-compression'[39m[33m;[39m
+ [90m 12 |[39m [36mimport[39m { setImageData } [36mfrom[39m [32m'@/lib/image-store'[39m[33m;[39m
+[31m[1m>[22m[39m[90m 13 |[39m [36mimport[39m { [33mTabs[39m[33m,[39m [33mTabsContent[39m[33m,[39m [33mTabsList[39m[33m,[39m [33mTabsTrigger[39m } [36mfrom[39m [32m'@/components/ui/tabs'[39m[33m;[39m
+ [90m    |[39m [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+ [90m 14 |[39m [36mimport[39m { [33mBadge[39m } [36mfrom[39m [32m'@/components/ui/badge'[39m[33m;[39m
+ [90m 15 |[39m [36mimport[39m { [33mSeparator[39m } [36mfrom[39m [32m'@/components/ui/separator'[39m[33m;[39m
+ [90m 16 |[39m [36mimport[39m {[0m
+
+Import map: aliased to relative './src/components/ui/tabs' inside of [project]/
+
+
+Import traces:
+  Client Component Browser:
+    ./src/app/pro/page.tsx [Client Component Browser]
+    ./src/app/pro/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/pro/page.tsx [Client Component SSR]
+    ./src/app/pro/page.tsx [Server Component]
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+./src/app/diagnosis/[id]/_components/diagnosis-client.tsx:8:1
+Module not found: Can't resolve '@/components/ui/textarea'
+[0m [90m  6 |[39m [36mimport[39m { [33mBadge[39m } [36mfrom[39m [32m'@/components/ui/badge'[39m[33m;[39m
+ [90m  7 |[39m [36mimport[39m { [33mLabel[39m } [36mfrom[39m [32m'@/components/ui/label'[39m[33m;[39m
+[31m[1m>[22m[39m[90m  8 |[39m [36mimport[39m { [33mTextarea[39m } [36mfrom[39m [32m'@/components/ui/textarea'[39m[33m;[39m
+ [90m    |[39m [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+ [90m  9 |[39m [36mimport[39m { [33mSkeleton[39m } [36mfrom[39m [32m'@/components/ui/skeleton'[39m[33m;[39m
+ [90m 10 |[39m [36mimport[39m { [33mArrowLeft[39m } [36mfrom[39m [32m'lucide-react'[39m[33m;[39m
+ [90m 11 |[39m [36mimport[39m { getImageData } [36mfrom[39m [32m'@/lib/image-store'[39m[33m;[39m[0m
+
+Import map: aliased to relative './src/components/ui/textarea' inside of [project]/
+
+
+Import trace:
+  Client Component Browser:
+    ./src/app/diagnosis/[id]/_components/diagnosis-client.tsx [Client Component Browser]
+    ./src/app/diagnosis/[id]/_components/diagnosis-client-loader.tsx [Client Component Browser]
+    ./src/app/diagnosis/[id]/_components/diagnosis-client-loader.tsx [Server Component]
+    ./src/app/diagnosis/[id]/page.tsx [Server Component]
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+./src/app/pro/page.tsx:26:1
+Module not found: Can't resolve '@/components/ui/textarea'
+[0m [90m 24 |[39m [36mimport[39m { [33mInput[39m } [36mfrom[39m [32m'@/components/ui/input'[39m[33m;[39m
+ [90m 25 |[39m [36mimport[39m { [33mLabel[39m } [36mfrom[39m [32m'@/components/ui/label'[39m[33m;[39m
+[31m[1m>[22m[39m[90m 26 |[39m [36mimport[39m { [33mTextarea[39m } [36mfrom[39m [32m'@/components/ui/textarea'[39m[33m;[39m
+ [90m    |[39m [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+ [90m 27 |[39m [36mimport[39m { [33mSlider[39m } [36mfrom[39m [32m'@/components/ui/slider'[39m[33m;[39m
+ [90m 28 |[39m [36mimport[39m { [33mArrowLeft[39m[33m,[39m [33mImagePlus[39m[33m,[39m [33mStar[39m[33m,[39m [33mStarHalf[39m[33m,[39m [33mX[39m } [36mfrom[39m [32m'lucide-react'[39m[33m;[39m
+ [90m 29 |[39m [36mimport[39m { supabase } [36mfrom[39m [32m'@/lib/supabase'[39m[33m;[39m[0m
+
+Import map: aliased to relative './src/components/ui/textarea' inside of [project]/
+
+
+Import traces:
+  Client Component Browser:
+    ./src/app/pro/page.tsx [Client Component Browser]
+    ./src/app/pro/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/pro/page.tsx [Client Component SSR]
+    ./src/app/pro/page.tsx [Server Component]
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+./src/app/welcome/page.tsx:14:1
+Module not found: Can't resolve '@/components/ui/textarea'
+[0m [90m 12 |[39m [36mimport[39m { setImageData } [36mfrom[39m [32m'@/lib/image-store'[39m[33m;[39m
+ [90m 13 |[39m [36mimport[39m { [33mLabel[39m } [36mfrom[39m [32m'@/components/ui/label'[39m[33m;[39m
+[31m[1m>[22m[39m[90m 14 |[39m [36mimport[39m { [33mTextarea[39m } [36mfrom[39m [32m'@/components/ui/textarea'[39m[33m;[39m
+ [90m    |[39m [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+ [90m 15 |[39m [36mimport[39m { [33mInput[39m } [36mfrom[39m [32m'@/components/ui/input'[39m[33m;[39m
+ [90m 16 |[39m [36mimport[39m { [33mArrowLeft[39m } [36mfrom[39m [32m'lucide-react'[39m[33m;[39m
+ [90m 17 |[39m[0m
+
+Import map: aliased to relative './src/components/ui/textarea' inside of [project]/
+
+
+Import traces:
+  Client Component Browser:
+    ./src/app/welcome/page.tsx [Client Component Browser]
+    ./src/app/welcome/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/welcome/page.tsx [Client Component SSR]
+    ./src/app/welcome/page.tsx [Server Component]
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+./src/app/api/diagnose/route.ts:3:1
+Module not found: Can't resolve '@/lib/ai-client'
+[0m [90m 1 |[39m [36mimport[39m { [33mNextRequest[39m } [36mfrom[39m [32m'next/server'[39m[33m;[39m
+ [90m 2 |[39m [36mimport[39m type { [33mContent[39m [36mas[39m [33mGeminiContent[39m } [36mfrom[39m [32m'@google/generative-ai'[39m[33m;[39m
+[31m[1m>[22m[39m[90m 3 |[39m [36mimport[39m { getGeminiModel } [36mfrom[39m [32m'@/lib/ai-client'[39m[33m;[39m
+ [90m   |[39m [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+ [90m 4 |[39m [36mimport[39m { logAiEvent } [36mfrom[39m [32m'@/lib/ai-logging'[39m[33m;[39m
+ [90m 5 |[39m
+ [90m 6 |[39m [36mexport[39m [36masync[39m [36mfunction[39m [33mPOST[39m(req[33m:[39m [33mNextRequest[39m) {[0m
+
+Import map: aliased to relative './src/lib/ai-client' inside of [project]/
+
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+./src/app/api/whatsapp-message/route.ts:2:1
+Module not found: Can't resolve '@/lib/ai-client'
+[0m [90m 1 |[39m [36mimport[39m { [33mNextRequest[39m[33m,[39m [33mNextResponse[39m } [36mfrom[39m [32m'next/server'[39m[33m;[39m
+[31m[1m>[22m[39m[90m 2 |[39m [36mimport[39m { getGeminiModel } [36mfrom[39m [32m'@/lib/ai-client'[39m[33m;[39m
+ [90m   |[39m [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+ [90m 3 |[39m
+ [90m 4 |[39m type [33mBody[39m [33m=[39m {
+ [90m 5 |[39m     diagnosis[33m?[39m[33m:[39m string[33m;[39m[0m
+
+Import map: aliased to relative './src/lib/ai-client' inside of [project]/
+
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+./src/lib/review-summary.ts:1:1
+Module not found: Can't resolve '@/lib/ai-client'
+[0m[31m[1m>[22m[39m[90m 1 |[39m [36mimport[39m { getGeminiModel } [36mfrom[39m [32m'@/lib/ai-client'[39m[33m;[39m
+ [90m   |[39m [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+ [90m 2 |[39m
+ [90m 3 |[39m type [33mReviewLike[39m [33m=[39m {
+ [90m 4 |[39m     rating[33m?[39m[33m:[39m number [33m|[39m [36mnull[39m[33m;[39m[0m
+
+Import map: aliased to relative './src/lib/ai-client' inside of [project]/
+
+
+Import traces:
+  App Route:
+    ./src/lib/review-summary.ts
+    ./src/app/api/providers/providers-route.ts
+    ./src/app/api/providers/route.ts
+
+  Server Component:
+    ./src/lib/review-summary.ts
+    ./src/lib/refresh-provider-by-place-id.ts
+    ./src/app/pro/[id]/page.tsx
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+./src/app/api/diagnose/route.ts:4:1
+Module not found: Can't resolve '@/lib/ai-logging'
+[0m [90m 2 |[39m [36mimport[39m type { [33mContent[39m [36mas[39m [33mGeminiContent[39m } [36mfrom[39m [32m'@google/generative-ai'[39m[33m;[39m
+ [90m 3 |[39m [36mimport[39m { getGeminiModel } [36mfrom[39m [32m'@/lib/ai-client'[39m[33m;[39m
+[31m[1m>[22m[39m[90m 4 |[39m [36mimport[39m { logAiEvent } [36mfrom[39m [32m'@/lib/ai-logging'[39m[33m;[39m
+ [90m   |[39m [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+ [90m 5 |[39m
+ [90m 6 |[39m [36mexport[39m [36masync[39m [36mfunction[39m [33mPOST[39m(req[33m:[39m [33mNextRequest[39m) {
+ [90m 7 |[39m     [36mconst[39m startedAt [33m=[39m [33mDate[39m[33m.[39mnow()[33m;[39m[0m
+
+Import map: aliased to relative './src/lib/ai-logging' inside of [project]/
+
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+./src/app/api/providers/providers-route.ts:2:1
+Module not found: Can't resolve '@/lib/ai-logging'
+[0m [90m 1 |[39m [36mimport[39m { [33mNextRequest[39m[33m,[39m [33mNextResponse[39m } [36mfrom[39m [32m'next/server'[39m[33m;[39m
+[31m[1m>[22m[39m[90m 2 |[39m [36mimport[39m { logAiEvent } [36mfrom[39m [32m'@/lib/ai-logging'[39m[33m;[39m
+ [90m   |[39m [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+ [90m 3 |[39m [36mimport[39m { createSupabaseServerClient[33m,[39m createSupabaseAdminClient } [36mfrom[39m [32m'@/lib/supabase-server'[39m[33m;[39m
+ [90m 4 |[39m [36mimport[39m { summarizeReviews[33m,[39m sanitizeCustomerSummary } [36mfrom[39m [32m'@/lib/review-summary'[39m[33m;[39m
+ [90m 5 |[39m [36mimport[39m { formatWeekdayDescriptionsTo24h } [36mfrom[39m [32m'@/lib/format-weekday-descriptions'[39m[33m;[39m[0m
+
+Import map: aliased to relative './src/lib/ai-logging' inside of [project]/
+
+
+Import trace:
+  App Route:
+    ./src/app/api/providers/providers-route.ts
+    ./src/app/api/providers/route.ts
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+./src/app/chat/_components/providers-map.tsx:5:1
+Module not found: Can't resolve '@/lib/icons'
+[0m [90m 3 |[39m [36mimport[39m { useEffect[33m,[39m useRef[33m,[39m useState[33m,[39m useCallback[33m,[39m useMemo } [36mfrom[39m [32m'react'[39m[33m;[39m
+ [90m 4 |[39m [36mimport[39m { setOptions[33m,[39m importLibrary } [36mfrom[39m [32m'@googlemaps/js-api-loader'[39m[33m;[39m
+[31m[1m>[22m[39m[90m 5 |[39m [36mimport[39m { [33mArrowLeft[39m[33m,[39m [33mArrowRight[39m } [36mfrom[39m [32m'@/lib/icons'[39m[33m;[39m
+ [90m   |[39m [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+ [90m 6 |[39m [36mimport[39m { formatBusinessName } [36mfrom[39m [32m'@/lib/utils'[39m[33m;[39m
+ [90m 7 |[39m [36mimport[39m { [33mSkeleton[39m } [36mfrom[39m [32m'@/components/ui/skeleton'[39m[33m;[39m
+ [90m 8 |[39m [36mimport[39m { [33mBadge[39m } [36mfrom[39m [32m'@/components/ui/badge'[39m[33m;[39m[0m
+
+Import map: aliased to relative './src/lib/icons' inside of [project]/
+
+
+Import traces:
+  Client Component Browser:
+    ./src/app/chat/_components/providers-map.tsx [Client Component Browser]
+    ./src/app/pro/[id]/_components/pro-page-map.tsx [Client Component Browser]
+    ./src/app/pro/page.tsx [Client Component Browser]
+    ./src/app/pro/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/chat/_components/providers-map.tsx [Client Component SSR]
+    ./src/app/pro/[id]/_components/pro-page-map.tsx [Client Component SSR]
+    ./src/app/pro/page.tsx [Client Component SSR]
+    ./src/app/pro/page.tsx [Server Component]
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+./src/app/pro/page.tsx:11:1
+Module not found: Can't resolve '@/lib/image-compression'
+[0m [90m  9 |[39m [36mimport[39m { usePathname[33m,[39m useRouter[33m,[39m useSearchParams } [36mfrom[39m [32m'next/navigation'[39m[33m;[39m
+ [90m 10 |[39m [36mimport[39m { [33mButton[39m } [36mfrom[39m [32m'@/components/ui/button'[39m[33m;[39m
+[31m[1m>[22m[39m[90m 11 |[39m [36mimport[39m { compressImage } [36mfrom[39m [32m'@/lib/image-compression'[39m[33m;[39m
+ [90m    |[39m [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+ [90m 12 |[39m [36mimport[39m { setImageData } [36mfrom[39m [32m'@/lib/image-store'[39m[33m;[39m
+ [90m 13 |[39m [36mimport[39m { [33mTabs[39m[33m,[39m [33mTabsContent[39m[33m,[39m [33mTabsList[39m[33m,[39m [33mTabsTrigger[39m } [36mfrom[39m [32m'@/components/ui/tabs'[39m[33m;[39m
+ [90m 14 |[39m [36mimport[39m { [33mBadge[39m } [36mfrom[39m [32m'@/components/ui/badge'[39m[33m;[39m[0m
+
+Import map: aliased to relative './src/lib/image-compression' inside of [project]/
+
+
+Import traces:
+  Client Component Browser:
+    ./src/app/pro/page.tsx [Client Component Browser]
+    ./src/app/pro/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/pro/page.tsx [Client Component SSR]
+    ./src/app/pro/page.tsx [Server Component]
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+./src/app/welcome/page.tsx:11:1
+Module not found: Can't resolve '@/lib/image-compression'
+[0m [90m  9 |[39m [36mimport[39m { useRouter[33m,[39m useSearchParams } [36mfrom[39m [32m'next/navigation'[39m[33m;[39m
+ [90m 10 |[39m [36mimport[39m { [33mButton[39m } [36mfrom[39m [32m'@/components/ui/button'[39m[33m;[39m
+[31m[1m>[22m[39m[90m 11 |[39m [36mimport[39m { compressImage } [36mfrom[39m [32m'@/lib/image-compression'[39m[33m;[39m
+ [90m    |[39m [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+ [90m 12 |[39m [36mimport[39m { setImageData } [36mfrom[39m [32m'@/lib/image-store'[39m[33m;[39m
+ [90m 13 |[39m [36mimport[39m { [33mLabel[39m } [36mfrom[39m [32m'@/components/ui/label'[39m[33m;[39m
+ [90m 14 |[39m [36mimport[39m { [33mTextarea[39m } [36mfrom[39m [32m'@/components/ui/textarea'[39m[33m;[39m[0m
+
+Import map: aliased to relative './src/lib/image-compression' inside of [project]/
+
+
+Import traces:
+  Client Component Browser:
+    ./src/app/welcome/page.tsx [Client Component Browser]
+    ./src/app/welcome/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/welcome/page.tsx [Client Component SSR]
+    ./src/app/welcome/page.tsx [Server Component]
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+./src/app/diagnosis/[id]/_components/diagnosis-client.tsx:11:1
+Module not found: Can't resolve '@/lib/image-store'
+[0m [90m  9 |[39m [36mimport[39m { [33mSkeleton[39m } [36mfrom[39m [32m'@/components/ui/skeleton'[39m[33m;[39m
+ [90m 10 |[39m [36mimport[39m { [33mArrowLeft[39m } [36mfrom[39m [32m'lucide-react'[39m[33m;[39m
+[31m[1m>[22m[39m[90m 11 |[39m [36mimport[39m { getImageData } [36mfrom[39m [32m'@/lib/image-store'[39m[33m;[39m
+ [90m    |[39m [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+ [90m 12 |[39m [36mimport[39m { supabase } [36mfrom[39m [32m'@/lib/supabase'[39m[33m;[39m
+ [90m 13 |[39m [36mimport[39m { extractMessageFromRaw[33m,[39m sanitizeAiContent[33m,[39m tryParseDiagnosisJson } [36mfrom[39m [32m'@/lib/utils'[39m[33m;[39m
+ [90m 14 |[39m [36mimport[39m { setLastConversationIdForWhatsApp } [36mfrom[39m [32m'@/lib/whatsapp-prefill'[39m[33m;[39m[0m
+
+Import map: aliased to relative './src/lib/image-store' inside of [project]/
+
+
+Import trace:
+  Client Component Browser:
+    ./src/app/diagnosis/[id]/_components/diagnosis-client.tsx [Client Component Browser]
+    ./src/app/diagnosis/[id]/_components/diagnosis-client-loader.tsx [Client Component Browser]
+    ./src/app/diagnosis/[id]/_components/diagnosis-client-loader.tsx [Server Component]
+    ./src/app/diagnosis/[id]/page.tsx [Server Component]
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+./src/app/pro/page.tsx:12:1
+Module not found: Can't resolve '@/lib/image-store'
+[0m [90m 10 |[39m [36mimport[39m { [33mButton[39m } [36mfrom[39m [32m'@/components/ui/button'[39m[33m;[39m
+ [90m 11 |[39m [36mimport[39m { compressImage } [36mfrom[39m [32m'@/lib/image-compression'[39m[33m;[39m
+[31m[1m>[22m[39m[90m 12 |[39m [36mimport[39m { setImageData } [36mfrom[39m [32m'@/lib/image-store'[39m[33m;[39m
+ [90m    |[39m [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+ [90m 13 |[39m [36mimport[39m { [33mTabs[39m[33m,[39m [33mTabsContent[39m[33m,[39m [33mTabsList[39m[33m,[39m [33mTabsTrigger[39m } [36mfrom[39m [32m'@/components/ui/tabs'[39m[33m;[39m
+ [90m 14 |[39m [36mimport[39m { [33mBadge[39m } [36mfrom[39m [32m'@/components/ui/badge'[39m[33m;[39m
+ [90m 15 |[39m [36mimport[39m { [33mSeparator[39m } [36mfrom[39m [32m'@/components/ui/separator'[39m[33m;[39m[0m
+
+Import map: aliased to relative './src/lib/image-store' inside of [project]/
+
+
+Import traces:
+  Client Component Browser:
+    ./src/app/pro/page.tsx [Client Component Browser]
+    ./src/app/pro/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/pro/page.tsx [Client Component SSR]
+    ./src/app/pro/page.tsx [Server Component]
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+./src/app/welcome/page.tsx:12:1
+Module not found: Can't resolve '@/lib/image-store'
+[0m [90m 10 |[39m [36mimport[39m { [33mButton[39m } [36mfrom[39m [32m'@/components/ui/button'[39m[33m;[39m
+ [90m 11 |[39m [36mimport[39m { compressImage } [36mfrom[39m [32m'@/lib/image-compression'[39m[33m;[39m
+[31m[1m>[22m[39m[90m 12 |[39m [36mimport[39m { setImageData } [36mfrom[39m [32m'@/lib/image-store'[39m[33m;[39m
+ [90m    |[39m [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+ [90m 13 |[39m [36mimport[39m { [33mLabel[39m } [36mfrom[39m [32m'@/components/ui/label'[39m[33m;[39m
+ [90m 14 |[39m [36mimport[39m { [33mTextarea[39m } [36mfrom[39m [32m'@/components/ui/textarea'[39m[33m;[39m
+ [90m 15 |[39m [36mimport[39m { [33mInput[39m } [36mfrom[39m [32m'@/components/ui/input'[39m[33m;[39m[0m
+
+Import map: aliased to relative './src/lib/image-store' inside of [project]/
+
+
+Import traces:
+  Client Component Browser:
+    ./src/app/welcome/page.tsx [Client Component Browser]
+    ./src/app/welcome/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/welcome/page.tsx [Client Component SSR]
+    ./src/app/welcome/page.tsx [Server Component]
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+./src/app/pro/[id]/page.tsx:8:1
+Module not found: Can't resolve '@/lib/provider-summaries'
+[0m [90m  6 |[39m [36mimport[39m { createSupabaseServerClient } [36mfrom[39m [32m'@/lib/supabase-server'[39m[33m;[39m
+ [90m  7 |[39m [36mimport[39m { refreshProviderByPlaceId } [36mfrom[39m [32m'@/lib/refresh-provider-by-place-id'[39m[33m;[39m
+[31m[1m>[22m[39m[90m  8 |[39m [36mimport[39m { generateProviderSummaries } [36mfrom[39m [32m'@/lib/provider-summaries'[39m[33m;[39m
+ [90m    |[39m [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+ [90m  9 |[39m [36mimport[39m { [33mAppHeader[39m } [36mfrom[39m [32m'@/components/app-header'[39m[33m;[39m
+ [90m 10 |[39m [36mimport[39m { [33mBadge[39m } [36mfrom[39m [32m'@/components/ui/badge'[39m[33m;[39m
+ [90m 11 |[39m [36mimport[39m { [33mButton[39m } [36mfrom[39m [32m'@/components/ui/button'[39m[33m;[39m[0m
+
+Import map: aliased to relative './src/lib/provider-summaries' inside of [project]/
+
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+./src/app/pro/[id]/page.tsx:25:1
+Module not found: Can't resolve '@/lib/refresh-provider-website'
+[0m [90m 23 |[39m [36mimport[39m { [33mProReviewForm[39m } [36mfrom[39m [32m'./_components/pro-review-form'[39m[33m;[39m
+ [90m 24 |[39m [36mimport[39m { [33mProGalleryUpload[39m } [36mfrom[39m [32m'./_components/pro-gallery-upload'[39m[33m;[39m
+[31m[1m>[22m[39m[90m 25 |[39m [36mimport[39m { refreshProviderWebsiteById } [36mfrom[39m [32m'@/lib/refresh-provider-website'[39m[33m;[39m
+ [90m    |[39m [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+ [90m 26 |[39m [36mimport[39m { getOpenStatusTextFromWeekdayDescriptions } [36mfrom[39m [32m'@/lib/open-status'[39m[33m;[39m
+ [90m 27 |[39m [36mimport[39m { formatWeekdayDescriptionsTo24h } [36mfrom[39m [32m'@/lib/format-weekday-descriptions'[39m[33m;[39m
+ [90m 28 |[39m[0m
+
+Import map: aliased to relative './src/lib/refresh-provider-website' inside of [project]/
+
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+./src/lib/refresh-provider-by-place-id.ts:7:1
+Module not found: Can't resolve '@/lib/review-normalization'
+[0m [90m  5 |[39m [90m */[39m
+ [90m  6 |[39m [36mimport[39m { createSupabaseAdminClient } [36mfrom[39m [32m'@/lib/supabase-server'[39m[33m;[39m
+[31m[1m>[22m[39m[90m  7 |[39m [36mimport[39m { normalizeReviewForDisplay } [36mfrom[39m [32m'@/lib/review-normalization'[39m[33m;[39m
+ [90m    |[39m [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+ [90m  8 |[39m [36mimport[39m { summarizeReviews[33m,[39m sanitizeCustomerSummary } [36mfrom[39m [32m'@/lib/review-summary'[39m[33m;[39m
+ [90m  9 |[39m [36mimport[39m { formatWeekdayDescriptionsTo24h } [36mfrom[39m [32m'@/lib/format-weekday-descriptions'[39m[33m;[39m
+ [90m 10 |[39m[0m
+
+Import map: aliased to relative './src/lib/review-normalization' inside of [project]/
+
+
+Import traces:
+  App Route:
+    ./src/lib/refresh-provider-by-place-id.ts
+    ./src/app/api/providers/[id]/sync-google-gallery/route.ts
+
+  Server Component:
+    ./src/lib/refresh-provider-by-place-id.ts
+    ./src/app/pro/[id]/page.tsx
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+./src/app/api/directions/route.ts:2:1
+Module not found: Can't resolve '@/lib/supabase-server'
+[0m [90m 1 |[39m [36mimport[39m { [33mNextRequest[39m[33m,[39m [33mNextResponse[39m } [36mfrom[39m [32m'next/server'[39m[33m;[39m
+[31m[1m>[22m[39m[90m 2 |[39m [36mimport[39m { createSupabaseServerClient[33m,[39m createSupabaseAdminClient } [36mfrom[39m [32m'@/lib/supabase-server'[39m[33m;[39m
+ [90m   |[39m [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+ [90m 3 |[39m
+ [90m 4 |[39m [36mconst[39m [33mDIRECTIONS_CACHE_DAYS[39m [33m=[39m [35m7[39m[33m;[39m
+ [90m 5 |[39m[0m
+
+Import map: aliased to relative './src/lib/supabase-server' inside of [project]/
+
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+./src/app/api/providers/[id]/sync-google-gallery/route.ts:2:1
+Module not found: Can't resolve '@/lib/supabase-server'
+[0m [90m 1 |[39m [36mimport[39m { [33mNextResponse[39m } [36mfrom[39m [32m'next/server'[39m[33m;[39m
+[31m[1m>[22m[39m[90m 2 |[39m [36mimport[39m { createSupabaseAdminClient } [36mfrom[39m [32m'@/lib/supabase-server'[39m[33m;[39m
+ [90m   |[39m [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+ [90m 3 |[39m [36mimport[39m { refreshProviderByPlaceId } [36mfrom[39m [32m'@/lib/refresh-provider-by-place-id'[39m[33m;[39m
+ [90m 4 |[39m
+ [90m 5 |[39m [90m/**[39m[0m
+
+Import map: aliased to relative './src/lib/supabase-server' inside of [project]/
+
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+./src/app/api/providers/providers-route.ts:3:1
+Module not found: Can't resolve '@/lib/supabase-server'
+[0m [90m 1 |[39m [36mimport[39m { [33mNextRequest[39m[33m,[39m [33mNextResponse[39m } [36mfrom[39m [32m'next/server'[39m[33m;[39m
+ [90m 2 |[39m [36mimport[39m { logAiEvent } [36mfrom[39m [32m'@/lib/ai-logging'[39m[33m;[39m
+[31m[1m>[22m[39m[90m 3 |[39m [36mimport[39m { createSupabaseServerClient[33m,[39m createSupabaseAdminClient } [36mfrom[39m [32m'@/lib/supabase-server'[39m[33m;[39m
+ [90m   |[39m [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+ [90m 4 |[39m [36mimport[39m { summarizeReviews[33m,[39m sanitizeCustomerSummary } [36mfrom[39m [32m'@/lib/review-summary'[39m[33m;[39m
+ [90m 5 |[39m [36mimport[39m { formatWeekdayDescriptionsTo24h } [36mfrom[39m [32m'@/lib/format-weekday-descriptions'[39m[33m;[39m
+ [90m 6 |[39m [36mimport[39m { isOpenNowFromWeekdayDescriptions } [36mfrom[39m [32m'@/lib/open-status'[39m[33m;[39m[0m
+
+Import map: aliased to relative './src/lib/supabase-server' inside of [project]/
+
+
+Import trace:
+  App Route:
+    ./src/app/api/providers/providers-route.ts
+    ./src/app/api/providers/route.ts
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+./src/app/api/reviews-count/route.ts:2:1
+Module not found: Can't resolve '@/lib/supabase-server'
+[0m [90m 1 |[39m [36mimport[39m { [33mNextRequest[39m[33m,[39m [33mNextResponse[39m } [36mfrom[39m [32m'next/server'[39m[33m;[39m
+[31m[1m>[22m[39m[90m 2 |[39m [36mimport[39m { createSupabaseServerClient } [36mfrom[39m [32m'@/lib/supabase-server'[39m[33m;[39m
+ [90m   |[39m [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+ [90m 3 |[39m
+ [90m 4 |[39m [36mexport[39m [36masync[39m [36mfunction[39m [33mPOST[39m(req[33m:[39m [33mNextRequest[39m) {
+ [90m 5 |[39m     [36mtry[39m {[0m
+
+Import map: aliased to relative './src/lib/supabase-server' inside of [project]/
+
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+./src/app/api/reviews/route.ts:3:1
+Module not found: Can't resolve '@/lib/supabase-server'
+[0m [90m 1 |[39m [36mimport[39m { [33mNextRequest[39m[33m,[39m [33mNextResponse[39m } [36mfrom[39m [32m'next/server'[39m[33m;[39m
+ [90m 2 |[39m [36mimport[39m { randomUUID } [36mfrom[39m [32m'crypto'[39m[33m;[39m
+[31m[1m>[22m[39m[90m 3 |[39m [36mimport[39m { createSupabaseAdminClient } [36mfrom[39m [32m'@/lib/supabase-server'[39m[33m;[39m
+ [90m   |[39m [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+ [90m 4 |[39m
+ [90m 5 |[39m [36mexport[39m type [33mScandioCategoryRatings[39m [33m=[39m {
+ [90m 6 |[39m     punctuality[33m:[39m number[33m;[39m[0m
+
+Import map: aliased to relative './src/lib/supabase-server' inside of [project]/
+
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+./src/app/pro/[id]/page.tsx:6:1
+Module not found: Can't resolve '@/lib/supabase-server'
+[0m [90m 4 |[39m [36mimport[39m { redirect[33m,[39m notFound } [36mfrom[39m [32m'next/navigation'[39m[33m;[39m
+ [90m 5 |[39m [36mimport[39m [33mProLegacyPage[39m [36mfrom[39m [32m'../page'[39m[33m;[39m
+[31m[1m>[22m[39m[90m 6 |[39m [36mimport[39m { createSupabaseServerClient } [36mfrom[39m [32m'@/lib/supabase-server'[39m[33m;[39m
+ [90m   |[39m [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+ [90m 7 |[39m [36mimport[39m { refreshProviderByPlaceId } [36mfrom[39m [32m'@/lib/refresh-provider-by-place-id'[39m[33m;[39m
+ [90m 8 |[39m [36mimport[39m { generateProviderSummaries } [36mfrom[39m [32m'@/lib/provider-summaries'[39m[33m;[39m
+ [90m 9 |[39m [36mimport[39m { [33mAppHeader[39m } [36mfrom[39m [32m'@/components/app-header'[39m[33m;[39m[0m
+
+Import map: aliased to relative './src/lib/supabase-server' inside of [project]/
+
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+./src/lib/refresh-provider-by-place-id.ts:6:1
+Module not found: Can't resolve '@/lib/supabase-server'
+[0m [90m 4 |[39m [90m * Used when a user clicks "View profile" and the provider is not yet in the DB.[39m
+ [90m 5 |[39m [90m */[39m
+[31m[1m>[22m[39m[90m 6 |[39m [36mimport[39m { createSupabaseAdminClient } [36mfrom[39m [32m'@/lib/supabase-server'[39m[33m;[39m
+ [90m   |[39m [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+ [90m 7 |[39m [36mimport[39m { normalizeReviewForDisplay } [36mfrom[39m [32m'@/lib/review-normalization'[39m[33m;[39m
+ [90m 8 |[39m [36mimport[39m { summarizeReviews[33m,[39m sanitizeCustomerSummary } [36mfrom[39m [32m'@/lib/review-summary'[39m[33m;[39m
+ [90m 9 |[39m [36mimport[39m { formatWeekdayDescriptionsTo24h } [36mfrom[39m [32m'@/lib/format-weekday-descriptions'[39m[33m;[39m[0m
+
+Import map: aliased to relative './src/lib/supabase-server' inside of [project]/
+
+
+Import traces:
+  App Route:
+    ./src/lib/refresh-provider-by-place-id.ts
+    ./src/app/api/providers/[id]/sync-google-gallery/route.ts
+
+  Server Component:
+    ./src/lib/refresh-provider-by-place-id.ts
+    ./src/app/pro/[id]/page.tsx
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+    at <unknown> (./src/app/pro/[id]/page.tsx:24:1)
+    at <unknown> (https://nextjs.org/docs/messages/module-not-found)
+    at <unknown> (./src/app/pro/[id]/page.tsx:23:1)
+    at <unknown> (https://nextjs.org/docs/messages/module-not-found)
+    at <unknown> (./src/app/pro/[id]/page.tsx:22:1)
+    at <unknown> (https://nextjs.org/docs/messages/module-not-found)
+    at <unknown> (./src/app/pro/[id]/page.tsx:9:1)
+    at <unknown> (https://nextjs.org/docs/messages/module-not-found)
+    at <unknown> (./src/app/chat/_components/providers-map.tsx:8:1)
+    at <unknown> (https://nextjs.org/docs/messages/module-not-found)
+    at <unknown> (./src/app/diagnosis/[id]/_components/diagnosis-client.tsx:6:1)
+    at <unknown> (https://nextjs.org/docs/messages/module-not-found)
+    at <unknown> (./src/app/match/_components/match-client.tsx:6:1)
+    at <unknown> (https://nextjs.org/docs/messages/module-not-found)
+    at <unknown> (./src/app/match/page.tsx:11:1)
+    at <unknown> (https://nextjs.org/docs/messages/module-not-found)
+    at <unknown> (./src/app/pro/[id]/page.tsx:10:1)
+    at <unknown> (https://nextjs.org/docs/messages/module-not-found)
+    at <unknown> (./src/app/pro/page.tsx:14:1)
+    at <unknown> (https://nextjs.org/docs/messages/module-not-found)
+    at <unknown> (./src/app/diagnosis/[id]/_components/diagnosis-client.tsx:5:1)
+    at <unknown> (https://nextjs.org/docs/messages/module-not-found)
+    at <unknown> (./src/app/match/_components/match-client.tsx:5:1)
+    at <unknown> (https://nextjs.org/docs/messages/module-not-found)
+    at <unknown> (./src/app/match/page.tsx:10:1)
+    at <unknown> (https://nextjs.org/docs/messages/module-not-found)
+    at <unknown> (./src/app/pro/[id]/page.tsx:11:1)
+    at <unknown> (https://nextjs.org/docs/messages/module-not-found)
+    at <unknown> (./src/app/pro/page.tsx:10:1)
+    at <unknown> (https://nextjs.org/docs/messages/module-not-found)
+    at <unknown> (./src/app/welcome/page.tsx:10:1)
+    at <unknown> (https://nextjs.org/docs/messages/module-not-found)
+    at <unknown> (./src/components/contact-popover.tsx:4:1)
+    at <unknown> (https://nextjs.org/docs/messages/module-not-found)
+    at <unknown> (./src/app/pro/[id]/page.tsx:13:1)
+    at <unknown> (https://nextjs.org/docs/messages/module-not-found)
+    at <unknown> (./src/app/pro/page.tsx:16:1)
+    at <unknown> (https://nextjs.org/docs/messages/module-not-found)
+    at <unknown> (./src/components/contact-popover.tsx:7:1)
+    at <unknown> (https://nextjs.org/docs/messages/module-not-found)
+    at <unknown> (./src/app/match/_components/match-client.tsx:13:1)
+    at <unknown> (https://nextjs.org/docs/messages/module-not-found)
+    at <unknown> (./src/app/pro/page.tsx:24:1)
+    at <unknown> (https://nextjs.org/docs/messages/module-not-found)
+    at <unknown> (./src/app/welcome/page.tsx:15:1)
+    at <unknown> (https://nextjs.org/docs/messages/module-not-found)
+    at <unknown> (./src/app/diagnosis/[id]/_components/diagnosis-client.tsx:7:1)
+    at <unknown> (https://nextjs.org/docs/messages/module-not-found)
+    at <unknown> (./src/app/pro/page.tsx:25:1)
+    at <unknown> (https://nextjs.org/docs/messages/module-not-found)
+    at <unknown> (./src/app/welcome/page.tsx:13:1)
+    at <unknown> (https://nextjs.org/docs/messages/module-not-found)
+    at <unknown> (./src/app/match/_components/match-client.tsx:7:1)
+    at <unknown> (https://nextjs.org/docs/messages/module-not-found)
+    at <unknown> (./src/app/match/page.tsx:13:1)
+    at <unknown> (https://nextjs.org/docs/messages/module-not-found)
+    at <unknown> (./src/components/contact-popover.tsx:5:1)
+    at <unknown> (https://nextjs.org/docs/messages/module-not-found)
+    at <unknown> (./src/app/pro/page.tsx:15:1)
+    at <unknown> (https://nextjs.org/docs/messages/module-not-found)
+    at <unknown> (./src/components/contact-popover.tsx:6:1)
+    at <unknown> (https://nextjs.org/docs/messages/module-not-found)
+    at <unknown> (./src/app/chat/_components/providers-map.tsx:7:1)
+    at <unknown> (https://nextjs.org/docs/messages/module-not-found)
+    at <unknown> (./src/app/diagnosis/[id]/_components/diagnosis-client-loader.tsx:5:1)
+    at <unknown> (https://nextjs.org/docs/messages/module-not-found)
+    at <unknown> (./src/app/diagnosis/[id]/_components/diagnosis-client.tsx:9:1)
+    at <unknown> (https://nextjs.org/docs/messages/module-not-found)
+    at <unknown> (./src/app/match/_components/match-client.tsx:15:1)
+    at <unknown> (https://nextjs.org/docs/messages/module-not-found)
+    at <unknown> (./src/app/match/page.tsx:17:1)
+    at <unknown> (https://nextjs.org/docs/messages/module-not-found)
+    at <unknown> (./src/app/pro/page.tsx:30:1)
+    at <unknown> (https://nextjs.org/docs/messages/module-not-found)
+    at <unknown> (./src/app/pro/[id]/page.tsx:12:1)
+    at <unknown> (https://nextjs.org/docs/messages/module-not-found)
+    at <unknown> (./src/app/pro/page.tsx:13:1)
+    at <unknown> (https://nextjs.org/docs/messages/module-not-found)
+    at <unknown> (./src/app/diagnosis/[id]/_components/diagnosis-client.tsx:8:1)
+    at <unknown> (https://nextjs.org/docs/messages/module-not-found)
+    at <unknown> (./src/app/pro/page.tsx:26:1)
+    at <unknown> (https://nextjs.org/docs/messages/module-not-found)
+    at <unknown> (./src/app/welcome/page.tsx:14:1)
+    at <unknown> (https://nextjs.org/docs/messages/module-not-found)
+    at <unknown> (./src/app/api/diagnose/route.ts:3:1)
+    at <unknown> (https://nextjs.org/docs/messages/module-not-found)
+    at <unknown> (./src/app/api/whatsapp-message/route.ts:2:1)
+    at <unknown> (https://nextjs.org/docs/messages/module-not-found)
+    at <unknown> (./src/lib/review-summary.ts:1:1)
+    at <unknown> (https://nextjs.org/docs/messages/module-not-found)
+    at <unknown> (./src/app/api/diagnose/route.ts:4:1)
+    at <unknown> (https://nextjs.org/docs/messages/module-not-found)
+    at <unknown> (./src/app/api/providers/providers-route.ts:2:1)
+    at <unknown> (https://nextjs.org/docs/messages/module-not-found)
+    at <unknown> (./src/app/chat/_components/providers-map.tsx:5:1)
+    at <unknown> (https://nextjs.org/docs/messages/module-not-found)
+    at <unknown> (./src/app/pro/page.tsx:11:1)
+    at <unknown> (https://nextjs.org/docs/messages/module-not-found)
+    at <unknown> (./src/app/welcome/page.tsx:11:1)
+    at <unknown> (https://nextjs.org/docs/messages/module-not-found)
+    at <unknown> (./src/app/diagnosis/[id]/_components/diagnosis-client.tsx:11:1)
+    at <unknown> (https://nextjs.org/docs/messages/module-not-found)
+    at <unknown> (./src/app/pro/page.tsx:12:1)
+    at <unknown> (https://nextjs.org/docs/messages/module-not-found)
+    at <unknown> (./src/app/welcome/page.tsx:12:1)
+    at <unknown> (https://nextjs.org/docs/messages/module-not-found)
+    at <unknown> (./src/app/pro/[id]/page.tsx:8:1)
+    at <unknown> (https://nextjs.org/docs/messages/module-not-found)
+    at <unknown> (./src/app/pro/[id]/page.tsx:25:1)
+    at <unknown> (https://nextjs.org/docs/messages/module-not-found)
+    at <unknown> (./src/lib/refresh-provider-by-place-id.ts:7:1)
+    at <unknown> (https://nextjs.org/docs/messages/module-not-found)
+    at <unknown> (./src/app/api/directions/route.ts:2:1)
+    at <unknown> (https://nextjs.org/docs/messages/module-not-found)
+    at <unknown> (./src/app/api/providers/[id]/sync-google-gallery/route.ts:2:1)
+    at <unknown> (https://nextjs.org/docs/messages/module-not-found)
+    at <unknown> (./src/app/api/providers/providers-route.ts:3:1)
+    at <unknown> (https://nextjs.org/docs/messages/module-not-found)
+    at <unknown> (./src/app/api/reviews-count/route.ts:2:1)
+    at <unknown> (https://nextjs.org/docs/messages/module-not-found)
+    at <unknown> (./src/app/api/reviews/route.ts:3:1)
+    at <unknown> (https://nextjs.org/docs/messages/module-not-found)
+    at <unknown> (./src/app/pro/[id]/page.tsx:6:1)
+    at <unknown> (https://nextjs.org/docs/messages/module-not-found)
+    at <unknown> (./src/lib/refresh-provider-by-place-id.ts:6:1)
+    at <unknown> (https://nextjs.org/docs/messages/module-not-found)

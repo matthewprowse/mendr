@@ -27,6 +27,31 @@ import {
     REVIEW_SYNC_TTL_MS,
 } from './providers-route-constants';
 
+/** Straight-line distance in km. Enforces the search radius when Places routing legs are missing (locationBias can still return far-away matches). */
+function greatCircleDistanceKm(
+    lat1: number,
+    lng1: number,
+    lat2: number,
+    lng2: number
+): number {
+    const R = 6371;
+    const toRad = (d: number) => (d * Math.PI) / 180;
+    const dLat = toRad(lat2 - lat1);
+    const dLon = toRad(lng2 - lng1);
+    const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+}
+
+function getProviderResultLimitByRadius(radiusMeters: number): number {
+    if (radiusMeters >= 50_000) return 50;
+    if (radiusMeters >= 20_000) return 20;
+    if (radiusMeters >= 10_000) return 10;
+    return 5;
+}
+
 export async function POST(req: NextRequest) {
     // ── Rate limit ─────────────────────────────────────────────────────────────
     const limited = checkRateLimit(req, 'providers');
@@ -180,10 +205,21 @@ export async function POST(req: NextRequest) {
                             }
                             return p;
                         });
+                        const originLat = Number(lat);
+                        const originLng = Number(lng);
+                        const radiusKm = radius / 1000;
                         // Enforce minimum review count on cached providers as well.
+                        // Also drop rows outside the requested radius (cache may predate stricter geo checks).
                         const filteredCached = normalizedCached.filter((p: any) => {
                             const count = p?.ratingCount ?? p?.rating_count ?? 0;
-                            return typeof count === 'number' && count >= 5;
+                            if (!(typeof count === 'number' && count >= 5)) return false;
+                            const plat = p?.latitude;
+                            const plng = p?.longitude;
+                            if (typeof plat !== 'number' || typeof plng !== 'number') return false;
+                            return (
+                                greatCircleDistanceKm(originLat, originLng, plat, plng) <=
+                                radiusKm + 0.5
+                            );
                         });
                         // If we can serve providers from cache but have no persisted Google reviews yet,
                         // force a Google refresh path so the downstream review import runs.
@@ -336,7 +372,7 @@ export async function POST(req: NextRequest) {
                             // without any I/O cost.
                             const reRankedCached = rankProviders(
                                 providersWithIds as ProviderItem[],
-                                6,
+                                getProviderResultLimitByRadius(radius),
                                 { tradeDetail: tradeDetailRaw, trade: tradeNorm }
                             );
 
@@ -577,7 +613,10 @@ export async function POST(req: NextRequest) {
         const rawPlacesMergedCount = places.length;
 
         // 3. Fast-path mapping for MVP: skip enrichment and heavy caching.
-        const mapPlacesToFastProviders = (minRatingCount: number) =>
+        const mapPlacesToFastProviders = (
+            minRatingCount: number,
+            relevanceMode: 'strict' | 'relaxed' = 'strict'
+        ) =>
             places
                 .map((place: any, index: number) => {
                 if (
@@ -587,8 +626,25 @@ export async function POST(req: NextRequest) {
                         cached: null,
                         tradeNorm,
                         isBoreholeLikeDetail,
+                        mode: relevanceMode,
                     })
                 ) {
+                    return null;
+                }
+
+                const placeLat = place.location?.latitude;
+                const placeLng = place.location?.longitude;
+                if (typeof placeLat !== 'number' || typeof placeLng !== 'number') {
+                    return null;
+                }
+                const radiusKm = radius / 1000;
+                const straightLineKm = greatCircleDistanceKm(
+                    Number(lat),
+                    Number(lng),
+                    placeLat,
+                    placeLng
+                );
+                if (straightLineKm > radiusKm + 0.5) {
                     return null;
                 }
 
@@ -601,6 +657,8 @@ export async function POST(req: NextRequest) {
                     if (meters > radius) {
                         return null;
                     }
+                } else {
+                    distanceKm = Number(straightLineKm.toFixed(1));
                 }
                 const durationRaw: string | undefined = leg?.duration;
                 if (durationRaw) {
@@ -675,11 +733,26 @@ export async function POST(req: NextRequest) {
             isOpen: boolean | null;
         }>;
 
-        let minRatingUsed = 5;
-        let fastProviders = mapPlacesToFastProviders(5);
-        if (fastProviders.length < 4) {
+        const providerLimit = getProviderResultLimitByRadius(radius);
+        const baseMinRating = radius >= 20_000 ? 3 : 5;
+        let minRatingUsed = baseMinRating;
+        let relevanceModeUsed: 'strict' | 'relaxed' = 'strict';
+        let fastProviders = mapPlacesToFastProviders(baseMinRating, 'strict');
+        if (baseMinRating > 3 && fastProviders.length < providerLimit) {
             minRatingUsed = 3;
-            fastProviders = mapPlacesToFastProviders(3);
+            fastProviders = mapPlacesToFastProviders(3, 'strict');
+        }
+        // Final fallback for sparse areas: include lower-review providers rather
+        // than returning an unusably small list (quality is still handled by ranking).
+        if (fastProviders.length < providerLimit) {
+            minRatingUsed = 1;
+            fastProviders = mapPlacesToFastProviders(1, 'strict');
+        }
+        // If strict relevance still starves the list, relax semantic matching while
+        // keeping hard safety exclusions (banned categories + geo radius).
+        if (fastProviders.length < providerLimit) {
+            relevanceModeUsed = 'relaxed';
+            fastProviders = mapPlacesToFastProviders(minRatingUsed, 'relaxed');
         }
 
         // Pre-fetched providers rows — fired in parallel with provider_cache below to save a round-trip.
@@ -743,13 +816,12 @@ export async function POST(req: NextRequest) {
         }
 
         // Rank by weighted composite: relevance 40%, Bayesian rating 30%, proximity 20%, recency 10%.
-        // Fetch 12 candidates (2× the carousel cap) so the rotation step has room to promote
-        // under-represented providers without running out of options.
-        const top12 = rankProviders(fastProviders as ProviderItem[], 12, {
+        // Result count scales with radius so wider searches can surface meaningfully more providers.
+        const rankedProviders = rankProviders(fastProviders as ProviderItem[], providerLimit, {
             tradeDetail: tradeDetailRaw,
             trade: tradeNorm,
         });
-        const limitedProviders = top12.map((p) => ({ ...p }));
+        const limitedProviders = rankedProviders.map((p) => ({ ...p }));
 
         // AI summaries from real review text: use Supabase reviews when we have them; otherwise
         // Place Details (same request). This must run even when providers are not in Supabase yet
@@ -912,8 +984,10 @@ export async function POST(req: NextRequest) {
                                 });
                         }
 
-                        // Trim to carousel size (4–6 providers max).
-                        limitedProviders.splice(6);
+                        // Keep the result set aligned with the configured per-radius cap.
+                        if (limitedProviders.length > providerLimit) {
+                            limitedProviders.splice(providerLimit);
+                        }
                     }
                     // ─────────────────────────────────────────────────────────────────────
 
@@ -1227,6 +1301,7 @@ export async function POST(req: NextRequest) {
                 rawPlacesMergedCount: rawPlacesMergedCount,
                 textSearchExtraPagesFetched,
                 minReviewThreshold: minRatingUsed,
+                relevanceMode: relevanceModeUsed,
                 fastProviderCountBeforeRank: fastProviders.length,
             },
         });

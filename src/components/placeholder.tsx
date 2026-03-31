@@ -1,17 +1,25 @@
+import { cn } from '@/lib/utils';
+
 export function Placeholder({
-    label,
+    label = '',
     aspectRatio = 'aspect-video',
     className = '',
 }: {
-    label: string;
+    label?: string;
     aspectRatio?: string;
     className?: string;
 }) {
     return (
         <div
-            className={`flex items-center justify-center rounded-lg border border-border/50 bg-secondary/50 hover:bg-secondary/25 hover:border-border/75 transition-all duration-250 text-center text-sm text-muted-foreground ${aspectRatio} ${className}`}
+            className={cn(
+                'flex items-center justify-center rounded-lg border border-border/50 bg-secondary',
+                'transition-all duration-250 hover:border-border/60',
+                label && 'text-center text-sm text-muted-foreground',
+                aspectRatio,
+                className,
+            )}
         >
-            <span className="max-w-[85%] px-2">{label}</span>
+            {label ? <span className="max-w-[85%] px-2">{label}</span> : null}
         </div>
     );
 }

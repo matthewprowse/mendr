@@ -5,7 +5,7 @@ export const SEARCH_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 export const TWENTY_FOUR_MONTHS_MS = 24 * 30 * 24 * 60 * 60 * 1000;
 
 /** Extra Google text search pages to fetch when the first page is thin (non-pagination). */
-export const TEXT_SEARCH_MAX_EXTRA_PAGES = 2;
+export const TEXT_SEARCH_MAX_EXTRA_PAGES = 4;
 
 /** When to re-fetch Google reviews for persistence (reviews_synced_at staleness). */
 export const REVIEW_SYNC_TTL_MS = 7 * 24 * 60 * 60 * 1000;

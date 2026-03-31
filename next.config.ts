@@ -15,6 +15,8 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+    transpilePackages: ['geist'],
+    allowedDevOrigins: ['192.168.101.239'],
     experimental: {
         // Only bundle the icons/components you actually use (big win for geist-icons + radix-ui)
         optimizePackageImports: ['geist-icons', 'radix-ui'],

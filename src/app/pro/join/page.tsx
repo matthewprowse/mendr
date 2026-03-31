@@ -57,13 +57,13 @@ const HOW_IT_WORKS = [
         step: '01',
         title: 'Apply to Join the Network',
         description:
-            'Fill in the application below with your trade, service area, and contact details. Our team reviews every application to maintain the quality of the network.',
+            'Fill in the application below with your trade and contact details. Our team reviews every application to maintain the quality of the network.',
     },
     {
         step: '02',
         title: 'Set Up Your Scandio Profile',
         description:
-            "Once accepted, you'll get access to your contractor profile. Add your credentials, past work photos, operating hours, and service areas. Your profile is your digital shopfront.",
+            "Once accepted, you'll get access to your contractor profile. Add your credentials, past work photos, and operating hours. Your profile is your digital shopfront.",
     },
     {
         step: '03',
@@ -159,7 +159,7 @@ export default function ProJoinPage() {
                     { href: '#benefits', label: 'Benefits' },
                     { href: '#pricing', label: 'Pricing' },
                     { href: '#testimonials', label: 'From the Network' },
-                    { href: '/landing', label: 'For Homeowners' },
+                    { href: '/', label: 'For Homeowners' },
                 ]}
                 logoHref="/pro/join"
                 showTrades={false}
@@ -478,7 +478,7 @@ export default function ProJoinPage() {
                                     ['Apply Now', '/pro/onboard'],
                                 ].map(([label, href]) => (
                                     <Link
-                                        key={href}
+                                        key={`${label}-${href}`}
                                         href={href}
                                         className="text-xs text-muted-foreground hover:text-foreground transition-colors"
                                     >
@@ -493,12 +493,12 @@ export default function ProJoinPage() {
                             </span>
                             <nav className="flex flex-col gap-2">
                                 {[
-                                    ['How It Works', '/landing#how-it-works'],
+                                    ['How It Works', '/#how-it-works'],
                                     ['Generate Report', '/welcome'],
-                                    ['Find Contractors', '/landing'],
+                                    ['Find Contractors', '/'],
                                 ].map(([label, href]) => (
                                     <Link
-                                        key={href}
+                                        key={`${label}-${href}`}
                                         href={href}
                                         className="text-xs text-muted-foreground hover:text-foreground transition-colors"
                                     >
@@ -518,7 +518,7 @@ export default function ProJoinPage() {
                                     ['Terms of Service', '#'],
                                 ].map(([label, href]) => (
                                     <Link
-                                        key={href}
+                                        key={`${label}-${href}`}
                                         href={href}
                                         className="text-xs text-muted-foreground hover:text-foreground transition-colors"
                                     >

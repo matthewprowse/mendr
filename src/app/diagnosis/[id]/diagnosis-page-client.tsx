@@ -11,9 +11,10 @@ import { Button } from '@/components/ui/button';
 import { FlowStepHeader } from '@/components/flow-header';
 import { toast } from 'sonner';
 import { compressImage } from '@/lib/image-compression';
-import { sanitizeAiContent } from '@/lib/utils';
+import { cn, sanitizeAiContent } from '@/lib/utils';
 import { Label } from '@/components/ui/label';
-import { Badge } from '@/components/ui/badge';
+import { DiagnosisMetaPanel } from '@/components/diagnosis-meta-panel';
+import { DiagnosisLeaveDialog } from '@/components/diagnosis-leave-dialog';
 import { Separator } from '@/components/ui/separator';
 
 type DiagnosisPageClientProps = {
@@ -25,6 +26,13 @@ type ConversationRow = {
     image_url: string | null;
     diagnosis: DiagnosisData | null;
     initial_image_description: string | null;
+};
+
+const URGENCY_LABELS: Record<string, string> = {
+    immediate: 'Immediate',
+    urgent: 'Urgent',
+    soon: 'Soon',
+    planned: 'Planned',
 };
 
 function parseDiagnosisFromResponse(text: string): DiagnosisData | null {
@@ -68,6 +76,13 @@ function parseDiagnosisFromResponse(text: string): DiagnosisData | null {
                 : typeof parsed.tradeDetail === 'string'
                   ? parsed.tradeDetail
                   : '';
+        const urgencyRaw =
+            typeof parsed.urgency_key === 'string'
+                ? parsed.urgency_key
+                : typeof parsed.urgencyKey === 'string'
+                  ? parsed.urgencyKey
+                  : '';
+        const urgency_key = urgencyRaw.trim().toLowerCase();
 
         return {
             ...(parsed as DiagnosisData),
@@ -78,6 +93,13 @@ function parseDiagnosisFromResponse(text: string): DiagnosisData | null {
             message: message || undefined,
             estimated_cost,
             trade_detail: trade_detailRaw.trim().length > 0 ? trade_detailRaw : trade,
+            urgency_key:
+                urgency_key === 'immediate' ||
+                urgency_key === 'urgent' ||
+                urgency_key === 'soon' ||
+                urgency_key === 'planned'
+                    ? urgency_key
+                    : 'soon',
         };
     } catch {
         // ignore
@@ -100,6 +122,7 @@ export function DiagnosisPageClient({ conversationId }: DiagnosisPageClientProps
     const [refining, setRefining] = useState(false);
     const [confirming, setConfirming] = useState(false);
     const refineFileInputRef = useRef<HTMLInputElement | null>(null);
+    const [leaveDialogOpen, setLeaveDialogOpen] = useState(false);
 
     const loadConversation = useCallback(
         async (id: string): Promise<ConversationRow | null> => {
@@ -140,6 +163,7 @@ export function DiagnosisPageClient({ conversationId }: DiagnosisPageClientProps
                         title: diag?.diagnosis || 'New Diagnosis',
                         image_url: img,
                         diagnosis: diag,
+                        urgency_key: (diag?.urgency_key ?? null) as string | null,
                         initial_image_description: (prompt ?? '').trim() || null,
                         device: deviceType,
                         user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : '',
@@ -255,10 +279,10 @@ export function DiagnosisPageClient({ conversationId }: DiagnosisPageClientProps
                     previousDiagnosis: {
                         diagnosis: diagnosis.diagnosis,
                         trade: diagnosis.trade,
+                        trade_detail: diagnosis.trade_detail,
                         action_required: diagnosis.action_required,
                         estimated_cost: diagnosis.estimated_cost,
                     },
-                    diagnosisRejected: true,
                 };
                 const res = await fetch('/api/diagnose', {
                     method: 'POST',
@@ -379,8 +403,13 @@ export function DiagnosisPageClient({ conversationId }: DiagnosisPageClientProps
                         setInitialPrompt(existing.initial_image_description);
                     }
                     if (existing.diagnosis) {
-                        setDiagnosis(existing.diagnosis);
-                        setServiceType(existing.diagnosis.trade ?? null);
+                        const diag = {
+                            ...existing.diagnosis,
+                            urgency_key:
+                                (existing.diagnosis.urgency_key ?? 'soon') as string,
+                        };
+                        setDiagnosis(diag);
+                        setServiceType(diag.trade ?? null);
                     } else if (existing.image_url) {
                         await runInitialDiagnosis(
                             existing.image_url,
@@ -427,11 +456,28 @@ export function DiagnosisPageClient({ conversationId }: DiagnosisPageClientProps
         return diagnosis.thinking || cleanedMessage || '';
     })();
 
+    const tallStickyFooter =
+        diagnosis &&
+        (diagnosis.requires_clarification || diagnosis.rejected || refineMode);
+
     return (
         <main className="flex min-h-screen flex-col bg-background">
-            <FlowStepHeader step={2} onBack={() => router.back()} />
+            <FlowStepHeader step={2} onBack={() => setLeaveDialogOpen(true)} />
 
-            <div className="mx-auto flex w-full max-w-xl flex-1 flex-col px-4 pb-32 pt-24 sm:px-6">
+            <DiagnosisLeaveDialog
+                open={leaveDialogOpen}
+                onOpenChange={setLeaveDialogOpen}
+                onLeave={() => router.back()}
+            />
+
+            <div
+                className={cn(
+                    'mx-auto flex w-full max-w-xl flex-1 flex-col px-4 pt-24 sm:px-6',
+                    tallStickyFooter
+                        ? 'pb-[calc(15rem+env(safe-area-inset-bottom))]'
+                        : 'pb-[calc(7rem+env(safe-area-inset-bottom))]'
+                )}
+            >
                 <section className="flex flex-1 flex-col gap-6">
                     <header className="flex flex-col gap-2">
                         <h1 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
@@ -472,9 +518,14 @@ export function DiagnosisPageClient({ conversationId }: DiagnosisPageClientProps
                     {(imageSrc || diagnosis) && (
                         <section aria-label="Photo and diagnosis" className="space-y-3">
                             <div className="space-y-3">
-                                <Badge variant="secondary">
-                                    {serviceType ?? diagnosis?.trade ?? 'Not Specified'}
-                                </Badge>
+                                <DiagnosisMetaPanel
+                                    trade={serviceType ?? diagnosis?.trade ?? 'Not specified'}
+                                    tradeDetail={diagnosis?.trade_detail}
+                                    urgencyKey={String(diagnosis?.urgency_key ?? 'soon')}
+                                    urgencyLabel={
+                                        URGENCY_LABELS[String(diagnosis?.urgency_key ?? 'soon')] ?? 'Soon'
+                                    }
+                                />
                                 <p className="text-sm text-foreground -mt-1">
                                     {initialPrompt.trim() ? initialPrompt.trim() : ''}
                                 </p>
@@ -518,7 +569,7 @@ export function DiagnosisPageClient({ conversationId }: DiagnosisPageClientProps
             </div>
 
             {diagnosis && !diagnosis.requires_clarification && !diagnosis.rejected && !refineMode && (
-                <footer className="fixed inset-x-0 bottom-0 z-40 border-t border-border/50 bg-background/95 px-4 py-4 backdrop-blur sm:px-6">
+                <footer className="fixed inset-x-0 bottom-0 z-40 bg-background/95 px-4 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur sm:px-6">
                     <div className="mx-auto flex w-full max-w-xl flex-col gap-2">
                         <div className="flex items-center gap-2">
                             <Button
@@ -544,7 +595,7 @@ export function DiagnosisPageClient({ conversationId }: DiagnosisPageClientProps
             )}
 
             {diagnosis && (diagnosis.requires_clarification || diagnosis.rejected || refineMode) && (
-                <footer className="fixed inset-x-0 bottom-0 z-40 border-t border-border/50 bg-background/95 px-4 py-4 backdrop-blur sm:px-6">
+                <footer className="fixed inset-x-0 bottom-0 z-40 bg-background/95 px-4 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur sm:px-6">
                     <div className="mx-auto flex w-full max-w-xl flex-col gap-3">
                         <Label className="text-sm font-medium text-foreground">
                             Add more context

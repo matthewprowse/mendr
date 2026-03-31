@@ -1,9 +1,12 @@
 'use client';
 
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { Menu, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/context/auth-context';
+import { UserAvatarMenu } from '@/components/user-avatar-menu';
 import { Button } from './ui/button';
 
 type LandingHeaderLink = {
@@ -24,27 +27,31 @@ export function LandingHeader({
     showTrades = false,
     rightSlot,
 }: LandingHeaderProps) {
+    const pathname = usePathname();
+    const { user, isLoading: authLoading } = useAuth();
     const [mobileOpen, setMobileOpen] = useState(false);
 
     useEffect(() => {
-        if (!mobileOpen) return;
-        const prev = document.body.style.overflow;
-        document.body.style.overflow = 'hidden';
-        return () => {
-            document.body.style.overflow = prev;
-        };
-    }, [mobileOpen]);
+        const closeMenu = () => setMobileOpen(false);
+        window.addEventListener('hashchange', closeMenu);
+        return () => window.removeEventListener('hashchange', closeMenu);
+    }, []);
+
+    useEffect(() => {
+        setMobileOpen(false);
+    }, [pathname]);
 
     const allLinks = [
         ...navLinks,
         ...(showTrades ? [{ href: '#all-services', label: 'Trades' }] : []),
     ];
+    const toggleMobileMenu = () => setMobileOpen((v) => !v);
 
     return (
         <>
             <header
                 className={cn(
-                    'sticky top-0 z-100 bg-background',
+                    'sticky top-0 z-[100] bg-background',
                     mobileOpen ? 'border-border/50' : 'border-border/50'
                 )}
             >
@@ -70,17 +77,32 @@ export function LandingHeader({
                         ))}
                     </nav>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1.5 sm:gap-2">
+                        <div className="hidden md:flex items-center gap-2">
+                            {authLoading ? (
+                                <div
+                                    className="h-8 w-8 shrink-0 animate-pulse rounded-full bg-muted"
+                                    aria-hidden
+                                />
+                            ) : user ? (
+                                <UserAvatarMenu />
+                            ) : null}
+                        </div>
                         {rightSlot && (
                             <div className="flex items-center">{rightSlot}</div>
                         )}
 
-                        {/* Mobile hamburger */}
+                        {/* Mobile menu */}
                         <Button
-                            variant="ghost"
-                            className="h-10 w-10"
-                            onClick={() => setMobileOpen((v) => !v)}
+                            variant="secondary"
+                            size="icon"
+                            className="md:hidden relative z-[120] h-10 w-10 shrink-0 touch-manipulation"
+                            onPointerUp={(e) => {
+                                e.preventDefault();
+                                toggleMobileMenu();
+                            }}
                             aria-label={mobileOpen ? 'Close Menu' : 'Open Menu'}
+                            type="button"
                         >
                             {mobileOpen ? (
                                 <X className="size-5" />
@@ -94,9 +116,7 @@ export function LandingHeader({
 
             {/* Full-screen mobile nav */}
             {mobileOpen && (
-                <div className="fixed inset-0 z-[64] flex flex-col bg-background md:hidden mt-16">
-                    {/* Spacer for header height */}
-
+                <div className="fixed inset-x-0 top-16 bottom-0 z-[90] flex flex-col bg-background md:hidden">
                     <nav className="flex flex-1 flex-col gap-12 p-4 justify-center">
                         {allLinks.map((link) => {
                             const key = `${link.href}-${link.label}`;
@@ -129,11 +149,10 @@ export function LandingHeader({
                     </nav>
 
                     <div className="flex p-4">
-                        <Button
-                            variant="default"
-                            className="h-10 w-full"
-                        >
-                            Generate Free Scandio Report
+                        <Button asChild variant="default" className="h-10 w-full">
+                            <Link href="/welcome" onClick={() => setMobileOpen(false)}>
+                                Generate Free Scandio Report
+                            </Link>
                         </Button>
                     </div>
                 </div>

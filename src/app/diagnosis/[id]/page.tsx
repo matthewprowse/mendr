@@ -9,8 +9,9 @@ type PageProps = {
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
     const { id } = await params;
     return {
-        title: id ? 'Diagnosis' : 'Diagnosis',
-        description: '',
+        title: 'Diagnosis',
+        description:
+            'Review your home maintenance diagnosis on Scandio. Check what we found from your photo, add context if needed, and continue to find a specialist.',
     };
 }
 

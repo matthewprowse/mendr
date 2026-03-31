@@ -290,7 +290,7 @@ export function ProReviewsTab(props: {
                             </div>
                         ))}
                         {providerGooglePlaceId ? (
-                            <p className="text-sm text-muted-foreground">
+                            <Button variant="secondary" className="h-10 w-full" asChild>
                                 <a
                                     href={`https://www.google.com/maps/place/?q=place_id:${providerGooglePlaceId.replace(
                                         /^places\//,
@@ -298,11 +298,10 @@ export function ProReviewsTab(props: {
                                     )}`}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    className="underline underline-offset-2"
                                 >
-                                    Open listing on Google Maps
+                                    View More Google Reviews
                                 </a>
-                            </p>
+                            </Button>
                         ) : null}
                     </>
                 ) : (
