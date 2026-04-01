@@ -1,129 +1,29 @@
- 'use client';
+/**
+ * Route: /welcome
+ * First step in the scan flow. User uploads an image/video, then we continue to /diagnosis/[id].
+ */
 
-import { useCallback, useMemo, useRef, useState } from 'react';
-import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { ArrowLeft } from 'lucide-react';
+'use client';
+
+import { useCallback, useRef, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Skeleton } from '@/components/ui/skeleton';
-import { ContactPopover } from '@/components/contact-popover';
-import { createClientId } from '@/lib/client-random-id';
-import { normalizeWebsiteUrl } from '@/lib/utils';
 import { compressImage } from '@/lib/image-compression';
 import { setImageData } from '@/lib/image-store';
-import type { CategoryKey } from './_types/page';
-import { useProProvider } from './hooks/providers';
-import { useProReviews } from './hooks/reviews';
-import { useProGallery } from './hooks/gallery';
-import { useStickyHeaderTitle } from './hooks/header';
-import { ProAboutTab } from './_components/about-tab';
-import { ProReviewsTab } from './_components/reviews-tab';
-import { ProGalleryTab } from './_components/gallery-tab';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Badge } from '@/components/ui/badge';
+import { Separator } from '@/components/ui/separator';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { ArrowLeft } from 'lucide-react';
 
 export default function WelcomePage() {
     const router = useRouter();
     const searchParams = useSearchParams();
     const trade = searchParams.get('trade') || '';
-    const pathname = usePathname();
-    const isUuid = (value: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
-    const placeIdFromPath = (() => {
-        const m = pathname.match(/^\/pro\/([^/]+)$/);
-        return m ? decodeURIComponent(m[1]) : '';
-    })();
-    const placeId = searchParams.get('placeId') || placeIdFromPath;
 
-    const headerBarRef = useRef<HTMLDivElement>(null);
-    const providerTitleRef = useRef<HTMLDivElement>(null);
+    const inputRef = useRef<HTMLInputElement>(null);
     const [isUploading, setIsUploading] = useState(false);
     const [contactOpen, setContactOpen] = useState(false);
-
-    const {
-        providerName,
-        providerAddress,
-        providerLat,
-        providerLng,
-        providerSummary,
-        providerSummaryLong,
-        providerPhone,
-        providerEmail,
-        providerWebsiteRaw,
-        isOperatingHoursLoading,
-        operatingHoursByDay,
-        showAllOperatingHours,
-        setShowAllOperatingHours,
-        providerIsOpen,
-        providerSpecialisations,
-        providerCertifications,
-        providerHighlights,
-        providerHonestNote,
-        providerYearsInBusiness,
-    } = useProProvider(placeId);
-
-    const {
-        isReviewsLoading,
-        resolvedProviderId,
-        providerGooglePlaceId,
-        googleReviewTotalFromGoogle,
-        scandioReviewTotalFromScandio,
-        googleReviewsShown,
-        scandioReviewsShown,
-        googleReviewCards,
-        scandioReviewCards,
-        googleReviewsVisibleCount,
-        scandioReviewsVisibleCount,
-        setGoogleReviewsVisibleCount,
-        setScandioReviewsVisibleCount,
-        scandioCategoryAggregates,
-        submitReview,
-    } = useProReviews(placeId);
-    const [shareOpen, setShareOpen] = useState(false);
-    const [reviewerName, setReviewerName] = useState('');
-    const [reviewTitle, setReviewTitle] = useState('');
-    const [reviewBody, setReviewBody] = useState('');
-    const [categoryRatings, setCategoryRatings] = useState<Record<CategoryKey, number>>({
-        punctuality: 5,
-        cleanliness: 5,
-        work_quality: 5,
-        quote_accuracy: 5,
-    });
-    const [submitError, setSubmitError] = useState<string | null>(null);
-    const [submitSuccess, setSubmitSuccess] = useState(false);
-    const [isSubmitting, setIsSubmitting] = useState(false);
-
-    const {
-        galleryImages,
-        isGalleryLoading,
-        isSyncingGoogleGallery,
-        galleryUploading,
-        galleryAddOpen,
-        setGalleryAddOpen,
-        galleryDraftItems,
-        galleryModalError,
-        setGalleryModalError,
-        galleryModalSuccess,
-        setGalleryModalSuccess,
-        lightbox,
-        setLightbox,
-        galleryModalInputRef,
-        openGalleryAddDialog,
-        removeGalleryDraftItem,
-        updateGalleryDraftCaption,
-        handleGalleryModalFiles,
-        handleGalleryModalSubmit,
-        bannerImage,
-        galleryGridImages,
-        setGalleryDraftItems,
-    } = useProGallery({
-        resolvedProviderId,
-        providerGooglePlaceId,
-    });
-
-    const { showProviderInHeader } = useStickyHeaderTitle({
-        headerBarRef,
-        providerTitleRef,
-        providerName,
-    });
 
     const processFile = useCallback(
         async (file: File) => {
@@ -141,7 +41,7 @@ export default function WelcomePage() {
                 });
 
                 const finalDataUrl = isImage ? await compressImage(dataUrl) : dataUrl;
-                const conversationId = createClientId();
+                const conversationId = crypto.randomUUID();
                 setImageData(conversationId, finalDataUrl, file.name);
 
                 const qp = new URLSearchParams();
@@ -162,264 +62,311 @@ export default function WelcomePage() {
         e.target.value = '';
     };
 
-    const categoryAverage =
-        (categoryRatings.punctuality +
-            categoryRatings.cleanliness +
-            categoryRatings.work_quality +
-            categoryRatings.quote_accuracy) /
-        4;
+    const ratingCards = [
+        { label: 'Punctuality', value: '4.8' },
+        { label: 'Cleanliness', value: '4.6' },
+        { label: 'Work Quality', value: '4.7' },
+        { label: 'Quote Accuracy', value: '4.8' },
+    ];
 
-    const mapEmbedQuery = useMemo(() => {
-        if (providerAddress) return providerAddress;
-        if (providerLat != null && providerLng != null) return `${providerLat},${providerLng}`;
-        return null;
-    }, [providerAddress, providerLat, providerLng]);
+    const ratingCardClassName = 'flex flex-col px-4 p-3 border border-input/75 rounded-lg';
+    const ratingLabelClassName = 'text-sm text-muted-foreground font-medium';
+    const ratingValueClassName = 'text-lg text-foreground font-bold';
 
-    const mapEmbedSrc = useMemo(() => {
-        if (!mapEmbedQuery) return null;
-        return `https://maps.google.com/maps?q=${encodeURIComponent(mapEmbedQuery)}&z=15&output=embed`;
-    }, [mapEmbedQuery]);
+    const scandioReviewCards = [
+        {
+            fullName: 'Alex Robertson',
+            initials: 'AR',
+            rating: '4.9',
+            sentAt: '15 Mar 2026',
+            body: 'They were friendly, punctual, and respectful of my home. The work was done carefully from start to finish, and the final finish looks great. I also appreciated the quick clean-up when they were finished.',
+        },
+        {
+            fullName: 'Sam Thompson',
+            initials: 'ST',
+            rating: '4.7',
+            sentAt: '10 Mar 2026',
+            body: 'Great communication throughout the job and clear updates on what to expect. The quality of the work was solid, and they kept the workspace tidy as they went. Overall, it felt professional and well-organized.',
+        },
+        {
+            fullName: 'Priya Kumar',
+            initials: 'PK',
+            rating: '4.8',
+            sentAt: '03 Mar 2026',
+            body: 'Clean, professional, and very thorough. The team took time to explain the plan, followed through on every step, and left the space spotless afterwards. The quote matched what we agreed and there were no surprises.',
+        },
+    ];
 
-    const directionsHref = useMemo(() => {
-        if (providerAddress) {
-            return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(providerAddress)}`;
-        }
-        if (providerLat != null && providerLng != null) {
-            return `https://www.google.com/maps/dir/?api=1&destination=${providerLat},${providerLng}`;
-        }
-        return null;
-    }, [providerAddress, providerLat, providerLng]);
+    const googleReviewCards = [
+        {
+            fullName: 'Emma Williams',
+            initials: 'EW',
+            rating: '4.8',
+            sentAt: '25 Feb 2026',
+            body: 'The job was completed to a high standard. They arrived on time, protected the surrounding areas, and worked efficiently without sacrificing quality. Everything was explained clearly before work began, and the final result looks excellent.',
+        },
+        {
+            fullName: 'Daniel Carter',
+            initials: 'DC',
+            rating: '4.6',
+            sentAt: '18 Feb 2026',
+            body: 'Communication was great and they kept me updated throughout. The team was tidy, professional, and did a thorough clean-up afterward. Minor details were handled promptly, and I felt confident with the process from start to finish.',
+        },
+        {
+            fullName: 'Sophia Morgan',
+            initials: 'SM',
+            rating: '4.7',
+            sentAt: '09 Feb 2026',
+            body: 'Very respectful and hardworking. The work was done carefully, with attention to the small finishing touches that make a difference. The quote was accurate and there were no unexpected changes. I would happily use them again.',
+        },
+    ];
 
-    const websiteHref = useMemo(() => normalizeWebsiteUrl(providerWebsiteRaw), [providerWebsiteRaw]);
-
-    const addressDisplayLine =
-        providerAddress ||
-        (providerLat != null && providerLng != null
-            ? `${providerLat.toFixed(5)}, ${providerLng.toFixed(5)}`
-            : null);
-
-    const mapsApiKey =
-        process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || process.env.NEXT_PUBLIC_GOOGLE_PLACES_API_KEY || '';
-    const hasMapCoords =
-        providerLat != null &&
-        providerLng != null &&
-        Number.isFinite(providerLat) &&
-        Number.isFinite(providerLng);
-
-    const handleShareSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        setSubmitError(null);
-        setSubmitSuccess(false);
-        setIsSubmitting(true);
-        try {
-            const res = await submitReview({
-                reviewerName,
-                reviewTitle,
-                reviewBody,
-                categoryRatings,
-            });
-            if (!res.ok) {
-                setSubmitError(res.error);
-                return;
-            }
-            setSubmitSuccess(true);
-            setReviewerName('');
-            setReviewTitle('');
-            setReviewBody('');
-            setCategoryRatings({
-                punctuality: 5,
-                cleanliness: 5,
-                work_quality: 5,
-                quote_accuracy: 5,
-            });
-            window.setTimeout(() => {
-                setShareOpen(false);
-                setSubmitSuccess(false);
-            }, 1800);
-        } catch {
-            setSubmitError('Network error');
-        } finally {
-            setIsSubmitting(false);
-        }
-    };
+    const reviewCardClassName = 'min-h-36 border border-border/75 rounded-lg p-4 flex flex-col gap-2';
+    const reviewHeaderClassName = 'flex items-start justify-between gap-2';
+    const reviewMetaRowClassName = 'flex items-center gap-2';
+    const reviewAvatarClassName =
+        'h-9 w-9 rounded-full bg-secondary flex items-center justify-center text-sm font-medium text-muted-foreground';
+    const reviewAuthorClassName = 'text-sm font-medium text-foreground';
+    const reviewSentAtClassName = 'text-[11px] text-muted-foreground';
+    const reviewOverallClassName = 'text-sm font-bold text-foreground';
+    const reviewBodyClassName = 'text-sm text-muted-foreground leading-relaxed';
 
     return (
         <main className="flex flex-col gap-6 p-4 pt-22 pb-22">
-            <div
-                ref={headerBarRef}
-                className="flex flex-row justify-between items-center p-4 h-18 bg-background w-full fixed inset-x-0 top-0 z-50"
-            >
+            <div className="flex flex-row justify-between items-center p-4 h-18 bg-background w-full fixed inset-x-0 top-0 z-50">
                 <Button variant="secondary" size="icon" className="h-10 w-10" onClick={() => router.back()}>
                     <ArrowLeft className="size-5" />
                 </Button>
-                <h3 className="text-lg text-foreground font-semibold truncate max-w-[min(280px,55vw)] text-center">
-                    {showProviderInHeader ? providerName || 'Company Name' : 'Scandio'}
-                </h3>
+                <h3 className="text-lg text-foreground font-semibold">Scandio</h3>
                 <Button variant="ghost" size="icon" className="hover:bg-transparent" />
             </div>
 
-            {isGalleryLoading || isSyncingGoogleGallery ? (
-                <Skeleton className="h-48 w-full rounded-lg" />
-            ) : bannerImage ? (
-                <div className="relative h-48 w-full overflow-hidden rounded-lg bg-secondary">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                        src={bannerImage.url}
-                        alt=""
-                        className="h-full w-full object-cover"
-                    />
-                </div>
-            ) : (
-                <div className="flex h-48 bg-secondary rounded-lg" />
-            )}
+            <div className="flex h-48 bg-secondary rounded-lg" />
             <div className="flex flex-col gap-2">
-                <div ref={providerTitleRef} className="flex flex-row justify-between items-center">
-                    <h1 className="text-2xl text-foreground font-bold">{providerName || 'Company Name'}</h1>
-                    <Badge variant="secondary">
-                        {providerIsOpen === true ? 'Open' : providerIsOpen === false ? 'Closed' : '—'}
-                    </Badge>
+                <div className="flex flex-row justify-between items-center">
+                    <h1 className="text-2xl text-foreground font-bold">Company Name</h1>
+                    <Badge variant="secondary">Open</Badge>
                 </div>
                 <p className="text-sm text-muted-foreground">
-                    {providerSummary?.trim()
-                        ? providerSummary.trim()
-                        : 'Short customer summary from reviews will appear here when available.'}
+                    Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore.
                 </p>
             </div>
 
-            <Tabs defaultValue="about" className="w-full">
-                <TabsList className="grid h-10 w-full grid-cols-3">
+            <Tabs defaultValue="about">
+                <TabsList className="grid grid-cols-3 h-10">
                     <TabsTrigger
                         value="about"
-                        className="h-10"
+                        className="h-8"
                     >
                         About
                     </TabsTrigger>
                     <TabsTrigger
                         value="reviews"
-                        className="h-10"
+                        className="h-8"
                     >
                         Reviews
                     </TabsTrigger>
                     <TabsTrigger
                         value="gallery"
-                        className="h-10"
+                        className="h-8"
                     >
                         Gallery
                     </TabsTrigger>
                 </TabsList>
 
-                <TabsContent value="about">
-                    <ProAboutTab
-                        operatingHoursByDay={operatingHoursByDay}
-                        isOperatingHoursLoading={isOperatingHoursLoading}
-                        showAllOperatingHours={showAllOperatingHours}
-                        setShowAllOperatingHours={setShowAllOperatingHours}
-                        hasMapCoords={hasMapCoords}
-                        mapsApiKey={mapsApiKey}
-                        providerName={providerName}
-                        providerAddress={providerAddress}
-                        providerLat={providerLat}
-                        providerLng={providerLng}
-                        mapEmbedSrc={mapEmbedSrc}
-                        addressDisplayLine={addressDisplayLine}
-                        directionsHref={directionsHref}
-                        profileSummaryLong={providerSummaryLong}
-                        specialisations={providerSpecialisations}
-                        certifications={providerCertifications}
-                        highlights={providerHighlights}
-                        honestNote={providerHonestNote}
-                        yearsInBusiness={providerYearsInBusiness}
-                    />
+                <TabsContent value="about" className="flex flex-col gap-6 mt-6">
+                    <div className="flex flex-col gap-2">
+                        <h3 className="text-lg text-foreground font-bold">Summary</h3>
+                        <p className="text-sm text-foreground">
+                            Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo
+                        </p>
+                    </div>
+
+                    <div className="flex flex-col gap-3">
+                        <h3 className="text-lg text-foreground font-bold">Operating Hours</h3>
+                        <div className="flex flex-row justify-between items-center">
+                            <p className="text-sm text-foreground font-medium">Monday</p>
+                            <p className="text-sm text-muted-foreground">10:00 - 17:00</p>
+                        </div>
+                        <div className="flex flex-row justify-between items-center">
+                            <p className="text-sm text-foreground font-medium">Tuesday</p>
+                            <p className="text-sm text-muted-foreground">10:00 - 17:00</p>
+                        </div>
+                        <Button variant="secondary" className="h-10">View More</Button>
+                    </div>
+
+                    <div className="flex flex-col gap-3">
+                        <h3 className="text-lg text-foreground font-bold">Directions</h3>
+                        <div className="flex flex-col text-center px-4 py-24 bg-secondary rounded-lg">
+                            <p className="text-xs text-muted-foreground">
+                                Lorem ipsum dolor sit amet, consectetur adipiscing elit.
+                            </p>
+                        </div>
+                        <p className="text-xs text-muted-foreground">Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</p>
+                    </div>
                 </TabsContent>
 
-                <TabsContent value="reviews">
-                    <ProReviewsTab
-                        isOperatingHoursLoading={isOperatingHoursLoading}
-                        providerSummary={providerSummary}
-                        isReviewsLoading={isReviewsLoading}
-                        scandioReviewsCount={scandioReviewTotalFromScandio}
-                        googleReviewsCount={googleReviewTotalFromGoogle}
-                        scandioCategoryAggregates={scandioCategoryAggregates}
-                        resolvedProviderId={resolvedProviderId}
-                        shareOpen={shareOpen}
-                        setShareOpen={setShareOpen}
-                        reviewerName={reviewerName}
-                        setReviewerName={setReviewerName}
-                        reviewTitle={reviewTitle}
-                        setReviewTitle={setReviewTitle}
-                        reviewBody={reviewBody}
-                        setReviewBody={setReviewBody}
-                        categoryRatings={categoryRatings}
-                        setCategoryRatings={setCategoryRatings}
-                        categoryAverage={categoryAverage}
-                        submitError={submitError}
-                        submitSuccess={submitSuccess}
-                        isSubmitting={isSubmitting}
-                        onShareSubmit={handleShareSubmit}
-                        scandioReviewsShown={scandioReviewsShown}
-                        googleReviewsShown={googleReviewsShown}
-                        scandioReviewCardsLength={scandioReviewCards.length}
-                        googleReviewCardsLength={googleReviewCards.length}
-                        scandioReviewsVisibleCount={scandioReviewsVisibleCount}
-                        googleReviewsVisibleCount={googleReviewsVisibleCount}
-                        setScandioReviewsVisibleCount={setScandioReviewsVisibleCount}
-                        setGoogleReviewsVisibleCount={setGoogleReviewsVisibleCount}
-                        providerGooglePlaceId={providerGooglePlaceId}
-                    />
+                <TabsContent value="reviews" className="flex flex-col gap-6 mt-6">
+                    <div className="flex flex-col gap-2">
+                        <h3 className="text-lg text-foreground font-bold">Reviews</h3>
+                        <p className="text-sm text-foreground">
+                            Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo
+                        </p>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                        {ratingCards.map((card) => (
+                            <div
+                                key={card.label}
+                                className={ratingCardClassName}
+                            >
+                                <p className={ratingLabelClassName}>{card.label}</p>
+                                <p className={ratingValueClassName}>{card.value}</p>
+                            </div>
+                        ))}
+                    </div>
+
+                    <div className="flex flex-col gap-4">
+                        <h6 className="text-md text-foreground font-bold">Scandio Reviews</h6>
+                        <Button
+                            variant="secondary"
+                            className="h-10"
+                        >
+                            Share Experience
+                        </Button>
+
+                        {scandioReviewCards.map((r) => (
+                            <div
+                                key={r.fullName}
+                                className={reviewCardClassName}
+                            >
+                                <div className={reviewHeaderClassName}>
+                                    <div className={reviewMetaRowClassName}>
+                                        <div className={reviewAvatarClassName}>
+                                            {r.initials}
+                                        </div>
+                                        <div className="flex flex-col">
+                                            <p className={reviewAuthorClassName}>{r.fullName}</p>
+                                            <p className={reviewSentAtClassName}>{r.sentAt}</p>
+                                        </div>
+                                    </div>
+                                    <p className={reviewOverallClassName}>{r.rating}</p>
+                                </div>
+                                <p className={reviewBodyClassName}>{r.body}</p>
+                            </div>
+                        ))}
+
+                        <Button
+                            variant="secondary"
+                            className="h-10 w-full"
+                        >
+                            View More
+                        </Button>
+                    </div>
+
+                    <div className="flex flex-col gap-4">
+                        <h6 className="text-md text-foreground font-bold">Google Reviews</h6>
+
+                        {googleReviewCards.map((r) => (
+                            <div
+                                key={r.fullName}
+                                className={reviewCardClassName}
+                            >
+                                <div className={reviewHeaderClassName}>
+                                    <div className={reviewMetaRowClassName}>
+                                        <div className={reviewAvatarClassName}>
+                                            {r.initials}
+                                        </div>
+                                        <div className="flex flex-col">
+                                            <p className={reviewAuthorClassName}>{r.fullName}</p>
+                                            <p className={reviewSentAtClassName}>{r.sentAt}</p>
+                                        </div>
+                                    </div>
+                                    <p className={reviewOverallClassName}>{r.rating}</p>
+                                </div>
+                                <p className={reviewBodyClassName}>{r.body}</p>
+                            </div>
+                        ))}
+
+                        <Button
+                            variant="secondary"
+                            className="h-10 w-full"
+                        >
+                            View More
+                        </Button>
+                    </div>
                 </TabsContent>
 
-                <TabsContent value="gallery">
-                    <ProGalleryTab
-                        resolvedProviderId={resolvedProviderId}
-                        galleryUploading={galleryUploading}
-                        galleryAddOpen={galleryAddOpen}
-                        setGalleryAddOpen={setGalleryAddOpen}
-                        galleryDraftItems={galleryDraftItems}
-                        setGalleryDraftItems={setGalleryDraftItems}
-                        galleryModalError={galleryModalError}
-                        setGalleryModalError={setGalleryModalError}
-                        galleryModalSuccess={galleryModalSuccess}
-                        setGalleryModalSuccess={setGalleryModalSuccess}
-                        galleryModalInputRef={galleryModalInputRef}
-                        handleGalleryModalFiles={handleGalleryModalFiles}
-                        openGalleryAddDialog={openGalleryAddDialog}
-                        isGalleryLoading={isGalleryLoading}
-                        isSyncingGoogleGallery={isSyncingGoogleGallery}
-                        galleryGridImages={galleryGridImages}
-                        galleryImages={galleryImages}
-                        setLightbox={setLightbox}
-                        removeGalleryDraftItem={removeGalleryDraftItem}
-                        updateGalleryDraftCaption={updateGalleryDraftCaption}
-                        handleGalleryModalSubmit={handleGalleryModalSubmit}
-                        lightbox={lightbox}
-                    />
+                <TabsContent value="gallery" className="flex flex-col gap-6 mt-6">
+                    <div className="flex flex-col gap-2">
+                        <h3 className="text-lg text-foreground font-bold">Gallery</h3>
+                        <p className="text-sm text-foreground">
+                            Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo
+                        </p>
+                    </div>
+
+                    <div className="flex flex-col gap-3">
+                        <div className="grid grid-cols-2 gap-2 md:grid-cols-3">
+                            {Array.from({ length: 6 }).map((_, i) => (
+                                <div
+                                    key={i}
+                                    className="aspect-square overflow-hidden rounded-xl bg-secondary"
+                                />
+                            ))}
+                        </div>
+
+                        <Button
+                            variant="secondary"
+                            className="h-10 w-full"
+                        >
+                            Add Photo
+                        </Button>
+                    </div>
                 </TabsContent>
             </Tabs>
 
             <div className="flex flex-row gap-2 p-4 bg-background w-full fixed inset-x-0 bottom-0 z-50">
-                {websiteHref ? (
-                    <Button variant="ghost" className="flex flex-1 h-10" asChild>
-                        <a href={websiteHref} target="_blank" rel="noopener noreferrer">
-                            Website
-                        </a>
-                    </Button>
-                ) : (
-                    <Button variant="ghost" className="flex flex-1 h-10" disabled type="button">
-                        Website
-                    </Button>
-                )}
-                <ContactPopover
-                    providerName={providerName || 'Provider'}
-                    displayName={providerName || 'Provider'}
-                    phone={providerPhone}
-                    email={providerEmail}
-                    label="Contact"
-                    className="flex flex-1 h-10"
-                    open={contactOpen}
-                    onOpenChange={setContactOpen}
-                    align="end"
-                    side="top"
-                />
+                <Popover open={contactOpen} onOpenChange={setContactOpen}>
+                    <PopoverTrigger asChild>
+                        <Button variant="secondary" className="flex flex-1 h-10">Contact</Button>
+                    </PopoverTrigger>
+                    <PopoverContent
+                        className="w-64 p-3 rounded-md shadow-xl border-input"
+                        align="start"
+                        side="top"
+                        sideOffset={4}
+                    >
+                        <div className="flex flex-col gap-3">
+                            <Button
+                                variant="secondary"
+                                className="w-full"
+                                onClick={() => setContactOpen(false)}
+                            >
+                                WhatsApp
+                            </Button>
+                            <p className="text-xs text-muted-foreground text-center">
+                                Lorem ipsum dolor sit amet, consectetur adipiscing elit.
+                            </p>
+                            <div className="flex flex-row gap-2">
+                                <Button
+                                    variant="ghost"
+                                    className="flex-1 h-10"
+                                    onClick={() => setContactOpen(false)}
+                                >
+                                    Phone
+                                </Button>
+                                <Button
+                                    variant="ghost"
+                                    className="flex-1 h-10"
+                                    onClick={() => setContactOpen(false)}
+                                >
+                                    Email
+                                </Button>
+                            </div>
+                        </div>
+                    </PopoverContent>
+                </Popover>
+                <Button variant="ghost" className="flex flex-1 h-10 text-muted-foreground">Website</Button>
             </div>
         </main>
     );

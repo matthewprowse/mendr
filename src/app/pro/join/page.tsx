@@ -1,76 +1,36 @@
-'use client';
-
 import Link from 'next/link';
+import { Check, Facebook, Instagram, Linkedin, Twitter } from 'lucide-react';
 import { LandingHeader } from '@/components/landing-header';
 import { Placeholder } from '@/components/placeholder';
 import { Button } from '@/components/ui/button';
 
-// ─── Static data ──────────────────────────────────────────────────────────────
-
-const STATS = [
-    { value: 'Founding network', label: 'Western Cape' },
-    { value: '< 60s', label: 'Average report delivery time' },
-    { value: '0%', label: 'Commission taken by Scandio' },
-];
-
-const BENEFITS = [
-    {
-        title: 'Arrive Informed, Not Guessing',
-        description:
-            'Homeowners share their Scandio Report before you arrive. You know the fault, the symptoms, and the scope before you leave the yard — reducing wasted call-outs and improving first-visit fix rates.',
-    },
-    {
-        title: 'Qualified Leads, Not Tyre-Kickers',
-        description:
-            'Every homeowner who contacts you through Scandio has already diagnosed their problem and committed to resolving it. No cold enquiries, no price shoppers, no time wasted.',
-    },
-    {
-        title: 'Your Profile, Your Reputation',
-        description:
-            'Build a verified Scandio profile with reviews, past work gallery, and trade credentials. Let your work speak for itself and stand out from the crowd.',
-    },
-    {
-        title: 'Zero Commission, Always',
-        description:
-            "We don't take a cut of your jobs. You quote, you invoice, you get paid — the full amount. Scandio charges homeowners nothing and contractors nothing. We grow when you grow.",
-    },
-    {
-        title: 'Be Discovered in Your Area',
-        description:
-            'Homeowners search by trade and location. Your profile appears when someone nearby needs your skills, driving local enquiries to you without any advertising spend on your part.',
-    },
-    {
-        title: 'Transparent Reviews You Can Trust',
-        description:
-            'Scandio reviews are tied to real jobs and use a structured rating system — punctuality, cleanliness, work quality, and quote accuracy. Earn honest trust signals that actually differentiate you.',
-    },
-];
-
-const WHAT_TO_EXPECT = [
-    'Pre-diagnosed leads — homeowners share their Scandio Report before contacting you, so you know the fault before you arrive.',
-    'No commission, ever — we charge contractors a flat monthly subscription once out of beta, never a cut of your jobs.',
-    'Equal visibility in the founding phase — all founding members appear in search results while we build lead volume across the Western Cape.',
-];
-
 const HOW_IT_WORKS = [
     {
-        step: '01',
-        title: 'Apply to Join the Network',
-        description:
-            'Fill in the application below with your trade and contact details. Our team reviews every application to maintain the quality of the network.',
+        title: 'Apply To Join The Network',
+        body: 'Submit your company details, service categories, and operating area. We review each application to keep network quality high and match quality stable.',
+        label: 'Provider application form mockup',
     },
     {
-        step: '02',
-        title: 'Set Up Your Scandio Profile',
-        description:
-            "Once accepted, you'll get access to your contractor profile. Add your credentials, past work photos, and operating hours. Your profile is your digital shopfront.",
+        title: 'Build Your Profile',
+        body: 'Set up your profile with service details, credentials, proof of work, and contact information. Better profile quality improves trust and increases conversion on homeowner-side comparisons.',
+        label: 'Provider profile setup mockup',
     },
     {
-        step: '03',
         title: 'Receive Informed Enquiries',
-        description:
-            'Homeowners in your area discover you through Scandio and share their report when they contact you. You arrive knowing the fault, the history, and what to bring.',
+        body: 'Homeowners arrive with diagnosis context already structured, so first conversations start with better information. That reduces wasted quoting cycles and helps teams arrive better prepared.',
+        label: 'Informed homeowner enquiry mockup',
     },
+];
+
+const VALUE_BENTO = [
+    { title: 'Higher Intent Enquiries', body: 'Homeowners come in after diagnosis, not cold browsing.', span: 'lg:col-span-2' },
+    { title: 'Less Wasted Quoting', body: 'Report-first conversations reduce repetitive clarifications.', span: 'lg:col-span-2' },
+    { title: 'Better First Visits', body: 'Teams can prepare with stronger context before arriving.', span: 'lg:col-span-1' },
+    { title: 'Zero Commission Model', body: 'Scandio does not take a cut of completed jobs.', span: 'lg:col-span-1' },
+    { title: 'Visibility In Your Area', body: 'Recommendations factor service fit and geographic relevance.', span: 'lg:col-span-1' },
+    { title: 'Profile-Led Trust', body: 'Structured profiles help homeowners choose with confidence.', span: 'lg:col-span-1' },
+    { title: 'Sustainable Growth', body: 'As diagnosis volume grows, qualified lead volume compounds.', span: 'lg:col-span-2' },
+    { title: 'Built For Long-Term Quality', body: 'Matching and ranking logic is continuously refined from real usage feedback.', span: 'lg:col-span-2' },
 ];
 
 type PricingFeature = { text: string; sub?: string };
@@ -89,16 +49,16 @@ type PricingTier = {
 const PRICING_TIERS: PricingTier[] = [
     {
         name: 'Founding Member',
-        timing: 'Now — Beta',
+        timing: 'Estimated Now - Beta',
         price: 'Free',
         priceNote: 'No credit card required',
         highlight: true,
-        lockInNote: 'Founding members lock in at R249/mo — guaranteed.',
+        lockInNote: 'Founding members lock in at an estimated R249/mo.',
         cta: { label: 'Get Started Free', href: '/pro/onboard' },
         features: [
             { text: 'Full profile listing' },
             { text: 'Appears in search results' },
-            { text: 'Receive Scandio Reports' },
+            { text: 'Receive Scandio reports' },
             { text: 'Review collection' },
             { text: 'Work gallery' },
             { text: 'Priority placement at launch' },
@@ -106,49 +66,91 @@ const PRICING_TIERS: PricingTier[] = [
     },
     {
         name: 'Solo',
-        timing: 'Est. late 2026',
-        price: 'R249/mo',
+        timing: 'Estimated Late 2026',
+        price: 'Est. R249/mo',
         priceNote: 'For individual contractors',
         highlight: false,
-        secondaryLink: { label: 'Join founding network now →', href: '/pro/onboard' },
+        secondaryLink: { label: 'Join founding network now ->', href: '/pro/onboard' },
         features: [
-            { text: 'Standard profile — name, trade, rating, contact' },
+            { text: 'Standard profile listing' },
             { text: 'Appears in search results' },
-            { text: 'Receive Scandio Reports' },
+            { text: 'Receive Scandio reports' },
             { text: 'Review collection' },
         ],
     },
     {
         name: 'Basic Team',
-        timing: 'Est. late 2026',
-        price: 'R649/mo',
+        timing: 'Estimated Late 2026',
+        price: 'Est. R649/mo',
         priceNote: 'For teams of 3 to 5',
         highlight: false,
-        secondaryLink: { label: 'Join founding network now →', href: '/pro/onboard' },
+        secondaryLink: { label: 'Join founding network now ->', href: '/pro/onboard' },
         features: [
             { text: 'Everything in Solo' },
             { text: 'Up to 5 team member profiles' },
             { text: 'Priority placement in match results', sub: 'First in results for diagnoses matching your trade and area.' },
-            { text: 'Advanced analytics — profile views and lead data' },
+            { text: 'Advanced analytics for profile views and lead data' },
             { text: 'Direct WhatsApp contact from profile' },
         ],
     },
     {
         name: 'Enterprise',
-        timing: 'Est. late 2026',
-        price: 'R1,249/mo',
-        priceNote: 'For large operations and franchises',
+        timing: 'Estimated Late 2026',
+        price: 'Est. R1,249/mo',
+        priceNote: 'For larger operations',
         highlight: false,
-        secondaryLink: { label: 'Join founding network now →', href: '/pro/onboard' },
+        secondaryLink: { label: 'Join founding network now ->', href: '/pro/onboard' },
         features: [
             { text: 'Everything in Basic Team' },
             { text: 'Unlimited team seats' },
-            { text: 'White label Scandio Reports with your branding', sub: 'Your logo and colours alongside Scandio on every report you receive.' },
-            { text: 'Highest priority placement in all results' },
+            { text: 'White-label report options', sub: 'Brand-aligned reports for larger teams and operations.' },
+            { text: 'Highest priority placement in results' },
             { text: 'Dedicated account support' },
         ],
     },
 ];
+
+const FAQS = [
+    {
+        q: 'Is it free to join right now?',
+        a: 'Yes. The founding phase is free to join. Scandio does not take commission on jobs completed through your business.',
+    },
+    {
+        q: 'What type of leads should we expect?',
+        a: 'Scandio is designed to send informed homeowner enquiries where diagnosis context is already available. This improves first-contact quality compared with generic cold enquiries.',
+    },
+    {
+        q: 'How are providers recommended to homeowners?',
+        a: 'Recommendations are based on service relevance, local fit, and profile quality signals. We use layered ranking rather than a single filter.',
+    },
+    {
+        q: 'Can we control where we are shown?',
+        a: 'Yes. Operating area and service categories are core inputs in recommendation relevance, so matching aligns with your practical service radius.',
+    },
+    {
+        q: 'Do we need to use Scandio pricing tools?',
+        a: 'No. You keep control of your own quoting and pricing process. Scandio focuses on diagnosis context and qualified matching.',
+    },
+    {
+        q: 'What does profile quality affect?',
+        a: 'Profile completeness improves homeowner trust, click-through behaviour, and downstream contact quality.',
+    },
+    {
+        q: 'When do paid plans begin?',
+        a: 'Paid plan timelines are communicated in advance. Founding providers are informed before any pricing changes take effect.',
+    },
+    {
+        q: 'How do we get started?',
+        a: 'Use the application flow on this page. Once approved, you can complete profile setup and begin receiving informed enquiries.',
+    },
+];
+
+const SOCIAL_LINKS = [
+    { href: 'https://x.com/', label: 'X', icon: Twitter },
+    { href: 'https://www.linkedin.com/', label: 'LinkedIn', icon: Linkedin },
+    { href: 'https://www.instagram.com/', label: 'Instagram', icon: Instagram },
+    { href: 'https://www.facebook.com/', label: 'Facebook', icon: Facebook },
+] as const;
 
 export default function ProJoinPage() {
     return (
@@ -156,386 +158,264 @@ export default function ProJoinPage() {
             <LandingHeader
                 navLinks={[
                     { href: '#how-it-works', label: 'How It Works' },
-                    { href: '#benefits', label: 'Benefits' },
+                    { href: '#value', label: 'Why Join' },
                     { href: '#pricing', label: 'Pricing' },
-                    { href: '#testimonials', label: 'From the Network' },
+                    { href: '#faq', label: 'FAQ' },
                     { href: '/', label: 'For Homeowners' },
+                    { href: '/contact', label: 'Contact' },
                 ]}
                 logoHref="/pro/join"
                 showTrades={false}
             />
 
             <main className="flex-1">
-                {/* ── Hero ── */}
-                <section className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-24 lg:px-8 lg:py-32">
-                    <div className="grid items-center gap-12 lg:grid-cols-2 lg:gap-16">
-                        <div className="flex flex-col items-center space-y-6 text-center lg:items-start lg:text-left">
-                            <span className="inline-flex items-center rounded-full border border-border/50 bg-secondary px-3 py-1 text-xs font-medium text-muted-foreground">
-                                For Western Cape Contractors
-                            </span>
-                            <h1 className="text-4xl font-bold leading-tight tracking-tight sm:text-5xl">
-                                Less time quoting. More time fixing.
-                            </h1>
-                            <p className="text-base text-muted-foreground max-w-lg">
-                                Scandio sends you homeowners who already know their problem. No
-                                cold enquiries, no wasted assessment visits — just qualified leads
-                                with a professional fault report in hand before you arrive.
-                            </p>
-                            <p className="text-base text-muted-foreground max-w-lg">
-                                Join the Western Cape&apos;s founding contractor network.
-                                Zero commission, ever.
-                            </p>
-                            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                                <Button asChild size="default">
-                                    <Link href="/pro/onboard" className="text-sm">
-                                        Apply to Join the Network
-                                    </Link>
-                                </Button>
-                                <Button variant="ghost" asChild>
-                                    <Link href="#how-it-works" className="text-sm">
-                                        See how it works →
-                                    </Link>
-                                </Button>
-                            </div>
-                            <p className="text-xs text-muted-foreground">
-                                Free to join &middot; No commission &middot; Western Cape only
-                            </p>
-                        </div>
-
-                        <div className="flex justify-center">
-                            <div className="relative w-full max-w-[348px] overflow-hidden rounded-3xl border border-border/50 bg-secondary/50">
-                                <div className="aspect-[9/16] flex items-center justify-center p-4 text-center text-sm text-muted-foreground">
-                                    Contractor Profile Mockup
+                <section className="relative overflow-hidden">
+                    <div className="absolute inset-0 pointer-events-none" aria-hidden="true" style={{ backgroundImage: 'radial-gradient(circle, var(--foreground) 1px, transparent 1px)', backgroundSize: '24px 24px', opacity: 0.027 }} />
+                    <div className="relative mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-24 lg:px-8 lg:py-28">
+                        <div className="grid items-center gap-12 lg:grid-cols-[3fr_2fr]">
+                            <div className="flex flex-col items-center gap-5 text-center lg:items-start lg:text-left">
+                                <span className="inline-flex items-center rounded-full border border-border/50 bg-secondary px-3 py-1 text-xs font-medium text-muted-foreground">
+                                    For Service Providers
+                                </span>
+                                <h1 className="text-3xl font-bold tracking-tight sm:text-4xl lg:text-5xl">
+                                    Less Time Quoting. More Time Doing The Work.
+                                </h1>
+                                <p className="max-w-2xl text-base text-muted-foreground sm:text-lg">
+                                    Join a network where homeowners arrive with structured diagnosis context already in hand. Better inputs produce better enquiries and better conversion.
+                                </p>
+                                <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                                    <Button asChild size="lg">
+                                        <Link href="/pro/onboard">Apply To Join The Network</Link>
+                                    </Button>
+                                    <Button variant="ghost" className="h-10 text-sm" asChild>
+                                        <Link href="#how-it-works">How Scandio Works</Link>
+                                    </Button>
                                 </div>
+                                <p className="text-sm text-muted-foreground">Free To Join · No Commission · Founding Network</p>
+                            </div>
+                            <div className="mx-auto w-full max-w-[360px]">
+                                <Placeholder label="" aspectRatio="aspect-[9/16]" className="w-full rounded-xl" />
                             </div>
                         </div>
                     </div>
                 </section>
 
-                {/* ── Stats ── */}
-                <section className="border-y border-border/50 bg-muted/30 py-10">
+                <section className="bg-foreground py-14 sm:py-20">
+                    <div className="mx-auto max-w-4xl px-4 text-center sm:px-6 lg:px-8">
+                        <p className="text-2xl font-semibold text-background sm:text-3xl">
+                            Most providers waste time on enquiries with poor context.
+                        </p>
+                        <p className="mt-3 text-base text-background/80 sm:text-lg">
+                            Scandio improves enquiry quality by moving diagnosis clarity earlier in the workflow.
+                        </p>
+                        <p className="mt-3 text-base text-background sm:text-lg">
+                            Better homeowner context means better provider efficiency.
+                        </p>
+                    </div>
+                </section>
+
+                <section id="how-it-works" className="scroll-mt-16 py-16 sm:py-20">
                     <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-                        <div className="grid grid-cols-1 gap-8 sm:grid-cols-3">
-                            {STATS.map(({ value, label }) => (
-                                <div
-                                    key={label}
-                                    className="flex flex-col items-center text-center gap-1"
-                                >
-                                    <span className="text-2xl font-bold tracking-tight text-foreground">
-                                        {value}
-                                    </span>
-                                    <span className="text-sm text-muted-foreground">{label}</span>
+                        <div className="mx-auto mb-12 max-w-3xl text-center sm:mb-16">
+                            <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">How Scandio Works For Providers</h2>
+                            <p className="mt-3 text-base text-muted-foreground">
+                                A cleaner workflow from application to informed enquiry.
+                            </p>
+                        </div>
+                        <div className="space-y-14 sm:space-y-16">
+                            {HOW_IT_WORKS.map(({ title, body, label }, idx) => (
+                                <div key={title} className="grid items-center gap-6 lg:grid-cols-2 lg:gap-10">
+                                    <div className={idx % 2 === 1 ? 'order-2 lg:order-1' : 'order-2'}>
+                                        <h3 className="text-xl font-semibold text-foreground sm:text-2xl">{title}</h3>
+                                        <p className="mt-3 text-base leading-relaxed text-muted-foreground">{body}</p>
+                                    </div>
+                                    <div className={idx % 2 === 1 ? 'order-1 lg:order-2' : 'order-1'}>
+                                        <Placeholder label={label} aspectRatio="aspect-[4/3]" className="w-full rounded-lg" />
+                                    </div>
                                 </div>
                             ))}
                         </div>
                     </div>
                 </section>
 
-                {/* ── How it works ── */}
-                <section
-                    id="how-it-works"
-                    className="mx-auto max-w-7xl space-y-16 px-4 py-20 sm:px-6 lg:px-8 scroll-mt-16"
-                >
-                    <div className="text-center">
-                        <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">
-                            How Scandio Works for Contractors
-                        </h2>
-                        <p className="mx-auto mt-4 max-w-2xl text-muted-foreground">
-                            From application to first informed enquiry — here&apos;s what joining
-                            the Scandio network looks like.
-                        </p>
-                    </div>
-
-                    {HOW_IT_WORKS.map(({ step, title, description }, i) => {
-                        const isEven = i % 2 === 1;
-                        return (
-                            <div
-                                key={step}
-                                className="grid items-center gap-6 lg:grid-cols-2 lg:gap-12"
-                            >
-                                <div
-                                    className={`space-y-3 ${isEven ? 'order-2 lg:order-2' : 'order-2 lg:order-1'}`}
-                                >
-                                    <span className="text-4xl font-bold text-muted-foreground/15 leading-none select-none">
-                                        {step}
-                                    </span>
-                                    <h3 className="text-xl font-semibold">{title}</h3>
-                                    <p className="text-base text-muted-foreground">{description}</p>
-                                </div>
-                                <div
-                                    className={`order-1 ${isEven ? 'lg:order-1' : 'lg:order-2'}`}
-                                >
-                                    <Placeholder
-                                        label={`${title} Mockup`}
-                                        aspectRatio="aspect-[4/3]"
-                                        className="w-full"
-                                    />
-                                </div>
-                            </div>
-                        );
-                    })}
-                </section>
-
-                {/* ── Benefits ── */}
-                <section id="benefits" className="bg-muted/50 py-16 scroll-mt-16">
+                <section id="value" className="scroll-mt-16 bg-muted/30 py-16 sm:py-20">
                     <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-                        <div className="mb-12 text-center">
-                            <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">
-                                Built for Contractors Who Value Their Time
-                            </h2>
-                            <p className="mx-auto mt-4 max-w-2xl text-muted-foreground">
-                                Every feature in Scandio is designed to reduce wasted effort and
-                                put more jobs in your diary.
+                        <div className="mx-auto mb-10 max-w-3xl text-center sm:mb-12">
+                            <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">Why Providers Join Scandio</h2>
+                            <p className="mt-3 text-base text-muted-foreground">
+                                Scandio is built to improve lead quality, reduce friction, and help providers convert more efficiently.
                             </p>
                         </div>
-                        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-                            {BENEFITS.map(({ title, description }) => (
-                                <div
-                                    key={title}
-                                    className="flex flex-col gap-3 rounded-lg border border-border/50 bg-background p-6 transition-all duration-200 hover:border-border/75"
-                                >
-                                    <h3 className="text-sm font-semibold text-foreground">
-                                        {title}
-                                    </h3>
-                                    <p className="text-sm text-muted-foreground leading-relaxed">
-                                        {description}
-                                    </p>
+                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-6">
+                            {VALUE_BENTO.map((item) => (
+                                <div key={item.title} className={['rounded-xl border border-border/50 bg-background p-4 sm:p-5 flex flex-col', item.span].join(' ')}>
+                                    <div className="mb-3 overflow-hidden rounded-lg bg-secondary/50">
+                                        <Placeholder label="" aspectRatio="aspect-video" className="w-full" />
+                                    </div>
+                                    <h3 className="text-base font-semibold text-foreground sm:text-lg">{item.title}</h3>
+                                    <p className="mt-2 text-sm leading-relaxed text-muted-foreground flex-1">{item.body}</p>
                                 </div>
                             ))}
                         </div>
                     </div>
                 </section>
 
-                {/* ── Pricing ── */}
-                <section id="pricing" className="mx-auto max-w-7xl px-4 py-20 sm:px-6 lg:px-8 scroll-mt-16">
-                    <div className="mb-10 text-center">
-                        <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">
-                            Simple pricing. No surprises.
-                        </h2>
-                        <p className="mx-auto mt-4 max-w-2xl text-muted-foreground">
-                            Free during our founding phase — no credit card, no commitment, no catch.
-                        </p>
-                        <p className="mx-auto mt-2 max-w-2xl text-muted-foreground">
-                            Paid tiers launch late 2026. Every founding member will be notified and locked in at the best available rate before anything changes.
-                        </p>
-                        <p className="mx-auto mt-3 max-w-xl text-xs text-muted-foreground/70">
-                            Pricing shown is indicative only and subject to change. All members notified at least 30 days before any changes.
-                        </p>
-                    </div>
-
-                    <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
-                        {PRICING_TIERS.map(({ name, timing, price, priceNote, highlight, features, lockInNote, cta, secondaryLink }) => (
-                            <div
-                                key={name}
-                                className={`relative flex flex-col gap-5 rounded-xl border p-6 transition-all duration-200 ${
-                                    highlight
-                                        ? 'border-foreground bg-foreground text-background'
-                                        : 'border-border/50 bg-background hover:border-border/75'
-                                }`}
-                            >
-                                {highlight && (
-                                    <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full border border-foreground bg-background px-3 py-0.5 text-xs font-semibold text-foreground">
-                                        Join Now
-                                    </span>
-                                )}
-                                <div className="flex flex-col gap-1">
-                                    <p className={`text-xs font-medium uppercase tracking-wider ${highlight ? 'text-background/60' : 'text-muted-foreground'}`}>
-                                        {timing}
-                                    </p>
-                                    <h3 className={`text-base font-semibold ${highlight ? 'text-background' : 'text-foreground'}`}>
-                                        {name}
-                                    </h3>
-                                </div>
-                                <div className="flex flex-col gap-0.5">
-                                    <span className={`text-3xl font-bold tracking-tight ${highlight ? 'text-background' : 'text-foreground'}`}>
-                                        {price}
-                                    </span>
-                                    <span className={`text-xs ${highlight ? 'text-background/60' : 'text-muted-foreground'}`}>
-                                        {priceNote}
-                                    </span>
-                                </div>
-                                <ul className="flex flex-col gap-2 flex-1">
-                                    {features.map((f) => (
-                                        <li key={f.text} className="flex items-start gap-2">
-                                            <svg
-                                                xmlns="http://www.w3.org/2000/svg"
-                                                width="14"
-                                                height="14"
-                                                viewBox="0 0 24 24"
-                                                fill="none"
-                                                stroke="currentColor"
-                                                strokeWidth="2.5"
-                                                strokeLinecap="round"
-                                                strokeLinejoin="round"
-                                                className={`mt-0.5 shrink-0 ${highlight ? 'text-background/70' : 'text-muted-foreground'}`}
-                                            >
-                                                <path d="M5 13l4 4L19 7" />
-                                            </svg>
-                                            <span className="flex flex-col gap-0.5">
-                                                <span className={`text-sm ${highlight ? 'text-background/80' : 'text-muted-foreground'}`}>
-                                                    {f.text}
-                                                </span>
-                                                {f.sub && (
-                                                    <span className={`text-xs leading-relaxed ${highlight ? 'text-background/50' : 'text-muted-foreground/60'}`}>
-                                                        {f.sub}
-                                                    </span>
-                                                )}
+                <section id="pricing" className="scroll-mt-16 py-16 sm:py-20">
+                    <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+                        <div className="mx-auto mb-10 max-w-3xl text-center">
+                            <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">Estimated Pricing For Providers</h2>
+                            <p className="mt-3 text-base text-muted-foreground">
+                                Four provider plans, with estimated launch pricing shown transparently.
+                            </p>
+                            <p className="mt-2 text-sm text-muted-foreground">
+                                Founding network is free now. Estimated paid tiers are subject to change before release.
+                            </p>
+                        </div>
+                        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                            {PRICING_TIERS.map(({ name, timing, price, priceNote, highlight, features, lockInNote, cta, secondaryLink }) => (
+                                <div
+                                    key={name}
+                                    className={`relative flex h-full flex-col gap-5 rounded-xl border bg-card p-5 transition-colors sm:p-6 ${
+                                        highlight
+                                            ? 'border-foreground/60 shadow-[0_0_0_1px_hsl(var(--foreground)/0.22)]'
+                                            : 'border-border/50 hover:border-border/75'
+                                    }`}
+                                >
+                                    <div className="flex items-start justify-between gap-3">
+                                        <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                                            {timing}
+                                        </p>
+                                        {highlight && (
+                                            <span className="rounded-full border border-border/70 bg-muted px-2.5 py-0.5 text-[11px] font-semibold text-foreground">
+                                                Recommended
                                             </span>
-                                        </li>
-                                    ))}
-                                </ul>
-                                {cta && (
-                                    <div className="mt-auto flex flex-col gap-1.5">
-                                        <Button asChild variant="secondary" className="w-full">
-                                            <Link href={cta.href}>{cta.label}</Link>
-                                        </Button>
-                                        {lockInNote && (
-                                            <p className={`text-center text-xs ${highlight ? 'text-background/50' : 'text-muted-foreground/70'}`}>
-                                                {lockInNote}
-                                            </p>
                                         )}
                                     </div>
-                                )}
-                                {secondaryLink && (
-                                    <div className="mt-auto pt-2 text-center">
-                                        <Link
-                                            href={secondaryLink.href}
-                                            className="text-xs text-muted-foreground hover:underline"
-                                        >
-                                            {secondaryLink.label}
-                                        </Link>
+                                    <div className="flex flex-col gap-1">
+                                        <h3 className="text-base font-semibold text-foreground">{name}</h3>
                                     </div>
-                                )}
-                            </div>
-                        ))}
+                                    <div className="flex flex-col gap-0.5">
+                                        <span className="text-3xl font-bold tracking-tight text-foreground">{price}</span>
+                                        <span className="text-xs text-muted-foreground">{priceNote}</span>
+                                    </div>
+                                    <ul className="flex flex-1 flex-col gap-2">
+                                        {features.map((f) => (
+                                            <li key={f.text} className="flex items-start gap-2">
+                                                <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                                                <span className="flex flex-col gap-0.5">
+                                                    <span className="text-sm text-muted-foreground">{f.text}</span>
+                                                    {f.sub && (
+                                                        <span className="text-xs leading-relaxed text-muted-foreground/70">
+                                                            {f.sub}
+                                                        </span>
+                                                    )}
+                                                </span>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                    {cta && (
+                                        <div className="mt-auto flex flex-col gap-1.5">
+                                            <Button asChild className="w-full">
+                                                <Link href={cta.href}>{cta.label}</Link>
+                                            </Button>
+                                            {lockInNote && (
+                                                <p className="text-center text-xs text-muted-foreground/70">
+                                                    {lockInNote}
+                                                </p>
+                                            )}
+                                        </div>
+                                    )}
+                                    {secondaryLink && (
+                                        <div className="mt-auto pt-2 text-center">
+                                            <Link href={secondaryLink.href} className="text-xs text-muted-foreground transition-colors hover:text-foreground hover:underline">
+                                                {secondaryLink.label}
+                                            </Link>
+                                        </div>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                        <p className="mt-6 text-center text-xs text-muted-foreground">
+                            Estimated pricing shown for planning only and may be updated before official launch.
+                        </p>
                     </div>
-
-                    <p className="mt-8 text-center text-xs text-muted-foreground/70">
-                        All members notified at least 30 days before any pricing changes. No surprises, ever.
-                    </p>
                 </section>
 
-                {/* ── What to expect ── */}
-                <section id="testimonials" className="bg-secondary/50 py-16 sm:py-24 scroll-mt-16">
-                    <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-                        <div className="mb-12 text-center">
-                            <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">
-                                What to expect when you join.
-                            </h2>
+                <section id="faq" className="scroll-mt-16 py-16 sm:py-20">
+                    <div className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8">
+                        <div className="mb-10 text-center sm:mb-12">
+                            <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">Frequently Asked Questions</h2>
                         </div>
-                        <div className="mx-auto max-w-2xl space-y-6">
-                            {WHAT_TO_EXPECT.map((point, i) => (
-                                <div key={i} className="flex gap-4">
-                                    <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-foreground/40" />
-                                    <p className="text-base text-muted-foreground leading-relaxed">{point}</p>
-                                </div>
+                        <div className="mx-auto divide-y divide-border/50">
+                            {FAQS.map(({ q, a }) => (
+                                <details key={q} className="group py-4">
+                                    <summary className="flex cursor-pointer list-none items-center justify-between gap-4 text-left">
+                                        <h3 className="text-base font-semibold text-foreground">{q}</h3>
+                                        <span className="text-muted-foreground transition-transform group-open:rotate-180">⌄</span>
+                                    </summary>
+                                    <p className="mt-3 pb-2 text-sm leading-relaxed text-muted-foreground">{a}</p>
+                                </details>
                             ))}
                         </div>
                     </div>
                 </section>
 
-                {/* ── Final CTA ── */}
-                <section className="bg-foreground py-20">
-                    <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 text-center">
-                        <h2 className="text-2xl font-bold tracking-tight text-background sm:text-3xl">
-                            Join the founding contractor network.
+                <section className="bg-[#0D0D0D] py-20 sm:py-24">
+                    <div className="mx-auto max-w-2xl px-4 text-center sm:px-6 lg:px-8">
+                        <h2 className="text-3xl font-bold tracking-tight text-white sm:text-4xl">
+                            Join The Network And Start Receiving Informed Enquiries.
                         </h2>
-                        <p className="mx-auto mt-4 max-w-xl text-background/70 text-base">
-                            We are accepting applications from Western Cape contractors now.
-                            Founding members lock in the best rate and get priority placement
-                            when paid tiers launch in late 2026.
+                        <p className="mt-3 text-base text-white/70">
+                            Free To Join. No Commission. Built For Provider Efficiency.
                         </p>
-                        <div className="mt-8">
-                            <Button asChild variant="secondary" size="lg">
-                                <Link href="/pro/onboard">Apply to Join — It&apos;s Free</Link>
+                        <div className="mt-6">
+                            <Button asChild size="lg" className="bg-white font-medium text-black hover:bg-white/90">
+                                <Link href="/pro/onboard">Apply To Join The Network</Link>
                             </Button>
                         </div>
                     </div>
                 </section>
-
             </main>
 
-            {/* ── Footer ── */}
             <footer className="border-t border-border/50 bg-background py-12">
                 <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-                    <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
-                        <div className="flex flex-col gap-3">
-                            <span className="text-sm font-semibold text-foreground">Scandio</span>
-                            <p className="text-xs text-muted-foreground leading-relaxed">
-                                Western Cape&apos;s home maintenance assistant. Connecting
-                                informed homeowners with trusted local contractors.
+                    <div className="grid gap-10 lg:grid-cols-[2fr_1fr_1fr]">
+                        <div>
+                            <p className="text-base font-semibold text-foreground">Scandio</p>
+                            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                                Provider-focused matching and diagnosis context to reduce wasted quoting and improve conversion quality.
                             </p>
+                            <div className="mt-4 flex items-center gap-2">
+                                {SOCIAL_LINKS.map(({ href, label, icon: Icon }) => (
+                                    <a key={label} href={href} target="_blank" rel="noopener noreferrer" aria-label={label} className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-border/60 text-muted-foreground transition-colors hover:text-foreground">
+                                        <Icon className="h-4 w-4" />
+                                    </a>
+                                ))}
+                            </div>
                         </div>
-                        <div className="flex flex-col gap-3">
-                            <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                                For Contractors
-                            </span>
-                            <nav className="flex flex-col gap-2">
-                                {[
-                                    ['How It Works', '#how-it-works'],
-                                    ['Benefits', '#benefits'],
-                                    ['Pricing', '#pricing'],
-                                    ['Apply Now', '/pro/onboard'],
-                                ].map(([label, href]) => (
-                                    <Link
-                                        key={`${label}-${href}`}
-                                        href={href}
-                                        className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-                                    >
+                        <div>
+                            <p className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Explore</p>
+                            <nav className="mt-3 flex flex-col gap-2">
+                                {([['How It Works', '#how-it-works'], ['Why Join', '#value'], ['Pricing', '#pricing'], ['FAQ', '#faq']] as [string, string][]).map(([label, href]) => (
+                                    <Link key={`${label}-${href}`} href={href} className="text-sm text-muted-foreground transition-colors hover:text-foreground">
                                         {label}
                                     </Link>
                                 ))}
                             </nav>
                         </div>
-                        <div className="flex flex-col gap-3">
-                            <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                                For Homeowners
-                            </span>
-                            <nav className="flex flex-col gap-2">
-                                {[
-                                    ['How It Works', '/#how-it-works'],
-                                    ['Generate Report', '/welcome'],
-                                    ['Find Contractors', '/'],
-                                ].map(([label, href]) => (
-                                    <Link
-                                        key={`${label}-${href}`}
-                                        href={href}
-                                        className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-                                    >
-                                        {label}
-                                    </Link>
-                                ))}
-                            </nav>
-                        </div>
-                        <div className="flex flex-col gap-3">
-                            <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                                Company
-                            </span>
-                            <nav className="flex flex-col gap-2">
-                                {[
-                                    ['Contact', '/contact'],
-                                    ['Privacy Policy', '#'],
-                                    ['Terms of Service', '#'],
-                                ].map(([label, href]) => (
-                                    <Link
-                                        key={`${label}-${href}`}
-                                        href={href}
-                                        className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-                                    >
+                        <div>
+                            <p className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Company</p>
+                            <nav className="mt-3 flex flex-col gap-2">
+                                {([['For Homeowners', '/'], ['Contact', '/contact'], ['Privacy Policy', '/privacy'], ['Terms Of Service', '/terms']] as [string, string][]).map(([label, href]) => (
+                                    <Link key={`${label}-${href}`} href={href} className="text-sm text-muted-foreground transition-colors hover:text-foreground">
                                         {label}
                                     </Link>
                                 ))}
                             </nav>
                         </div>
                     </div>
-                    <div className="mt-10 border-t border-border/50 pt-6 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                        <p className="text-xs text-muted-foreground">
-                            &copy; {new Date().getFullYear()} Scandio. All rights reserved.
-                            Western Cape, South Africa.
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                            We take 0% commission. We mean it.
-                        </p>
+                    <div className="mt-10 border-t border-border/50 pt-6">
+                        <p className="text-sm text-muted-foreground">&copy; {new Date().getFullYear()} Scandio. All Rights Reserved.</p>
                     </div>
                 </div>
             </footer>

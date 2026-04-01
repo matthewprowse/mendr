@@ -100,6 +100,29 @@ export const RATE_LIMITS = {
 
 export type RateLimitBucket = keyof typeof RATE_LIMITS;
 
+function parseCsvEnv(value: string | undefined): string[] {
+    return (value ?? '')
+        .split(',')
+        .map((x) => x.trim())
+        .filter(Boolean);
+}
+
+/**
+ * Temporary local/dev bypass:
+ * - DISABLE_RATE_LIMIT=true (global bypass)
+ * - RATE_LIMIT_BYPASS_IPS=127.0.0.1,::1 (IP-specific bypass)
+ */
+export function isRateLimitBypassed(req: NextRequest): boolean {
+    const disableAll = process.env.DISABLE_RATE_LIMIT === 'true';
+    if (disableAll) return true;
+
+    const callerIp = getCallerIp(req);
+    if (!callerIp) return false;
+
+    const bypassIps = new Set(parseCsvEnv(process.env.RATE_LIMIT_BYPASS_IPS));
+    return bypassIps.has(callerIp);
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // IP extraction
 //
@@ -127,21 +150,20 @@ export function checkRateLimit(
     req: NextRequest,
     bucket: RateLimitBucket,
 ): NextResponse | null {
+    if (isRateLimitBypassed(req)) return null;
+
     const config = RATE_LIMITS[bucket];
     const result = applyRateLimit({ ip: getCallerIp(req), bucket, config });
 
     if (!result.ok) {
         const retryAfterSecs = Math.ceil((result.resetAt - Date.now()) / 1000);
-        const windowMinutes = Math.max(1, Math.round(config.windowMs / 60_000));
-        const waitMinutes = Math.ceil(retryAfterSecs / 60);
-        const minuteLabel = windowMinutes === 1 ? 'minute' : 'minutes';
+        const waitMinutes = Math.max(1, Math.ceil(retryAfterSecs / 60));
         const waitLabel = waitMinutes === 1 ? 'minute' : 'minutes';
         return NextResponse.json(
             {
                 error: 'rate_limited',
-                message: `You have reached the limit of ${config.max} requests in ${windowMinutes} ${minuteLabel}. Please wait about ${waitMinutes} ${waitLabel} and try again.`,
+                message: `You have hit a temporary request limit. Please wait about ${waitMinutes} ${waitLabel}, then try again.`,
                 limit: config.max,
-                windowMinutes,
                 retryAfterSeconds: retryAfterSecs,
             },
             {

@@ -114,14 +114,14 @@ export function LandingHeader({
                 </div>
             </header>
 
-            {/* Full-screen mobile nav */}
+            {/* Mobile nav panel */}
             {mobileOpen && (
-                <div className="fixed inset-x-0 top-16 bottom-0 z-[90] flex flex-col bg-background md:hidden">
-                    <nav className="flex flex-1 flex-col gap-12 p-4 justify-center">
+                <div className="fixed inset-x-0 top-16 z-[90] border-b border-border/50 bg-background/95 backdrop-blur md:hidden">
+                    <nav className="flex flex-col gap-1 p-4">
                         {allLinks.map((link) => {
                             const key = `${link.href}-${link.label}`;
                             const className =
-                                'text-2xl text-foreground font-semibold';
+                                'rounded-md px-3 py-2 text-base font-medium text-foreground hover:bg-muted/60';
                             if (link.href.startsWith('#')) {
                                 return (
                                     <a
@@ -148,7 +148,7 @@ export function LandingHeader({
                         })}
                     </nav>
 
-                    <div className="flex p-4">
+                    <div className="flex p-4 pt-0">
                         <Button asChild variant="default" className="h-10 w-full">
                             <Link href="/welcome" onClick={() => setMobileOpen(false)}>
                                 Generate Free Scandio Report

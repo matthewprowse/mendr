@@ -28,7 +28,7 @@ export default function ContactPage() {
                         </p>
                     </div>
 
-                    <ContactForm fieldIdPrefix="contact" />
+                    <ContactForm fieldIdPrefix="contact" subjectMode="input" />
                 </section>
             </main>
 

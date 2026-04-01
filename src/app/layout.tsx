@@ -1,10 +1,17 @@
 import type { Metadata, Viewport } from 'next';
 import { GeistSans } from 'geist/font/sans';
 import { GeistMono } from 'geist/font/mono';
+import { Familjen_Grotesk } from 'next/font/google';
 import './globals.css';
 import { Toaster } from '@/components/ui/sonner';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { AuthProvider } from '@/context/auth-context';
+
+const familjenGrotesk = Familjen_Grotesk({
+    subsets: ['latin'],
+    weight: ['400', '500', '700'],
+    variable: '--font-familjen-grotesk',
+});
 
 export const metadata: Metadata = {
     title: {
@@ -30,7 +37,7 @@ export default async function RootLayout({
         <html
             lang="en"
             data-scroll-behavior="smooth"
-            className={`${GeistSans.variable} ${GeistMono.variable}`}
+            className={`${GeistSans.variable} ${GeistMono.variable} ${familjenGrotesk.variable}`}
         >
             <body className="font-sans antialiased">
                 <AuthProvider>

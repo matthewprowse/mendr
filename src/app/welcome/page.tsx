@@ -18,6 +18,8 @@ import { FlowStepHeader } from '@/components/flow-header';
 import { trackEvent } from '@/lib/analytics';
 import { createClientId } from '@/lib/client-random-id';
 import { compressImage } from '@/lib/image-compression';
+import { Separator } from '@/components/ui/separator';
+
 
 const ACCEPTED_FILE_TYPES_TEXT = 'Accepted file types: JPG, JPEG, PNG, WEBP, GIF, HEIC, HEIF';
 const MAX_FILE_SIZE_TEXT = 'Max file size: 10MB';
@@ -146,20 +148,8 @@ export default function WelcomePage() {
         };
     }, []);
 
-    useEffect(() => {
-        const html = document.documentElement;
-        const body = document.body;
-        html.classList.add('welcome-scroll-lock');
-        body.classList.add('welcome-scroll-lock');
-
-        return () => {
-            html.classList.remove('welcome-scroll-lock');
-            body.classList.remove('welcome-scroll-lock');
-        };
-    }, []);
-
     return (
-        <div className="h-dvh overflow-hidden overscroll-none flex flex-col bg-background">
+        <div className="h-dvh overflow-hidden overscroll-none flex flex-col bg-background pb-4">
             <FlowStepHeader
                 step={1}
                 onBack={null}
@@ -181,29 +171,29 @@ export default function WelcomePage() {
             {/* Scrollable content */}
             <main
                 ref={mainScrollRef}
-                className="min-h-0 flex flex-1 justify-center overflow-y-auto overscroll-contain px-4 pt-20 pb-[calc(5.5rem+env(safe-area-inset-bottom))] sm:px-6"
+                className="min-h-0 flex flex-1 justify-center overflow-y-auto px-4 pt-20 sm:px-6"
             >
                 <div className="flex w-full max-w-xl flex-col gap-8">
 
                     {/* Step heading */}
                     <div className="flex flex-col gap-2">
-                        <h1 ref={pageTitleRef} className="text-2xl font-bold text-foreground">Start Diagnosis</h1>
+                        <h1 ref={pageTitleRef} className="text-3xl font-semibold text-foreground">Header Name</h1>
                         <p className="text-sm text-muted-foreground">
-                            Something acting up? Take a photo and tell us what you are seeing. We will figure out
-                            what is going on.
+                            Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore.
                         </p>
                     </div>
 
                     
-                    <div className="flex flex-col gap-4 p-4 text-center border border-input rounded-lg shadow-xs">
+                    <div className="flex flex-col gap-4">
+                        <Label>Header Name</Label>
                         {pickedPreviewUrl ? (
                             <div className="flex flex-col gap-4">
                                 <div className="overflow-hidden rounded-lg border border-input bg-secondary">
                                     {/* eslint-disable-next-line @next/next/no-img-element */}
                                     <img
                                         src={pickedPreviewUrl}
-                                        alt={pickedFileName ? `Selected photo: ${pickedFileName}` : 'Selected photo'}
-                                        className="h-56 w-full object-cover"
+                                        alt={pickedFileName ? `Selected Photo: ${pickedFileName}` : 'Selected Photo'}
+                                        className="h-48 w-full object-cover"
                                     />
                                 </div>
                                 <Button
@@ -213,24 +203,26 @@ export default function WelcomePage() {
                                     disabled={isUploading}
                                     onClick={clearPicked}
                                 >
-                                    Choose Different Photo
+                                    Remove Selected Photo
                                 </Button>
                             </div>
                         ) : (
                             <>
                                 <Button
                                     variant="secondary"
-                                    className="h-10 w-full"
+                                    className="h-10"
                                     type="button"
                                     disabled={!canPickFile}
                                     onClick={() => inputRef.current?.click()}
                                 >
-                                    Choose Photo
+                                    Select Photo
                                 </Button>
-                                <div className="text-sm text-muted-foreground space-y-1">
-                                    <p>{ACCEPTED_FILE_TYPES_TEXT}</p>
-                                    <p>{MAX_FILE_SIZE_TEXT}</p>
-                                </div>
+
+                                <p
+                                    className="text-xs text-muted-foreground"
+                                >
+                                    Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore.
+                                </p>
                             </>
                         )}
                         {uploadError ? (
@@ -238,25 +230,31 @@ export default function WelcomePage() {
                         ) : null}
                     </div>
 
+                    <Separator />
+
                     {/* Optional context */}
                     <div className="flex flex-col gap-4">
                         <Label htmlFor="helpful-info">
-                            What should we know? (optional)
+                            Add More Information
                         </Label>
                         <Textarea
                             id="helpful-info"
-                            className="h-18 resize-none"
+                            className="h-18 w-full text-sm text-[14px]"
                             value={helpfulInfo}
                             onChange={(e) => setHelpfulInfo(e.target.value)}
-                            placeholder="Example: Leak is under the kitchen sink and it gets worse at night."
                         />
+                        <p
+                            className="text-xs text-muted-foreground"
+                        >
+                            Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore.
+                        </p>
                     </div>
 
                 </div>
             </main>
 
             {/* Fixed bottom action bar */}
-            <div className="fixed inset-x-0 bottom-0 z-40 bg-background/95 p-4 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+            <div className="sticky bottom-0 z-40 mt-auto bg-background/95 p-4 backdrop-blur supports-[backdrop-filter]:bg-background/80">
                 <div className="mx-auto w-full max-w-xl">
                     <Button
                         size="lg"
@@ -308,7 +306,7 @@ export default function WelcomePage() {
                             router.push(`/diagnosis/${conversationId}${suffix}`);
                         }}
                     >
-                        {isUploading ? 'Uploading Photo...' : canContinue ? 'Get My Report' : 'Choose Photo to Continue'}
+                        {isUploading ? 'Processing...' : canContinue ? 'Continue to Scandio Report' : 'Select Photo to Continue'}
                     </Button>
                 </div>
             </div>

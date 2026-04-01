@@ -63,6 +63,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         const body = await req.json().catch(() => null) as {
             placeIds?: unknown;
             trade?: unknown;
+            priorityPlaceId?: unknown;
+            cacheVersion?: unknown;
         } | null;
 
         if (!body || !Array.isArray(body.placeIds) || body.placeIds.length === 0) {
@@ -77,6 +79,20 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         const trade = typeof body.trade === 'string' && body.trade.trim()
             ? body.trade.trim()
             : undefined;
+        const priorityPlaceId =
+            typeof body.priorityPlaceId === 'string' && body.priorityPlaceId.trim()
+                ? toGooglePlaceId(body.priorityPlaceId.trim())
+                : null;
+        const cacheVersionRaw =
+            typeof body.cacheVersion === 'number'
+                ? body.cacheVersion
+                : typeof body.cacheVersion === 'string'
+                  ? Number.parseInt(body.cacheVersion, 10)
+                  : NaN;
+        const cacheVersion =
+            Number.isFinite(cacheVersionRaw) && cacheVersionRaw > 0
+                ? Math.floor(cacheVersionRaw)
+                : undefined;
 
         // Resolve Google Place IDs → internal provider UUIDs
         const admin = await createSupabaseAdminClient();
@@ -89,14 +105,28 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
             return NextResponse.json({ queued: 0, processed: 0 });
         }
 
+        const inputOrder = new Map<string, number>();
+        placeIds.forEach((id, idx) => inputOrder.set(id, idx));
+        const orderedProviders = [...providers].sort((a, b) => {
+            const aId = String((a as any).google_place_id ?? '');
+            const bId = String((b as any).google_place_id ?? '');
+            if (priorityPlaceId) {
+                if (aId === priorityPlaceId && bId !== priorityPlaceId) return -1;
+                if (bId === priorityPlaceId && aId !== priorityPlaceId) return 1;
+            }
+            const aOrder = inputOrder.get(aId) ?? Number.MAX_SAFE_INTEGER;
+            const bOrder = inputOrder.get(bId) ?? Number.MAX_SAFE_INTEGER;
+            return aOrder - bOrder;
+        });
+
         const semaphore = createSemaphore(MAX_CONCURRENT);
 
         await Promise.all(
-            providers.map(async (p) => {
+            orderedProviders.map(async (p) => {
                 const release = await semaphore();
                 try {
                     await Promise.race([
-                        enrichProvider(p.id as string, { trade }),
+                        enrichProvider(p.id as string, { trade, cacheVersion }),
                         new Promise<void>((_, reject) =>
                             setTimeout(
                                 () => reject(new Error('Job timeout')),
@@ -112,7 +142,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
             })
         );
 
-        return NextResponse.json({ queued: providers.length, processed: providers.length });
+        return NextResponse.json({ queued: orderedProviders.length, processed: orderedProviders.length });
     } catch (err) {
         console.error('[enrich/queue] Unhandled error:', err);
         return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

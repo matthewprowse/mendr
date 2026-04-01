@@ -1,10 +1,10 @@
 import type { Metadata } from 'next';
-import { LandingPageClient } from './page/_components/landing-page-client';
+import { HomeMarketingPageClient } from './page/_components/home-marketing-page-client';
 
 export const metadata: Metadata = {
     title: 'Home Fault Diagnosis — Free Scandio Report | Western Cape',
     description:
-        'Scandio diagnoses home maintenance faults in under 60 seconds. Get a free professional report, cost estimates, and connect with vetted Western Cape contractors. No account needed.',
+        'Scandio diagnoses home maintenance faults in under 60 seconds. Get a free professional report, cost estimates, and connect with local Western Cape contractors. No account needed.',
     keywords: [
         'home maintenance',
         'home repair',
@@ -23,7 +23,7 @@ export const metadata: Metadata = {
     openGraph: {
         title: 'Home Fault Diagnosis — Free Scandio Report | Western Cape',
         description:
-            'Diagnose home maintenance faults in under 60 seconds. Get a free professional report, cost estimates, and connect with vetted Western Cape contractors. No account needed.',
+            'Diagnose home maintenance faults in under 60 seconds. Get a free professional report, cost estimates, and connect with local Western Cape contractors. No account needed.',
         type: 'website',
         url: 'https://scandio.app/',
         images: [
@@ -51,7 +51,7 @@ const jsonLd = {
     applicationCategory: 'HomeImprovement',
     operatingSystem: 'Web',
     description:
-        'AI-powered home maintenance fault diagnosis. Upload a photo, receive a professional Scandio Report, and connect with vetted local contractors in the Western Cape.',
+        'AI-powered home maintenance fault diagnosis. Upload a photo, receive a professional Scandio Report, and connect with local contractors in the Western Cape.',
     url: 'https://scandio.app',
     offers: {
         '@type': 'Offer',
@@ -71,14 +71,14 @@ const jsonLd = {
     },
 };
 
-export default function HomePage() {
+export default async function HomePage() {
     return (
         <>
             <script
                 type="application/ld+json"
                 dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
             />
-            <LandingPageClient />
+            <HomeMarketingPageClient />
         </>
     );
 }

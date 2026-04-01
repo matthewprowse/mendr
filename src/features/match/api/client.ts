@@ -40,14 +40,18 @@ export async function geocodeApi(payload: GeocodeRequest): Promise<GeocodeRespon
 
 export async function queueEnrichmentApi(
     placeIds: string[],
-    trade?: string
+    trade?: string,
+    options?: { priorityPlaceId?: string }
 ): Promise<void> {
     const normalized = normalizePlaceIds(placeIds);
     if (normalized.length === 0) return;
+    const priorityPlaceId = options?.priorityPlaceId
+        ? toGooglePlaceId(options.priorityPlaceId)
+        : undefined;
     fetch('/api/enrich/queue', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ placeIds: normalized, trade }),
+        body: JSON.stringify({ placeIds: normalized, trade, priorityPlaceId }),
     }).catch(() => undefined);
 }
 

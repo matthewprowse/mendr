@@ -7,6 +7,26 @@ const BANNED_TYPES = new Set<string>([
     'cafe',
     'coffee_shop',
     'night_club',
+    'hotel',
+    'lodging',
+    'resort_hotel',
+    'tourist_attraction',
+    'bank',
+    'atm',
+    'school',
+    'university',
+    'hospital',
+    'pharmacy',
+    'doctor',
+    'dentist',
+    'veterinary_care',
+    'gym',
+    'movie_theater',
+    'car_dealer',
+    'car_rental',
+    'gas_station',
+    'shopping_mall',
+    'department_store',
     'spa',
     'hair_salon',
     'beauty_salon',
@@ -25,6 +45,14 @@ const BANNED_KEYWORDS = [
     'vape',
     'coffee',
     'restaurant',
+    'hotel',
+    'guest house',
+    'guesthouse',
+    'casino',
+    'betting',
+    'adult',
+    'escort',
+    'massage parlour',
     'bar ',
     ' bar',
     'cocktail',
@@ -92,6 +120,22 @@ const SERVICE_KEYWORDS = [
     'awning',
 ];
 
+// Relaxed mode still needs a real home-services signal, just less strict than SERVICE_KEYWORDS.
+const RELAXED_SERVICE_KEYWORDS = [
+    'repair',
+    'repairs',
+    'maintenance',
+    'contractor',
+    'installation',
+    'installations',
+    'renovation',
+    'renovations',
+    'home improvement',
+    'property maintenance',
+    'handyman',
+    'builder',
+];
+
 export function isProviderRelevantForTrade(params: {
     place: any;
     aiData: any;
@@ -135,8 +179,18 @@ export function isProviderRelevantForTrade(params: {
         .replace(/\s+/g, ' ')
         .trim();
 
+    // Hard profanity/abuse guardrail for obviously unsuitable business names/content.
+    if (/\b(fuck|f\*+k|shit|bitch|cunt|porn|sex shop)\b/i.test(haystack)) return false;
+
     if (BANNED_KEYWORDS.some((kw) => haystack.includes(kw))) return false;
     if (mode === 'strict' && !SERVICE_KEYWORDS.some((kw) => haystack.includes(kw))) return false;
+    if (
+        mode === 'relaxed' &&
+        !SERVICE_KEYWORDS.some((kw) => haystack.includes(kw)) &&
+        !RELAXED_SERVICE_KEYWORDS.some((kw) => haystack.includes(kw))
+    ) {
+        return false;
+    }
 
     if (tradeNorm) {
         if (tradeNorm.includes('plumb')) {

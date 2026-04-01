@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import type { Content as GeminiContent } from '@google/generative-ai';
 import { getGeminiModel } from '@/lib/ai-client';
 import { logAiEvent } from '@/lib/ai-logging';
-import { checkRateLimit } from '@/lib/rate-limit-config';
+import { checkRateLimit, isRateLimitBypassed } from '@/lib/rate-limit-config';
 import { createSupabaseServerClient, createSupabaseAdminClient } from '@/lib/supabase-server';
 import { buildSystemInstruction } from './prompts';
 import {
@@ -307,7 +307,10 @@ export async function POST(req: NextRequest) {
         !Array.isArray(parsedBodyForQuota.history) ||
         (parsedBodyForQuota.history as unknown[]).length === 0;
 
-    if (isFirstMessage) {
+    const disableDiagnosisQuota =
+        process.env.DISABLE_DIAGNOSIS_DAILY_QUOTA === 'true' || isRateLimitBypassed(req);
+
+    if (isFirstMessage && !disableDiagnosisQuota) {
         let quotaUserId: string | null = null;
         let quotaAnonKey: string | null = null;
 

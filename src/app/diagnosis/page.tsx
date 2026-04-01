@@ -65,6 +65,8 @@ export default function WelcomePage({ conversationId }: { conversationId?: strin
     const didRunDiagnosisRef = useRef<string | null>(null);
     const [imageSrc, setImageSrc] = useState<string | null>(null);
     const [leaveDialogOpen, setLeaveDialogOpen] = useState(false);
+    const footerRef = useRef<HTMLDivElement | null>(null);
+    const [footerHeight, setFooterHeight] = useState(0);
 
     const parseDiagnosisFromResponse = (text: string): DiagnosisData | null => {
         const jsonBlockMatch = text.match(/<json>([\s\S]*?)<\/json>/i);
@@ -221,12 +223,23 @@ export default function WelcomePage({ conversationId }: { conversationId?: strin
                         if (res.status === 429) {
                             try {
                                 const parsed = JSON.parse(text);
+                                const retryAfterSeconds = Number(parsed?.retryAfterSeconds);
+                                const waitMinutes = Number.isFinite(retryAfterSeconds)
+                                    ? Math.max(1, Math.ceil(retryAfterSeconds / 60))
+                                    : null;
+                                const waitText = waitMinutes ? `${waitMinutes} minute${waitMinutes === 1 ? '' : 's'}` : 'a few minutes';
+                                const isRateLimited = String(parsed?.error || '').toLowerCase() === 'rate_limited';
+                                const isQuotaExceeded = String(parsed?.error || '').toLowerCase() === 'quota_exceeded';
                                 setDiagnosisFailureMessage(
-                                    String(
-                                        parsed?.message ||
-                                            parsed?.error ||
-                                            'Scandio is busy right now. Please try again shortly.'
-                                    )
+                                    isRateLimited
+                                        ? `You are sending requests too quickly. Please wait about ${waitText}, then tap Retry Report.`
+                                        : isQuotaExceeded
+                                          ? String(parsed?.message || 'You have reached your diagnosis limit for now.')
+                                          : String(
+                                                parsed?.message ||
+                                                    parsed?.error ||
+                                                    'Scandio is busy right now. Please try again shortly.'
+                                            )
                                 );
                             } catch {
                                 setDiagnosisFailureMessage(
@@ -417,6 +430,32 @@ export default function WelcomePage({ conversationId }: { conversationId?: strin
         };
     }, [conversationId, runInitialDiagnosis, supabase, trade]);
 
+    useEffect(() => {
+        const footerEl = footerRef.current;
+        if (!footerEl) {
+            setFooterHeight(0);
+            return;
+        }
+
+        const updateFooterHeight = () => {
+            setFooterHeight(footerEl.offsetHeight);
+        };
+
+        updateFooterHeight();
+
+        let resizeObserver: ResizeObserver | null = null;
+        if (typeof ResizeObserver !== 'undefined') {
+            resizeObserver = new ResizeObserver(updateFooterHeight);
+            resizeObserver.observe(footerEl);
+        }
+        window.addEventListener('resize', updateFooterHeight);
+
+        return () => {
+            resizeObserver?.disconnect();
+            window.removeEventListener('resize', updateFooterHeight);
+        };
+    }, [isAddingInfo]);
+
     const processFile = useCallback(
         async (file: File) => {
             const isImage = file.type.startsWith('image/');
@@ -522,6 +561,7 @@ export default function WelcomePage({ conversationId }: { conversationId?: strin
     const welcomeHref = trade.trim()
         ? `/welcome?trade=${encodeURIComponent(trade.trim())}`
         : '/welcome';
+    const contentBottomPadding = Math.max(footerHeight, 112);
 
     return (
         <main className="flex min-h-screen flex-col bg-background">
@@ -535,46 +575,16 @@ export default function WelcomePage({ conversationId }: { conversationId?: strin
 
             <div
                 className={`flex flex-1 justify-center px-4 pt-20 sm:px-6 ${
-                    isAddingInfo
-                        ? 'pb-[calc(13rem+env(safe-area-inset-bottom))]'
-                        : 'pb-[calc(7rem+env(safe-area-inset-bottom))]'
+                    'pb-6'
                 }`}
+                style={{ paddingBottom: `${contentBottomPadding}px` }}
             >
             <div className="flex w-full max-w-xl flex-col gap-6">
 
             <div className="flex flex-col gap-2">
-                <h1 className="text-2xl font-bold text-foreground tracking-tight">
-                    {isMatchBlocked && !showSkeleton ? (
-                        isUnrelatedDiagnosis ? (
-                            <>This Photo Does Not Show a Home Repair Issue</>
-                        ) : (
-                            <>Your Scandio Report Needs a Bit More Detail</>
-                        )
-                    ) : (
-                        <>Your Scandio Report</>
-                    )}
-                </h1>
+                <h1 className="text-3xl font-semibold text-foreground">Header Name</h1>
                 <p className="text-sm text-muted-foreground">
-                    {hasDiagnosisFailure ? (
-                        <>We could not finish your report this time, but you can retry now.</>
-                    ) : isMatchBlocked && !showSkeleton ? (
-                        isUnrelatedDiagnosis ? (
-                            <>
-                                Scandio can only help with home maintenance faults. Share a clearer photo of the
-                                issue, or describe what is wrong below.
-                            </>
-                        ) : (
-                            <>
-                                We could not confidently match this to a trade yet. Add a bit more detail below, or
-                                go back and choose a new photo.
-                            </>
-                        )
-                    ) : (
-                        <>
-                            Here is what we found from your photo and notes. You know your home best, so tell us if
-                            anything looks off.
-                        </>
-                    )}
+                    Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore.
                 </p>
             </div>
 
@@ -676,7 +686,10 @@ export default function WelcomePage({ conversationId }: { conversationId?: strin
             </div>
 
             {!isAddingInfo ? (
-                <div className="fixed inset-x-0 bottom-0 z-40 bg-background/95 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur supports-[backdrop-filter]:bg-background/80">
+                <div
+                    ref={footerRef}
+                    className="fixed inset-x-0 bottom-0 z-40 bg-background/95 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur supports-[backdrop-filter]:bg-background/80"
+                >
                     <div
                         className={`mx-auto flex w-full max-w-xl ${
                             isMatchBlocked && !showSkeleton ? 'flex-col gap-3' : 'flex-col gap-3'
@@ -726,7 +739,7 @@ export default function WelcomePage({ conversationId }: { conversationId?: strin
                             <>
                                 <div className="space-y-2">
                                     <Label htmlFor="diagnosis-refine-text" className="text-sm font-medium text-foreground">
-                                        Add More Detail (optional)
+                                        Add More Detail
                                     </Label>
                                     <Textarea
                                         id="diagnosis-refine-text"
@@ -734,9 +747,8 @@ export default function WelcomePage({ conversationId }: { conversationId?: strin
                                         value={infoText}
                                         onChange={(e) => setInfoText(e.target.value)}
                                         disabled={showSkeleton || isDiagnosing}
-                                        className="text-sm resize-none"
+                                        className="h-18 w-full text-sm text-[14px]"
                                         rows={3}
-                                        placeholder="Example: The leak only starts when we run hot water."
                                     />
                                 </div>
                                 <div className="flex gap-2">
@@ -794,7 +806,10 @@ export default function WelcomePage({ conversationId }: { conversationId?: strin
                     </div>
                 </div>
             ) : (
-                <div className="fixed inset-x-0 bottom-0 z-40 bg-background/95 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur supports-[backdrop-filter]:bg-background/80">
+                <div
+                    ref={footerRef}
+                    className="fixed inset-x-0 bottom-0 z-40 bg-background/95 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur supports-[backdrop-filter]:bg-background/80"
+                >
                     <div className="mx-auto flex w-full max-w-xl flex-col gap-3">
                         <Label htmlFor="diagnosis-info-text" className="text-sm font-medium text-foreground">
                             Add More Detail
@@ -805,7 +820,7 @@ export default function WelcomePage({ conversationId }: { conversationId?: strin
                             value={infoText}
                             onChange={(e) => setInfoText(e.target.value)}
                             disabled={showSkeleton}
-                            className="text-sm resize-none"
+                            className="h-18 w-full text-sm text-[14px]"
                             rows={3}
                         />
                         <div className="flex gap-2">

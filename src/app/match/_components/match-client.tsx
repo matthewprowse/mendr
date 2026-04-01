@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { toWhatsAppPhone } from '@/lib/utils';
 import { setLastConversationIdForWhatsApp } from '@/lib/whatsapp-prefill';
-import { ArrowLeft, ArrowRight, Car, Loader2, Star } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Car, Loader2, LocateFixed, Star } from 'lucide-react';
 import { toast } from 'sonner';
 import { FlowStepHeader } from '@/components/flow-header';
 import { Input } from '@/components/ui/input';
@@ -91,6 +91,26 @@ function formatCustomerSummary(summary: string, providerName: string): string {
     return sentences.slice(0, 5).join(' ').trim();
 }
 
+function providerPriorityScore(provider: MatchProvider): number {
+    const rating = typeof provider.rating === 'number' ? provider.rating : 0;
+    const ratingCount = typeof provider.ratingCount === 'number' ? provider.ratingCount : 0;
+    const hasWebsite = Boolean(provider.website && provider.website.trim());
+    const isOpen = provider.isOpen === true;
+    const hasProfileContent =
+        Boolean(provider.summary?.trim()) ||
+        (Array.isArray(provider.specialisations) && provider.specialisations.length > 0) ||
+        (provider.profileCompleteness ?? 0) >= 2;
+
+    // Prioritise quality and confidence signals for "top recommendations".
+    let score = 0;
+    score += Math.min(5, rating) * 20;
+    score += Math.min(200, ratingCount) * 0.35;
+    score += hasWebsite ? 12 : 0;
+    score += isOpen ? 10 : 0;
+    score += hasProfileContent ? 8 : 0;
+    return score;
+}
+
 export function MatchClient({ conversationId: initialConversationId }: { conversationId?: string }) {
     const router = useRouter();
     const searchParams = useSearchParams();
@@ -110,6 +130,8 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
         setAddressInput,
         resolveTradeContext,
         ensureLocation,
+        getCurrentCoordinates,
+        reverseGeocodeLatLng,
         persistConversationLocation,
     } = useMatchConversationContext(conversationId);
     const {
@@ -124,14 +146,27 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
         searchRadiusMeters,
         resolveTradeContext,
     });
-    const totalCompanies = providers.length || 1;
     const [contactOpen, setContactOpen] = useState(false);
     const [isUpdatingLocation, setIsUpdatingLocation] = useState(false);
+    const [isLocatingUser, setIsLocatingUser] = useState(false);
 
+    const sortedProviders = useMemo(() => {
+        return [...providers]
+            .sort((a, b) => {
+                const byScore = providerPriorityScore(b) - providerPriorityScore(a);
+                if (byScore !== 0) return byScore;
+                const byRating = (b.rating ?? 0) - (a.rating ?? 0);
+                if (byRating !== 0) return byRating;
+                return (b.ratingCount ?? 0) - (a.ratingCount ?? 0);
+            });
+    }, [providers]);
+    const topProviders = useMemo(() => sortedProviders.slice(0, 5), [sortedProviders]);
+    const otherProviders = useMemo(() => sortedProviders.slice(5), [sortedProviders]);
+    const totalCompanies = topProviders.length || 1;
     const selectedProvider = useMemo(() => {
-        const idx = Math.min(Math.max(companyIndex - 1, 0), Math.max(providers.length - 1, 0));
-        return providers[idx] || null;
-    }, [providers, companyIndex]);
+        const idx = Math.min(Math.max(companyIndex - 1, 0), Math.max(topProviders.length - 1, 0));
+        return topProviders[idx] || null;
+    }, [topProviders, companyIndex]);
 
     const [scandioReviewCountByProviderId, setScandioReviewCountByProviderId] = useState<
         Record<string, number>
@@ -145,6 +180,10 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
     const enrichmentQueuedRef = useRef<string>('');
     const hydratedFromCacheRef = useRef(false);
     const skipNextAutoRefreshRef = useRef(false);
+    const selectedProviderHasSummary = useMemo(
+        () => hasEnrichedSummary(enrichmentCache, selectedProvider),
+        [enrichmentCache, selectedProvider]
+    );
 
     useEffect(() => {
         if (!conversationId) return;
@@ -203,7 +242,9 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
 
         // 1. Fire enrichment queue (fire-and-forget)
         void resolveTradeContext().then(({ trade }) => {
-            queueEnrichmentApi(placeIds, trade || undefined);
+            queueEnrichmentApi(placeIds, trade || undefined, {
+                priorityPlaceId: selectedProvider?.placeId,
+            });
         });
 
         // 2. Fetch existing cache entries for immediate display, then short polling.
@@ -239,8 +280,34 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
         return () => {
             cancelled = true;
         };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [providers, enrichmentCache]);
+    }, [providers, enrichmentCache, resolveTradeContext, selectedProvider?.placeId]);
+
+    useEffect(() => {
+        if (!selectedProvider?.placeId || selectedProviderHasSummary) return;
+        let cancelled = false;
+
+        void (async () => {
+            const trade = (await resolveTradeContext()).trade || undefined;
+            queueEnrichmentApi([selectedProvider.placeId], trade, {
+                priorityPlaceId: selectedProvider.placeId,
+            });
+
+            for (let attempt = 0; attempt < 12; attempt += 1) {
+                if (cancelled) return;
+                const cache = await fetchEnrichmentApi([selectedProvider.placeId]);
+                if (cache) {
+                    setEnrichmentCache((prev) => ({ ...prev, ...cache }));
+                    const entry = enrichmentEntryForProvider({ ...enrichmentCache, ...cache }, selectedProvider);
+                    if ((entry?.reviewSummary ?? '').trim().length > 0) return;
+                }
+                await sleep(800);
+            }
+        })();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [enrichmentCache, resolveTradeContext, selectedProvider, selectedProviderHasSummary]);
 
     useEffect(() => {
         const pid = selectedProvider?.providerId;
@@ -272,10 +339,16 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
         providers,
         searchRadiusMeters,
         onMarkerClick: (placeId) => {
-            const idx = providers.findIndex((p) => p.placeId === placeId);
+            const idx = topProviders.findIndex((p) => p.placeId === placeId);
             if (idx >= 0) setCompanyIndex(idx + 1);
         },
     });
+
+    useEffect(() => {
+        if (topProviders.length === 0) return;
+        setCompanyIndex((prev) => Math.min(Math.max(prev, 1), topProviders.length));
+    }, [topProviders.length, setCompanyIndex]);
+
 
     const googleMapsLink = useMemo(() => {
         if (!userLocation) return '';
@@ -343,6 +416,35 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
         },
         [conversationId, refreshProvidersForLocation]
     );
+
+    const handleUseCurrentLocation = useCallback(async () => {
+        setIsLocatingUser(true);
+        setIsLoading(true);
+        try {
+            const coords = await getCurrentCoordinates();
+            if (!coords) {
+                toast.error('Could not access your location. Please allow permission and try again.');
+                return;
+            }
+            const resolvedAddress = await reverseGeocodeLatLng(coords.lat, coords.lng);
+            const formattedAddress = resolvedAddress || `${coords.lat.toFixed(6)}, ${coords.lng.toFixed(6)}`;
+            const loc = { lat: coords.lat, lng: coords.lng, address: formattedAddress };
+            setUserLocation(loc);
+            setAddressInput(formattedAddress);
+            await persistConversationLocation(loc);
+            await refreshProvidersForLocation(loc);
+        } finally {
+            setIsLocatingUser(false);
+            setIsLoading(false);
+        }
+    }, [
+        getCurrentCoordinates,
+        persistConversationLocation,
+        refreshProvidersForLocation,
+        reverseGeocodeLatLng,
+        setAddressInput,
+        setUserLocation,
+    ]);
 
     useEffect(() => {
         let cancelled = false;
@@ -413,27 +515,29 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
         [conversationId, selectedProvider?.providerId]
     );
 
-    const openProviderDetails = useCallback(async () => {
-        if (!selectedProvider?.providerId) return;
-        const alreadyEnriched = hasEnrichedSummary(enrichmentCache, selectedProvider);
+    const openProviderDetails = useCallback(async (targetProvider: MatchProvider | null) => {
+        if (!targetProvider?.providerId) return;
+        const alreadyEnriched = hasEnrichedSummary(enrichmentCache, targetProvider);
         if (alreadyEnriched) {
-            router.push(`/pro/${encodeURIComponent(selectedProvider.providerId)}`);
+            const cid = conversationId ? `?conversationId=${encodeURIComponent(conversationId)}` : '';
+            router.push(`/pro/${encodeURIComponent(targetProvider.providerId)}${cid}`);
             return;
         }
 
-        setDetailsWaitingProviderName(selectedProvider.name || 'this provider');
+        setDetailsWaitingProviderName(targetProvider.name || 'this provider');
         setIsDetailsWaiting(true);
         try {
-            queueEnrichmentApi([selectedProvider.placeId], (await resolveTradeContext()).trade || undefined);
+            queueEnrichmentApi([targetProvider.placeId], (await resolveTradeContext()).trade || undefined);
             for (let attempt = 0; attempt < 20; attempt += 1) {
-                const cache = await fetchEnrichmentApi([selectedProvider.placeId]);
+                const cache = await fetchEnrichmentApi([targetProvider.placeId]);
                 if (cache) {
                     setEnrichmentCache((prev) => ({ ...prev, ...cache }));
                     const refreshedProvider = {
-                        ...selectedProvider,
+                        ...targetProvider,
                     };
                     if (hasEnrichedSummary({ ...enrichmentCache, ...cache }, refreshedProvider)) {
-                        router.push(`/pro/${encodeURIComponent(selectedProvider.providerId)}`);
+                        const cid = conversationId ? `?conversationId=${encodeURIComponent(conversationId)}` : '';
+                        router.push(`/pro/${encodeURIComponent(targetProvider.providerId)}${cid}`);
                         return;
                     }
                 }
@@ -443,7 +547,7 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
         } finally {
             setIsDetailsWaiting(false);
         }
-    }, [enrichmentCache, resolveTradeContext, router, selectedProvider]);
+    }, [conversationId, enrichmentCache, resolveTradeContext, router]);
 
     if (isDetailsWaiting) {
         return (
@@ -465,77 +569,36 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
     }
 
     return (
-        <main className="flex flex-col h-dvh pt-16">
+        <main className="flex min-h-screen flex-col bg-background">
             <FlowStepHeader step={3} onBack={() => router.back()} />
-
-            <div className="flex flex-col gap-4 px-4 pt-4 flex-1 min-h-0 mb-3">
-                <div className="flex flex-col gap-1">
-                    <h1 className="text-2xl font-bold text-foreground tracking-tight">
-                        Vetted Contractors Near You
-                    </h1>
+            <div className="mx-auto flex w-full max-w-xl flex-1 flex-col gap-4 px-4 pb-4 pt-20 sm:px-6">
+                <div className="flex flex-col gap-2">
+                    <h1 className="text-3xl font-semibold text-foreground">Header Name</h1>
                     <p className="text-sm text-muted-foreground">
-                        These contractors match your Scandio Report and are close to your address.
+                        Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore.
                     </p>
                 </div>
 
-                <Input
-                    placeholder="Enter your address"
-                    className="text-sm h-10 mt-3"
-                    value={addressInput}
-                    onChange={(e) => setAddressInput(e.target.value)}
-                    onKeyDown={(e) => {
-                        if (e.key !== 'Enter') return;
-                        void updateLocationFromAddress(addressInput);
-                    }}
-                    disabled={isUpdatingLocation || isLoading}
-                />
-
-                <div className="flex flex-row justify-between items-center mb-3">
-                    <label className="text-sm text-foreground font-medium">Search Radius</label>
-                    <div className="flex flex-row items-center gap-2 overflow-x-auto">
-                        {RADIUS_OPTIONS_KM.map((km) => {
-                            const isActive = searchRadiusKm === km;
-                            return (
-                                <Badge
-                                    key={km}
-                                    variant={isActive ? 'default' : 'secondary'}
-                                    className="shrink-0 rounded-full cursor-pointer"
-                                    role="button"
-                                    aria-pressed={isActive}
-                                    onClick={() => setSearchRadiusKm(km)}
-                                >
-                                    {km} km
-                                </Badge>
-                            );
-                        })}
-                    </div>
-                </div>
-                {!showBottomSkeleton && isLoadingMoreForExpandedRadius ? (
-                    <p className="text-xs text-muted-foreground -mt-1">
-                        Expanding your search radius and loading more contractors...
-                    </p>
-                ) : null}
-
-                <div className="relative flex flex-col flex-1 text-center px-4 items-center justify-center bg-secondary rounded-lg w-full overflow-hidden">
-                    <div ref={mapHostRef} className="absolute inset-0 w-full h-full rounded-lg" />
+                <div className="relative h-52 w-full overflow-hidden rounded-lg bg-secondary">
+                    <div ref={mapHostRef} className="absolute inset-0 h-full w-full rounded-lg" />
                     {!userLocation || isLoading ? (
-                        <p className="relative z-10 text-xs text-muted-foreground">
+                        <p className="relative z-10 flex h-full items-center justify-center px-4 text-xs text-muted-foreground">
                             {isLoading ? 'Finding nearby contractors...' : null}
                         </p>
                     ) : null}
                 </div>
 
                 {showBottomSkeleton ? (
-                    <div className="flex flex-row gap-4 items-center justify-between truncate">
+                    <div className="flex flex-row items-center justify-between gap-4 truncate">
                         <Skeleton className="h-4 w-56" />
                         <Skeleton className="h-4 w-20" />
                     </div>
                 ) : selectedProvider ? (
-                    <div className="flex flex-row gap-4 items-center justify-between truncate">
-                        <p className="text-sm truncate">
+                    <div className="flex flex-row items-center justify-between gap-4 truncate">
+                        <p className="truncate text-sm">
                             {formatProviderAddress(selectedProvider.address) || 'Address not available'}
                         </p>
-                        <span className="text-sm text-muted-foreground inline-flex items-center gap-1.5">
+                        <span className="inline-flex items-center gap-1.5 text-sm text-muted-foreground">
                             <Car className="size-4" aria-hidden="true" />
                             {selectedProvider.durationText
                                 ? selectedProvider.durationText.replace(/\bmin\b/gi, 'Minutes')
@@ -543,24 +606,71 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
                         </span>
                     </div>
                 ) : null}
-            </div>
 
-            <div className="flex flex-col gap-4 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] w-full sticky bottom-0 z-40">
+                <div className="space-y-4 rounded-lg border border-input bg-card p-4">
+                    <div className="relative">
+                        <Input
+                            placeholder="Enter your address"
+                            className="h-10 pr-11 text-sm"
+                            value={addressInput}
+                            onChange={(e) => setAddressInput(e.target.value)}
+                            onKeyDown={(e) => {
+                                if (e.key !== 'Enter') return;
+                                void updateLocationFromAddress(addressInput);
+                            }}
+                            disabled={isUpdatingLocation || isLoading}
+                        />
+                        <button
+                            type="button"
+                            aria-label="Use current location"
+                            className="absolute inset-y-0 right-1 my-1 inline-flex w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground disabled:opacity-50"
+                            disabled={isUpdatingLocation || isLoading || isLocatingUser}
+                            onClick={() => {
+                                void handleUseCurrentLocation();
+                            }}
+                        >
+                            {isLocatingUser ? (
+                                <Loader2 className="size-4 animate-spin" />
+                            ) : (
+                                <LocateFixed className="size-4" />
+                            )}
+                        </button>
+                    </div>
+                    <div className="flex flex-row items-center justify-between">
+                        <label className="text-sm font-medium text-foreground">Search Radius</label>
+                        <div className="flex flex-row items-center gap-2 overflow-x-auto">
+                            {RADIUS_OPTIONS_KM.map((km) => {
+                                const isActive = searchRadiusKm === km;
+                                return (
+                                    <Badge
+                                        key={km}
+                                        variant={isActive ? 'default' : 'secondary'}
+                                        className="shrink-0 cursor-pointer rounded-full"
+                                        role="button"
+                                        aria-pressed={isActive}
+                                        onClick={() => setSearchRadiusKm(km)}
+                                    >
+                                        {km} km
+                                    </Badge>
+                                );
+                            })}
+                        </div>
+                    </div>
+                    {!showBottomSkeleton && isLoadingMoreForExpandedRadius ? (
+                        <p className="text-xs text-muted-foreground">
+                            Expanding your search radius and loading more contractors...
+                        </p>
+                    ) : null}
+                </div>
+
+                <div className="flex flex-col gap-4">
                 <div className="flex flex-row justify-between items-center">
-                    <Badge variant="secondary">
-                        {showBottomSkeleton ? (
-                            <Skeleton className="h-4 w-24" />
-                        ) : noProviders ? (
-                            '0 / 0'
-                        ) : (
-                            `${companyIndex} / ${totalCompanies}`
-                        )}
-                    </Badge>
+                    <h3 className="text-xl font-bold text-foreground tracking-tight">Top Recommendations</h3>
                     <div className="flex flex-row gap-2">
                         <Button
                             variant="secondary"
                             className="h-10 w-10"
-                            aria-label="Previous contractor"
+                            aria-label="Previous Company"
                             onClick={goPrev}
                             disabled={showBottomSkeleton || companyIndex === 1}
                         >
@@ -569,7 +679,7 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
                         <Button
                             variant="secondary"
                             className="h-10 w-10"
-                            aria-label="Next contractor"
+                            aria-label="Next Company"
                             onClick={goNext}
                             disabled={showBottomSkeleton || companyIndex === totalCompanies}
                         >
@@ -577,7 +687,7 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
                         </Button>
                     </div>
                 </div>
-                <div className="flex flex-col gap-4 p-4 border border-input rounded-lg">
+                <div className="flex flex-col gap-4 p-4 border border-input rounded-lg bg-card">
                     {showBottomSkeleton ? (
                         <div className="flex flex-col gap-4">
                             <div className="flex flex-col gap-2">
@@ -660,26 +770,34 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
                                     scandioSummary || fallbackSummary,
                                     selectedProvider.name
                                 );
+                                const shouldShowSummarySkeleton =
+                                    !displaySummary &&
+                                    (isEnrichmentLoading || !selectedProviderHasSummary);
                                 const pendingText = isEnrichmentLoading
                                     ? 'Scandio summary is being prepared now.'
                                     : 'Scandio summary will appear once ready.';
 
                                 return (
                                     <div className="flex flex-col gap-1">
-                                        <p className="text-sm text-foreground font-medium">
-                                            Why Scandio Matched Them
-                                        </p>
-                                        <p
-                                            className="text-sm text-muted-foreground"
-                                            style={{
-                                                display: '-webkit-box',
-                                                WebkitLineClamp: 4 as any,
-                                                WebkitBoxOrient: 'vertical',
-                                                overflow: 'hidden',
-                                            }}
-                                        >
-                                            {displaySummary || pendingText}
-                                        </p>
+                                        {shouldShowSummarySkeleton ? (
+                                            <div className="flex flex-col gap-2">
+                                                <Skeleton className="h-4 w-full" />
+                                                <Skeleton className="h-4 w-11/12" />
+                                                <Skeleton className="h-4 w-5/6" />
+                                            </div>
+                                        ) : (
+                                            <p
+                                                className="text-sm text-muted-foreground"
+                                                style={{
+                                                    display: '-webkit-box',
+                                                    WebkitLineClamp: 4 as any,
+                                                    WebkitBoxOrient: 'vertical',
+                                                    overflow: 'hidden',
+                                                }}
+                                            >
+                                                {displaySummary || pendingText}
+                                            </p>
+                                        )}
                                     </div>
                                 );
                             })()}
@@ -761,7 +879,7 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
                                     variant="ghost"
                                     className="flex flex-1 h-10"
                                     onClick={() => {
-                                        void openProviderDetails();
+                                        void openProviderDetails(selectedProvider);
                                     }}
                                     disabled={!selectedProvider?.providerId}
                                 >
@@ -771,7 +889,55 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
                         </>
                     )}
                 </div>
-            </div>
+
+                {!showBottomSkeleton && otherProviders.length > 0 ? (
+                    <div className="flex flex-col gap-2">
+                        <h3 className="text-sm font-semibold text-foreground">Other recommendations</h3>
+                        <div>
+                            <div className="flex flex-col gap-2 pr-1">
+                                {otherProviders.map((provider) => (
+                                    <div
+                                        key={provider.placeId}
+                                        className="flex items-center justify-between gap-3 rounded-lg border border-input bg-card px-3 py-2.5"
+                                    >
+                                        <div className="min-w-0 flex-1">
+                                            <p className="truncate text-sm font-medium text-foreground">{provider.name}</p>
+                                            <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
+                                                <span className="inline-flex items-center gap-1">
+                                                    <Star className="size-3.5 fill-yellow-500 text-yellow-500" aria-hidden="true" />
+                                                    {provider.rating != null ? provider.rating.toFixed(1) : '—'}
+                                                </span>
+                                                <span>
+                                                    {(provider.ratingCount ?? 0) +
+                                                        (typeof provider.scandioReviewCount === 'number'
+                                                            ? provider.scandioReviewCount
+                                                            : 0)} reviews
+                                                </span>
+                                                {typeof provider.isOpen === 'boolean' ? (
+                                                    <Badge variant="secondary" className="h-5 px-2 text-[10px]">
+                                                        {provider.isOpen ? 'Open' : 'Closed'}
+                                                    </Badge>
+                                                ) : null}
+                                            </div>
+                                        </div>
+                                        <Button
+                                            variant="secondary"
+                                            className="h-8 shrink-0 px-3"
+                                            onClick={() => {
+                                                void openProviderDetails(provider);
+                                            }}
+                                            disabled={!provider.providerId}
+                                        >
+                                            View
+                                        </Button>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                ) : null}
+                </div>
+                </div>
         </main>
     );
 }

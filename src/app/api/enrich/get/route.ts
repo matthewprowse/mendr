@@ -10,6 +10,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseAdminClient } from '@/lib/supabase-server';
 import { toGooglePlaceId } from '@/app/api/providers/persistence';
 import { checkRateLimit } from '@/lib/rate-limit-config';
+import { aiConfig } from '@/lib/ai-config';
 
 export interface EnrichmentCacheEntry {
     googlePlaceId: string;
@@ -21,6 +22,7 @@ export interface EnrichmentCacheEntry {
     websiteQuality: string | null;
     enrichedAt: string | null;
     profileCompleteness: number;
+    cacheVersion: number;
 }
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
@@ -46,7 +48,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         const { data: rows } = await admin
             .from('provider_cache')
             .select(
-                'google_place_id, bio, specialisations, has_work_photos, review_summary, response_profile, website_quality, enriched_at, profile_completeness'
+                'google_place_id, bio, specialisations, has_work_photos, review_summary, response_profile, website_quality, enriched_at, profile_completeness, cache_version'
             )
             .in('google_place_id', placeIds)
             .eq('scrape_status', 'ok');
@@ -68,6 +70,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
                     typeof row.profile_completeness === 'number'
                         ? Math.max(0, Math.min(3, row.profile_completeness))
                         : 0,
+                cacheVersion:
+                    typeof row.cache_version === 'number' && row.cache_version > 0
+                        ? Math.floor(row.cache_version)
+                        : 1,
             };
             // Support both key shapes during migration:
             // - canonical "places/<id>" (DB form)
@@ -77,7 +83,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
             cache[rawId] = entry;
         }
 
-        return NextResponse.json({ cache });
+        return NextResponse.json({
+            cache,
+            currentCacheVersion: aiConfig.providerEnrichmentCacheVersion,
+        });
     } catch (err) {
         console.error('[enrich/get] Error:', err);
         return NextResponse.json({ cache: {} });

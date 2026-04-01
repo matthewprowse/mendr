@@ -24,9 +24,11 @@ const SUBJECTS = [
 type ContactFormProps = {
     /** Prefix for input ids so multiple instances on the same document never clash. */
     fieldIdPrefix?: string;
+    /** Use free-text subject input instead of dropdown. */
+    subjectMode?: 'select' | 'input';
 };
 
-export function ContactForm({ fieldIdPrefix = 'contact' }: ContactFormProps) {
+export function ContactForm({ fieldIdPrefix = 'contact', subjectMode = 'select' }: ContactFormProps) {
     const p = fieldIdPrefix;
     const [name, setName] = useState('');
     const [email, setEmail] = useState('');
@@ -112,18 +114,30 @@ export function ContactForm({ fieldIdPrefix = 'contact' }: ContactFormProps) {
 
             <div className="flex flex-col gap-2">
                 <Label htmlFor={`${p}-subject`}>Subject</Label>
-                <Select value={subject} onValueChange={setSubject}>
-                    <SelectTrigger id={`${p}-subject`} className="h-10">
-                        <SelectValue placeholder="Select a subject" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        {SUBJECTS.map((s) => (
-                            <SelectItem key={s} value={s}>
-                                {s}
-                            </SelectItem>
-                        ))}
-                    </SelectContent>
-                </Select>
+                {subjectMode === 'input' ? (
+                    <Input
+                        id={`${p}-subject`}
+                        value={subject}
+                        onChange={(e) => setSubject(e.target.value)}
+                        required
+                        maxLength={180}
+                        className="h-10"
+                        placeholder="What can we help with?"
+                    />
+                ) : (
+                    <Select value={subject} onValueChange={setSubject}>
+                        <SelectTrigger id={`${p}-subject`} className="h-10">
+                            <SelectValue placeholder="Select a subject" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {SUBJECTS.map((s) => (
+                                <SelectItem key={s} value={s}>
+                                    {s}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                )}
             </div>
 
             <div className="flex flex-col gap-2">

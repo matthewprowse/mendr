@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { isOpenNowFromWeekdayDescriptions } from '@/lib/open-status';
 import { parseWeekdayDescriptions } from '../_lib/hours';
@@ -23,6 +23,7 @@ export function useProProvider(placeId: string) {
     const [providerPhone, setProviderPhone] = useState<string | null>(null);
     const [providerEmail, setProviderEmail] = useState<string | null>(null);
     const [providerWebsiteRaw, setProviderWebsiteRaw] = useState<string | null>(null);
+    const [isProviderLoading, setIsProviderLoading] = useState(true);
     const [isOperatingHoursLoading, setIsOperatingHoursLoading] = useState(true);
     const [operatingHoursByDay, setOperatingHoursByDay] = useState<Record<string, string>>({});
     const [showAllOperatingHours, setShowAllOperatingHours] = useState(false);
@@ -33,11 +34,13 @@ export function useProProvider(placeId: string) {
     const [providerHonestNote, setProviderHonestNote] = useState<string | null>(null);
     const [providerYearsInBusiness, setProviderYearsInBusiness] = useState<number | null>(null);
     const [providerFounder, setProviderFounder] = useState<string | null>(null);
+    const lastQueuedPlaceIdRef = useRef<string>('');
 
     useEffect(() => {
         let cancelled = false;
         const load = async () => {
             if (!placeId) return;
+            setIsProviderLoading(true);
             setIsOperatingHoursLoading(true);
             setOperatingHoursByDay({});
             setShowAllOperatingHours(false);
@@ -154,6 +157,20 @@ export function useProProvider(placeId: string) {
                     setProviderHonestNote(typeof data.honest_note === 'string' && data.honest_note.trim() ? data.honest_note.trim() : null);
                     setProviderYearsInBusiness(typeof data.years_in_business === 'number' ? data.years_in_business : null);
                     setProviderFounder(typeof data.founder_or_key_person === 'string' && data.founder_or_key_person.trim() ? data.founder_or_key_person.trim() : null);
+                    const queuePlaceId = googlePlaceId
+                        ?? (isUuid(placeId) ? null : (placeId.startsWith('places/') ? placeId : `places/${placeId}`));
+                    if (queuePlaceId && lastQueuedPlaceIdRef.current !== queuePlaceId) {
+                        lastQueuedPlaceIdRef.current = queuePlaceId;
+                        // Load cached data immediately from providers, then refresh enrichment in background.
+                        void fetch('/api/enrich/queue', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                placeIds: [queuePlaceId],
+                                priorityPlaceId: queuePlaceId,
+                            }),
+                        }).catch(() => undefined);
+                    }
                 } else {
                     setProviderName(null);
                     setProviderAddress(null);
@@ -174,7 +191,10 @@ export function useProProvider(placeId: string) {
             } catch {
                 // ignore
             } finally {
-                if (!cancelled) setIsOperatingHoursLoading(false);
+                if (!cancelled) {
+                    setIsOperatingHoursLoading(false);
+                    setIsProviderLoading(false);
+                }
             }
         };
         void load();
@@ -202,6 +222,7 @@ export function useProProvider(placeId: string) {
         providerPhone,
         providerEmail,
         providerWebsiteRaw,
+        isProviderLoading,
         isOperatingHoursLoading,
         operatingHoursByDay,
         showAllOperatingHours,

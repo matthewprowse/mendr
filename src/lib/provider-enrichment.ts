@@ -16,6 +16,7 @@
 
 import { createSupabaseAdminClient } from '@/lib/supabase-server';
 import { getGeminiModel } from '@/lib/ai-client';
+import { aiConfig } from '@/lib/ai-config';
 import { sanitizeCustomerSummary } from '@/lib/review-summary';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -315,6 +316,7 @@ async function runCombinedEnrichment(params: {
     websiteText: string;
     imageCategories: ImageCategory[];
     reviewsText: string;
+    cacheVersion: number;
     trade?: string;
     address?: string | null;
     rating?: number | null;
@@ -323,6 +325,7 @@ async function runCombinedEnrichment(params: {
     const prompt = `You are Scandio's provider enrichment engine. Extract everything useful about this South African home services business. Be aggressive — specific beats vague, concrete beats generic. Do not invent facts.
 
 Provider: ${params.providerName}
+Enrichment Version: ${params.cacheVersion}
 ${params.trade ? `Trade: ${params.trade}` : ''}
 ${params.address ? `Address: ${params.address}` : ''}
 ${params.rating != null ? `Rating: ${params.rating} (${params.reviewCount ?? 0} reviews)` : ''}
@@ -402,9 +405,13 @@ export interface EnrichProviderResult {
 
 export async function enrichProvider(
     providerId: string,
-    options?: { trade?: string }
+    options?: { trade?: string; cacheVersion?: number }
 ): Promise<EnrichProviderResult> {
     const admin = await createSupabaseAdminClient();
+    const targetCacheVersion =
+        typeof options?.cacheVersion === 'number' && options.cacheVersion > 0
+            ? Math.floor(options.cacheVersion)
+            : aiConfig.providerEnrichmentCacheVersion;
 
     // Look up provider
     const { data: provider, error: provErr } = await admin
@@ -418,27 +425,44 @@ export async function enrichProvider(
     if (provErr || !provider) return { ok: false, reason: 'Provider not found' };
 
     const logPrefix = `[enrichment:${provider.name ?? providerId}]`;
-    console.log(`${logPrefix} Starting enrichment (trade=${options?.trade ?? 'unknown'})`);
+    console.log(
+        `${logPrefix} Starting enrichment (trade=${options?.trade ?? 'unknown'}, cacheVersion=${targetCacheVersion})`
+    );
 
     // Check cache staleness
     const { data: cached } = await admin
         .from('provider_cache')
-        .select('scrape_status, scraped_at, enriched_at')
+        .select('scrape_status, scraped_at, enriched_at, cache_version')
         .eq('provider_id', providerId)
         .maybeSingle();
 
     if (cached?.scraped_at) {
         const age = Date.now() - new Date(cached.scraped_at).getTime();
+        const cachedVersion =
+            typeof cached.cache_version === 'number' ? cached.cache_version : 0;
+        const isVersionMatch = cachedVersion === targetCacheVersion;
         // Only skip if BOTH the scrape AND the AI enrichment completed successfully.
         // If enriched_at is null the AI call failed last time — we must retry even if
         // the scrape itself was marked 'ok' and is within the 14-day TTL.
-        if (cached.scrape_status === 'ok' && cached.enriched_at && age < CACHE_TTL_MS) {
-            console.log(`${logPrefix} Skipping — cache fresh (scraped=${cached.scraped_at}, enriched=${cached.enriched_at})`);
+        if (cached.scrape_status === 'ok' && cached.enriched_at && age < CACHE_TTL_MS && isVersionMatch) {
+            console.log(
+                `${logPrefix} Skipping — cache fresh (scraped=${cached.scraped_at}, enriched=${cached.enriched_at}, version=${cachedVersion})`
+            );
             return { ok: true, skipped: true, reason: 'Cache fresh' };
         }
-        if (cached.scrape_status === 'failed' && age < FAILED_RETRY_MS) {
+        if (cached.scrape_status === 'ok' && cached.enriched_at && age < CACHE_TTL_MS && !isVersionMatch) {
+            console.log(
+                `${logPrefix} Cache version mismatch (cached=${cachedVersion}, target=${targetCacheVersion}) — rerunning enrichment`
+            );
+        }
+        if (cached.scrape_status === 'failed' && age < FAILED_RETRY_MS && isVersionMatch) {
             console.log(`${logPrefix} Skipping — scrape failed recently, retry locked`);
             return { ok: true, skipped: true, reason: 'Failed recently, retry locked' };
+        }
+        if (cached.scrape_status === 'failed' && age < FAILED_RETRY_MS && !isVersionMatch) {
+            console.log(
+                `${logPrefix} Failed retry lock bypassed due to version change (cached=${cachedVersion}, target=${targetCacheVersion})`
+            );
         }
         if (cached.scrape_status === 'ok' && !cached.enriched_at) {
             console.log(`${logPrefix} Retrying — scrape ok but enriched_at is null (previous AI call likely failed)`);
@@ -505,7 +529,7 @@ export async function enrichProvider(
                     google_place_id: provider.google_place_id ?? '',
                     scraped_at: new Date().toISOString(),
                     scrape_status: 'failed',
-                    cache_version: 1,
+                    cache_version: targetCacheVersion,
                     updated_at: new Date().toISOString(),
                 },
                 { onConflict: 'provider_id' }
@@ -629,6 +653,7 @@ export async function enrichProvider(
         websiteText,
         imageCategories,
         reviewsText,
+        cacheVersion: targetCacheVersion,
         trade: primaryTrade ?? undefined,
         address: typeof provider.address === 'string' ? provider.address : null,
         rating: typeof provider.rating === 'number' ? provider.rating : null,
@@ -695,7 +720,7 @@ export async function enrichProvider(
             founder_or_key_person: combined?.founder_or_key_person ?? null,
             highlights: normalizedHighlights.length ? normalizedHighlights : null,
             honest_note: combined?.honest_note ?? null,
-            cache_version: 1,
+            cache_version: targetCacheVersion,
             updated_at: now,
         },
         { onConflict: 'provider_id' }

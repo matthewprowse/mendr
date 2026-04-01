@@ -17,6 +17,7 @@ import {
 } from '@/components/ui/select';
 import { FlowStepHeader } from '@/components/flow-header';
 import { getSupabase } from '@/lib/supabase';
+import { geocodeApi } from '@/features/match/api/client';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
