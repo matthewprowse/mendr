@@ -23,14 +23,14 @@ export const metadata: Metadata = {
         'home maintenance app',
     ],
     alternates: {
-        canonical: 'https://scandio.app/landing',
+        canonical: 'https://scandio.co.za/landing',
     },
     openGraph: {
         title: 'Home Fault Diagnosis — Free Scandio Report | Western Cape',
         description:
             'Diagnose home maintenance faults in under 60 seconds. Get a free professional report, cost estimates, and connect with vetted Western Cape contractors. No account needed.',
         type: 'website',
-        url: 'https://scandio.app/landing',
+        url: 'https://scandio.co.za/landing',
         images: [
             {
                 url: '/og-scandio.jpg',
@@ -57,7 +57,7 @@ const jsonLd = {
     operatingSystem: 'Web',
     description:
         'AI-powered home maintenance fault diagnosis. Upload a photo, receive a professional Scandio Report, and connect with vetted local contractors in the Western Cape.',
-    url: 'https://scandio.app',
+    url: 'https://scandio.co.za',
     offers: {
         '@type': 'Offer',
         price: '0',
@@ -72,7 +72,7 @@ const jsonLd = {
     creator: {
         '@type': 'Organization',
         name: 'Scandio',
-        url: 'https://scandio.app',
+        url: 'https://scandio.co.za',
     },
 };
 

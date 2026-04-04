@@ -52,17 +52,55 @@ function getProviderResultLimitByRadius(radiusMeters: number): number {
     return 5;
 }
 
+const PLACES_SEARCH_TEXT_URL = 'https://places.googleapis.com/v1/places:searchText';
+
+const PLACES_SEARCH_TEXT_FIELD_MASK =
+    'places.id,places.displayName,places.formattedAddress,places.rating,places.userRatingCount,places.nationalPhoneNumber,places.websiteUri,places.location,places.types,places.reviews,places.editorialSummary,places.reviewSummary,places.regularOpeningHours,places.currentOpeningHours,routingSummaries,nextPageToken';
+
+function isTransientPlacesHttpStatus(status: number): boolean {
+    return status === 503 || status === 502 || status === 429;
+}
+
+/** Single retry on 503 for transient Google outages. */
+async function fetchPlacesSearchText(apiKey: string, bodyObj: Record<string, unknown>): Promise<Response> {
+    const init: RequestInit = {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-Goog-Api-Key': apiKey,
+            'X-Goog-FieldMask': PLACES_SEARCH_TEXT_FIELD_MASK,
+        },
+        body: JSON.stringify(bodyObj),
+    };
+    let res = await fetch(PLACES_SEARCH_TEXT_URL, init);
+    if (res.status === 503) {
+        await new Promise((r) => setTimeout(r, 400));
+        res = await fetch(PLACES_SEARCH_TEXT_URL, init);
+    }
+    return res;
+}
+
 export async function POST(req: NextRequest) {
     // ── Rate limit ─────────────────────────────────────────────────────────────
     const limited = checkRateLimit(req, 'providers');
     if (limited) return limited;
 
     try {
+        const raw = await req.text();
+        if (!raw.trim()) {
+            return NextResponse.json({ error: 'Request body required' }, { status: 400 });
+        }
+        let body: ProvidersRequestBody;
+        try {
+            body = JSON.parse(raw) as ProvidersRequestBody;
+        } catch {
+            return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
+        }
+
         const startedAt = Date.now();
         let searchCacheHit = false;
         let searchCacheExpired = false;
         let textSearchExtraPagesFetched = 0;
-        const body = (await req.json()) as ProvidersRequestBody;
         const {
             lat,
             lng,
@@ -74,6 +112,7 @@ export async function POST(req: NextRequest) {
             tradeDetail,
         } = body;
         let supabase: Awaited<ReturnType<typeof createSupabaseServerClient>> | null = null;
+        let adminSupabase: Awaited<ReturnType<typeof createSupabaseAdminClient>> | null = null;
         try {
             supabase = await createSupabaseServerClient();
         } catch (e) {
@@ -81,6 +120,11 @@ export async function POST(req: NextRequest) {
                 'Supabase not configured — provider cache disabled:',
                 (e as Error).message
             );
+        }
+        try {
+            adminSupabase = await createSupabaseAdminClient();
+        } catch {
+            // Non-fatal; we can still serve providers without DB caching.
         }
 
         if (!lat || !lng || !trade) {
@@ -155,7 +199,7 @@ export async function POST(req: NextRequest) {
         let cachedData: any[] = [];
         let pendingCacheWrite: { key: string; placeIds: string[]; routing: any[]; nextToken: string | null } | null = null;
 
-        if (!pageToken && supabase) {
+        if (!pageToken && (adminSupabase || supabase)) {
             const latR = Math.round(Number(lat) * 1000) / 1000;
             const lngR = Math.round(Number(lng) * 1000) / 1000;
             const searchCacheKey = buildSearchCacheKey({
@@ -165,7 +209,8 @@ export async function POST(req: NextRequest) {
                 detailKeyForCache,
                 radius: Number(radius),
             });
-            const { data: searchRow } = await supabase
+            const cacheReader = adminSupabase || supabase!;
+            const { data: searchRow } = await cacheReader
                 .from('provider_search_cache')
                 .select('place_ids, routing_summaries, next_page_token, created_at, providers')
                 .eq('query_key', searchCacheKey)
@@ -399,7 +444,7 @@ export async function POST(req: NextRequest) {
                     // refresh from Google rather than serving stale/minimal cached objects.
                     if (!cacheHasRichFields) {
                         searchCacheExpired = true;
-                    } else {
+                    } else if (supabase) {
                         const placeIdsFromCache = searchRow.place_ids as string[];
                         const { data: providerRows } = await supabase
                             .from('providers')
@@ -451,6 +496,8 @@ export async function POST(req: NextRequest) {
                             data = { nextPageToken: searchRow.next_page_token ?? null };
                             cachedData = orderedRows;
                         }
+                    } else {
+                        searchCacheExpired = true;
                     }
                 } else {
                     searchCacheExpired = true;
@@ -475,16 +522,7 @@ export async function POST(req: NextRequest) {
 
         if (places.length === 0) {
             // 2. Fetch providers from Google Places API
-        const url = `https://places.googleapis.com/v1/places:searchText`;
-        const response = await fetch(url, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-Goog-Api-Key': apiKey,
-                'X-Goog-FieldMask':
-                    'places.id,places.displayName,places.formattedAddress,places.rating,places.userRatingCount,places.nationalPhoneNumber,places.websiteUri,places.location,places.types,places.reviews,places.editorialSummary,places.reviewSummary,places.regularOpeningHours,places.currentOpeningHours,routingSummaries,nextPageToken',
-            },
-            body: JSON.stringify({
+            const response = await fetchPlacesSearchText(apiKey, {
                 textQuery: searchQuery,
                 ...(pageToken && { pageToken }),
                 routingParameters: {
@@ -500,14 +538,36 @@ export async function POST(req: NextRequest) {
                     },
                 },
                 pageSize: 20,
-            }),
-        });
+            });
 
-        if (!response.ok) {
-            const errorText = await response.text();
-            console.error(`Google Places API Error Details: ${errorText}`);
-            throw new Error(`Google Places API error (${response.status}): ${errorText}`);
-        }
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.error(`Google Places API Error Details: ${errorText}`);
+                if (isTransientPlacesHttpStatus(response.status)) {
+                    logAiEvent({
+                        endpoint: 'providers',
+                        status: 'error',
+                        durationMs: Date.now() - startedAt,
+                        meta: {
+                            error: errorText.slice(0, 500),
+                            placesHttpStatus: response.status,
+                        },
+                    });
+                    const message =
+                        response.status === 429
+                            ? 'Google Places is rate-limiting requests. Try again in a moment.'
+                            : 'Google Places is temporarily unavailable. Try again shortly.';
+                    return NextResponse.json(
+                        {
+                            error: message,
+                            code: 'PLACES_UNAVAILABLE',
+                            providers: [],
+                        },
+                        { status: response.status === 429 ? 429 : 503 }
+                    );
+                }
+                throw new Error(`Google Places API error (${response.status}): ${errorText}`);
+            }
 
             data = await response.json();
             const rawPlaces = data.places || [];
@@ -532,31 +592,22 @@ export async function POST(req: NextRequest) {
                 places.length < 55
             ) {
                 textSearchExtraPagesFetched += 1;
-                const responseMore = await fetch(url, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-Goog-Api-Key': apiKey,
-                        'X-Goog-FieldMask':
-                            'places.id,places.displayName,places.formattedAddress,places.rating,places.userRatingCount,places.nationalPhoneNumber,places.websiteUri,places.location,places.types,places.reviews,places.editorialSummary,places.reviewSummary,places.regularOpeningHours,places.currentOpeningHours,routingSummaries,nextPageToken',
+                const responseMore = await fetchPlacesSearchText(apiKey, {
+                    textQuery: searchQuery,
+                    pageToken: nextSearchToken,
+                    routingParameters: {
+                        origin: {
+                            latitude: lat,
+                            longitude: lng,
+                        },
                     },
-                    body: JSON.stringify({
-                        textQuery: searchQuery,
-                        pageToken: nextSearchToken,
-                        routingParameters: {
-                            origin: {
-                                latitude: lat,
-                                longitude: lng,
-                            },
+                    locationBias: {
+                        circle: {
+                            center: { latitude: lat, longitude: lng },
+                            radius: radius,
                         },
-                        locationBias: {
-                            circle: {
-                                center: { latitude: lat, longitude: lng },
-                                radius: radius,
-                            },
-                        },
-                        pageSize: 20,
-                    }),
+                    },
+                    pageSize: 20,
                 });
                 if (!responseMore.ok) break;
                 const dataMore = await responseMore.json();
@@ -757,18 +808,19 @@ export async function POST(req: NextRequest) {
 
         // Pre-fetched providers rows — fired in parallel with provider_cache below to save a round-trip.
         let prefetchedProvRows: { id: string; google_place_id: string }[] | null = null;
-        if (supabase && fastProviders.length > 0) {
+        const dbReader = adminSupabase || supabase;
+        if (dbReader && fastProviders.length > 0) {
             const placeIds = fastProviders
                 .map((p) => toGooglePlaceId(p.placeId))
                 .filter(Boolean);
             if (placeIds.length > 0) {
                 // 2.1: Fire provider_cache and providers in parallel — same input set, independent data.
                 const [cacheResult, provResult] = await Promise.all([
-                    supabase
+                    dbReader
                         .from('provider_cache')
                         .select('google_place_id, profile_completeness, specialisations')
                         .in('google_place_id', placeIds),
-                    supabase
+                    dbReader
                         .from('providers')
                         .select('id, google_place_id')
                         .in('google_place_id', placeIds),
@@ -836,7 +888,7 @@ export async function POST(req: NextRequest) {
 
                 let providerIdByGoogle = new Map<string, string>();
 
-                if (supabase) {
+                if (dbReader) {
                     // Use the providers result that was pre-fetched in parallel with provider_cache above.
                     const provRows = prefetchedProvRows;
                     providerIdByGoogle = new Map<string, string>(
@@ -864,7 +916,7 @@ export async function POST(req: NextRequest) {
                     // providerIds but are independent of each other.
                     const [scandioData, tokenRows] = await Promise.all([
                         providerIdList.length > 0
-                            ? supabase
+                            ? dbReader
                                 .from('reviews')
                                 .select('provider_id')
                                 .eq('source', 'scandio')
@@ -873,7 +925,7 @@ export async function POST(req: NextRequest) {
                                 .then((r) => r.data ?? null, () => null as null)
                             : Promise.resolve(null as null),
                         rotationPids.length > 0
-                            ? supabase
+                            ? dbReader
                                 .from('provider_rotation_tokens')
                                 .select('provider_id, tokens_remaining, last_shown_at')
                                 .eq('week_key', weekKey)

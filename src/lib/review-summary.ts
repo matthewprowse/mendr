@@ -16,12 +16,21 @@ function getReviewText(r: ReviewLike): string {
 
 export function sanitizeCustomerSummary(text: string): string {
     if (!text) return '';
-    return String(text)
+    const cleaned = String(text)
         .replace(/[“”]/g, '')
         .replace(/[‘’]/g, '')
         .replace(/""/g, '')
         .replace(/''/g, '')
         .replace(/—/g, ' ')
+        .replace(/\s{2,}/g, ' ')
+        .trim();
+    // Product copy rule: avoid audience nouns in provider summaries.
+    return cleaned
+        .replace(/\bhomeowners?\b/gi, 'people')
+        .replace(/\busers?\b/gi, 'people')
+        .replace(/\bcustomers?\b/gi, 'people')
+        .replace(/\bclients?\b/gi, 'people')
+        .replace(/\bresidents?\b/gi, 'people')
         .replace(/\s{2,}/g, ' ')
         .trim();
 }
@@ -140,6 +149,7 @@ Writing rules:
 13. Never use em dashes
 14. Both sentences must be grammatically complete and end with a full stop
 15. Output ONLY the JSON object. No text before or after. No markdown. No code blocks
+16. Do not use audience nouns like homeowner(s), user(s), customer(s), client(s), resident(s)
 
 Reviews:
 ${reviewBlock}

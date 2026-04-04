@@ -53,7 +53,7 @@ export async function POST(req: NextRequest) {
     if (providerId) {
         const admin = await createSupabaseAdminClient();
         await admin
-            .from('provider_waitlist')
+            .from('provider_applications')
             .update({ sendgrid_sent_at: new Date().toISOString() })
             .eq('id', providerId);
     }

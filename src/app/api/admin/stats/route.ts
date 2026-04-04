@@ -21,9 +21,9 @@ export async function GET(req: NextRequest) {
     todayStart.setHours(0, 0, 0, 0);
     const todayIso = todayStart.toISOString();
 
-    const [waitlistNew, contactUnread, todayStarts] = await Promise.all([
+    const [waitlistNew, contactUnread, todayStarts, pendingReviews, pendingGallery] = await Promise.all([
         admin
-            .from('provider_waitlist')
+            .from('provider_applications')
             .select('id', { count: 'exact', head: true })
             .eq('status', 'new'),
         admin
@@ -35,11 +35,21 @@ export async function GET(req: NextRequest) {
             .select('id', { count: 'exact', head: true })
             .eq('event_type', 'welcome_start')
             .gte('created_at', todayIso),
+        admin
+            .from('reviews')
+            .select('id', { count: 'exact', head: true })
+            .eq('status', 'pending'),
+        admin
+            .from('provider_images')
+            .select('id', { count: 'exact', head: true })
+            .eq('status', 'pending'),
     ]);
 
     return NextResponse.json({
         newProviders: waitlistNew.count ?? 0,
         unreadMessages: contactUnread.count ?? 0,
         todayStarts: todayStarts.count ?? 0,
+        pendingReviews: pendingReviews.count ?? 0,
+        pendingGallery: pendingGallery.count ?? 0,
     });
 }

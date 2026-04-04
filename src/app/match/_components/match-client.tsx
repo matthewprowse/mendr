@@ -26,6 +26,7 @@ import { useMatchConversationContext } from '@/features/match/hooks/useMatchConv
 import { useMatchProviders } from '@/features/match/hooks/useMatchProviders';
 import { useMatchMap } from '@/features/match/hooks/useMatchMap';
 import { loadMatchPageCache, saveMatchPageCache } from '@/features/match/cache/match-page-cache';
+import { MatchNoProvidersEmpty } from '@/app/match/_components/match-no-providers-empty';
 
 const RADIUS_OPTIONS_KM = [5, 10, 20, 50] as const;
 
@@ -149,6 +150,8 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
     const [contactOpen, setContactOpen] = useState(false);
     const [isUpdatingLocation, setIsUpdatingLocation] = useState(false);
     const [isLocatingUser, setIsLocatingUser] = useState(false);
+    // Deduplicate provider_contact analytics per provider per session.
+    const providerContactFiredForProviderIdRef = useRef<string | null>(null);
 
     const sortedProviders = useMemo(() => {
         return [...providers]
@@ -162,11 +165,20 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
     }, [providers]);
     const topProviders = useMemo(() => sortedProviders.slice(0, 5), [sortedProviders]);
     const otherProviders = useMemo(() => sortedProviders.slice(5), [sortedProviders]);
+    const providerPlaceIdsKey = useMemo(
+        () => providers.map((p) => p.placeId).filter(Boolean).sort().join(','),
+        [providers]
+    );
     const totalCompanies = topProviders.length || 1;
     const selectedProvider = useMemo(() => {
         const idx = Math.min(Math.max(companyIndex - 1, 0), Math.max(topProviders.length - 1, 0));
         return topProviders[idx] || null;
     }, [topProviders, companyIndex]);
+
+    useEffect(() => {
+        // Reset whenever the user moves to a different provider.
+        providerContactFiredForProviderIdRef.current = null;
+    }, [selectedProvider?.providerId]);
 
     const [scandioReviewCountByProviderId, setScandioReviewCountByProviderId] = useState<
         Record<string, number>
@@ -179,7 +191,23 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
     const [detailsWaitingProviderName, setDetailsWaitingProviderName] = useState<string>('');
     const enrichmentQueuedRef = useRef<string>('');
     const hydratedFromCacheRef = useRef(false);
+    /** When sessionStorage cache had providers, skip the initial `/api/providers` fetch (avoids duplicate load). */
+    const skipInitialProviderFetchRef = useRef(false);
     const skipNextAutoRefreshRef = useRef(false);
+    /** After an explicit provider refresh, ignore debounced refresh briefly (avoids duplicate POST /api/providers on mount). */
+    const suppressDebouncedProviderRefreshUntilRef = useRef(0);
+    const providerRefreshDebounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const enrichmentCacheRef = useRef(enrichmentCache);
+    enrichmentCacheRef.current = enrichmentCache;
+
+    const bumpSuppressDebouncedProviderRefresh = useCallback(() => {
+        suppressDebouncedProviderRefreshUntilRef.current = Date.now() + 450;
+        if (providerRefreshDebounceTimerRef.current) {
+            clearTimeout(providerRefreshDebounceTimerRef.current);
+            providerRefreshDebounceTimerRef.current = null;
+        }
+    }, []);
+
     const selectedProviderHasSummary = useMemo(
         () => hasEnrichedSummary(enrichmentCache, selectedProvider),
         [enrichmentCache, selectedProvider]
@@ -187,10 +215,13 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
 
     useEffect(() => {
         if (!conversationId) return;
+        hydratedFromCacheRef.current = false;
+        skipInitialProviderFetchRef.current = false;
         const cached = loadMatchPageCache(conversationId);
         if (!cached) return;
 
         hydratedFromCacheRef.current = true;
+        skipInitialProviderFetchRef.current = cached.providers.length > 0;
         skipNextAutoRefreshRef.current = true;
         setSearchRadiusKm(cached.searchRadiusKm);
         setUserLocation(cached.userLocation);
@@ -253,7 +284,11 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
         void (async () => {
             const mergeCache = (cache: Record<string, EnrichmentCacheEntry> | null) => {
                 if (cancelled || !cache) return;
-                setEnrichmentCache((prev) => ({ ...prev, ...cache }));
+                setEnrichmentCache((prev) => {
+                    const next = { ...prev, ...cache };
+                    enrichmentCacheRef.current = next;
+                    return next;
+                });
             };
 
             const initial = await fetchEnrichmentApi(placeIds);
@@ -265,7 +300,7 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
                 await sleep(2000);
                 if (cancelled) break;
                 const pendingProviders = providers.filter(
-                    (p) => !hasEnrichedSummary(enrichmentCache, p)
+                    (p) => !hasEnrichedSummary(enrichmentCacheRef.current, p)
                 );
                 if (pendingProviders.length === 0) break;
                 const pendingIds = pendingProviders.map((p) => p.placeId).filter(Boolean);
@@ -280,7 +315,7 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
         return () => {
             cancelled = true;
         };
-    }, [providers, enrichmentCache, resolveTradeContext, selectedProvider?.placeId]);
+    }, [providerPlaceIdsKey, resolveTradeContext, selectedProvider?.placeId]);
 
     useEffect(() => {
         if (!selectedProvider?.placeId || selectedProviderHasSummary) return;
@@ -297,7 +332,10 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
                 const cache = await fetchEnrichmentApi([selectedProvider.placeId]);
                 if (cache) {
                     setEnrichmentCache((prev) => ({ ...prev, ...cache }));
-                    const entry = enrichmentEntryForProvider({ ...enrichmentCache, ...cache }, selectedProvider);
+                    const entry = enrichmentEntryForProvider(
+                        { ...enrichmentCacheRef.current, ...cache },
+                        selectedProvider
+                    );
                     if ((entry?.reviewSummary ?? '').trim().length > 0) return;
                 }
                 await sleep(800);
@@ -307,7 +345,12 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
         return () => {
             cancelled = true;
         };
-    }, [enrichmentCache, resolveTradeContext, selectedProvider, selectedProviderHasSummary]);
+    }, [
+        resolveTradeContext,
+        selectedProvider?.placeId,
+        selectedProvider?.providerId,
+        selectedProviderHasSummary,
+    ]);
 
     useEffect(() => {
         const pid = selectedProvider?.providerId;
@@ -359,7 +402,8 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
         const loc = await ensureLocation();
         if (!loc) return;
         await refreshProvidersForLocation(loc);
-    }, [ensureLocation, refreshProvidersForLocation]);
+        bumpSuppressDebouncedProviderRefresh();
+    }, [bumpSuppressDebouncedProviderRefresh, ensureLocation, refreshProvidersForLocation]);
 
     const updateLocationFromAddress = useCallback(
         async (address: string) => {
@@ -409,12 +453,13 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
                 await persistConversationLocation(loc);
 
                 await refreshProvidersForLocation(loc);
+                bumpSuppressDebouncedProviderRefresh();
             } finally {
                 setIsUpdatingLocation(false);
                 setIsLoading(false);
             }
         },
-        [conversationId, refreshProvidersForLocation]
+        [bumpSuppressDebouncedProviderRefresh, conversationId, persistConversationLocation, refreshProvidersForLocation]
     );
 
     const handleUseCurrentLocation = useCallback(async () => {
@@ -433,11 +478,13 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
             setAddressInput(formattedAddress);
             await persistConversationLocation(loc);
             await refreshProvidersForLocation(loc);
+            bumpSuppressDebouncedProviderRefresh();
         } finally {
             setIsLocatingUser(false);
             setIsLoading(false);
         }
     }, [
+        bumpSuppressDebouncedProviderRefresh,
         getCurrentCoordinates,
         persistConversationLocation,
         refreshProvidersForLocation,
@@ -449,7 +496,8 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
     useEffect(() => {
         let cancelled = false;
         const load = async () => {
-            if (hydratedFromCacheRef.current && providers.length > 0) {
+            if (skipInitialProviderFetchRef.current) {
+                skipInitialProviderFetchRef.current = false;
                 return;
             }
             setIsLoading(true);
@@ -463,7 +511,7 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
         return () => {
             cancelled = true;
         };
-    }, [fetchProviders, providers.length]);
+    }, [conversationId, fetchProviders]);
 
     useEffect(() => {
         if (!userLocation) return;
@@ -479,13 +527,28 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
             return;
         }
         const timer = setTimeout(() => {
+            if (Date.now() < suppressDebouncedProviderRefreshUntilRef.current) return;
             void refreshProvidersForLocation(userLocation);
         }, 300);
-        return () => clearTimeout(timer);
+        providerRefreshDebounceTimerRef.current = timer;
+        return () => {
+            clearTimeout(timer);
+            if (providerRefreshDebounceTimerRef.current === timer) {
+                providerRefreshDebounceTimerRef.current = null;
+            }
+        };
     }, [isUpdatingLocation, refreshProvidersForLocation, searchRadiusMeters, userLocation]);
 
     const goPrev = () => setCompanyIndex((v) => Math.max(1, v - 1));
     const goNext = () => setCompanyIndex((v) => Math.min(totalCompanies, v + 1));
+
+    const focusAddressSearch = useCallback(() => {
+        const el = document.getElementById('match-address-input');
+        if (el instanceof HTMLInputElement) {
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            window.setTimeout(() => el.focus(), 250);
+        }
+    }, []);
 
     // Keep current providers visible while we fetch more (e.g. radius expansion).
     const showBottomSkeleton = (isLoading || isProvidersLoading) && providers.length === 0;
@@ -502,10 +565,13 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
     const trackContactIntent = useCallback(
         (channel: 'phone' | 'email' | 'whatsapp') => {
             if (!conversationId || !selectedProvider?.providerId) return;
-            trackEvent('provider_contact', {
-                provider_id: selectedProvider.providerId,
-                diagnosis_id: conversationId,
-            });
+            if (providerContactFiredForProviderIdRef.current !== selectedProvider.providerId) {
+                providerContactFiredForProviderIdRef.current = selectedProvider.providerId;
+                trackEvent('provider_contact', {
+                    provider_id: selectedProvider.providerId,
+                    diagnosis_id: conversationId,
+                });
+            }
             void restoreProviderTokenApi({
                 providerId: selectedProvider.providerId,
                 conversationId,
@@ -515,8 +581,23 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
         [conversationId, selectedProvider?.providerId]
     );
 
+    const trackProviderContactOnceOnOpen = useCallback(() => {
+        if (!conversationId || !selectedProvider?.providerId) return;
+        if (providerContactFiredForProviderIdRef.current === selectedProvider.providerId) return;
+        providerContactFiredForProviderIdRef.current = selectedProvider.providerId;
+        trackEvent('provider_contact', {
+            provider_id: selectedProvider.providerId,
+            diagnosis_id: conversationId,
+        });
+    }, [conversationId, selectedProvider?.providerId]);
+
     const openProviderDetails = useCallback(async (targetProvider: MatchProvider | null) => {
         if (!targetProvider?.providerId) return;
+        // Track when a user actually opens provider details.
+        trackEvent('provider_profile_view', {
+            provider_id: targetProvider.providerId,
+            diagnosis_id: conversationId,
+        });
         const alreadyEnriched = hasEnrichedSummary(enrichmentCache, targetProvider);
         if (alreadyEnriched) {
             const cid = conversationId ? `?conversationId=${encodeURIComponent(conversationId)}` : '';
@@ -583,7 +664,7 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
                     <div ref={mapHostRef} className="absolute inset-0 h-full w-full rounded-lg" />
                     {!userLocation || isLoading ? (
                         <p className="relative z-10 flex h-full items-center justify-center px-4 text-xs text-muted-foreground">
-                            {isLoading ? 'Finding nearby contractors...' : null}
+                            {isLoading ? 'Finding Service Providers...' : null}
                         </p>
                     ) : null}
                 </div>
@@ -610,6 +691,7 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
                 <div className="space-y-4 rounded-lg border border-input bg-card p-4">
                     <div className="relative">
                         <Input
+                            id="match-address-input"
                             placeholder="Enter your address"
                             className="h-10 pr-11 text-sm"
                             value={addressInput}
@@ -664,31 +746,46 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
                 </div>
 
                 <div className="flex flex-col gap-4">
-                <div className="flex flex-row justify-between items-center">
-                    <h3 className="text-xl font-bold text-foreground tracking-tight">Top Recommendations</h3>
-                    <div className="flex flex-row gap-2">
-                        <Button
-                            variant="secondary"
-                            className="h-10 w-10"
-                            aria-label="Previous Company"
-                            onClick={goPrev}
-                            disabled={showBottomSkeleton || companyIndex === 1}
-                        >
-                            {showBottomSkeleton ? <Skeleton className="h-4 w-4" /> : <ArrowLeft className="size-5" aria-hidden="true" />}
-                        </Button>
-                        <Button
-                            variant="secondary"
-                            className="h-10 w-10"
-                            aria-label="Next Company"
-                            onClick={goNext}
-                            disabled={showBottomSkeleton || companyIndex === totalCompanies}
-                        >
-                            {showBottomSkeleton ? <Skeleton className="h-4 w-4" /> : <ArrowRight className="size-5" aria-hidden="true" />}
-                        </Button>
+                <div
+                    className={
+                        noProviders
+                            ? 'flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-4'
+                            : 'flex flex-row justify-between items-center'
+                    }
+                >
+                    <div className="min-w-0">
+                        <h3 className="text-xl font-bold text-foregroundimage.png">Top Recommendations</h3>
+                        {noProviders ? (
+                            <p className="mt-1 text-sm text-muted-foreground">
+                                We couldn&apos;t find matching contractors for this location yet.
+                            </p>
+                        ) : null}
                     </div>
+                    {!noProviders ? (
+                        <div className="flex flex-row gap-2 shrink-0">
+                            <Button
+                                variant="secondary"
+                                className="h-10 w-10"
+                                aria-label="Previous Company"
+                                onClick={goPrev}
+                                disabled={showBottomSkeleton || companyIndex === 1}
+                            >
+                                {showBottomSkeleton ? <Skeleton className="h-4 w-4" /> : <ArrowLeft className="size-5" aria-hidden="true" />}
+                            </Button>
+                            <Button
+                                variant="secondary"
+                                className="h-10 w-10"
+                                aria-label="Next Company"
+                                onClick={goNext}
+                                disabled={showBottomSkeleton || companyIndex === totalCompanies}
+                            >
+                                {showBottomSkeleton ? <Skeleton className="h-4 w-4" /> : <ArrowRight className="size-5" aria-hidden="true" />}
+                            </Button>
+                        </div>
+                    ) : null}
                 </div>
+                {showBottomSkeleton ? (
                 <div className="flex flex-col gap-4 p-4 border border-input rounded-lg bg-card">
-                    {showBottomSkeleton ? (
                         <div className="flex flex-col gap-4">
                             <div className="flex flex-col gap-2">
                                 <Skeleton className="h-6 w-56" />
@@ -704,24 +801,11 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
                                 <Skeleton className="flex-1 h-10" />
                             </div>
                         </div>
+                </div>
                     ) : noProviders ? (
-                        <div className="flex flex-col gap-4">
-                            <div className="flex flex-col gap-2">
-                                <h3 className="text-lg text-foreground font-bold truncate">No contractors found nearby</h3>
-                                <p className="text-sm text-muted-foreground">
-                                    Try updating your address and we will pull a fresh set of contractors.
-                                </p>
-                            </div>
-                            <div className="flex flex-row gap-2">
-                                <Button variant="default" className="flex flex-1 h-10" disabled>
-                                    Contact Contractor
-                                </Button>
-                                <Button variant="ghost" className="flex flex-1 h-10" disabled>
-                                    View Profile
-                                </Button>
-                            </div>
-                        </div>
+                        <MatchNoProvidersEmpty onEditAddress={focusAddressSearch} />
                     ) : (
+                <div className="flex flex-col gap-4 p-4 border border-input rounded-lg bg-card">
                         <>
                             <div className="flex flex-col gap-2">
                                 <h3 className="text-lg text-foreground font-bold truncate">
@@ -803,7 +887,13 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
                             })()}
 
                             <div className="flex flex-row gap-2">
-                                <Popover open={contactOpen} onOpenChange={setContactOpen}>
+                                <Popover
+                                    open={contactOpen}
+                                    onOpenChange={(open) => {
+                                        setContactOpen(open);
+                                        if (open) trackProviderContactOnceOnOpen();
+                                    }}
+                                >
                                     <PopoverTrigger asChild>
                                         <Button
                                             variant="default"
@@ -887,8 +977,8 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
                                 </Button>
                             </div>
                         </>
-                    )}
                 </div>
+                    )}
 
                 {!showBottomSkeleton && otherProviders.length > 0 ? (
                     <div className="flex flex-col gap-2">

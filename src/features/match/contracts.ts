@@ -49,6 +49,8 @@ export type ProvidersResponse = {
     searchQuery?: string;
     tradeDetail?: string | null;
     error?: string;
+    /** Set when Google Places returns a transient error (e.g. 503). */
+    code?: string;
 };
 
 export type GeocodeRequest = {

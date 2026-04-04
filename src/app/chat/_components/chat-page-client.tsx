@@ -32,7 +32,7 @@ export interface ChatPageClientProps {
 
 export function ChatPageClient({ conversationId, initialTrade }: ChatPageClientProps) {
     const router = useRouter();
-    const { user } = useAuth();
+    const { user, isLoading: authLoading } = useAuth();
     const id = conversationId;
 
     // Don't read store during render to avoid hydration mismatch (server has no store; client might).
@@ -284,7 +284,7 @@ export function ChatPageClient({ conversationId, initialTrade }: ChatPageClientP
         const finalDiagnosis = overrides?.diag || diagnosis;
         const finalLocation = overrides?.loc || userLocation;
 
-        const { error } = await (supabase as any).from('conversations').upsert({
+        const payload: Record<string, unknown> = {
             id,
             title: finalDiagnosis?.diagnosis || 'New Diagnosis',
             image_url: imageSrc,
@@ -294,12 +294,19 @@ export function ChatPageClient({ conversationId, initialTrade }: ChatPageClientP
             diagnosis: finalDiagnosis,
             device: deviceType,
             user_agent: navigator.userAgent,
-            user_id: user?.id ?? null,
             updated_at: new Date().toISOString(),
             ...(overrides?.initial_image_description !== undefined && {
                 initial_image_description: overrides.initial_image_description,
             }),
-        });
+        };
+
+        // When running without login, we still rely on Supabase anonymous auth
+        // so RLS can use `auth.uid()`. Never overwrite `user_id` with null.
+        if (user?.id) {
+            payload.user_id = user.id;
+        }
+
+        const { error } = await (supabase as any).from('conversations').upsert(payload);
         if (error && typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
             console.warn('[Supabase] conversation:', error.code, error.message);
         } else if (!error) {
@@ -1215,6 +1222,7 @@ export function ChatPageClient({ conversationId, initialTrade }: ChatPageClientP
 
     useEffect(() => {
         if (!id) return;
+        if (authLoading || !user?.id) return;
 
         const imageData = getImageData();
         if (imageData && imageData.id === id) {
@@ -1269,7 +1277,7 @@ export function ChatPageClient({ conversationId, initialTrade }: ChatPageClientP
             cancelled = true;
             if (channel) supabase.removeChannel(channel);
         };
-    }, [id, loadConversation]);
+    }, [id, loadConversation, authLoading, user?.id]);
 
     // Request location once when chat loads so it's ready when diagnosis arrives
     // On mobile, this may fail without user gesture — user can tap "Use my location" when prompted

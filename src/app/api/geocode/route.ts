@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { checkRateLimit } from '@/lib/rate-limit-config';
+import { createSupabaseAdminClient } from '@/lib/supabase-server';
 
 type GeocodeRequestBody = {
     lat?: number;
@@ -9,6 +10,7 @@ type GeocodeRequestBody = {
 };
 
 const WESTERN_CAPE_COMPONENTS = 'country:ZA|administrative_area:Western Cape';
+const GEOCODE_CACHE_DAYS = 30;
 
 type GeocoderResult = {
     geometry?: { location?: { lat?: number; lng?: number } };
@@ -48,6 +50,31 @@ function getMapsApiKey(): string {
     );
 }
 
+function normalizeAddress(value: string): string {
+    return value.trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+function roundCoord(value: number): number {
+    return Math.round(value * 1000) / 1000;
+}
+
+function buildGeocodeCacheKey(input: {
+    hasCoords: boolean;
+    lat?: number;
+    lng?: number;
+    address?: string;
+    westernCapeOnly: boolean;
+}): string {
+    const wc = input.westernCapeOnly ? 'wc1' : 'wc0';
+    if (input.hasCoords) {
+        const lat = roundCoord(Number(input.lat));
+        const lng = roundCoord(Number(input.lng));
+        return `coord:${lat},${lng}:${wc}`;
+    }
+    const address = normalizeAddress(String(input.address ?? ''));
+    return `addr:${address}:${wc}`;
+}
+
 export async function POST(req: NextRequest) {
     const limited = checkRateLimit(req, 'geocode');
     if (limited) return limited;
@@ -71,6 +98,42 @@ export async function POST(req: NextRequest) {
             { error: 'Provide either lat/lng or address' },
             { status: 400 }
         );
+    }
+
+    const cacheKey = buildGeocodeCacheKey({
+        hasCoords,
+        lat: body.lat,
+        lng: body.lng,
+        address: body.address,
+        westernCapeOnly,
+    });
+
+    try {
+        const admin = await createSupabaseAdminClient();
+        const cutoff = new Date(Date.now() - GEOCODE_CACHE_DAYS * 24 * 60 * 60 * 1000).toISOString();
+        const { data: cached } = await admin
+            .from('geocode_cache')
+            .select('response, created_at')
+            .eq('cache_key', cacheKey)
+            .gt('created_at', cutoff)
+            .maybeSingle();
+
+        const payload = cached?.response as { lat?: number; lng?: number; address?: string } | null;
+        if (
+            payload &&
+            typeof payload.lat === 'number' &&
+            typeof payload.lng === 'number' &&
+            typeof payload.address === 'string'
+        ) {
+            return NextResponse.json({
+                lat: payload.lat,
+                lng: payload.lng,
+                address: payload.address,
+                cacheHit: true,
+            });
+        }
+    } catch {
+        // Non-fatal: if cache query fails, continue to Google.
     }
 
     try {
@@ -143,10 +206,28 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: 'Invalid geocoding response' }, { status: 502 });
         }
 
+        try {
+            const admin = await createSupabaseAdminClient();
+            await admin.from('geocode_cache').upsert(
+                {
+                    cache_key: cacheKey,
+                    response: {
+                        lat,
+                        lng,
+                        address: typeof address === 'string' ? address : '',
+                    },
+                },
+                { onConflict: 'cache_key' }
+            );
+        } catch {
+            // Non-fatal: cache write failures should never fail geocoding.
+        }
+
         return NextResponse.json({
             lat,
             lng,
             address: typeof address === 'string' ? address : undefined,
+            cacheHit: false,
         });
     } catch (error: any) {
         return NextResponse.json(

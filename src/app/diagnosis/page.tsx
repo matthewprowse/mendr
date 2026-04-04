@@ -21,6 +21,9 @@ import { FlowStepHeader } from '@/components/flow-header';
 import { DiagnosisLeaveDialog } from '@/components/diagnosis-leave-dialog';
 import { cleanThoughtSentenceStarts, splitDetailAndHazard } from '@/lib/diagnosis-display';
 import { createClientId } from '@/lib/client-random-id';
+import { writeMatchTradeContextStorage } from '@/lib/match-trade-context';
+import { fetchConversationDiagnosis, patchConversation } from '@/lib/conversations-api';
+import { useAuth } from '@/context/auth-context';
 
 const URGENCY_LABELS: Record<string, string> = {
     immediate: 'Immediate',
@@ -38,6 +41,7 @@ function sleep(ms: number): Promise<void> {
 export default function WelcomePage({ conversationId }: { conversationId?: string }) {
     const router = useRouter();
     const searchParams = useSearchParams();
+    const { user } = useAuth();
     const trade = searchParams.get('trade') || '';
     const supabase = getSupabase();
 
@@ -296,27 +300,26 @@ export default function WelcomePage({ conversationId }: { conversationId?: strin
                     setDiagnosisTitle(diagWithThought.diagnosis);
                     setDiagnosisFailureMessage(null);
 
-                    try {
-                        const deviceType =
-                            typeof navigator !== 'undefined' && /Mobi|Android/i.test(navigator.userAgent)
-                                ? 'mobile'
-                                : 'desktop';
-                        await supabase
-                            .from('conversations')
-                            .upsert({
-                                id: conversationId,
-                                title: diagWithThought.diagnosis || 'New Diagnosis',
-                                image_url: img,
-                                diagnosis: diagWithThought,
-                                urgency_key: diagWithThought.urgency_key ?? null,
-                                initial_image_description: (prompt ?? '').trim() || null,
-                                device: deviceType,
-                                user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : '',
-                            })
-                            .select('id')
-                            .single();
-                    } catch {
-                        // Non-fatal: still show diagnosis even if persistence fails.
+                    const deviceType =
+                        typeof navigator !== 'undefined' && /Mobi|Android/i.test(navigator.userAgent)
+                            ? 'mobile'
+                            : 'desktop';
+                    const saveResult = await patchConversation(cid, {
+                        title: diagWithThought.diagnosis || 'New Diagnosis',
+                        image_url: img,
+                        diagnosis: diagWithThought as unknown,
+                        urgency_key: diagWithThought.urgency_key ?? null,
+                        initial_image_description: (prompt ?? '').trim() || null,
+                        device: deviceType,
+                        user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : '',
+                        user_id: user?.id ?? null,
+                    });
+                    if (!saveResult.ok) {
+                        setDiagnosisFailureMessage(
+                            saveResult.error ||
+                                'We could not save your Scandio Report. Please check your connection and try again.'
+                        );
+                        return null;
                     }
 
                     return diagWithThought;
@@ -330,7 +333,7 @@ export default function WelcomePage({ conversationId }: { conversationId?: strin
                 setIsDiagnosingRetrying(false);
             }
         },
-        [conversationId, serviceCatalog, supabase]
+        [conversationId, serviceCatalog, supabase, user?.id]
     );
 
     useEffect(() => {
@@ -362,25 +365,25 @@ export default function WelcomePage({ conversationId }: { conversationId?: strin
             // Reset guard when the route id changes.
             didRunDiagnosisRef.current = null;
             setDiagnosisTitle('Diagnosing…');
-            // Show uploaded image immediately while conversation row is loading.
+            // URL saved on /welcome after a successful upload — used if the client cannot read
+            // the conversation row yet (slow network) or RLS hides rows created via the admin API.
+            let pendingImageUrl: string | null = null;
             try {
-                const immediateImageUrl = sessionStorage.getItem(
+                pendingImageUrl = sessionStorage.getItem(
                     `pending_diagnosis_image_url:${conversationId}`
                 );
-                if (immediateImageUrl) setImageSrc(immediateImageUrl);
+                if (pendingImageUrl) setImageSrc(pendingImageUrl);
             } catch {
                 // Ignore session storage issues.
             }
 
-            const { data } = await supabase
-                .from('conversations')
-                .select('id,image_url,diagnosis,initial_image_description')
-                .eq('id', conversationId)
-                .maybeSingle();
+            const conv = await fetchConversationDiagnosis(conversationId);
+            const data = conv.ok ? conv.data : null;
 
             if (cancelled) return;
             const img = (data as any)?.image_url as string | null;
-            setImageSrc(img);
+            const imageUrlForDiagnosis = (img && String(img).trim()) || pendingImageUrl || null;
+            setImageSrc(imageUrlForDiagnosis);
             const prompt = ((data as any)?.initial_image_description as string | null) ?? '';
             const customerInfo = prompt.trim();
             setCustomerInfoItems(customerInfo ? [customerInfo] : []);
@@ -412,14 +415,14 @@ export default function WelcomePage({ conversationId }: { conversationId?: strin
                 return;
             }
 
-            if (!img) {
+            if (!imageUrlForDiagnosis) {
                 setDiagnosisFailureMessage(
                     'No uploaded photo was found for this report. Please choose a new photo.'
                 );
                 return;
             }
             const selectedService = trade.trim() || null;
-            await runInitialDiagnosis(img, prompt, selectedService);
+            await runInitialDiagnosis(imageUrlForDiagnosis, prompt, selectedService);
         };
 
         void bootstrap().finally(() => {
@@ -764,17 +767,15 @@ export default function WelcomePage({ conversationId }: { conversationId?: strin
                                             setCustomerInfoItems(nextItems);
                                             setInfoText('');
                                             if (conversationId) {
-                                                try {
-                                                    await supabase
-                                                        .from('conversations')
-                                                        .upsert({
-                                                            id: conversationId,
-                                                            initial_image_description: joinedInfo || null,
-                                                        })
-                                                        .select('id')
-                                                        .single();
-                                                } catch {
-                                                    // Non-fatal.
+                                                const noteSave = await patchConversation(conversationId, {
+                                                    initial_image_description: joinedInfo || null,
+                                                });
+                                                if (!noteSave.ok) {
+                                                    setDiagnosisFailureMessage(
+                                                        noteSave.error ||
+                                                            'We could not save your notes. Please try again.'
+                                                    );
+                                                    return;
                                                 }
                                             }
                                             if (imageSrc) {
@@ -795,6 +796,11 @@ export default function WelcomePage({ conversationId }: { conversationId?: strin
                                             const key = `pending_diagnosis_image_url:${conversationId}`;
                                             try { sessionStorage.removeItem(key); } catch {}
                                             try { localStorage.removeItem(key); } catch {}
+                                            writeMatchTradeContextStorage(
+                                                conversationId,
+                                                tradeLabel || trade,
+                                                tradeDetailLabel || tradeLabel || trade
+                                            );
                                             router.push(`/match/${encodeURIComponent(conversationId)}`);
                                         }}
                                     >
@@ -848,17 +854,15 @@ export default function WelcomePage({ conversationId }: { conversationId?: strin
                                     setIsAddingInfo(false);
                                     setInfoText('');
                                     if (conversationId) {
-                                        try {
-                                            await supabase
-                                                .from('conversations')
-                                                .upsert({
-                                                    id: conversationId,
-                                                    initial_image_description: joinedInfo || null,
-                                                })
-                                                .select('id')
-                                                .single();
-                                        } catch {
-                                            // Non-fatal.
+                                        const noteSave = await patchConversation(conversationId, {
+                                            initial_image_description: joinedInfo || null,
+                                        });
+                                        if (!noteSave.ok) {
+                                            setDiagnosisFailureMessage(
+                                                noteSave.error ||
+                                                    'We could not save your notes. Please try again.'
+                                            );
+                                            return;
                                         }
                                     }
                                     if (imageSrc) {

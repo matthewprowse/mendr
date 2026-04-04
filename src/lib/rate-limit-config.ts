@@ -96,6 +96,24 @@ export const RATE_LIMITS = {
         max: 30,
     },
 
+    // Guest location upsert for match flow — server uses admin client to bypass RLS.
+    conversationLocation: {
+        windowMs: 60 * 1000,
+        max: 40,
+    },
+
+    // Conversation row read (diagnosis bootstrap, match trade) — service role.
+    conversationRead: {
+        windowMs: 60 * 1000,
+        max: 80,
+    },
+
+    // Conversation diagnosis / metadata writes — service role.
+    conversationUpsert: {
+        windowMs: 60 * 1000,
+        max: 60,
+    },
+
 } as const satisfies Record<string, RateLimitConfig>;
 
 export type RateLimitBucket = keyof typeof RATE_LIMITS;

@@ -1,7 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { setOptions, importLibrary } from '@googlemaps/js-api-loader';
+import { importLibrary } from '@googlemaps/js-api-loader';
+import { ensureGoogleMapsLoaderOptions } from '@/lib/google-maps-js-loader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -55,7 +56,7 @@ export function CoverageMap({ apiKey }: CoverageMapProps) {
     useEffect(() => {
         if (!apiKey || !containerRef.current) return;
 
-        setOptions({ key: apiKey, v: 'weekly' });
+        ensureGoogleMapsLoaderOptions(apiKey);
         importLibrary('maps')
             .then(() => {
                 if (!containerRef.current) return;

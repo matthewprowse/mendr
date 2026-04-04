@@ -208,14 +208,15 @@ export function ProviderCard({
     const providerDetailId = provider.place_id || provider.id;
     const logLead = async (contactType: 'whatsapp' | 'phone' | 'email') => {
         try {
-            await fetch('/api/leads', {
+            await fetch('/api/events', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    conversation_id: conversationId || null,
-                    provider_place_id: provider.place_id,
-                    provider_name: provider.name,
-                    contact_type: contactType,
+                    event_type: 'provider_contact',
+                    session_id: conversationId || '',
+                    diagnosis_id: conversationId || null,
+                    provider_id: provider.place_id || null,
+                    meta: { contact_type: contactType, provider_name: provider.name },
                 }),
             });
         } catch (_e) {}

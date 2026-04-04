@@ -13,10 +13,16 @@ function normalizePlaceIds(placeIds: string[]): string[] {
         .map((id) => toGooglePlaceId(id.trim()));
 }
 
+export type FetchProvidersApiResult = {
+    ok: boolean;
+    status: number;
+    data: ProvidersResponse | null;
+};
+
 export async function fetchProvidersApi(
     payload: ProvidersRequest,
     options?: { signal?: AbortSignal }
-): Promise<ProvidersResponse | null> {
+): Promise<FetchProvidersApiResult> {
     const res = await fetch('/api/providers', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -24,11 +30,40 @@ export async function fetchProvidersApi(
         signal: options?.signal,
     });
     const data = (await res.json().catch(() => null)) as ProvidersResponse | null;
-    if (!res.ok) return data;
-    return data;
+    return { ok: res.ok, status: res.status, data };
+}
+
+const geocodeLatLngCache = new Map<string, GeocodeResponse | null>();
+
+function geocodeCacheKey(lat: number, lng: number): string {
+    return `${lat.toFixed(5)},${lng.toFixed(5)}`;
 }
 
 export async function geocodeApi(payload: GeocodeRequest): Promise<GeocodeResponse | null> {
+    if (
+        typeof payload.lat === 'number' &&
+        typeof payload.lng === 'number' &&
+        !Number.isNaN(payload.lat) &&
+        !Number.isNaN(payload.lng)
+    ) {
+        const key = geocodeCacheKey(payload.lat, payload.lng);
+        if (geocodeLatLngCache.has(key)) {
+            return geocodeLatLngCache.get(key) ?? null;
+        }
+        const res = await fetch('/api/geocode', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        }).catch(() => null);
+        if (!res) {
+            geocodeLatLngCache.set(key, null);
+            return null;
+        }
+        const data = (await res.json().catch(() => null)) as GeocodeResponse | null;
+        geocodeLatLngCache.set(key, data);
+        return data;
+    }
+
     const res = await fetch('/api/geocode', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

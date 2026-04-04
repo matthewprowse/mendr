@@ -1,7 +1,16 @@
 'use client';
 
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
-import { setOptions, importLibrary } from '@googlemaps/js-api-loader';
+import { importLibrary } from '@googlemaps/js-api-loader';
+import { ensureGoogleMapsLoaderOptions } from '@/lib/google-maps-js-loader';
+
+type RoutesComputeResult = {
+    localizedValues?: { duration?: string | null };
+    durationMillis?: number | null;
+    createPolylines: (opts?: {
+        polylineOptions?: google.maps.PolylineOptions;
+    }) => google.maps.Polyline[];
+};
 import { ArrowLeft, ArrowRight } from '@/lib/icons';
 import { formatBusinessName } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -80,8 +89,6 @@ function formatDuration(text: string): string {
 const PIN_PATH =
     'M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z';
 
-let mapsOptionsSet = false;
-
 export function ProvidersMap({
     apiKey,
     providers,
@@ -99,8 +106,8 @@ export function ProvidersMap({
     const containerRef = useRef<HTMLDivElement>(null);
     const mapRef = useRef<google.maps.Map | null>(null);
     const markersRef = useRef<google.maps.marker.AdvancedMarkerElement[]>([]);
-    const directionsRendererRef = useRef<google.maps.DirectionsRenderer | null>(null);
-    const directionsServiceRef = useRef<google.maps.DirectionsService | null>(null);
+    const routePolylinesRef = useRef<google.maps.Polyline[]>([]);
+    const routeRequestSeqRef = useRef(0);
 
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -187,50 +194,89 @@ export function ProvidersMap({
     const userLocationRef = useRef(userLocation);
     userLocationRef.current = userLocation;
 
-    const drawDirections = useCallback(
-        (index: number) => {
-            const map = mapRef.current;
-            const service = directionsServiceRef.current;
-            const renderer = directionsRendererRef.current;
-            if (!map || !service || !renderer) return;
+    const drawDirections = useCallback((index: number) => {
+        const map = mapRef.current;
+        if (!map) return;
 
-            const provider = validProvidersRef.current[index];
-            if (!provider || provider.latitude == null || provider.longitude == null) return;
+        const reqId = ++routeRequestSeqRef.current;
+        routePolylinesRef.current.forEach((p) => p.setMap(null));
+        routePolylinesRef.current = [];
+        setLiveDuration('');
 
-            const loc = userLocationRef.current;
+        const provider = validProvidersRef.current[index];
+        if (!provider || provider.latitude == null || provider.longitude == null) return;
 
-            if (!loc) {
-                map.panTo({ lat: provider.latitude, lng: provider.longitude });
-                map.setZoom(14);
-                setLiveDuration('');
-                return;
-            }
+        const loc = userLocationRef.current;
 
-            renderer.setMap(map);
-            service.route(
-                {
-                    origin: { lat: loc.lat, lng: loc.lng },
-                    destination: { lat: provider.latitude, lng: provider.longitude },
-                    travelMode: google.maps.TravelMode.DRIVING,
-                },
-                (result, status) => {
-                    if (status === google.maps.DirectionsStatus.OK && result) {
-                        renderer.setDirections(result);
-                        const duration = result.routes?.[0]?.legs?.[0]?.duration?.text ?? '';
-                        setLiveDuration(duration);
-                    } else {
-                        renderer.setMap(null);
-                        setLiveDuration('');
-                        const bounds = new google.maps.LatLngBounds();
-                        bounds.extend({ lat: loc.lat, lng: loc.lng });
-                        bounds.extend({ lat: provider.latitude!, lng: provider.longitude! });
-                        map.fitBounds(bounds, { top: 60, right: 60, bottom: 240, left: 60 });
+        if (!loc) {
+            map.panTo({ lat: provider.latitude, lng: provider.longitude });
+            map.setZoom(14);
+            return;
+        }
+
+        const fitBoundsFallback = () => {
+            const bounds = new google.maps.LatLngBounds();
+            bounds.extend({ lat: loc.lat, lng: loc.lng });
+            bounds.extend({ lat: provider.latitude!, lng: provider.longitude! });
+            map.fitBounds(bounds, { top: 60, right: 60, bottom: 240, left: 60 });
+        };
+
+        void (async () => {
+            try {
+                const routesModule = await importLibrary('routes');
+                const Route = (
+                    routesModule as {
+                        Route?: {
+                            computeRoutes: (req: {
+                                origin: google.maps.LatLngLiteral;
+                                destination: google.maps.LatLngLiteral;
+                                travelMode: google.maps.TravelMode;
+                                fields: string[];
+                            }) => Promise<{ routes: RoutesComputeResult[] }>;
+                        };
                     }
+                ).Route;
+                if (!Route?.computeRoutes) {
+                    if (reqId !== routeRequestSeqRef.current) return;
+                    fitBoundsFallback();
+                    return;
                 }
-            );
-        },
-        []
-    );
+                const { routes } = await Route.computeRoutes({
+                    origin: { lat: loc.lat, lng: loc.lng },
+                    destination: { lat: provider.latitude!, lng: provider.longitude! },
+                    travelMode: google.maps.TravelMode.DRIVING,
+                    fields: ['path', 'localizedValues', 'durationMillis'],
+                });
+                if (reqId !== routeRequestSeqRef.current) return;
+                if (!routes?.length) {
+                    fitBoundsFallback();
+                    return;
+                }
+                const r0 = routes[0];
+                const duration =
+                    (r0.localizedValues?.duration && String(r0.localizedValues.duration).trim()) ||
+                    (typeof r0.durationMillis === 'number' && Number.isFinite(r0.durationMillis)
+                        ? `${Math.max(1, Math.round(r0.durationMillis / 60000))} min`
+                        : '');
+                setLiveDuration(duration);
+
+                const polylines = r0.createPolylines({
+                    polylineOptions: {
+                        strokeColor: '#0f172a',
+                        strokeWeight: 4,
+                        strokeOpacity: 0.8,
+                    },
+                });
+                polylines.forEach((pl) => {
+                    pl.setMap(map);
+                    routePolylinesRef.current.push(pl);
+                });
+            } catch {
+                if (reqId !== routeRequestSeqRef.current) return;
+                fitBoundsFallback();
+            }
+        })();
+    }, []);
 
     const makeMarkerContent = (color: string, scale: number): Element => {
         const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -266,10 +312,7 @@ export function ProvidersMap({
     useEffect(() => {
         if (!apiKey || !containerRef.current) return;
 
-        if (!mapsOptionsSet) {
-            setOptions({ key: apiKey, v: 'weekly' });
-            mapsOptionsSet = true;
-        }
+        ensureGoogleMapsLoaderOptions(apiKey);
 
         const mapLoadTimeout = setTimeout(() => {
             setError('Map is taking too long to load.');
@@ -298,15 +341,6 @@ export function ProvidersMap({
                 });
 
                 mapRef.current = map;
-                directionsServiceRef.current = new google.maps.DirectionsService();
-                directionsRendererRef.current = new google.maps.DirectionsRenderer({
-                    suppressMarkers: true,
-                    polylineOptions: {
-                        strokeColor: '#0f172a',
-                        strokeWeight: 4,
-                        strokeOpacity: 0.8,
-                    },
-                });
 
                 setLoading(false);
             })
@@ -317,9 +351,8 @@ export function ProvidersMap({
             });
 
         return () => {
-            directionsRendererRef.current?.setMap(null);
-            directionsRendererRef.current = null;
-            directionsServiceRef.current = null;
+            routePolylinesRef.current.forEach((p) => p.setMap(null));
+            routePolylinesRef.current = [];
             mapRef.current = null;
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -363,7 +396,7 @@ export function ProvidersMap({
                 content: makeMarkerContent(isFirst ? '#EA4335' : '#64748b', isFirst ? 1.8 : 1.2),
                 zIndex: isFirst ? 10 : 1,
             });
-            marker.addListener('click', () => setIndex(i));
+            marker.addEventListener('gmp-click', () => setIndex(i));
             markersRef.current.push(marker);
         });
 

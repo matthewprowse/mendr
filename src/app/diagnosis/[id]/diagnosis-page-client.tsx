@@ -16,6 +16,9 @@ import { Label } from '@/components/ui/label';
 import { DiagnosisMetaPanel } from '@/components/diagnosis-meta-panel';
 import { DiagnosisLeaveDialog } from '@/components/diagnosis-leave-dialog';
 import { Separator } from '@/components/ui/separator';
+import { useAuth } from '@/context/auth-context';
+import { fetchConversationDiagnosis, patchConversation } from '@/lib/conversations-api';
+import { writeMatchTradeContextStorage } from '@/lib/match-trade-context';
 
 type DiagnosisPageClientProps = {
     conversationId: string;
@@ -110,6 +113,7 @@ function parseDiagnosisFromResponse(text: string): DiagnosisData | null {
 export function DiagnosisPageClient({ conversationId }: DiagnosisPageClientProps) {
     const router = useRouter();
     const supabase = getSupabase();
+    const { user } = useAuth();
 
     const [loading, setLoading] = useState(true);
     const [imageSrc, setImageSrc] = useState<string | null>(null);
@@ -126,55 +130,49 @@ export function DiagnosisPageClient({ conversationId }: DiagnosisPageClientProps
 
     const loadConversation = useCallback(
         async (id: string): Promise<ConversationRow | null> => {
-            const { data, error } = await supabase
-                .from('conversations')
-                .select('id,image_url,diagnosis,initial_image_description')
-                .eq('id', id)
-                .maybeSingle();
-            if (error) {
+            const res = await fetchConversationDiagnosis(id);
+            if (!res.ok) {
                 if (process.env.NODE_ENV === 'development') {
                     // eslint-disable-next-line no-console
-                    console.warn('[DiagnosisPage] loadConversation error', error);
+                    console.warn('[DiagnosisPage] loadConversation error', res.error);
                 }
                 return null;
             }
+            const data = res.data;
             if (!data) return null;
             return {
                 id: data.id,
-                image_url: (data as any).image_url ?? null,
-                diagnosis: (data as any).diagnosis ?? null,
-                initial_image_description: (data as any).initial_image_description ?? null,
+                image_url: data.image_url ?? null,
+                diagnosis: (data.diagnosis as DiagnosisData | null) ?? null,
+                initial_image_description: data.initial_image_description ?? null,
             };
         },
-        [supabase]
+        []
     );
 
     const saveConversationDiagnosis = useCallback(
-        async (diag: DiagnosisData | null, img: string | null, prompt?: string) => {
+        async (diag: DiagnosisData | null, img: string | null, prompt?: string): Promise<boolean> => {
             const deviceType =
                 typeof navigator !== 'undefined' && /Mobi|Android/i.test(navigator.userAgent)
                     ? 'mobile'
                     : 'desktop';
-            try {
-                await supabase
-                    .from('conversations')
-                    .upsert({
-                        id: conversationId,
-                        title: diag?.diagnosis || 'New Diagnosis',
-                        image_url: img,
-                        diagnosis: diag,
-                        urgency_key: (diag?.urgency_key ?? null) as string | null,
-                        initial_image_description: (prompt ?? '').trim() || null,
-                        device: deviceType,
-                        user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : '',
-                    })
-                    .select('id')
-                    .single();
-            } catch {
-                // Swallow persistence errors here; the user can still see the diagnosis.
+            const result = await patchConversation(conversationId, {
+                title: diag?.diagnosis || 'New Diagnosis',
+                image_url: img,
+                diagnosis: diag,
+                urgency_key: (diag?.urgency_key ?? null) as string | null,
+                initial_image_description: (prompt ?? '').trim() || null,
+                device: deviceType,
+                user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : '',
+                user_id: user?.id ?? null,
+            });
+            if (!result.ok) {
+                toast.error(result.error || 'Could not save your report.');
+                return false;
             }
+            return true;
         },
-        [conversationId, supabase]
+        [conversationId, user?.id]
     );
 
     const runInitialDiagnosis = useCallback(
@@ -233,8 +231,8 @@ export function DiagnosisPageClient({ conversationId }: DiagnosisPageClientProps
                     return null;
                 }
                 setDiagnosis(diag);
-                trackEvent('diagnosis_complete', { diagnosis_id: conversationId });
-                await saveConversationDiagnosis(diag, img, prompt);
+                const saved = await saveConversationDiagnosis(diag, img, prompt);
+                if (!saved) return null;
                 return diag;
             } catch (e) {
                 if (process.env.NODE_ENV === 'development') {
@@ -308,7 +306,8 @@ export function DiagnosisPageClient({ conversationId }: DiagnosisPageClientProps
                 }
                 setDiagnosis(diag);
                 setRefineText('');
-                await saveConversationDiagnosis(diag, imageSrc, initialPrompt);
+                const saved = await saveConversationDiagnosis(diag, imageSrc, initialPrompt);
+                if (!saved) return;
             } catch (e) {
                 if (process.env.NODE_ENV === 'development') {
                     // eslint-disable-next-line no-console
@@ -432,7 +431,10 @@ export function DiagnosisPageClient({ conversationId }: DiagnosisPageClientProps
         if (!diagnosis) return;
         setConfirming(true);
         try {
-            await saveConversationDiagnosis(diagnosis, imageSrc, initialPrompt);
+            // Count the diagnosis as completed only when the user confirms and proceeds to match.
+            trackEvent('diagnosis_complete', { diagnosis_id: conversationId });
+            const saved = await saveConversationDiagnosis(diagnosis, imageSrc, initialPrompt);
+            if (!saved) return;
             const key = `pending_diagnosis_image_url:${conversationId}`;
             try {
                 sessionStorage.removeItem(key);
@@ -440,6 +442,11 @@ export function DiagnosisPageClient({ conversationId }: DiagnosisPageClientProps
             try {
                 localStorage.removeItem(key);
             } catch {}
+            writeMatchTradeContextStorage(
+                conversationId,
+                typeof diagnosis.trade === 'string' ? diagnosis.trade : '',
+                typeof diagnosis.trade_detail === 'string' ? diagnosis.trade_detail : undefined
+            );
             router.push(`/match/${encodeURIComponent(conversationId)}`);
         } finally {
             setConfirming(false);

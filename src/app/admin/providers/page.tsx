@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
+import { getAppOrigin } from '@/lib/site-url';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -20,26 +21,40 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
+import { AdminPageHeader } from '../_components/admin-page-header';
+import { AdminDataTable } from '../_components/admin-data-table';
+import { TableCell, TableRow } from '@/components/ui/table';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 type Status = 'new' | 'contacted' | 'approved' | 'rejected';
 
-type WaitlistEntry = {
+type ProviderApplication = {
     id: string;
     created_at: string;
-    name: string;
+    contact_name: string;
     business_name: string | null;
     trade: string;
     phone: string;
     email: string;
     areas: string;
-    years_experience: number | null;
-    message: string | null;
+    founded_year: number | null;
     status: Status;
     notes: string | null;
     sendgrid_sent_at: string | null;
     source: string | null;
+};
+
+type LiveProviderRow = {
+    id: string;
+    name: string;
+    address: string | null;
+    rating: number | null;
+    rating_count: number;
+    output_count: number;
+    contact_count: number;
+    profile_view_count: number;
+    avg_output_position: number | null;
 };
 
 // ── Status badge ──────────────────────────────────────────────────────────────
@@ -89,17 +104,17 @@ function StatusBadge({ status, onChange }: { status: Status; onChange: (s: Statu
 const EMAIL_TEMPLATES = [
     {
         id: 'waitlist',
-        label: 'Waitlist confirmation',
-        subject: 'You are on the Scandio provider waitlist',
+        label: 'Application confirmation',
+        subject: 'We received your Scandio application',
         body: (name: string) =>
-            `Hi ${name},\n\nThank you for applying to join the Scandio contractor network. We have received your application and are excited to have you with us.\n\nScandio is building the Western Cape's founding contractor network, connecting informed homeowners with trusted local professionals. We will be in touch before we open the network to providers — you will be among the first to know.\n\nIn the meantime, if you have any questions, feel free to reply to this email.\n\nKind regards,\nThe Scandio Team`,
+            `Hi ${name},\n\nThank you for applying to join the Scandio contractor network. We have received your application and we’ll be in touch within 2 business days.\n\nIf you have any questions, you can reply directly to this email.\n\nKind regards,\nThe Scandio Team`,
     },
     {
         id: 'invitation',
         label: 'Invitation to join',
         subject: 'Your Scandio network invitation is ready',
         body: (name: string) =>
-            `Hi ${name},\n\nGreat news — the Scandio contractor network is now open and your profile is ready to set up.\n\nAs a founding member you are locked in at the best available rate, and you will receive priority placement when paid tiers launch in late 2026.\n\nTo get started, complete your profile here: https://scandio.app/pro/onboard\n\nIf you have any questions, just reply to this email.\n\nKind regards,\nThe Scandio Team`,
+            `Hi ${name},\n\nGreat news — the Scandio contractor network is now open and your profile is ready to set up.\n\nAs a founding member you are locked in at the best available rate, and you will receive priority placement when paid tiers launch in late 2026.\n\nTo get started, complete your profile here: ${getAppOrigin()}/pro/onboard\n\nIf you have any questions, just reply to this email.\n\nKind regards,\nThe Scandio Team`,
     },
     {
         id: 'followup',
@@ -162,20 +177,27 @@ const FILTER_STATUSES = ['all', ...STATUSES] as const;
 type FilterStatus = (typeof FILTER_STATUSES)[number];
 
 export default function AdminProvidersPage() {
-    const [entries, setEntries] = useState<WaitlistEntry[]>([]);
+    const [entries, setEntries] = useState<ProviderApplication[]>([]);
+    const [liveProviders, setLiveProviders] = useState<LiveProviderRow[]>([]);
     const [loading, setLoading] = useState(true);
+    const [liveLoading, setLiveLoading] = useState(true);
     const [filter, setFilter] = useState<FilterStatus>('all');
     const [search, setSearch] = useState('');
-    const [emailTarget, setEmailTarget] = useState<WaitlistEntry | null>(null);
+    const [emailTarget, setEmailTarget] = useState<ProviderApplication | null>(null);
     const [emailTemplate, setEmailTemplate] = useState(EMAIL_TEMPLATES[0].id);
     const [emailBody, setEmailBody] = useState('');
     const [emailSubject, setEmailSubject] = useState('');
     const [sending, setSending] = useState(false);
 
     const load = useCallback(async () => {
-        const res = await fetch('/api/admin/providers');
-        if (res.ok) setEntries(await res.json());
+        const [applicationsRes, liveProvidersRes] = await Promise.all([
+            fetch('/api/admin/providers'),
+            fetch('/api/admin/providers/live'),
+        ]);
+        if (applicationsRes.ok) setEntries(await applicationsRes.json());
+        if (liveProvidersRes.ok) setLiveProviders(await liveProvidersRes.json());
         setLoading(false);
+        setLiveLoading(false);
     }, []);
 
     useEffect(() => { void load(); }, [load]);
@@ -185,7 +207,7 @@ export default function AdminProvidersPage() {
         if (!emailTarget) return;
         const tpl = EMAIL_TEMPLATES.find((t) => t.id === emailTemplate);
         if (!tpl) return;
-        setEmailBody(tpl.body(emailTarget.name));
+        setEmailBody(tpl.body(emailTarget.contact_name));
         setEmailSubject(tpl.subject);
     }, [emailTemplate, emailTarget]);
 
@@ -209,7 +231,7 @@ export default function AdminProvidersPage() {
                 body: JSON.stringify({
                     providerId: emailTarget.id,
                     email: emailTarget.email,
-                    name: emailTarget.name,
+                    name: emailTarget.contact_name,
                     subject: emailSubject,
                     body: emailBody,
                 }),
@@ -247,23 +269,24 @@ export default function AdminProvidersPage() {
         if (filter !== 'all' && e.status !== filter) return false;
         if (!q) return true;
         return (
-            e.name.toLowerCase().includes(q) ||
+            e.contact_name.toLowerCase().includes(q) ||
             e.email.toLowerCase().includes(q) ||
             (e.business_name ?? '').toLowerCase().includes(q) ||
             e.trade.toLowerCase().includes(q)
         );
     });
+    const liveFiltered = liveProviders.filter((p) => {
+        if (!q) return true;
+        return (
+            p.name.toLowerCase().includes(q) ||
+            (p.address ?? '').toLowerCase().includes(q)
+        );
+    });
 
     return (
-        <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
-            {/* Header */}
-            <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                    <h1 className="text-2xl font-bold text-foreground">Provider Waitlist</h1>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                        {entries.length} applicant{entries.length !== 1 ? 's' : ''} total
-                    </p>
-                </div>
+        <div className="mx-auto w-full max-w-7xl px-4 pb-8 pt-4 sm:px-6 lg:px-8">
+            <div className="mb-6">
+                <AdminPageHeader title="Providers" />
             </div>
 
             {/* Filter bar */}
@@ -292,95 +315,88 @@ export default function AdminProvidersPage() {
                 />
             </div>
 
-            {/* Table */}
-            <div className="overflow-x-auto rounded-xl border border-border/50">
-                <table className="min-w-full divide-y divide-border/50 text-sm">
-                    <thead className="bg-muted/30">
-                        <tr>
-                            {['Date', 'Name', 'Business', 'Trade', 'Areas', 'Phone', 'Email', 'Exp.', 'Status', 'Notes', 'Actions'].map(
-                                (h) => (
-                                    <th
-                                        key={h}
-                                        className="px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground"
-                                    >
-                                        {h}
-                                    </th>
-                                )
-                            )}
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-border/50 bg-background">
-                        {loading ? (
-                            <tr>
-                                <td colSpan={11} className="py-12 text-center text-sm text-muted-foreground">
-                                    Loading…
-                                </td>
-                            </tr>
-                        ) : filtered.length === 0 ? (
-                            <tr>
-                                <td colSpan={11} className="py-12 text-center text-sm text-muted-foreground">
-                                    No entries found.
-                                </td>
-                            </tr>
-                        ) : (
-                            filtered.map((e) => (
-                                <tr key={e.id} className="hover:bg-muted/20">
-                                    <td className="whitespace-nowrap px-3 py-2 text-xs text-muted-foreground">
-                                        {new Date(e.created_at).toLocaleDateString('en-ZA', {
-                                            day: 'numeric',
-                                            month: 'short',
-                                        })}
-                                    </td>
-                                    <td className="px-3 py-2 font-medium text-foreground">{e.name}</td>
-                                    <td className="px-3 py-2 text-muted-foreground">{e.business_name ?? '—'}</td>
-                                    <td className="px-3 py-2 text-muted-foreground">{e.trade}</td>
-                                    <td className="max-w-[140px] px-3 py-2 text-muted-foreground">
-                                        <span className="line-clamp-2 text-xs">{e.areas}</span>
-                                    </td>
-                                    <td className="whitespace-nowrap px-3 py-2 text-muted-foreground">{e.phone}</td>
-                                    <td className="px-3 py-2 text-muted-foreground">
-                                        <a href={`mailto:${e.email}`} className="hover:underline">
-                                            {e.email}
-                                        </a>
-                                    </td>
-                                    <td className="px-3 py-2 text-center text-muted-foreground">
-                                        {e.years_experience ?? '—'}
-                                    </td>
-                                    <td className="px-3 py-2">
-                                        <StatusBadge
-                                            status={e.status}
-                                            onChange={(s) => void updateStatus(e.id, s)}
-                                        />
-                                    </td>
-                                    <td className="min-w-[160px] px-3 py-2">
-                                        <NotesCell
-                                            id={e.id}
-                                            initial={e.notes}
-                                            onSaved={(v) =>
-                                                setEntries((prev) =>
-                                                    prev.map((x) => (x.id === e.id ? { ...x, notes: v } : x))
-                                                )
-                                            }
-                                        />
-                                    </td>
-                                    <td className="px-3 py-2">
-                                        <Button
-                                            size="sm"
-                                            variant="secondary"
-                                            className="h-7 text-xs"
-                                            onClick={() => {
-                                                setEmailTarget(e);
-                                                setEmailTemplate('waitlist');
-                                            }}
-                                        >
-                                            Email
-                                        </Button>
-                                    </td>
-                                </tr>
-                            ))
-                        )}
-                    </tbody>
-                </table>
+            <div className="mb-8 flex flex-col gap-3">
+                <h2 className="text-base font-semibold text-foreground">Live Providers (Shown To Users)</h2>
+                <AdminDataTable
+                    headers={['Provider', 'Address', 'Rating', 'Outputs', 'Contacts', 'Profile Views', 'Avg Position']}
+                    loading={liveLoading}
+                    emptyText="No live providers found."
+                >
+                    {liveFiltered.map((p) => (
+                        <TableRow key={p.id}>
+                            <TableCell className="font-medium text-foreground">{p.name}</TableCell>
+                            <TableCell className="max-w-[260px] text-muted-foreground">{p.address ?? '—'}</TableCell>
+                            <TableCell className="text-muted-foreground">
+                                {p.rating != null ? `${p.rating.toFixed(1)} (${p.rating_count})` : '—'}
+                            </TableCell>
+                            <TableCell className="text-muted-foreground">{p.output_count}</TableCell>
+                            <TableCell className="text-muted-foreground">{p.contact_count}</TableCell>
+                            <TableCell className="text-muted-foreground">{p.profile_view_count}</TableCell>
+                            <TableCell className="text-muted-foreground">
+                                {p.avg_output_position != null ? p.avg_output_position.toFixed(2) : 'Not tracked yet'}
+                            </TableCell>
+                        </TableRow>
+                    ))}
+                </AdminDataTable>
+            </div>
+
+            <div className="flex flex-col gap-3">
+                <h2 className="text-base font-semibold text-foreground">Provider Applications</h2>
+                <AdminDataTable
+                    headers={['Date', 'Contact', 'Business', 'Trade', 'Areas', 'Phone', 'Email', 'Founded', 'Status', 'Notes', 'Actions']}
+                    loading={loading}
+                    emptyText="No entries found."
+                    colSpan={11}
+                >
+                    {filtered.map((e) => (
+                        <TableRow key={e.id}>
+                            <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
+                                {new Date(e.created_at).toLocaleDateString('en-ZA', {
+                                    day: 'numeric',
+                                    month: 'short',
+                                })}
+                            </TableCell>
+                            <TableCell className="font-medium text-foreground">{e.contact_name}</TableCell>
+                            <TableCell className="text-muted-foreground">{e.business_name ?? '—'}</TableCell>
+                            <TableCell className="text-muted-foreground">{e.trade}</TableCell>
+                            <TableCell className="max-w-[140px] text-muted-foreground">
+                                <span className="line-clamp-2 text-xs">{e.areas}</span>
+                            </TableCell>
+                            <TableCell className="whitespace-nowrap text-muted-foreground">{e.phone}</TableCell>
+                            <TableCell className="text-muted-foreground">
+                                <a href={`mailto:${e.email}`} className="hover:underline">
+                                    {e.email}
+                                </a>
+                            </TableCell>
+                            <TableCell className="text-center text-muted-foreground">{e.founded_year ?? '—'}</TableCell>
+                            <TableCell><StatusBadge status={e.status} onChange={(s) => void updateStatus(e.id, s)} /></TableCell>
+                            <TableCell className="min-w-[160px]">
+                                <NotesCell
+                                    id={e.id}
+                                    initial={e.notes}
+                                    onSaved={(v) =>
+                                        setEntries((prev) =>
+                                            prev.map((x) => (x.id === e.id ? { ...x, notes: v } : x))
+                                        )
+                                    }
+                                />
+                            </TableCell>
+                            <TableCell>
+                                <Button
+                                    size="sm"
+                                    variant="secondary"
+                                    className="h-7 text-xs"
+                                    onClick={() => {
+                                        setEmailTarget(e);
+                                        setEmailTemplate('waitlist');
+                                    }}
+                                >
+                                    Email
+                                </Button>
+                            </TableCell>
+                        </TableRow>
+                    ))}
+                </AdminDataTable>
             </div>
 
             {/* Email modal */}
@@ -393,7 +409,7 @@ export default function AdminProvidersPage() {
                         <div className="flex flex-col gap-4">
                             {/* Recipient */}
                             <div className="rounded-lg border border-border/50 bg-muted/20 p-3 text-sm">
-                                <p className="font-medium text-foreground">{emailTarget.name}</p>
+                                <p className="font-medium text-foreground">{emailTarget.contact_name}</p>
                                 <p className="text-muted-foreground">{emailTarget.email}</p>
                                 <p className="text-xs text-muted-foreground">{emailTarget.trade}</p>
                             </div>

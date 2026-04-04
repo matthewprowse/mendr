@@ -65,7 +65,7 @@ export function ProGalleryTab(props: {
     } = props;
 
     return (
-        <div className="flex flex-col gap-6 mt-6">
+        <div className="flex flex-col gap-6 mt-2">
             <div className="flex flex-col gap-2">
                 <h3 className="text-lg text-foreground font-bold">Gallery</h3>
                 <p className="text-sm text-foreground">

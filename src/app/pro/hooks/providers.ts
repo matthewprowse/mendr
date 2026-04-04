@@ -7,6 +7,7 @@ import {
     isLowSignalProfileText,
     normalizeProfileTextForStorage,
 } from '@/lib/provider-profile-clean';
+import { sanitizeCustomerSummary } from '@/lib/review-summary';
 
 export function useProProvider(placeId: string) {
     const isUuid = (value: string) =>
@@ -29,10 +30,7 @@ export function useProProvider(placeId: string) {
     const [showAllOperatingHours, setShowAllOperatingHours] = useState(false);
     // R11: Enrichment display fields
     const [providerSpecialisations, setProviderSpecialisations] = useState<string[]>([]);
-    const [providerCertifications, setProviderCertifications] = useState<string[]>([]);
     const [providerHighlights, setProviderHighlights] = useState<string[]>([]);
-    const [providerHonestNote, setProviderHonestNote] = useState<string | null>(null);
-    const [providerYearsInBusiness, setProviderYearsInBusiness] = useState<number | null>(null);
     const [providerFounder, setProviderFounder] = useState<string | null>(null);
     const lastQueuedPlaceIdRef = useRef<string>('');
 
@@ -53,7 +51,7 @@ export function useProProvider(placeId: string) {
                 const selectBase =
                     'id, google_place_id, name, summary, weekday_descriptions, address, latitude, longitude, phone, website';
                 const selectExtended =
-                    'id, google_place_id, name, summary, summary_long, about, past_work, specialisations, certifications, highlights, honest_note, years_in_business, founder_or_key_person, weekday_descriptions, address, latitude, longitude, phone, website';
+                    'id, google_place_id, name, summary, summary_long, about, past_work, specialisations, highlights, key_person, weekday_descriptions, address, latitude, longitude, phone, website';
 
                 const fetchRow = async (select: string) => {
                     if (isUuid(placeId)) {
@@ -102,7 +100,7 @@ export function useProProvider(placeId: string) {
                     const aboutRaw = typeof data.about === 'string' ? data.about : '';
                     const pastWorkRaw = typeof data.past_work === 'string' ? data.past_work : '';
 
-                    const summary = sanitizeProfileText(summaryRaw);
+                    const summary = sanitizeCustomerSummary(sanitizeProfileText(summaryRaw));
                     const long =
                         summaryLongRaw.trim()
                             ? sanitizeProfileText(summaryLongRaw)
@@ -152,11 +150,8 @@ export function useProProvider(placeId: string) {
                     setShowAllOperatingHours(false);
                     // R11: Enrichment display fields
                     setProviderSpecialisations(Array.isArray(data.specialisations) ? (data.specialisations as string[]) : []);
-                    setProviderCertifications(Array.isArray(data.certifications) ? (data.certifications as string[]) : []);
                     setProviderHighlights(Array.isArray(data.highlights) ? (data.highlights as string[]) : []);
-                    setProviderHonestNote(typeof data.honest_note === 'string' && data.honest_note.trim() ? data.honest_note.trim() : null);
-                    setProviderYearsInBusiness(typeof data.years_in_business === 'number' ? data.years_in_business : null);
-                    setProviderFounder(typeof data.founder_or_key_person === 'string' && data.founder_or_key_person.trim() ? data.founder_or_key_person.trim() : null);
+                    setProviderFounder(typeof data.key_person === 'string' && data.key_person.trim() ? data.key_person.trim() : null);
                     const queuePlaceId = googlePlaceId
                         ?? (isUuid(placeId) ? null : (placeId.startsWith('places/') ? placeId : `places/${placeId}`));
                     if (queuePlaceId && lastQueuedPlaceIdRef.current !== queuePlaceId) {
@@ -182,10 +177,7 @@ export function useProProvider(placeId: string) {
                     setProviderEmail(null);
                     setProviderWebsiteRaw(null);
                     setProviderSpecialisations([]);
-                    setProviderCertifications([]);
                     setProviderHighlights([]);
-                    setProviderHonestNote(null);
-                    setProviderYearsInBusiness(null);
                     setProviderFounder(null);
                 }
             } catch {
@@ -230,10 +222,7 @@ export function useProProvider(placeId: string) {
         providerIsOpen,
         // R11: Enrichment display fields
         providerSpecialisations,
-        providerCertifications,
         providerHighlights,
-        providerHonestNote,
-        providerYearsInBusiness,
         providerFounder,
     };
 }

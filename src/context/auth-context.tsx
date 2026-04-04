@@ -27,6 +27,7 @@ export function AuthProvider({
 
     useEffect(() => {
         const AUTH_TIMEOUT_MS = 5000;
+        let attemptedAnonymousSignIn = false;
         const initSession = async () => {
             try {
                 const sessionPromise = supabase.auth.getSession();
@@ -35,6 +36,20 @@ export function AuthProvider({
                 );
                 const result = await Promise.race([sessionPromise, timeout]);
                 const session = result?.data?.session ?? null;
+
+                if (!session && !attemptedAnonymousSignIn) {
+                    attemptedAnonymousSignIn = true;
+                    try {
+                        const anonRes = await supabase.auth.signInAnonymously();
+                        const anonSession = anonRes?.data?.session ?? null;
+                        setSession(anonSession);
+                        setUser(anonRes?.data?.user ?? null);
+                        return;
+                    } catch {
+                        // Fall through to anonymous user remaining null.
+                    }
+                }
+
                 setSession(session);
                 setUser(session?.user ?? null);
             } catch {
@@ -66,7 +81,13 @@ export function AuthProvider({
 
     return (
         <AuthContext.Provider value={{ user, session, isLoading, signOut }}>
-            {children}
+            {isLoading ? (
+                <div className="flex items-center justify-center min-h-[50vh]">
+                    Loading…
+                </div>
+            ) : (
+                children
+            )}
         </AuthContext.Provider>
     );
 }

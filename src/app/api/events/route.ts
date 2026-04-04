@@ -2,7 +2,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseAdminClient } from '@/lib/supabase-server';
 import { createHash } from 'crypto';
 
-const VALID_EVENTS = ['welcome_start', 'diagnosis_complete', 'match_view', 'provider_contact'] as const;
+const VALID_EVENTS = [
+    'welcome_start',
+    'diagnosis_complete',
+    'match_view',
+    'provider_contact',
+    'provider_profile_view',
+] as const;
 type EventType = (typeof VALID_EVENTS)[number];
 
 function hashIp(ip: string): string {

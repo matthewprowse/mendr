@@ -3,8 +3,15 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { ArrowRight } from 'lucide-react';
+import { AdminPageHeader } from './_components/admin-page-header';
 
-type Stats = { newProviders: number; unreadMessages: number; todayStarts: number };
+type Stats = {
+    newProviders: number;
+    unreadMessages: number;
+    todayStarts: number;
+    pendingReviews: number;
+    pendingGallery: number;
+};
 
 function StatCard({
     label,
@@ -43,23 +50,25 @@ export default function AdminDashboard() {
     }
 
     useEffect(() => {
-        void load();
-        const iv = setInterval(load, 60_000);
+        const tick = () => {
+            window.setTimeout(() => {
+                void load();
+            }, 0);
+        };
+        tick();
+        const iv = setInterval(tick, 60_000);
         return () => clearInterval(iv);
-    }, []);
+    }, [load]);
 
     return (
-        <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6">
+        <div className="mx-auto w-full max-w-7xl px-4 pb-8 pt-4 sm:px-6 lg:px-8">
             <div className="mb-8">
-                <h1 className="text-2xl font-bold text-foreground">Dashboard</h1>
-                <p className="mt-1 text-sm text-muted-foreground">
-                    Live counts — refreshes every 60 seconds.
-                </p>
+                <AdminPageHeader title="Home" />
             </div>
 
             {loading ? (
-                <div className="grid gap-6 sm:grid-cols-3">
-                    {[1, 2, 3].map((i) => (
+                <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-5">
+                    {[1, 2, 3, 4, 5].map((i) => (
                         <div
                             key={i}
                             className="h-40 animate-pulse rounded-xl border border-border/50 bg-muted/40"
@@ -67,7 +76,7 @@ export default function AdminDashboard() {
                     ))}
                 </div>
             ) : (
-                <div className="grid gap-6 sm:grid-cols-3">
+                <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-5">
                     <StatCard
                         label="Provider Waitlist"
                         value={stats?.newProviders ?? 0}
@@ -85,6 +94,18 @@ export default function AdminDashboard() {
                         value={stats?.unreadMessages ?? 0}
                         sub="Unread messages"
                         href="/admin/contact"
+                    />
+                    <StatCard
+                        label="Pending Reviews"
+                        value={stats?.pendingReviews ?? 0}
+                        sub="Needs moderation"
+                        href="/admin/reviews"
+                    />
+                    <StatCard
+                        label="Pending Gallery"
+                        value={stats?.pendingGallery ?? 0}
+                        sub="Images awaiting approval"
+                        href="/admin/gallery"
                     />
                 </div>
             )}

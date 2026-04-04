@@ -19,6 +19,7 @@ type LandingHeaderProps = {
     logoHref?: string;
     showTrades?: boolean;
     rightSlot?: React.ReactNode;
+    logoBadge?: React.ReactNode;
 };
 
 export function LandingHeader({
@@ -26,6 +27,7 @@ export function LandingHeader({
     logoHref = '/',
     showTrades = false,
     rightSlot,
+    logoBadge,
 }: LandingHeaderProps) {
     const pathname = usePathname();
     const { user, isLoading: authLoading } = useAuth();
@@ -58,10 +60,11 @@ export function LandingHeader({
                 <div className="mx-auto flex h-16 w-full max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
                     <Link
                         href={logoHref}
-                        className="text-lg font-semibold text-foreground"
+                        className="flex items-center gap-2 text-lg font-semibold text-foreground"
                         onClick={() => setMobileOpen(false)}
                     >
-                        Scandio
+                        <span>Scandio</span>
+                        {logoBadge}
                     </Link>
 
                     {/* Desktop nav */}

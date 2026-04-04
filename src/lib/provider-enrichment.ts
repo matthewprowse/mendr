@@ -267,7 +267,6 @@ interface AiEnrichmentOutput {
     specialisations: string[];
     years_experience: number | null;
     service_areas: string[];
-    certifications: string[];
     response_profile: string;
     website_quality: 'high' | 'medium' | 'low' | 'none';
 }
@@ -281,17 +280,14 @@ interface AiEnrichmentOutput {
  * Consolidating into one call reduces Gemini usage from 3–4 calls per provider to 1
  * (plus the single batch image classification call), cutting latency and cost by ~75%.
  *
- * R11: Extended with years_in_business, founder_or_key_person, highlights, honest_note.
+ * R11: Extended with highlights.
  */
 interface CombinedEnrichmentOutput extends AiEnrichmentOutput {
     review_summary: string;
     customer_review_summary: string;
     about_business: string;
     past_work: string;
-    years_in_business: number | null;
-    founder_or_key_person: string | null;
     highlights: string[];
-    honest_note: string | null;
 }
 
 function computeProfileCompleteness(params: {
@@ -305,8 +301,7 @@ function computeProfileCompleteness(params: {
 
     const hasDeepSignals =
         params.hasWorkPhotos ||
-        (params.enrichment.specialisations?.length ?? 0) > 0 ||
-        (params.enrichment.certifications?.length ?? 0) > 0;
+        (params.enrichment.specialisations?.length ?? 0) > 0;
 
     return hasDeepSignals ? 3 : 2;
 }
@@ -343,26 +338,19 @@ Return ONLY valid JSON, no markdown:
   "bio": "2-3 factual sentences: what they do, where, what sets them apart. British English. Max 300 chars. No hollow phrases.",
   "specialisations": ["3-8 specific homeowner-facing services only. Format each as Title Case, max 4 words, no punctuation suffix, and no generic category-only terms (e.g. avoid 'Plumbing'). Keep one canonical phrase per service (no variants like 'Geyser Repair' and 'Hot Water Cylinder Repair')."],
   "years_experience": null,
-  "years_in_business": null,
-  "founder_or_key_person": null,
   "service_areas": ["suburb/area names only if explicitly mentioned — not inferred from address. Max 10."],
-  "certifications": ["specific accreditations/memberships only — e.g. 'NHBRC Registered', 'PIRB Member'. Max 8."],
   "response_profile": "One sentence on responsiveness from reviews. Max 100 chars. Empty string if unclear.",
   "website_quality": "high|medium|low|none",
   "highlights": ["3-5 concrete differentiators a homeowner cares about. Each must be one full sentence in British English ending with punctuation. Never generic."],
-  "honest_note": null,
-  "review_summary": "Exactly 2 sentences from reviews. Max 140 chars total. British English. Warm, direct, no business name, no numbers.",
-  "customer_review_summary": "3-5 sentences: overall tone, consistent praise, recurring issues if any. No business name or ratings.",
+  "review_summary": "Exactly 2 sentences from reviews. Max 140 chars total. British English. Warm, direct, no business name, no numbers, and no audience nouns (homeowners/users/customers/clients/residents).",
+  "customer_review_summary": "3-5 sentences: overall tone, consistent praise, recurring issues if any. No business name or ratings, and no audience nouns (homeowners/users/customers/clients/residents).",
   "about_business": "2-3 sentences from website content only. Don't echo reviews.",
   "past_work": "2-4 sentences: concrete job types and examples from reviews/website."
 }
 
 Rules (British English throughout):
-- years_in_business: integer from founding year or stated experience ('since 1998' → 28, '15 years in the industry' → 15). null if absent.
-- founder_or_key_person: owner/founder name anywhere in content. null if absent.
 - specialisations: strict noun phrases only; Title Case output; remove near-duplicate wording and keep the clearest canonical phrase.
 - highlights: scan for emergency callouts, pricing, qualifications, equipment, guarantees, turnaround times. Never use hollow phrases.
-- honest_note: one useful homeowner caveat — e.g. area limitations, commercial-focus, limited reviews. null if nothing relevant.
 - review_summary: hard cap 140 chars; trim to a sentence boundary if needed.`.trim();
 
     try {
@@ -482,7 +470,7 @@ export async function enrichProvider(
                 fetch(website, {
                     method: 'GET',
                     headers: {
-                        'User-Agent': 'ScandioBot/1.0 (+https://scandio.app)',
+                        'User-Agent': 'ScandioBot/1.0 (+https://scandio.co.za)',
                         Accept: 'text/html,application/xhtml+xml',
                     },
                 }),
@@ -583,7 +571,7 @@ export async function enrichProvider(
                 try {
                     const imgRes = await withTimeout(
                         fetch(imgUrl, {
-                            headers: { 'User-Agent': 'ScandioBot/1.0 (+https://scandio.app)' },
+                            headers: { 'User-Agent': 'ScandioBot/1.0 (+https://scandio.co.za)' },
                         }),
                         IMAGE_FETCH_TIMEOUT
                     ).catch(() => null);
@@ -663,7 +651,7 @@ export async function enrichProvider(
 
     console.log(`${logPrefix} Stage 4: AI enrichment ${combined ? 'succeeded' : 'failed/null'}`);
     if (combined) {
-        console.log(`${logPrefix} Stage 4: bio="${combined.bio?.slice(0, 80) ?? ''}", specialisations=${JSON.stringify(combined.specialisations)}, years_in_business=${combined.years_in_business}, founder=${combined.founder_or_key_person ?? 'null'}, highlights=${combined.highlights?.length ?? 0}, honest_note="${combined.honest_note?.slice(0, 60) ?? 'null'}"`);
+        console.log(`${logPrefix} Stage 4: bio="${combined.bio?.slice(0, 80) ?? ''}", specialisations=${JSON.stringify(combined.specialisations)}, highlights=${combined.highlights?.length ?? 0}`);
     }
 
     // Map combined output back to the shapes previously returned by separate calls.
@@ -676,7 +664,6 @@ export async function enrichProvider(
               specialisations: normalizedSpecialisations,
               years_experience: combined.years_experience,
               service_areas: combined.service_areas,
-              certifications: combined.certifications,
               response_profile: combined.response_profile,
               website_quality: combined.website_quality,
           }
@@ -707,7 +694,6 @@ export async function enrichProvider(
             specialisations: enrichment?.specialisations ?? [],
             years_experience: enrichment?.years_experience ?? null,
             service_areas: enrichment?.service_areas ?? [],
-            certifications: enrichment?.certifications ?? [],
             response_profile: enrichment?.response_profile ?? null,
             website_quality: enrichment?.website_quality ?? null,
             profile_completeness: profileCompleteness,
@@ -716,10 +702,7 @@ export async function enrichProvider(
             review_summary: reviewSummary,
             raw_scrape_text: websiteText ? websiteText.slice(0, 8_000) : null,
             // R11: Extended fields
-            years_in_business: combined?.years_in_business ?? null,
-            founder_or_key_person: combined?.founder_or_key_person ?? null,
             highlights: normalizedHighlights.length ? normalizedHighlights : null,
-            honest_note: combined?.honest_note ?? null,
             cache_version: targetCacheVersion,
             updated_at: now,
         },
@@ -742,11 +725,7 @@ export async function enrichProvider(
             // read them from providers (public table) without needing provider_cache access.
             specialisations: enrichment?.specialisations ?? [],
             service_areas: enrichment?.service_areas ?? [],
-            certifications: enrichment?.certifications ?? [],
             highlights: normalizedHighlights.length ? normalizedHighlights : null,
-            honest_note: combined?.honest_note ?? null,
-            years_in_business: combined?.years_in_business ?? null,
-            founder_or_key_person: combined?.founder_or_key_person ?? null,
             updated_at: now,
         };
 
@@ -779,6 +758,6 @@ export async function enrichProvider(
         }
     }
 
-    console.log(`${logPrefix} Enrichment complete`);
+    console.log(`${logPrefix} Enrichment Complete`);
     return { ok: true };
 }

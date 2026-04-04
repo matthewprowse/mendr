@@ -88,7 +88,6 @@ export function HomeMarketingPageClient() {
             <div className="flex min-h-screen flex-col bg-background">
                 <LandingHeader
                     navLinks={[
-                        { href: '/about', label: 'About' },
                         { href: '#how-it-works', label: 'How It Works' },
                         { href: '#value', label: 'Why Scandio' },
                         { href: '/contact', label: 'Contact' },
@@ -131,20 +130,6 @@ export function HomeMarketingPageClient() {
                             <p className="text-2xl font-semibold text-background sm:text-3xl">Most homeowners do not know what is actually wrong.</p>
                             <p className="mt-3 text-base text-background/80 sm:text-lg">That uncertainty leads to unclear quotes, repeated explanations, and wasted call-outs.</p>
                             <p className="mt-3 text-base text-background sm:text-lg">Scandio gives you a clearer starting point before the first call.</p>
-                        </div>
-                    </section>
-
-                    <section id="about" className="scroll-mt-16 bg-muted/30 py-16 sm:py-20">
-                        <div className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8 text-center">
-                            <h2 className="text-center text-2xl font-bold tracking-tight sm:text-3xl">About Scandio</h2>
-                            <p className="mt-3 text-base text-muted-foreground">
-                                Want to learn more about Scandio, the founder, how the idea started, and how the product evolved into a diagnosis-first platform? We have put the full story on a dedicated page.
-                            </p>
-                            <div className="mt-6">
-                                <Button asChild variant="outline">
-                                    <Link href="/about">Read The Full Story</Link>
-                                </Button>
-                            </div>
                         </div>
                     </section>
 
@@ -255,7 +240,7 @@ export function HomeMarketingPageClient() {
                             <div>
                                 <p className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Explore</p>
                                 <nav className="mt-3 flex flex-col gap-2">
-                                    {([['About', '/about'], ['How It Works', '#how-it-works'], ['Why Scandio', '#value'], ['FAQ', '#faq']] as [string, string][]).map(([label, href]) => (
+                                    {([['How It Works', '#how-it-works'], ['Why Scandio', '#value'], ['FAQ', '#faq']] as [string, string][]).map(([label, href]) => (
                                         <Link key={`${label}-${href}`} href={href} className="text-sm text-muted-foreground transition-colors hover:text-foreground">
                                             {label}
                                         </Link>

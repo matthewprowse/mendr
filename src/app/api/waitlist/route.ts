@@ -27,7 +27,7 @@ export async function POST(req: NextRequest) {
     const phone = typeof body.phone === 'string' ? body.phone.trim() : '';
     const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
     const areas = typeof body.areas === 'string' ? body.areas.trim() : '';
-    const years_experience = body.years_experience ? Number(body.years_experience) : null;
+    const founded_year = body.years_experience ? new Date().getFullYear() - Number(body.years_experience) : null;
     const message = typeof body.message === 'string' ? body.message.trim() || null : null;
     const source = typeof body.source === 'string' ? body.source.trim() : null;
 
@@ -44,20 +44,28 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'Areas too long' }, { status: 400 });
     if (message && message.length > 2000)
         return NextResponse.json({ error: 'Message too long' }, { status: 400 });
-    if (years_experience !== null && (isNaN(years_experience) || years_experience < 0 || years_experience > 100))
+    if (founded_year !== null && (isNaN(founded_year) || founded_year < 1900 || founded_year > 2100))
         return NextResponse.json({ error: 'Invalid years of experience' }, { status: 400 });
 
     const admin = await createSupabaseAdminClient();
 
-    const { error } = await admin.from('provider_waitlist').insert({
-        name,
-        business_name: business_name || null,
-        trade,
-        phone,
+    // Legacy endpoint: keep it working, but store into provider_applications so we only have one intake table.
+    const { error } = await admin.from('provider_applications').insert({
+        business_name: business_name || name,
+        contact_name: name,
         email,
+        address: areas, // best-effort: we don't have structured address fields on this legacy payload
         areas,
-        years_experience,
-        message,
+        phone,
+        website: null,
+        trade,
+        trade_description: message || '—',
+        founded_year,
+        team_size: null,
+        registration_number: null,
+        certifications: null,
+        highlights: null,
+        referral: source && VALID_SOURCES.includes(source as any) ? source : null,
         source: source && VALID_SOURCES.includes(source as any) ? source : null,
         status: 'new',
     });

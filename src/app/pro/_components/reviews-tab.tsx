@@ -8,9 +8,70 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
 import { SCANDIO_CATEGORY_ROWS, REVIEWS_PAGE_SIZE } from '../_constants/page';
 import type { CategoryKey, ReviewCard } from '../_types/page';
-import { CategorySliderRow } from './category-slider-row';
 import { ReviewsPaginationFooter } from './pagination-footer';
 import { StarRatingDisplay } from './star-rating';
+import { Star } from 'lucide-react';
+
+function categoryDescription(key: CategoryKey): string {
+    switch (key) {
+        case 'punctuality':
+            return 'How reliably the work starts and stays on schedule.';
+        case 'cleanliness':
+            return 'How tidy the site stays during and after the job.';
+        case 'work_quality':
+            return 'How well the completed work matches expectations.';
+        case 'quote_accuracy':
+            return 'How closely the final cost matches the agreed scope/quote.';
+        default:
+            return '';
+    }
+}
+
+function CategoryStarRatingRow({
+    rowKey,
+    label,
+    value,
+    onChange,
+}: {
+    rowKey: CategoryKey;
+    label: string;
+    value: number;
+    onChange: (n: number) => void;
+}) {
+    return (
+        <div className="flex flex-col gap-1 rounded-lg border border-border/50 bg-background p-3">
+            <div className="flex flex-col gap-0.5">
+                <div className="min-w-0">
+                    <div className="text-sm font-medium text-foreground">{label}</div>
+                    <div className="mt-0.5 text-xs text-muted-foreground">{categoryDescription(rowKey)}</div>
+                </div>
+            </div>
+            <div className="flex items-center gap-1">
+                {[1, 2, 3, 4, 5].map((n) => {
+                    const active = value >= n;
+                    return (
+                        <button
+                            key={n}
+                            type="button"
+                            aria-label={`${label}: ${n} out of 5`}
+                            onClick={() => onChange(n)}
+                            className={[
+                                'inline-flex h-8 w-8 items-center justify-center rounded-md transition-colors',
+                                active ? 'bg-yellow-500/10 text-yellow-500' : 'bg-background text-muted-foreground hover:bg-muted/50',
+                            ].join(' ')}
+                        >
+                            <Star
+                                className="h-4 w-4"
+                                fill={active ? 'currentColor' : 'none'}
+                                strokeWidth={active ? 2.2 : 1.6}
+                            />
+                        </button>
+                    );
+                })}
+            </div>
+        </div>
+    );
+}
 
 export function ProReviewsTab(props: {
     isOperatingHoursLoading: boolean;
@@ -92,7 +153,7 @@ export function ProReviewsTab(props: {
         'h-9 w-9 rounded-full bg-secondary flex items-center justify-center text-sm font-medium text-muted-foreground';
 
     return (
-        <div className="flex flex-col gap-6 mt-6">
+        <div className="flex flex-col gap-6 mt-2">
             <div className="flex flex-col gap-2">
                 <h3 className="text-lg text-foreground font-bold">Reviews</h3>
                 {isOperatingHoursLoading ? (
@@ -107,9 +168,9 @@ export function ProReviewsTab(props: {
                 )}
             </div>
 
-            {(isReviewsLoading || scandioReviewsCount > 0) && (
+            {(isReviewsLoading || scandioReviewsCount > 0 || isOperatingHoursLoading) && (
                 <div className="grid grid-cols-2 gap-2">
-                    {isReviewsLoading
+                    {isReviewsLoading || isOperatingHoursLoading
                         ? SCANDIO_CATEGORY_ROWS.map((row) => (
                               <div key={row.key} className="flex flex-col px-4 p-3 border border-input/75 rounded-lg">
                                   <Skeleton className="mb-2 h-4 w-28" />
@@ -133,7 +194,7 @@ export function ProReviewsTab(props: {
                 <div className="flex flex-col gap-3">
                     <div className="flex flex-row items-center justify-between gap-3">
                         <h6 className="text-md text-foreground font-bold">Scandio Reviews</h6>
-                        {isReviewsLoading ? (
+                        {isReviewsLoading || isOperatingHoursLoading ? (
                             <Skeleton className="h-6 w-9 rounded-full" />
                         ) : (
                             <Badge variant="secondary">{scandioReviewsCount}</Badge>
@@ -153,51 +214,92 @@ export function ProReviewsTab(props: {
                 <Dialog open={shareOpen} onOpenChange={setShareOpen}>
                     <DialogContent showCloseButton={false} className="max-h-[min(90vh,640px)] overflow-y-auto sm:max-w-lg">
                         <form onSubmit={onShareSubmit} className="flex flex-col gap-6">
-                            <DialogHeader className="text-left gap-3">
+                            <DialogHeader className="text-left gap-1">
                                 <DialogTitle className="text-left leading-none">Share Experience</DialogTitle>
                                 <DialogDescription>
-                                    Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.
+                                    Add a few details about the work you booked. After moderation, your experience will appear in the provider profile.
                                 </DialogDescription>
                             </DialogHeader>
-                            <div className="flex flex-col gap-3">
+                            <div className="flex flex-col gap-2">
                                 <Label htmlFor="reviewer-name">Full Name</Label>
-                                <Input value={reviewerName} onChange={(e) => setReviewerName(e.target.value)} className="text-xs h-10" required />
+                                <Input
+                                    id="reviewer-name"
+                                    value={reviewerName}
+                                    onChange={(e) => setReviewerName(e.target.value)}
+                                    className="h-10"
+                                    required
+                                    maxLength={100}
+                                    placeholder="Your name"
+                                />
                             </div>
-                            <div className="flex flex-col gap-3">
+                            <div className="flex flex-col gap-2">
                                 <Label htmlFor="review-title">Experience Title</Label>
-                                <Input value={reviewTitle} onChange={(e) => setReviewTitle(e.target.value)} className="text-xs h-10" />
+                                <Input
+                                    id="review-title"
+                                    value={reviewTitle}
+                                    onChange={(e) => setReviewTitle(e.target.value)}
+                                    className="h-10"
+                                    maxLength={200}
+                                    placeholder="Short summary (optional)"
+                                />
                             </div>
-                            <div className="flex flex-col gap-3">
+                            <div className="flex flex-col gap-2">
                                 <Label htmlFor="review-body">Experience Description</Label>
-                                <Textarea value={reviewBody} onChange={(e) => setReviewBody(e.target.value)} className="text-xs min-h-[64px]" required />
+                                <Textarea
+                                    id="review-body"
+                                    value={reviewBody}
+                                    onChange={(e) => setReviewBody(e.target.value)}
+                                    className="min-h-[96px] resize-none text-sm [font-size:16px] md:text-sm"
+                                    rows={4}
+                                    required
+                                    maxLength={5000}
+                                    placeholder="What was booked, what went well, and what others should know?"
+                                />
                             </div>
                             <Separator />
-                            <div className="flex flex-col items-center justify-between gap-3">
+                            <div className="flex items-center justify-between gap-4">
                                 <Label>Average</Label>
                                 <StarRatingDisplay rating={Math.max(0, Math.min(5, categoryAverage))} size="md" />
                             </div>
                             <div className="flex flex-col gap-4">
-                                {SCANDIO_CATEGORY_ROWS.map((row) => (
-                                    <CategorySliderRow
-                                        key={row.key}
-                                        rowKey={row.key}
-                                        label={row.label}
-                                        value={categoryRatings[row.key]}
-                                        onChange={(n) => setCategoryRatings((prev) => ({ ...prev, [row.key]: n }))}
-                                    />
-                                ))}
+                                <p className="text-xs text-muted-foreground">
+                                    Rate each area below. The descriptions explain what each score reflects.
+                                </p>
+                                <div className="grid grid-cols-2 gap-3">
+                                    {SCANDIO_CATEGORY_ROWS.map((row) => (
+                                        <CategoryStarRatingRow
+                                            key={row.key}
+                                            rowKey={row.key}
+                                            label={row.label}
+                                            value={categoryRatings[row.key]}
+                                            onChange={(n) =>
+                                                setCategoryRatings((prev) => ({ ...prev, [row.key]: n }))
+                                            }
+                                        />
+                                    ))}
+                                </div>
                             </div>
                             {submitError ? <p className="text-sm text-destructive">{submitError}</p> : null}
-                            {submitSuccess ? <p className="text-sm text-foreground">Thanks — your review was submitted and will appear after moderation.</p> : null}
+                            {submitSuccess ? (
+                                <p className="text-sm text-foreground">
+                                    Thanks — your experience was submitted and will appear after moderation.
+                                </p>
+                            ) : null}
                             <DialogFooter className="w-full flex-row gap-2 sm:justify-stretch">
                                 <Button type="button" variant="ghost" className="h-10 min-h-10 flex-1" onClick={() => setShareOpen(false)} disabled={isSubmitting}>Cancel</Button>
-                                <Button type="submit" className="h-10 min-h-10 flex-1" disabled={isSubmitting || !resolvedProviderId}>{isSubmitting ? 'Submitting…' : 'Submit Experience'}</Button>
+                                <Button
+                                    type="submit"
+                                    className="h-10 min-h-10 flex-1"
+                                    disabled={isSubmitting || !resolvedProviderId}
+                                >
+                                    {isSubmitting ? 'Submitting…' : 'Submit Experience'}
+                                </Button>
                             </DialogFooter>
                         </form>
                     </DialogContent>
                 </Dialog>
 
-                {isReviewsLoading ? (
+                {isReviewsLoading || isOperatingHoursLoading ? (
                     Array.from({ length: 2 }).map((_, i) => (
                         <div key={`scandio-review-skeleton-${i}`} className={reviewCardClass}>
                             <div className={reviewHeaderClass}>
@@ -249,13 +351,13 @@ export function ProReviewsTab(props: {
             <div className="flex flex-col gap-6">
                 <div className="flex flex-row items-center justify-between gap-3">
                     <h6 className="text-md text-foreground font-bold">Google Reviews</h6>
-                    {isReviewsLoading ? (
+                    {isReviewsLoading || isOperatingHoursLoading ? (
                         <Skeleton className="h-6 w-9 rounded-full" />
                     ) : (
                         <Badge variant="secondary">{googleReviewsCount}</Badge>
                     )}
                 </div>
-                {isReviewsLoading ? (
+                {isReviewsLoading || isOperatingHoursLoading ? (
                     Array.from({ length: 3 }).map((_, i) => (
                         <div key={`google-review-skeleton-${i}`} className={reviewCardClass}>
                             <div className={reviewHeaderClass}>

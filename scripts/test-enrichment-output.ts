@@ -19,14 +19,11 @@ interface EnrichmentOutput {
     bio: string;
     specialisations: string[];
     years_experience: number | null;
-    years_in_business: number | null;
-    founder_or_key_person: string | null;
     service_areas: string[];
     certifications: string[];
     response_profile: string;
     website_quality: string;
     highlights: string[];
-    honest_note: string | null;
     review_summary: string;
     customer_review_summary: string;
     about_business: string;
@@ -91,14 +88,11 @@ Return ONLY a valid JSON object — no markdown, no explanation, no code fences:
   "bio": "2-3 sentences. Concrete and factual — what they do, where they operate, what makes them stand out. British English. Max 300 chars. No generic phrases like 'committed to excellence'. Empty string only if there is truly nothing to say.",
   "specialisations": ["up to 8 specific service specialisations extracted from actual content. 'Burst pipe repair', 'geyser installation', 'drain unblocking' beats 'plumbing services'. Prefer specific over category names."],
   "years_experience": null,
-  "years_in_business": null,
-  "founder_or_key_person": null,
   "service_areas": ["suburb or area names they serve. Only if explicitly mentioned in content. Max 10. Empty array if not stated."],
   "certifications": ["specific registrations, accreditations, memberships mentioned. E.g. 'NHBRC Registered', 'PIRB Member', 'Master Plumber Association', 'ECSA'. Max 8. Empty array if none mentioned."],
   "response_profile": "One sentence on their responsiveness or communication style derived from reviews. Max 100 chars. Empty string if unclear.",
   "website_quality": "high|medium|low|none",
   "highlights": ["3-5 specific and concrete selling points that would make a homeowner choose this provider. Extracted from actual content. 'Same-day callouts available', 'PIRB registered', '20+ years experience', 'Free quote within 2 hours' beats 'great service'. Must have at least 1 entry if any meaningful content exists."],
-  "honest_note": null,
   "review_summary": "Exactly 2 complete sentences summarising what customers say. Max 140 chars total. British English. Warm and direct. No business name, no rating numbers.",
   "customer_review_summary": "3-5 sentences: proportional sentiment — overall tone, consistent praise, recurring complaints if any. No business name or rating numbers.",
   "about_business": "2-3 sentences about what they do and who they serve. Based primarily on website content. Do not echo review sentiment.",
@@ -109,10 +103,7 @@ Extraction rules:
 - British English throughout.
 - bio: no filler. Facts only. Extract actual trade specialties, location focus, and years if available.
 - specialisations: scan the whole content — headings, body copy, review mentions, JSON-LD. Extract noun phrases for actual services.
-- years_in_business: integer only. Look for founding year ('established 2009' → ${new Date().getFullYear()}-2009), phrases like '15 years in the industry', 'since 1998'. null if not found.
-- founder_or_key_person: first name or full name of the owner/founder mentioned anywhere. null if not found.
 - highlights: be aggressive. Look for emergency availability, pricing transparency, qualifications, equipment, service guarantees, turnaround times, locations, any concrete differentiator.
-- honest_note: one sentence of genuinely useful context for a homeowner. null if nothing relevant.
 - service_areas: suburb/area/region names only. Not province or country level.
 - website_quality: high = rich services info, team, contact, portfolio; medium = basic but navigable; low = minimal or clearly stale; none = blocked.`.trim();
 
@@ -179,14 +170,11 @@ async function main() {
         }
 
         console.log(`bio:\n  ${out.bio}`);
-        console.log(`\nyears_in_business: ${out.years_in_business}`);
-        console.log(`founder_or_key_person: ${out.founder_or_key_person}`);
         console.log(`website_quality: ${out.website_quality}`);
         console.log(`\nspecialisations:\n  ${out.specialisations.map((s) => `• ${s}`).join('\n  ')}`);
         console.log(`\nservice_areas:\n  ${out.service_areas.length ? out.service_areas.map((s) => `• ${s}`).join('\n  ') : '(none)'}`);
         console.log(`\ncertifications:\n  ${out.certifications.length ? out.certifications.map((s) => `• ${s}`).join('\n  ') : '(none)'}`);
         console.log(`\nhighlights:\n  ${out.highlights.map((s) => `✓ ${s}`).join('\n  ')}`);
-        console.log(`\nhonest_note: ${out.honest_note ?? '(null)'}`);
         console.log(`\nresponse_profile: ${out.response_profile}`);
         console.log(`\nreview_summary:\n  ${out.review_summary}`);
         console.log(`\nabout_business:\n  ${out.about_business}`);

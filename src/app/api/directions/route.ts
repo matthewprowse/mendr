@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createSupabaseServerClient, createSupabaseAdminClient } from '@/lib/supabase-server';
+import { createSupabaseAdminClient } from '@/lib/supabase-server';
 import { checkRateLimit } from '@/lib/rate-limit-config';
 
 const DIRECTIONS_CACHE_DAYS = 7;
@@ -44,9 +44,9 @@ export async function GET(req: NextRequest) {
 
     const queryKey = directionsCacheKey(origin, destination);
     try {
-        const supabase = await createSupabaseServerClient();
+        const admin = await createSupabaseAdminClient();
         const cutoff = new Date(Date.now() - DIRECTIONS_CACHE_DAYS * 24 * 60 * 60 * 1000).toISOString();
-        const { data: cached } = await supabase
+        const { data: cached } = await admin
             .from('directions_cache')
             .select('distance_text, distance_meters, duration_text, duration_seconds')
             .eq('query_key', queryKey)

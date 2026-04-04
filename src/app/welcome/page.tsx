@@ -149,7 +149,7 @@ export default function WelcomePage() {
     }, []);
 
     return (
-        <div className="h-dvh overflow-hidden overscroll-none flex flex-col bg-background pb-4">
+        <div className="h-dvh overflow-hidden overscroll-none flex flex-col bg-background">
             <FlowStepHeader
                 step={1}
                 onBack={null}

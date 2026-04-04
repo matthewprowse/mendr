@@ -10,14 +10,14 @@ function checkAdminCookie(req: NextRequest): boolean {
     return session === Buffer.from(password).toString('base64');
 }
 
-// GET — list all waitlist entries, newest first.
+// GET — list all provider applications, newest first.
 export async function GET(req: NextRequest) {
     if (!checkAdminCookie(req)) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
     const admin = await createSupabaseAdminClient();
     const { data, error } = await admin
-        .from('provider_waitlist')
+        .from('provider_applications')
         .select('*')
         .order('created_at', { ascending: false });
 
@@ -44,7 +44,7 @@ export async function PATCH(req: NextRequest) {
     }
 
     const admin = await createSupabaseAdminClient();
-    const { error } = await admin.from('provider_waitlist').update(patch).eq('id', id);
+    const { error } = await admin.from('provider_applications').update(patch).eq('id', id);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     return NextResponse.json({ ok: true });
 }

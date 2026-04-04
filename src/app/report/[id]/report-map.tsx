@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { setOptions, importLibrary } from '@googlemaps/js-api-loader';
+import { importLibrary } from '@googlemaps/js-api-loader';
+import { ensureGoogleMapsLoaderOptions } from '@/lib/google-maps-js-loader';
 
 type ReportMapProps = {
     apiKey: string;
@@ -25,7 +26,7 @@ export function ReportMap({ apiKey, origin, destination }: ReportMapProps) {
 
         let hiddenPanel: HTMLDivElement | null = null;
 
-        setOptions({ key: apiKey, v: 'weekly' });
+        ensureGoogleMapsLoaderOptions(apiKey);
         const loadLibs =
             origin && typeof dest !== 'string'
                 ? [importLibrary('maps'), importLibrary('routes')]

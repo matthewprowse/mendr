@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -37,6 +37,13 @@ export default function WelcomePage() {
     const providerTitleRef = useRef<HTMLDivElement>(null);
     const [isUploading, setIsUploading] = useState(false);
     const [contactOpen, setContactOpen] = useState(false);
+    const [activeTab, setActiveTab] = useState<'about' | 'reviews' | 'gallery'>('about');
+    const isFirstTabEffect = useRef(true);
+
+    const aboutSectionRef = useRef<HTMLDivElement>(null);
+    const reviewsSectionRef = useRef<HTMLDivElement>(null);
+    const gallerySectionRef = useRef<HTMLDivElement>(null);
+    const tabsStickyRef = useRef<HTMLDivElement>(null);
 
     const {
         providerName,
@@ -48,16 +55,14 @@ export default function WelcomePage() {
         providerPhone,
         providerEmail,
         providerWebsiteRaw,
+        isProviderLoading,
         isOperatingHoursLoading,
         operatingHoursByDay,
         showAllOperatingHours,
         setShowAllOperatingHours,
         providerIsOpen,
         providerSpecialisations,
-        providerCertifications,
         providerHighlights,
-        providerHonestNote,
-        providerYearsInBusiness,
     } = useProProvider(placeId);
 
     const {
@@ -243,6 +248,54 @@ export default function WelcomePage() {
         }
     };
 
+    useEffect(() => {
+        // Don't jump on first render; only on user tab changes.
+        if (isFirstTabEffect.current) {
+            isFirstTabEffect.current = false;
+            return;
+        }
+
+        let cancelled = false;
+
+        const getSectionEl = () =>
+            activeTab === 'about'
+                ? aboutSectionRef.current
+                : activeTab === 'reviews'
+                  ? reviewsSectionRef.current
+                  : gallerySectionRef.current;
+
+        const tryScroll = (attempt: number) => {
+            if (cancelled) return;
+
+            const el = getSectionEl();
+            const tabsStickyEl = tabsStickyRef.current;
+            if (!el || !tabsStickyEl) {
+                if (attempt < 10) window.setTimeout(() => tryScroll(attempt + 1), 0);
+                return;
+            }
+
+            const elRect = el.getBoundingClientRect();
+            const tabsRect = tabsStickyEl.getBoundingClientRect();
+
+            // desired: section wrapper top should sit just below the pinned tabs wrapper
+            const desiredElTopInViewport = tabsRect.top + tabsRect.height;
+            const currentScrollY = window.scrollY || 0;
+            const targetY = currentScrollY + (desiredElTopInViewport - elRect.top);
+
+            // Clamp to document bounds
+            const maxY = Math.max(0, document.body.scrollHeight - window.innerHeight);
+            const clamped = Math.max(0, Math.min(targetY, maxY));
+
+            window.scrollTo({ top: clamped, behavior: 'smooth' });
+        };
+
+        window.setTimeout(() => tryScroll(0), 0);
+
+        return () => {
+            cancelled = true;
+        };
+    }, [activeTab]);
+
     return (
         <main className="flex flex-col gap-6 p-4 pt-22 pb-22">
             <div
@@ -252,13 +305,34 @@ export default function WelcomePage() {
                 <Button variant="secondary" size="icon" className="h-10 w-10" onClick={() => router.back()}>
                     <ArrowLeft className="size-5" />
                 </Button>
-                <h3 className="text-lg text-foreground font-semibold truncate max-w-[min(280px,55vw)] text-center">
-                    {showProviderInHeader ? providerName || 'Company Name' : 'Scandio'}
+                <h3 className="truncate text-center text-lg font-semibold text-foreground max-w-[min(300px,58vw)]">
+                    {showProviderInHeader ? (
+                        isProviderLoading ? (
+                            <Skeleton className="h-5 w-40 mx-auto" />
+                        ) : (
+                            providerName || 'Provider'
+                        )
+                    ) : (
+                        <span className="inline-flex items-center gap-2">
+                            <span>Scandio</span>
+                            <Badge variant="secondary">Pro</Badge>
+                        </span>
+                    )}
                 </h3>
-                <Button variant="ghost" size="icon" className="hover:bg-transparent" />
+                {showProviderInHeader ? (
+                    isProviderLoading ? (
+                        <Skeleton className="h-8 w-20 rounded-full" />
+                    ) : (
+                        <Badge variant="secondary">
+                            {providerIsOpen === true ? 'Open' : providerIsOpen === false ? 'Closed' : '—'}
+                        </Badge>
+                    )
+                ) : (
+                    <Button variant="ghost" size="icon" className="hover:bg-transparent" />
+                )}
             </div>
 
-            {isGalleryLoading || isSyncingGoogleGallery ? (
+            {isProviderLoading || isGalleryLoading || isSyncingGoogleGallery ? (
                 <Skeleton className="h-48 w-full rounded-lg" />
             ) : bannerImage ? (
                 <div className="relative h-48 w-full overflow-hidden rounded-lg bg-secondary">
@@ -274,125 +348,147 @@ export default function WelcomePage() {
             )}
             <div className="flex flex-col gap-2">
                 <div ref={providerTitleRef} className="flex flex-row justify-between items-center">
-                    <h1 className="text-2xl text-foreground font-bold">{providerName || 'Company Name'}</h1>
-                    <Badge variant="secondary">
-                        {providerIsOpen === true ? 'Open' : providerIsOpen === false ? 'Closed' : '—'}
-                    </Badge>
+                    <h1 className="text-2xl text-foreground font-bold">
+                        {isProviderLoading ? <Skeleton className="h-8 w-56" /> : providerName || 'Provider'}
+                    </h1>
+                    {isProviderLoading ? (
+                        <Skeleton className="h-8 w-24 rounded-full" />
+                    ) : (
+                        <Badge variant="secondary">
+                            {providerIsOpen === true ? 'Open' : providerIsOpen === false ? 'Closed' : '—'}
+                        </Badge>
+                    )}
                 </div>
-                <p className="text-sm text-muted-foreground">
-                    {providerSummary?.trim()
-                        ? providerSummary.trim()
-                        : 'Short customer summary from reviews will appear here when available.'}
-                </p>
+                {isProviderLoading ? (
+                    <div className="flex flex-col gap-2">
+                        <Skeleton className="h-4 w-5/6" />
+                        <Skeleton className="h-4 w-3/4" />
+                    </div>
+                ) : (
+                    <p className="text-sm text-muted-foreground">
+                        {providerSummary?.trim()
+                            ? providerSummary.trim()
+                            : 'Short customer summary from reviews will appear here when available.'}
+                    </p>
+                )}
             </div>
 
-            <Tabs defaultValue="about" className="w-full">
-                <TabsList className="grid h-10 w-full grid-cols-3">
-                    <TabsTrigger
-                        value="about"
-                        className="h-10"
-                    >
-                        About
-                    </TabsTrigger>
-                    <TabsTrigger
-                        value="reviews"
-                        className="h-10"
-                    >
-                        Reviews
-                    </TabsTrigger>
-                    <TabsTrigger
-                        value="gallery"
-                        className="h-10"
-                    >
-                        Gallery
-                    </TabsTrigger>
-                </TabsList>
+            <Tabs
+                value={activeTab}
+                onValueChange={(v) => setActiveTab(v as 'about' | 'reviews' | 'gallery')}
+                className="w-full"
+            >
+                <div ref={tabsStickyRef} className="sticky top-[72px] z-40 -mx-4 bg-background px-4 pt-0 pb-4 backdrop-blur">
+                    <TabsList className="grid h-10 w-full grid-cols-3 items-stretch">
+                        <TabsTrigger
+                            value="about"
+                            className="h-full min-h-0"
+                        >
+                            About
+                        </TabsTrigger>
+                        <TabsTrigger
+                            value="reviews"
+                            className="h-full min-h-0"
+                        >
+                            Reviews
+                        </TabsTrigger>
+                        <TabsTrigger
+                            value="gallery"
+                            className="h-full min-h-0"
+                        >
+                            Gallery
+                        </TabsTrigger>
+                    </TabsList>
+                </div>
 
                 <TabsContent value="about">
-                    <ProAboutTab
-                        operatingHoursByDay={operatingHoursByDay}
-                        isOperatingHoursLoading={isOperatingHoursLoading}
-                        showAllOperatingHours={showAllOperatingHours}
-                        setShowAllOperatingHours={setShowAllOperatingHours}
-                        hasMapCoords={hasMapCoords}
-                        mapsApiKey={mapsApiKey}
-                        providerName={providerName}
-                        providerAddress={providerAddress}
-                        providerLat={providerLat}
-                        providerLng={providerLng}
-                        mapEmbedSrc={mapEmbedSrc}
-                        addressDisplayLine={addressDisplayLine}
-                        directionsHref={directionsHref}
-                        profileSummaryLong={providerSummaryLong}
-                        specialisations={providerSpecialisations}
-                        certifications={providerCertifications}
-                        highlights={providerHighlights}
-                        honestNote={providerHonestNote}
-                        yearsInBusiness={providerYearsInBusiness}
-                    />
+                    <div ref={aboutSectionRef}>
+                        <ProAboutTab
+                            operatingHoursByDay={operatingHoursByDay}
+                            isOperatingHoursLoading={isOperatingHoursLoading}
+                            showAllOperatingHours={showAllOperatingHours}
+                            setShowAllOperatingHours={setShowAllOperatingHours}
+                            hasMapCoords={hasMapCoords}
+                            mapsApiKey={mapsApiKey}
+                            providerName={providerName}
+                            providerAddress={providerAddress}
+                            providerLat={providerLat}
+                            providerLng={providerLng}
+                            mapEmbedSrc={mapEmbedSrc}
+                            addressDisplayLine={addressDisplayLine}
+                            directionsHref={directionsHref}
+                            profileSummaryLong={providerSummaryLong}
+                            specialisations={providerSpecialisations}
+                            highlights={providerHighlights}
+                        />
+                    </div>
                 </TabsContent>
 
                 <TabsContent value="reviews">
-                    <ProReviewsTab
-                        isOperatingHoursLoading={isOperatingHoursLoading}
-                        providerSummary={providerSummary}
-                        isReviewsLoading={isReviewsLoading}
-                        scandioReviewsCount={scandioReviewTotalFromScandio}
-                        googleReviewsCount={googleReviewTotalFromGoogle}
-                        scandioCategoryAggregates={scandioCategoryAggregates}
-                        resolvedProviderId={resolvedProviderId}
-                        shareOpen={shareOpen}
-                        setShareOpen={setShareOpen}
-                        reviewerName={reviewerName}
-                        setReviewerName={setReviewerName}
-                        reviewTitle={reviewTitle}
-                        setReviewTitle={setReviewTitle}
-                        reviewBody={reviewBody}
-                        setReviewBody={setReviewBody}
-                        categoryRatings={categoryRatings}
-                        setCategoryRatings={setCategoryRatings}
-                        categoryAverage={categoryAverage}
-                        submitError={submitError}
-                        submitSuccess={submitSuccess}
-                        isSubmitting={isSubmitting}
-                        onShareSubmit={handleShareSubmit}
-                        scandioReviewsShown={scandioReviewsShown}
-                        googleReviewsShown={googleReviewsShown}
-                        scandioReviewCardsLength={scandioReviewCards.length}
-                        googleReviewCardsLength={googleReviewCards.length}
-                        scandioReviewsVisibleCount={scandioReviewsVisibleCount}
-                        googleReviewsVisibleCount={googleReviewsVisibleCount}
-                        setScandioReviewsVisibleCount={setScandioReviewsVisibleCount}
-                        setGoogleReviewsVisibleCount={setGoogleReviewsVisibleCount}
-                        providerGooglePlaceId={providerGooglePlaceId}
-                    />
+                    <div ref={reviewsSectionRef}>
+                        <ProReviewsTab
+                            isOperatingHoursLoading={isOperatingHoursLoading}
+                            providerSummary={providerSummary}
+                            isReviewsLoading={isReviewsLoading}
+                            scandioReviewsCount={scandioReviewTotalFromScandio}
+                            googleReviewsCount={googleReviewTotalFromGoogle}
+                            scandioCategoryAggregates={scandioCategoryAggregates}
+                            resolvedProviderId={resolvedProviderId}
+                            shareOpen={shareOpen}
+                            setShareOpen={setShareOpen}
+                            reviewerName={reviewerName}
+                            setReviewerName={setReviewerName}
+                            reviewTitle={reviewTitle}
+                            setReviewTitle={setReviewTitle}
+                            reviewBody={reviewBody}
+                            setReviewBody={setReviewBody}
+                            categoryRatings={categoryRatings}
+                            setCategoryRatings={setCategoryRatings}
+                            categoryAverage={categoryAverage}
+                            submitError={submitError}
+                            submitSuccess={submitSuccess}
+                            isSubmitting={isSubmitting}
+                            onShareSubmit={handleShareSubmit}
+                            scandioReviewsShown={scandioReviewsShown}
+                            googleReviewsShown={googleReviewsShown}
+                            scandioReviewCardsLength={scandioReviewCards.length}
+                            googleReviewCardsLength={googleReviewCards.length}
+                            scandioReviewsVisibleCount={scandioReviewsVisibleCount}
+                            googleReviewsVisibleCount={googleReviewsVisibleCount}
+                            setScandioReviewsVisibleCount={setScandioReviewsVisibleCount}
+                            setGoogleReviewsVisibleCount={setGoogleReviewsVisibleCount}
+                            providerGooglePlaceId={providerGooglePlaceId}
+                        />
+                    </div>
                 </TabsContent>
 
                 <TabsContent value="gallery">
-                    <ProGalleryTab
-                        resolvedProviderId={resolvedProviderId}
-                        galleryUploading={galleryUploading}
-                        galleryAddOpen={galleryAddOpen}
-                        setGalleryAddOpen={setGalleryAddOpen}
-                        galleryDraftItems={galleryDraftItems}
-                        setGalleryDraftItems={setGalleryDraftItems}
-                        galleryModalError={galleryModalError}
-                        setGalleryModalError={setGalleryModalError}
-                        galleryModalSuccess={galleryModalSuccess}
-                        setGalleryModalSuccess={setGalleryModalSuccess}
-                        galleryModalInputRef={galleryModalInputRef}
-                        handleGalleryModalFiles={handleGalleryModalFiles}
-                        openGalleryAddDialog={openGalleryAddDialog}
-                        isGalleryLoading={isGalleryLoading}
-                        isSyncingGoogleGallery={isSyncingGoogleGallery}
-                        galleryGridImages={galleryGridImages}
-                        galleryImages={galleryImages}
-                        setLightbox={setLightbox}
-                        removeGalleryDraftItem={removeGalleryDraftItem}
-                        updateGalleryDraftCaption={updateGalleryDraftCaption}
-                        handleGalleryModalSubmit={handleGalleryModalSubmit}
-                        lightbox={lightbox}
-                    />
+                    <div ref={gallerySectionRef}>
+                        <ProGalleryTab
+                            resolvedProviderId={resolvedProviderId}
+                            galleryUploading={galleryUploading}
+                            galleryAddOpen={galleryAddOpen}
+                            setGalleryAddOpen={setGalleryAddOpen}
+                            galleryDraftItems={galleryDraftItems}
+                            setGalleryDraftItems={setGalleryDraftItems}
+                            galleryModalError={galleryModalError}
+                            setGalleryModalError={setGalleryModalError}
+                            galleryModalSuccess={galleryModalSuccess}
+                            setGalleryModalSuccess={setGalleryModalSuccess}
+                            galleryModalInputRef={galleryModalInputRef}
+                            handleGalleryModalFiles={handleGalleryModalFiles}
+                            openGalleryAddDialog={openGalleryAddDialog}
+                            isGalleryLoading={isGalleryLoading}
+                            isSyncingGoogleGallery={isSyncingGoogleGallery}
+                            galleryGridImages={galleryGridImages}
+                            galleryImages={galleryImages}
+                            setLightbox={setLightbox}
+                            removeGalleryDraftItem={removeGalleryDraftItem}
+                            updateGalleryDraftCaption={updateGalleryDraftCaption}
+                            handleGalleryModalSubmit={handleGalleryModalSubmit}
+                            lightbox={lightbox}
+                        />
+                    </div>
                 </TabsContent>
             </Tabs>
 

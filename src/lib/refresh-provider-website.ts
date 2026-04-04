@@ -86,7 +86,7 @@ export async function refreshProviderWebsiteById(id: string): Promise<RefreshPro
     const res = await fetch(website, {
         method: 'GET',
         headers: {
-            'User-Agent': 'ScandioBot/1.0 (+https://scandio.app)',
+            'User-Agent': 'ScandioBot/1.0 (+https://scandio.co.za)',
             Accept: 'text/html,application/xhtml+xml',
         },
     });

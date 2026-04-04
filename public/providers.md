@@ -282,7 +282,7 @@ Before any work:
 #### Stage 1 — Website scraping (10s timeout)
 ```
 GET provider.website
-User-Agent: ScandioBot/1.0 (+https://scandio.app)
+User-Agent: ScandioBot/1.0 (+https://scandio.co.za)
 ```
 Extracts structured text from the HTML:
 - `<title>`, `<meta description>`, `<h1>` / `<h2>` headings

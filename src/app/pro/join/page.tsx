@@ -1,7 +1,10 @@
+'use client';
+
 import Link from 'next/link';
-import { Check, Facebook, Instagram, Linkedin, Twitter } from 'lucide-react';
+import { Facebook, Instagram, Linkedin, Twitter } from 'lucide-react';
 import { LandingHeader } from '@/components/landing-header';
 import { Placeholder } from '@/components/placeholder';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 
 const HOW_IT_WORKS = [
@@ -31,83 +34,6 @@ const VALUE_BENTO = [
     { title: 'Profile-Led Trust', body: 'Structured profiles help homeowners choose with confidence.', span: 'lg:col-span-1' },
     { title: 'Sustainable Growth', body: 'As diagnosis volume grows, qualified lead volume compounds.', span: 'lg:col-span-2' },
     { title: 'Built For Long-Term Quality', body: 'Matching and ranking logic is continuously refined from real usage feedback.', span: 'lg:col-span-2' },
-];
-
-type PricingFeature = { text: string; sub?: string };
-type PricingTier = {
-    name: string;
-    timing: string;
-    price: string;
-    priceNote: string;
-    highlight: boolean;
-    features: PricingFeature[];
-    lockInNote?: string;
-    cta?: { label: string; href: string };
-    secondaryLink?: { label: string; href: string };
-};
-
-const PRICING_TIERS: PricingTier[] = [
-    {
-        name: 'Founding Member',
-        timing: 'Estimated Now - Beta',
-        price: 'Free',
-        priceNote: 'No credit card required',
-        highlight: true,
-        lockInNote: 'Founding members lock in at an estimated R249/mo.',
-        cta: { label: 'Get Started Free', href: '/pro/onboard' },
-        features: [
-            { text: 'Full profile listing' },
-            { text: 'Appears in search results' },
-            { text: 'Receive Scandio reports' },
-            { text: 'Review collection' },
-            { text: 'Work gallery' },
-            { text: 'Priority placement at launch' },
-        ],
-    },
-    {
-        name: 'Solo',
-        timing: 'Estimated Late 2026',
-        price: 'Est. R249/mo',
-        priceNote: 'For individual contractors',
-        highlight: false,
-        secondaryLink: { label: 'Join founding network now ->', href: '/pro/onboard' },
-        features: [
-            { text: 'Standard profile listing' },
-            { text: 'Appears in search results' },
-            { text: 'Receive Scandio reports' },
-            { text: 'Review collection' },
-        ],
-    },
-    {
-        name: 'Basic Team',
-        timing: 'Estimated Late 2026',
-        price: 'Est. R649/mo',
-        priceNote: 'For teams of 3 to 5',
-        highlight: false,
-        secondaryLink: { label: 'Join founding network now ->', href: '/pro/onboard' },
-        features: [
-            { text: 'Everything in Solo' },
-            { text: 'Up to 5 team member profiles' },
-            { text: 'Priority placement in match results', sub: 'First in results for diagnoses matching your trade and area.' },
-            { text: 'Advanced analytics for profile views and lead data' },
-            { text: 'Direct WhatsApp contact from profile' },
-        ],
-    },
-    {
-        name: 'Enterprise',
-        timing: 'Estimated Late 2026',
-        price: 'Est. R1,249/mo',
-        priceNote: 'For larger operations',
-        highlight: false,
-        secondaryLink: { label: 'Join founding network now ->', href: '/pro/onboard' },
-        features: [
-            { text: 'Everything in Basic Team' },
-            { text: 'Unlimited team seats' },
-            { text: 'White-label report options', sub: 'Brand-aligned reports for larger teams and operations.' },
-            { text: 'Highest priority placement in results' },
-            { text: 'Dedicated account support' },
-        ],
-    },
 ];
 
 const FAQS = [
@@ -159,13 +85,13 @@ export default function ProJoinPage() {
                 navLinks={[
                     { href: '#how-it-works', label: 'How It Works' },
                     { href: '#value', label: 'Why Join' },
-                    { href: '#pricing', label: 'Pricing' },
                     { href: '#faq', label: 'FAQ' },
                     { href: '/', label: 'For Homeowners' },
                     { href: '/contact', label: 'Contact' },
                 ]}
                 logoHref="/pro/join"
                 showTrades={false}
+                logoBadge={<Badge variant="secondary">Pro</Badge>}
             />
 
             <main className="flex-1">
@@ -174,9 +100,6 @@ export default function ProJoinPage() {
                     <div className="relative mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-24 lg:px-8 lg:py-28">
                         <div className="grid items-center gap-12 lg:grid-cols-[3fr_2fr]">
                             <div className="flex flex-col items-center gap-5 text-center lg:items-start lg:text-left">
-                                <span className="inline-flex items-center rounded-full border border-border/50 bg-secondary px-3 py-1 text-xs font-medium text-muted-foreground">
-                                    For Service Providers
-                                </span>
                                 <h1 className="text-3xl font-bold tracking-tight sm:text-4xl lg:text-5xl">
                                     Less Time Quoting. More Time Doing The Work.
                                 </h1>
@@ -260,87 +183,6 @@ export default function ProJoinPage() {
                     </div>
                 </section>
 
-                <section id="pricing" className="scroll-mt-16 py-16 sm:py-20">
-                    <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-                        <div className="mx-auto mb-10 max-w-3xl text-center">
-                            <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">Estimated Pricing For Providers</h2>
-                            <p className="mt-3 text-base text-muted-foreground">
-                                Four provider plans, with estimated launch pricing shown transparently.
-                            </p>
-                            <p className="mt-2 text-sm text-muted-foreground">
-                                Founding network is free now. Estimated paid tiers are subject to change before release.
-                            </p>
-                        </div>
-                        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                            {PRICING_TIERS.map(({ name, timing, price, priceNote, highlight, features, lockInNote, cta, secondaryLink }) => (
-                                <div
-                                    key={name}
-                                    className={`relative flex h-full flex-col gap-5 rounded-xl border bg-card p-5 transition-colors sm:p-6 ${
-                                        highlight
-                                            ? 'border-foreground/60 shadow-[0_0_0_1px_hsl(var(--foreground)/0.22)]'
-                                            : 'border-border/50 hover:border-border/75'
-                                    }`}
-                                >
-                                    <div className="flex items-start justify-between gap-3">
-                                        <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                                            {timing}
-                                        </p>
-                                        {highlight && (
-                                            <span className="rounded-full border border-border/70 bg-muted px-2.5 py-0.5 text-[11px] font-semibold text-foreground">
-                                                Recommended
-                                            </span>
-                                        )}
-                                    </div>
-                                    <div className="flex flex-col gap-1">
-                                        <h3 className="text-base font-semibold text-foreground">{name}</h3>
-                                    </div>
-                                    <div className="flex flex-col gap-0.5">
-                                        <span className="text-3xl font-bold tracking-tight text-foreground">{price}</span>
-                                        <span className="text-xs text-muted-foreground">{priceNote}</span>
-                                    </div>
-                                    <ul className="flex flex-1 flex-col gap-2">
-                                        {features.map((f) => (
-                                            <li key={f.text} className="flex items-start gap-2">
-                                                <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                                                <span className="flex flex-col gap-0.5">
-                                                    <span className="text-sm text-muted-foreground">{f.text}</span>
-                                                    {f.sub && (
-                                                        <span className="text-xs leading-relaxed text-muted-foreground/70">
-                                                            {f.sub}
-                                                        </span>
-                                                    )}
-                                                </span>
-                                            </li>
-                                        ))}
-                                    </ul>
-                                    {cta && (
-                                        <div className="mt-auto flex flex-col gap-1.5">
-                                            <Button asChild className="w-full">
-                                                <Link href={cta.href}>{cta.label}</Link>
-                                            </Button>
-                                            {lockInNote && (
-                                                <p className="text-center text-xs text-muted-foreground/70">
-                                                    {lockInNote}
-                                                </p>
-                                            )}
-                                        </div>
-                                    )}
-                                    {secondaryLink && (
-                                        <div className="mt-auto pt-2 text-center">
-                                            <Link href={secondaryLink.href} className="text-xs text-muted-foreground transition-colors hover:text-foreground hover:underline">
-                                                {secondaryLink.label}
-                                            </Link>
-                                        </div>
-                                    )}
-                                </div>
-                            ))}
-                        </div>
-                        <p className="mt-6 text-center text-xs text-muted-foreground">
-                            Estimated pricing shown for planning only and may be updated before official launch.
-                        </p>
-                    </div>
-                </section>
-
                 <section id="faq" className="scroll-mt-16 py-16 sm:py-20">
                     <div className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8">
                         <div className="mb-10 text-center sm:mb-12">
@@ -396,7 +238,7 @@ export default function ProJoinPage() {
                         <div>
                             <p className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Explore</p>
                             <nav className="mt-3 flex flex-col gap-2">
-                                {([['How It Works', '#how-it-works'], ['Why Join', '#value'], ['Pricing', '#pricing'], ['FAQ', '#faq']] as [string, string][]).map(([label, href]) => (
+                                {([['How It Works', '#how-it-works'], ['Why Join', '#value'], ['FAQ', '#faq']] as [string, string][]).map(([label, href]) => (
                                     <Link key={`${label}-${href}`} href={href} className="text-sm text-muted-foreground transition-colors hover:text-foreground">
                                         {label}
                                     </Link>

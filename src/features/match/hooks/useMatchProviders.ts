@@ -42,6 +42,7 @@ export function useMatchProviders(params: {
     const [isProvidersLoading, setIsProvidersLoading] = useState(false);
     const [isLoadingMoreForExpandedRadius, setIsLoadingMoreForExpandedRadius] = useState(false);
     const lastProvidersErrorToastAtRef = useRef<number>(0);
+    const lastMissingTradeToastAtRef = useRef<number>(0);
     // Store radius in a ref so the callback stays stable across radius changes.
     const searchRadiusMetersRef = useRef(searchRadiusMeters);
     searchRadiusMetersRef.current = searchRadiusMeters;
@@ -58,7 +59,16 @@ export function useMatchProviders(params: {
     const refreshProvidersForLocation = useCallback(
         async (loc: MatchLocation) => {
             const { trade: t, trade_detail: td } = await resolveTradeContext();
-            if (!t) return;
+            if (!t) {
+                const tNow = Date.now();
+                if (tNow - lastMissingTradeToastAtRef.current > 12_000) {
+                    lastMissingTradeToastAtRef.current = tNow;
+                    toast.error(
+                        'Could not load the trade for this report (connection or permissions). Try again, or return to your diagnosis and tap Find a Contractor once more.'
+                    );
+                }
+                return;
+            }
 
             const radius = searchRadiusMetersRef.current;
             const previousRadius = previousRadiusRef.current;
@@ -82,7 +92,7 @@ export function useMatchProviders(params: {
                 await waitForPageVisible(controller.signal);
                 if (controller.signal.aborted) return;
 
-                const firstPage = await fetchProvidersApi(
+                const firstResult = await fetchProvidersApi(
                     {
                         lat: loc.lat,
                         lng: loc.lng,
@@ -95,7 +105,9 @@ export function useMatchProviders(params: {
                 // Ignore responses that were superseded by a newer request.
                 if (controller.signal.aborted) return;
 
-                if (Array.isArray(firstPage?.providers)) {
+                const firstPage = firstResult.data;
+
+                if (firstResult.ok && Array.isArray(firstPage?.providers)) {
                     const fetchedProviders: MatchProvider[] = [...firstPage.providers];
 
                     // When expanding radius, pull a few more pages (if available) so the user actually
@@ -107,7 +119,7 @@ export function useMatchProviders(params: {
                         while (nextToken && pagesFetched < MAX_EXTRA_PAGES) {
                             await waitForPageVisible(controller.signal);
                             if (controller.signal.aborted) return;
-                            const nextPage = await fetchProvidersApi(
+                            const nextResult = await fetchProvidersApi(
                                 {
                                     lat: loc.lat,
                                     lng: loc.lng,
@@ -120,7 +132,8 @@ export function useMatchProviders(params: {
                                 { signal: controller.signal }
                             );
                             if (controller.signal.aborted) return;
-                            if (Array.isArray(nextPage?.providers)) {
+                            const nextPage = nextResult.data;
+                            if (nextResult.ok && Array.isArray(nextPage?.providers)) {
                                 fetchedProviders.push(...nextPage.providers);
                             }
                             nextToken = nextPage?.nextPageToken ?? null;
@@ -170,6 +183,23 @@ export function useMatchProviders(params: {
                     }
                     return;
                 }
+
+                if (!firstResult.ok && firstPage?.code === 'PLACES_UNAVAILABLE') {
+                    const tNow = Date.now();
+                    if (tNow - lastProvidersErrorToastAtRef.current > 5000) {
+                        lastProvidersErrorToastAtRef.current = tNow;
+                        toast.error(
+                            firstPage?.error ||
+                                'Search temporarily unavailable. Please try again in a moment.'
+                        );
+                    }
+                    if (!expandingRadius) {
+                        setProviders([]);
+                        setCompanyIndex(1);
+                    }
+                    return;
+                }
+
                 if (!expandingRadius) {
                     setProviders([]);
                     setCompanyIndex(1);
