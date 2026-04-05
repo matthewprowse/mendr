@@ -6,9 +6,8 @@
 
 import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
-import { Suspense } from 'react';
-import { Spinner } from '@/components/ui/spinner';
 import { ReportDetailContent } from './_components/report-detail-content';
+import { fetchReportDetailOnServer } from '@/lib/fetch-report-detail-server';
 
 type PageProps = {
     params: Promise<{ id: string }>;
@@ -16,10 +15,21 @@ type PageProps = {
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
     const { id } = await params;
-    return {
-        title: id ? `Scandio: Job Report` : 'Scandio: Job Report',
-        description: '',
+    const base: Metadata = {
+        title: 'Scandio: Job Report',
+        description: 'View your Scandio home maintenance diagnosis report.',
     };
+    const result = await fetchReportDetailOnServer(id);
+    if (result.status === 'ok' && result.data.diagnosis) {
+        const d = result.data.diagnosis as Record<string, unknown>;
+        if (typeof d.diagnosis === 'string' && d.diagnosis && d.diagnosis !== 'N/A') {
+            return {
+                ...base,
+                title: `${d.diagnosis.slice(0, 60)} | Scandio Report`,
+            };
+        }
+    }
+    return base;
 }
 
 export default async function ReportDetailPage({ params }: PageProps) {
@@ -29,15 +39,7 @@ export default async function ReportDetailPage({ params }: PageProps) {
         redirect('/');
     }
 
-    return (
-        <Suspense
-            fallback={
-                <div className="flex min-h-screen w-full items-center justify-center bg-background">
-                    <Spinner className="size-8 text-muted-foreground" />
-                </div>
-            }
-        >
-            <ReportDetailContent reportId={id} />
-        </Suspense>
-    );
+    const serverResult = await fetchReportDetailOnServer(id);
+
+    return <ReportDetailContent reportId={id} serverResult={serverResult} />;
 }

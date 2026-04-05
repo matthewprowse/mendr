@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { HomeMarketingPageClient } from './page/_components/home-marketing-page-client';
+import { HomeMarketingPage } from './page/_components/home-marketing-page';
 import { getSiteUrl } from '@/lib/site-url';
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -109,7 +109,7 @@ export default async function HomePage() {
                 type="application/ld+json"
                 dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
             />
-            <HomeMarketingPageClient />
+            <HomeMarketingPage />
         </>
     );
 }

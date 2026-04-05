@@ -1,58 +1,79 @@
-import { createServerClient as createClient, type CookieOptions } from '@supabase/ssr';
+import { createServerClient } from '@supabase/ssr';
+import { createClient } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
 
+/**
+ * Cookie-aware Supabase client for Route Handlers and auth flows (anon key + user session).
+ */
 export async function createSupabaseServerClient() {
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-    if (!url || !anonKey) {
-        throw new Error('Supabase URL or anon key missing. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.');
+    const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    if (!url || !key) {
+        throw new Error('Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY');
     }
+
     const cookieStore = await cookies();
 
-    return createClient(
-        url,
-        anonKey,
-        {
-            cookies: {
-                getAll() {
-                    return cookieStore.getAll();
-                },
-                setAll(cookiesToSet) {
-                    try {
-                        cookiesToSet.forEach(({ name, value, options }) =>
-                            cookieStore.set(name, value, options)
-                        );
-                    } catch (error) {
-                        // Ignore if called from Server Component
-                    }
-                },
+    return createServerClient(url, key, {
+        cookies: {
+            getAll() {
+                return cookieStore.getAll();
             },
-        }
-    );
+            setAll(cookiesToSet) {
+                try {
+                    cookiesToSet.forEach(({ name, value, options }) => {
+                        cookieStore.set(name, value, options);
+                    });
+                } catch {
+                    /* ignore when called from a Server Component without mutable cookies */
+                }
+            },
+        },
+    });
 }
 
-// Alias for compatibility while debugging
-export const createServerClient = createSupabaseServerClient;
-
+/**
+ * Service-role client for trusted server-only operations (bypasses RLS).
+ */
 export async function createSupabaseAdminClient() {
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-    if (!url || !serviceRoleKey) {
-        throw new Error(
-            'Supabase admin client requires NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY. ' +
-                'Without them, providers cannot be saved and the Pro page will not load.'
-        );
+    const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!url || !key) {
+        throw new Error('Missing SUPABASE_SERVICE_ROLE_KEY');
     }
-    return createClient(
-        url,
-        serviceRoleKey,
-        {
-            cookies: {
-                getAll() {
-                    return [];
-                },
-                setAll() {},
+
+    return createClient(url, key, {
+        auth: { persistSession: false, autoRefreshToken: false },
+    });
+}
+
+/**
+ * Anon Supabase client for Server Components when env is configured; otherwise `null`
+ * (caller may fall back to client-side loading).
+ */
+export async function createServerSupabaseClient() {
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    if (!url || !key) {
+        return null;
+    }
+
+    const cookieStore = await cookies();
+
+    return createServerClient(url, key, {
+        cookies: {
+            getAll() {
+                return cookieStore.getAll();
             },
-        }
-    );
+            setAll(cookiesToSet) {
+                try {
+                    cookiesToSet.forEach(({ name, value, options }) => {
+                        cookieStore.set(name, value, options);
+                    });
+                } catch {
+                    /* ignore */
+                }
+            },
+        },
+    });
 }

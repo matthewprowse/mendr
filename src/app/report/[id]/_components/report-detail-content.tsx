@@ -16,6 +16,7 @@ import {
     reportThoughtsParagraph,
     splitDetailAndHazard,
 } from '@/lib/diagnosis-display';
+import type { ReportDetailServerResult } from '@/lib/fetch-report-detail-server';
 
 type ReportData = {
     diagnosis: Record<string, unknown> | null;
@@ -34,15 +35,47 @@ type ReportData = {
 
 export interface ReportDetailContentProps {
     reportId: string;
+    /** When present, hydrates from the server fetch and skips redundant client loading when possible. */
+    serverResult?: ReportDetailServerResult;
 }
 
-export function ReportDetailContent({ reportId }: ReportDetailContentProps) {
+function initialFromServer(serverResult: ReportDetailServerResult | undefined): {
+    loading: boolean;
+    reportData: ReportData | null;
+    error: string | null;
+    skipClientFetch: boolean;
+} {
+    if (!serverResult || serverResult.status === 'skipped') {
+        return { loading: true, reportData: null, error: null, skipClientFetch: false };
+    }
+    if (serverResult.status === 'ok') {
+        return { loading: false, reportData: serverResult.data, error: null, skipClientFetch: true };
+    }
+    if (serverResult.status === 'not_found') {
+        return {
+            loading: false,
+            reportData: null,
+            error: 'Report not found.',
+            skipClientFetch: true,
+        };
+    }
+    return {
+        loading: false,
+        reportData: null,
+        error: serverResult.message,
+        skipClientFetch: true,
+    };
+}
+
+export function ReportDetailContent({ reportId, serverResult }: ReportDetailContentProps) {
     const id = reportId;
     const router = useRouter();
 
-    const [loading, setLoading] = useState(true);
-    const [reportData, setReportData] = useState<ReportData | null>(null);
-    const [error, setError] = useState<string | null>(null);
+    const init = initialFromServer(serverResult);
+    const [loading, setLoading] = useState(init.loading);
+    const [reportData, setReportData] = useState<ReportData | null>(init.reportData);
+    const [error, setError] = useState<string | null>(init.error);
+    const skipClientFetch = init.skipClientFetch;
 
     // Persist to localStorage
     useEffect(() => {
@@ -174,9 +207,9 @@ export function ReportDetailContent({ reportId }: ReportDetailContentProps) {
     }, [id]);
 
     useEffect(() => {
-        if (!id) return;
+        if (!id || skipClientFetch) return;
         loadReport();
-    }, [id, loadReport]);
+    }, [id, loadReport, skipClientFetch]);
 
     const handleShare = useCallback(async () => {
         const url =

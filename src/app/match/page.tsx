@@ -1,12 +1,12 @@
-'use client';
+import type { Metadata } from 'next';
+import MatchPageClient from './match-page-client';
 
-import { MatchClient } from './_components/match-client';
-
-type MatchPageProps = {
-    conversationId?: string;
+export const metadata: Metadata = {
+    title: 'Find providers',
+    description:
+        'Match with local home maintenance providers based on your Scandio diagnosis.',
 };
 
-export default function MatchPage({ conversationId }: MatchPageProps) {
-    return <MatchClient conversationId={conversationId} />;
+export default function MatchIndexPage() {
+    return <MatchPageClient />;
 }
-

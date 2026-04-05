@@ -1,48 +1,25 @@
 import type { Metadata } from 'next';
-import Link from 'next/link';
-import { LandingHeader } from '@/components/landing-header';
+import { FlowStepHeader } from '@/components/flow-header';
+import { getSiteLegalConfig } from '@/lib/site-legal';
+import { PrivacyPageContent } from './privacy-page-content';
 
 export const metadata: Metadata = {
     title: 'Privacy Policy',
-    description: 'How Scandio handles your information.',
+    description: 'How Scandio handles personal information under POPIA.',
 };
 
 export default function PrivacyPage() {
+    const c = getSiteLegalConfig();
+
     return (
         <div className="flex min-h-screen flex-col bg-background">
-            <LandingHeader
-                navLinks={[
-                    { href: '/', label: 'For Homeowners' },
-                    { href: '/pro/join', label: 'For Contractors' },
-                ]}
-                logoHref="/"
-                showTrades={false}
-            />
-            <main className="flex-1">
-                <article className="mx-auto max-w-2xl px-4 py-16 sm:px-6 sm:py-24">
-                    <h1 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
-                        Privacy Policy
-                    </h1>
-                    <p className="mt-2 text-sm text-muted-foreground">Last updated March 2026.</p>
-                    <div className="mt-10 space-y-4 text-sm leading-relaxed text-muted-foreground">
-                        <p>
-                            This page is a placeholder summary. Scandio is committed to protecting
-                            your privacy. We process data only as needed to provide the service
-                            (for example, photos you submit for diagnosis and messages you send
-                            through our contact form).
-                        </p>
-                        <p>
-                            For full details, retention, cookies, and your rights, we will publish
-                            a complete policy here. Until then, contact us with any privacy
-                            questions.
-                        </p>
-                        <p>
-                            <Link href="/contact" className="font-medium text-foreground underline underline-offset-4 hover:no-underline">
-                                Contact us
-                            </Link>
-                        </p>
-                    </div>
-                </article>
+            <FlowStepHeader step={1} onBack={null} backHref="/" centerLabel="Privacy" />
+            <main className="mx-auto flex w-full max-w-xl flex-1 flex-col gap-8 px-4 pb-16 pt-20 sm:px-6">
+                <div className="flex flex-col gap-2">
+                    <h1 className="text-3xl font-semibold text-foreground">Privacy Policy</h1>
+                    <p className="text-sm text-muted-foreground">Last updated 5 April 2026.</p>
+                </div>
+                <PrivacyPageContent c={c} />
             </main>
         </div>
     );
