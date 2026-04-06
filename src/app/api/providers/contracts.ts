@@ -53,4 +53,11 @@ export interface ProvidersResponseBody {
     nextPageToken?: string | null;
     searchQuery?: string;
     tradeDetail?: string | null;
+    debugTiming?: {
+        totalMs: number;
+        stages: Record<string, number>;
+        searchCacheHit: boolean;
+        placesCount: number;
+        providersCount: number;
+    };
 }

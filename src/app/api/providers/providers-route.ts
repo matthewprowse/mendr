@@ -52,6 +52,13 @@ function getProviderResultLimitByRadius(radiusMeters: number): number {
     return 5;
 }
 
+function getTargetPlacesCountByRadius(radiusMeters: number): number {
+    const providerLimit = getProviderResultLimitByRadius(radiusMeters);
+    // Keep enough headroom for filtering/relevance, but avoid always pulling ~55 places
+    // on small-radius searches where only 5-10 final providers are needed.
+    return Math.min(55, Math.max(20, providerLimit + 10));
+}
+
 const PLACES_SEARCH_TEXT_URL = 'https://places.googleapis.com/v1/places:searchText';
 
 const PLACES_SEARCH_TEXT_FIELD_MASK =
@@ -88,9 +95,12 @@ export async function POST(req: NextRequest) {
     try {
         const t0 = Date.now();
         console.log('[providers] request received');
-        const logStage = (label: string) => {
+        const stageTimings: Record<string, number> = {};
+        const logStage = (label: string, stageKey?: string) => {
             if (process.env.NODE_ENV === 'development') {
-                console.log(`[providers] ${label} at +${Date.now() - t0}ms`);
+                const elapsed = Date.now() - t0;
+                if (stageKey) stageTimings[stageKey] = elapsed;
+                console.log(`[providers] ${label} at +${elapsed}ms`);
             }
         };
         const raw = await req.text();
@@ -118,7 +128,7 @@ export async function POST(req: NextRequest) {
             /** Optional specialty line from AI diagnosis (same as `conversations.diagnosis.trade_detail`). Refines Google text search. */
             tradeDetail,
         } = body;
-        logStage('body parsed');
+        logStage('body parsed', 'body_parsed');
         let supabase: Awaited<ReturnType<typeof createSupabaseServerClient>> | null = null;
         let adminSupabase: Awaited<ReturnType<typeof createSupabaseAdminClient>> | null = null;
         try {
@@ -206,6 +216,21 @@ export async function POST(req: NextRequest) {
         };
         let cachedData: any[] = [];
         let pendingCacheWrite: { key: string; placeIds: string[]; routing: any[]; nextToken: string | null } | null = null;
+        const attachDebugTiming = (
+            body: ProvidersResponseBody
+        ): ProvidersResponseBody => {
+            if (process.env.NODE_ENV !== 'development') return body;
+            return {
+                ...body,
+                debugTiming: {
+                    totalMs: Date.now() - t0,
+                    stages: { ...stageTimings },
+                    searchCacheHit,
+                    placesCount: places.length,
+                    providersCount: Array.isArray(body.providers) ? body.providers.length : 0,
+                },
+            };
+        };
 
         if (!pageToken && (adminSupabase || supabase)) {
             const latR = Math.round(Number(lat) * 1000) / 1000;
@@ -528,7 +553,8 @@ export async function POST(req: NextRequest) {
             }
         }
         logStage(
-            `cache lookup complete (hit=${searchCacheHit ? 'yes' : 'no'}, places=${places.length})`
+            `cache lookup complete (hit=${searchCacheHit ? 'yes' : 'no'}, places=${places.length})`,
+            'cache_lookup_done'
         );
 
         if (places.length === 0) {
@@ -596,11 +622,12 @@ export async function POST(req: NextRequest) {
 
             const seenPlaceIds = new Set<string>(places.map((p: any) => String(p?.id ?? '')));
             let nextSearchToken = (data.nextPageToken as string | undefined) || null;
+            const targetPlacesCount = getTargetPlacesCountByRadius(radius);
             while (
                 nextSearchToken &&
                 !pageToken &&
                 textSearchExtraPagesFetched < TEXT_SEARCH_MAX_EXTRA_PAGES &&
-                places.length < 55
+                places.length < targetPlacesCount
             ) {
                 textSearchExtraPagesFetched += 1;
                 const responseMore = await fetchPlacesSearchText(apiKey, {
@@ -654,7 +681,8 @@ export async function POST(req: NextRequest) {
             }
         }
         logStage(
-            `places resolved (count=${places.length}, googleExtraPages=${textSearchExtraPagesFetched})`
+            `places resolved (count=${places.length}, googleExtraPages=${textSearchExtraPagesFetched})`,
+            'places_resolved'
         );
 
         if (places.length === 0) {
@@ -803,21 +831,37 @@ export async function POST(req: NextRequest) {
         let minRatingUsed = baseMinRating;
         let relevanceModeUsed: 'strict' | 'relaxed' = 'strict';
         let fastProviders = mapPlacesToFastProviders(baseMinRating, 'strict');
+        logStage(
+            `fast providers strict/base mapped (count=${fastProviders.length}, minReviews=${baseMinRating})`,
+            'fast_map_base'
+        );
         if (baseMinRating > 3 && fastProviders.length < providerLimit) {
             minRatingUsed = 3;
             fastProviders = mapPlacesToFastProviders(3, 'strict');
+            logStage(
+                `fast providers strict/relaxed-minReviews mapped (count=${fastProviders.length}, minReviews=3)`,
+                'fast_map_min3'
+            );
         }
         // Final fallback for sparse areas: include lower-review providers rather
         // than returning an unusably small list (quality is still handled by ranking).
         if (fastProviders.length < providerLimit) {
             minRatingUsed = 1;
             fastProviders = mapPlacesToFastProviders(1, 'strict');
+            logStage(
+                `fast providers strict/minReviews1 mapped (count=${fastProviders.length})`,
+                'fast_map_min1'
+            );
         }
         // If strict relevance still starves the list, relax semantic matching while
         // keeping hard safety exclusions (banned categories + geo radius).
         if (fastProviders.length < providerLimit) {
             relevanceModeUsed = 'relaxed';
             fastProviders = mapPlacesToFastProviders(minRatingUsed, 'relaxed');
+            logStage(
+                `fast providers relaxed relevance mapped (count=${fastProviders.length})`,
+                'fast_map_relaxed'
+            );
         }
 
         // Pre-fetched providers rows — fired in parallel with provider_cache below to save a round-trip.
@@ -860,6 +904,10 @@ export async function POST(req: NextRequest) {
                     const specs = specialisationsByGoogleId.get(gid);
                     if (specs) (p as any).specialisations = specs;
                 });
+                logStage(
+                    `prefetch cache/providers done (candidatePlaces=${placeIds.length})`,
+                    'prefetch_cache_providers_done'
+                );
             }
         }
 
@@ -880,7 +928,7 @@ export async function POST(req: NextRequest) {
             });
             return NextResponse.json({ providers: [] });
         }
-        logStage(`fast providers prepared (count=${fastProviders.length})`);
+        logStage(`fast providers prepared (count=${fastProviders.length})`, 'fast_providers_prepared');
 
         // Rank by weighted composite: relevance 40%, Bayesian rating 30%, proximity 20%, recency 10%.
         // Result count scales with radius so wider searches can surface meaningfully more providers.
@@ -889,7 +937,7 @@ export async function POST(req: NextRequest) {
             trade: tradeNorm,
         });
         const limitedProviders = rankedProviders.map((p) => ({ ...p }));
-        logStage(`providers ranked (count=${limitedProviders.length})`);
+        logStage(`providers ranked (count=${limitedProviders.length})`, 'providers_ranked');
 
         // AI summaries from real review text: use Supabase reviews when we have them; otherwise
         // Place Details (same request). This must run even when providers are not in Supabase yet
@@ -1382,7 +1430,7 @@ export async function POST(req: NextRequest) {
         console.log(
             `[providers] responding in ${Date.now() - t0}ms with ${limitedProviders.length} providers`
         );
-        return NextResponse.json(responseBody);
+        return NextResponse.json(attachDebugTiming(responseBody));
     } catch (error: unknown) {
         logAiEvent({
             endpoint: 'providers',

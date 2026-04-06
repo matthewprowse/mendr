@@ -48,6 +48,13 @@ export type ProvidersResponse = {
     nextPageToken?: string | null;
     searchQuery?: string;
     tradeDetail?: string | null;
+    debugTiming?: {
+        totalMs: number;
+        stages: Record<string, number>;
+        searchCacheHit: boolean;
+        placesCount: number;
+        providersCount: number;
+    };
     error?: string;
     /** Set when Google Places returns a transient error (e.g. 503). */
     code?: string;

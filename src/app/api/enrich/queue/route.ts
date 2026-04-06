@@ -60,6 +60,15 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     if (limited) return limited;
 
     try {
+        const t0 = Date.now();
+        const stageTimings: Record<string, number> = {};
+        const logStage = (label: string, key?: string) => {
+            if (process.env.NODE_ENV === 'development') {
+                const elapsed = Date.now() - t0;
+                if (key) stageTimings[key] = elapsed;
+                console.log(`[enrich/queue] ${label} at +${elapsed}ms`);
+            }
+        };
         const body = await req.json().catch(() => null) as {
             placeIds?: unknown;
             trade?: unknown;
@@ -75,6 +84,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
             .filter((id) => typeof id === 'string' && id.trim())
             .map((id) => toGooglePlaceId(id.trim()))
             .slice(0, MAX_PLACE_IDS);
+        logStage(`normalized place ids (count=${placeIds.length})`, 'place_ids_normalized');
 
         const trade = typeof body.trade === 'string' && body.trade.trim()
             ? body.trade.trim()
@@ -100,6 +110,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
             .from('providers')
             .select('id, google_place_id')
             .in('google_place_id', placeIds);
+        logStage(`providers resolved (count=${providers?.length ?? 0})`, 'providers_resolved');
 
         if (!providers || providers.length === 0) {
             return NextResponse.json({ queued: 0, processed: 0 });
@@ -121,28 +132,45 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
         const semaphore = createSemaphore(MAX_CONCURRENT);
 
-        await Promise.all(
-            orderedProviders.map(async (p) => {
-                const release = await semaphore();
-                try {
-                    await Promise.race([
-                        enrichProvider(p.id as string, { trade, cacheVersion }),
-                        new Promise<void>((_, reject) =>
-                            setTimeout(
-                                () => reject(new Error('Job timeout')),
-                                JOB_TIMEOUT_MS
-                            )
-                        ),
-                    ]);
-                } catch {
-                    // Individual job failures are non-fatal
-                } finally {
-                    release();
-                }
-            })
-        );
+        // Fire-and-forget enrichment jobs. The client does not await this endpoint,
+        // so we return quickly and let the pipeline continue in the background.
+        void (async () => {
+            await Promise.all(
+                orderedProviders.map(async (p) => {
+                    const release = await semaphore();
+                    try {
+                        await Promise.race([
+                            enrichProvider(p.id as string, { trade, cacheVersion }),
+                            new Promise<void>((_, reject) =>
+                                setTimeout(
+                                    () => reject(new Error('Job timeout')),
+                                    JOB_TIMEOUT_MS
+                                )
+                            ),
+                        ]);
+                    } catch {
+                        // Individual job failures are non-fatal.
+                    } finally {
+                        release();
+                    }
+                })
+            );
+        })();
 
-        return NextResponse.json({ queued: orderedProviders.length, processed: orderedProviders.length });
+        logStage(`accepted jobs (count=${orderedProviders.length})`, 'jobs_accepted');
+        return NextResponse.json({
+            queued: orderedProviders.length,
+            processed: 0,
+            ...(process.env.NODE_ENV === 'development'
+                ? {
+                    debugTiming: {
+                        totalMs: Date.now() - t0,
+                        stages: stageTimings,
+                        acceptedJobs: orderedProviders.length,
+                    },
+                }
+                : {}),
+        });
     } catch (err) {
         console.error('[enrich/queue] Unhandled error:', err);
         return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
