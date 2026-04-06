@@ -74,8 +74,85 @@ function hasEnrichedSummary(
     return summary.length > 0;
 }
 
+function hasEnrichedSummaryByPlaceId(
+    cache: Record<string, EnrichmentCacheEntry>,
+    placeId: string
+): boolean {
+    if (!placeId) return false;
+    const entry =
+        cache[placeId] ||
+        cache[placeId.replace(/^places\//, '')] ||
+        cache[`places/${placeId.replace(/^places\//, '')}`];
+    const summary = (entry?.reviewSummary ?? '').trim();
+    return summary.length > 0;
+}
+
 function sleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function pollEnrichment(
+    placeIds: string[],
+    fetchFn: (
+        ids: string[]
+    ) => Promise<Record<string, EnrichmentCacheEntry> | null>,
+    cacheRef: { current: Record<string, EnrichmentCacheEntry> },
+    onUpdate: (cache: Record<string, EnrichmentCacheEntry>) => void,
+    options?: {
+        maxRounds?: number;
+        initialDelayMs?: number;
+        signal?: AbortSignal;
+        onRoundComplete?: (round: number) => void;
+        onStop?: (reason: 'enriched' | 'aborted' | 'max_rounds' | 'error', rounds: number) => void;
+    }
+): Promise<void> {
+    const { maxRounds = 5, initialDelayMs = 1000, signal, onRoundComplete, onStop } = options ?? {};
+    let delay = initialDelayMs;
+    let roundsCompleted = 0;
+
+    for (let round = 0; round < maxRounds; round += 1) {
+        if (signal?.aborted) {
+            onStop?.('aborted', roundsCompleted);
+            return;
+        }
+        const pending = placeIds.filter((id) => !hasEnrichedSummaryByPlaceId(cacheRef.current, id));
+        if (pending.length === 0) {
+            onStop?.('enriched', roundsCompleted);
+            return;
+        }
+
+        await sleep(delay);
+        if (signal?.aborted) {
+            onStop?.('aborted', roundsCompleted);
+            return;
+        }
+
+        try {
+            const next = await fetchFn(pending);
+            if (signal?.aborted) {
+                onStop?.('aborted', roundsCompleted);
+                return;
+            }
+            if (next) {
+                const updated = { ...cacheRef.current, ...next };
+                cacheRef.current = updated;
+                onUpdate(updated);
+                onRoundComplete?.(round);
+            }
+            roundsCompleted = round + 1;
+        } catch (err) {
+            if (signal?.aborted) {
+                onStop?.('aborted', roundsCompleted);
+                return;
+            }
+            onStop?.('error', roundsCompleted);
+            console.warn('[enrichment] poll error:', err);
+            return;
+        }
+
+        delay = Math.min(delay * 2, 8000);
+    }
+    onStop?.('max_rounds', roundsCompleted);
 }
 
 /** Keep summary concise and avoid repeating provider name at the start. */
@@ -280,6 +357,7 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
 
         // 2. Fetch existing cache entries for immediate display, then short polling.
         let cancelled = false;
+        const abortController = new AbortController();
         setIsEnrichmentLoading(true);
         void (async () => {
             const mergeCache = (cache: Record<string, EnrichmentCacheEntry> | null) => {
@@ -293,57 +371,72 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
 
             const initial = await fetchEnrichmentApi(placeIds);
             mergeCache(initial);
-
-            const MAX_POLL_ROUNDS = 10;
-            for (let round = 0; round < MAX_POLL_ROUNDS; round += 1) {
-                if (cancelled) break;
-                await sleep(2000);
-                if (cancelled) break;
-                const pendingProviders = providers.filter(
-                    (p) => !hasEnrichedSummary(enrichmentCacheRef.current, p)
-                );
-                if (pendingProviders.length === 0) break;
-                const pendingIds = pendingProviders.map((p) => p.placeId).filter(Boolean);
-                if (pendingIds.length === 0) break;
-                const next = await fetchEnrichmentApi(pendingIds);
-                mergeCache(next);
-            }
+            await pollEnrichment(
+                placeIds,
+                fetchEnrichmentApi,
+                enrichmentCacheRef,
+                (cache) => setEnrichmentCache({ ...cache }),
+                {
+                    maxRounds: 5,
+                    initialDelayMs: 1000,
+                    signal: abortController.signal,
+                }
+            );
         })().finally(() => {
             if (!cancelled) setIsEnrichmentLoading(false);
         });
 
         return () => {
             cancelled = true;
+            abortController.abort();
         };
     }, [providerPlaceIdsKey, resolveTradeContext, selectedProvider?.placeId]);
 
     useEffect(() => {
         if (!selectedProvider?.placeId || selectedProviderHasSummary) return;
         let cancelled = false;
+        const abortController = new AbortController();
 
         void (async () => {
             const trade = (await resolveTradeContext()).trade || undefined;
             queueEnrichmentApi([selectedProvider.placeId], trade, {
                 priorityPlaceId: selectedProvider.placeId,
             });
-
-            for (let attempt = 0; attempt < 12; attempt += 1) {
-                if (cancelled) return;
-                const cache = await fetchEnrichmentApi([selectedProvider.placeId]);
-                if (cache) {
-                    setEnrichmentCache((prev) => ({ ...prev, ...cache }));
-                    const entry = enrichmentEntryForProvider(
-                        { ...enrichmentCacheRef.current, ...cache },
-                        selectedProvider
-                    );
-                    if ((entry?.reviewSummary ?? '').trim().length > 0) return;
+            await pollEnrichment(
+                [selectedProvider.placeId],
+                fetchEnrichmentApi,
+                enrichmentCacheRef,
+                (cache) => setEnrichmentCache({ ...cache }),
+                {
+                    maxRounds: 6,
+                    initialDelayMs: 500,
+                    signal: abortController.signal,
+                    onRoundComplete: (round) => {
+                        if (process.env.NODE_ENV === 'development') {
+                            const entry = enrichmentEntryForProvider(
+                                enrichmentCacheRef.current,
+                                selectedProvider
+                            );
+                            if ((entry?.reviewSummary ?? '').trim().length > 0) {
+                                console.log(
+                                    `[enrichment] selected provider enriched after ${round + 1} round(s)`
+                                );
+                            }
+                        }
+                    },
+                    onStop: (reason, rounds) => {
+                        if (process.env.NODE_ENV !== 'development') return;
+                        console.log(
+                            `[enrichment] selected provider polling stopped: ${reason} after ${rounds} round(s)`
+                        );
+                    },
                 }
-                await sleep(800);
-            }
+            );
         })();
 
         return () => {
             cancelled = true;
+            abortController.abort();
         };
     }, [
         resolveTradeContext,

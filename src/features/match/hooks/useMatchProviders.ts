@@ -55,6 +55,8 @@ export function useMatchProviders(params: {
     const seenPlaceIdsRef = useRef<Set<string>>(new Set());
     // AbortController ref — aborts stale in-flight requests when a newer one starts.
     const abortControllerRef = useRef<AbortController | null>(null);
+    // In-flight de-dupe for identical request parameters.
+    const inFlightRef = useRef<{ key: string; promise: Promise<void>; controller: AbortController } | null>(null);
 
     const refreshProvidersForLocation = useCallback(
         async (loc: MatchLocation) => {
@@ -75,6 +77,22 @@ export function useMatchProviders(params: {
             const expandingRadius =
                 radius > previousRadius && providersRef.current.length > 0;
             previousRadiusRef.current = radius;
+            const requestKey = [
+                loc.lat.toFixed(6),
+                loc.lng.toFixed(6),
+                t.trim().toLowerCase(),
+                td.trim().toLowerCase(),
+                String(radius),
+            ].join('|');
+
+            const inFlight = inFlightRef.current;
+            if (inFlight && inFlight.key === requestKey && !inFlight.controller.signal.aborted) {
+                if (process.env.NODE_ENV === 'development') {
+                    console.log('[match] de-duped identical providers request');
+                }
+                await inFlight.promise;
+                return;
+            }
 
             // Do not time-throttle by (lat,lng,radius): switching service radius and back within a few
             // seconds must refetch — a global 8s skip previously left the wrong radius’s results on screen.
@@ -83,10 +101,19 @@ export function useMatchProviders(params: {
             abortControllerRef.current?.abort();
             const controller = new AbortController();
             abortControllerRef.current = controller;
+            let finishInFlight: (() => void) | null = null;
+            const inFlightPromise = new Promise<void>((resolve) => {
+                finishInFlight = resolve;
+            });
+            inFlightRef.current = { key: requestKey, promise: inFlightPromise, controller };
 
             setIsProvidersLoading(true);
             setIsLoadingMoreForExpandedRadius(expandingRadius);
             try {
+                const t0 = Date.now();
+                if (process.env.NODE_ENV === 'development') {
+                    console.log('[match] fetching providers...');
+                }
                 // If the browser has backgrounded/suspended this tab, fetching can fail with
                 // net::ERR_NETWORK_IO_SUSPENDED. Wait until we’re visible again.
                 await waitForPageVisible(controller.signal);
@@ -173,6 +200,11 @@ export function useMatchProviders(params: {
                             // Keep current list if expansion returned no new providers.
                             setProviders(providersRef.current);
                         }
+                        if (process.env.NODE_ENV === 'development') {
+                            console.log(
+                                `[match] providers received in ${Date.now() - t0}ms — ${fetchedProviders.length} results`
+                            );
+                        }
                     } else {
                         // New search: reset "seen" history.
                         seenPlaceIdsRef.current = new Set(
@@ -180,6 +212,11 @@ export function useMatchProviders(params: {
                         );
                         setProviders(fetchedProviders);
                         setCompanyIndex(1);
+                        if (process.env.NODE_ENV === 'development') {
+                            console.log(
+                                `[match] providers received in ${Date.now() - t0}ms — ${fetchedProviders.length} results`
+                            );
+                        }
                     }
                     return;
                 }
@@ -225,6 +262,10 @@ export function useMatchProviders(params: {
                     setIsProvidersLoading(false);
                     setIsLoadingMoreForExpandedRadius(false);
                 }
+                if (inFlightRef.current?.controller === controller) {
+                    inFlightRef.current = null;
+                }
+                finishInFlight?.();
             }
         },
         // Stable deps: radius read from searchRadiusMetersRef inside the callback.

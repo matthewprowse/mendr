@@ -86,6 +86,13 @@ export async function POST(req: NextRequest) {
     if (limited) return limited;
 
     try {
+        const t0 = Date.now();
+        console.log('[providers] request received');
+        const logStage = (label: string) => {
+            if (process.env.NODE_ENV === 'development') {
+                console.log(`[providers] ${label} at +${Date.now() - t0}ms`);
+            }
+        };
         const raw = await req.text();
         if (!raw.trim()) {
             return NextResponse.json({ error: 'Request body required' }, { status: 400 });
@@ -111,6 +118,7 @@ export async function POST(req: NextRequest) {
             /** Optional specialty line from AI diagnosis (same as `conversations.diagnosis.trade_detail`). Refines Google text search. */
             tradeDetail,
         } = body;
+        logStage('body parsed');
         let supabase: Awaited<ReturnType<typeof createSupabaseServerClient>> | null = null;
         let adminSupabase: Awaited<ReturnType<typeof createSupabaseAdminClient>> | null = null;
         try {
@@ -519,6 +527,9 @@ export async function POST(req: NextRequest) {
                 }
             }
         }
+        logStage(
+            `cache lookup complete (hit=${searchCacheHit ? 'yes' : 'no'}, places=${places.length})`
+        );
 
         if (places.length === 0) {
             // 2. Fetch providers from Google Places API
@@ -642,6 +653,9 @@ export async function POST(req: NextRequest) {
                 };
             }
         }
+        logStage(
+            `places resolved (count=${places.length}, googleExtraPages=${textSearchExtraPagesFetched})`
+        );
 
         if (places.length === 0) {
             const durationMs = Date.now() - startedAt;
@@ -866,6 +880,7 @@ export async function POST(req: NextRequest) {
             });
             return NextResponse.json({ providers: [] });
         }
+        logStage(`fast providers prepared (count=${fastProviders.length})`);
 
         // Rank by weighted composite: relevance 40%, Bayesian rating 30%, proximity 20%, recency 10%.
         // Result count scales with radius so wider searches can surface meaningfully more providers.
@@ -874,6 +889,7 @@ export async function POST(req: NextRequest) {
             trade: tradeNorm,
         });
         const limitedProviders = rankedProviders.map((p) => ({ ...p }));
+        logStage(`providers ranked (count=${limitedProviders.length})`);
 
         // AI summaries from real review text: use Supabase reviews when we have them; otherwise
         // Place Details (same request). This must run even when providers are not in Supabase yet
@@ -1106,8 +1122,10 @@ export async function POST(req: NextRequest) {
                 if (pid) placeById.set(pid, pl);
             }
 
-            await createSupabaseAdminClient()
-                .then(async (adminSupabase) => {
+            // Fire-and-forget — do not await, do not block response.
+            void (async () => {
+                try {
+                    const adminSupabase = await createSupabaseAdminClient();
                     const nowIso = new Date().toISOString();
                     const rows = limitedProviders.map((p) => {
                         const googlePlaceId =
@@ -1325,13 +1343,10 @@ export async function POST(req: NextRequest) {
                     }
 
                     return upsertRes;
-                })
-                .then(({ error }) => {
-                    if (error) {
-                        console.warn('Providers table upsert skipped:', error.message);
-                    }
-                })
-                .catch((e) => console.warn('Providers table upsert skipped:', (e as Error).message));
+                } catch (err) {
+                    console.error('[providers] background sync error:', err);
+                }
+            })();
         }
 
         const durationMs = Date.now() - startedAt;
@@ -1364,6 +1379,9 @@ export async function POST(req: NextRequest) {
             searchQuery,
             tradeDetail: tradeDetailRaw || null,
         };
+        console.log(
+            `[providers] responding in ${Date.now() - t0}ms with ${limitedProviders.length} providers`
+        );
         return NextResponse.json(responseBody);
     } catch (error: unknown) {
         logAiEvent({
