@@ -9,6 +9,32 @@ import {
 } from '@/lib/provider-profile-clean';
 import { sanitizeCustomerSummary } from '@/lib/review-summary';
 
+type ProviderRow = {
+    id?: unknown;
+    google_place_id?: unknown;
+    name?: unknown;
+    summary?: unknown;
+    summary_long?: unknown;
+    about?: unknown;
+    past_work?: unknown;
+    specialisations?: unknown;
+    highlights?: unknown;
+    key_person?: unknown;
+    rating?: unknown;
+    rating_count?: unknown;
+    weekday_descriptions?: unknown;
+    address?: unknown;
+    latitude?: unknown;
+    longitude?: unknown;
+    phone?: unknown;
+    website?: unknown;
+};
+
+const toProviderRow = (value: unknown): ProviderRow | null => {
+    if (!value || typeof value !== 'object') return null;
+    return value as ProviderRow;
+};
+
 export function useProProvider(placeId: string) {
     const isUuid = (value: string) =>
         /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
@@ -45,7 +71,7 @@ export function useProProvider(placeId: string) {
             setOperatingHoursByDay({});
             setShowAllOperatingHours(false);
             try {
-                let data: any = null;
+                let data: ProviderRow | null = null;
                 // Some deployments may lag behind schema updates; if extended fields
                 // (about/past_work/summary_long) aren't present yet, Supabase/PostgREST
                 // returns `400 Bad Request`. Retry with a minimal column set so the
@@ -57,23 +83,23 @@ export function useProProvider(placeId: string) {
 
                 const fetchRow = async (select: string) => {
                     if (isUuid(placeId)) {
-                        const { data: row, error } = await (supabase as any)
+                        const { data: row, error } = await supabase
                             .from('providers')
                             .select(select)
                             .eq('id', placeId)
                             .maybeSingle();
                         if (error) throw error;
-                        return row;
+                        return toProviderRow(row);
                     }
 
                     const googlePlaceId = placeId.startsWith('places/') ? placeId : `places/${placeId}`;
-                    const { data: row, error } = await (supabase as any)
+                    const { data: row, error } = await supabase
                         .from('providers')
                         .select(select)
                         .eq('google_place_id', googlePlaceId)
                         .maybeSingle();
                     if (error) throw error;
-                    return row;
+                    return toProviderRow(row);
                 };
 
                 try {

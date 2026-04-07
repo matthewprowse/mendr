@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { AdminPageHeader } from '../_components/admin-page-header';
 import { AdminDataTable } from '../_components/admin-data-table';
 import { TableCell, TableRow } from '@/components/ui/table';
@@ -32,9 +32,9 @@ export default function AdminGalleryPage() {
     const [query, setQuery] = useState('');
     const [filter, setFilter] = useState<'all' | ModerationStatus>('pending');
     const [page, setPage] = useState(0);
+    const [pageSize, setPageSize] = useState(25);
     const [selected, setSelected] = useState<GalleryRow | null>(null);
     const [editDraft, setEditDraft] = useState<GalleryRow | null>(null);
-    const PAGE_SIZE = 50;
 
     const baseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 
@@ -76,13 +76,13 @@ export default function AdminGalleryPage() {
             );
         });
     }, [rows, query, filter]);
-    const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+    const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
 
     useEffect(() => {
         setPage((p) => Math.min(p, totalPages - 1));
     }, [totalPages]);
 
-    const paged = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+    const paged = filtered.slice(page * pageSize, (page + 1) * pageSize);
 
     async function updateStatus(id: string, status: ModerationStatus) {
         setRows((prev) => prev.map((r) => (r.id === id ? { ...r, status } : r)));
@@ -195,6 +195,22 @@ export default function AdminGalleryPage() {
             </AdminDataTable>
             {totalPages > 1 ? (
                 <div className="mt-3 flex items-center justify-end gap-2">
+                    <div className="mr-2 flex items-center gap-2">
+                        <Label htmlFor="gallery-page-size" className="text-xs text-muted-foreground">Rows</Label>
+                        <Input
+                            id="gallery-page-size"
+                            type="number"
+                            min={1}
+                            value={pageSize}
+                            onChange={(e) => {
+                                const next = Number(e.target.value);
+                                if (!Number.isFinite(next)) return;
+                                setPageSize(Math.max(1, Math.trunc(next)));
+                                setPage(0);
+                            }}
+                            className="h-8 w-20 text-sm"
+                        />
+                    </div>
                     <Button size="sm" variant="outline" disabled={page === 0} onClick={() => setPage((p) => p - 1)}>Previous</Button>
                     <span className="text-xs text-muted-foreground">{page + 1} / {totalPages}</span>
                     <Button size="sm" variant="outline" disabled={page >= totalPages - 1} onClick={() => setPage((p) => p + 1)}>Next</Button>
@@ -202,14 +218,62 @@ export default function AdminGalleryPage() {
             ) : null}
             <Dialog open={!!selected} onOpenChange={(open) => !open && setSelected(null)}>
                 <DialogContent className="max-w-2xl">
-                    <DialogHeader><DialogTitle>Gallery Image</DialogTitle></DialogHeader>
+                    <DialogHeader>
+                        <DialogTitle>Gallery Image</DialogTitle>
+                        <DialogDescription>
+                            Review image details, moderate status, and then edit metadata if needed.
+                        </DialogDescription>
+                    </DialogHeader>
                     {selected ? (
-                        <div className="space-y-3">
-                            {imageUrl(selected) ? <img src={imageUrl(selected)!} alt="" className="h-56 w-full rounded-md object-cover" /> : null}
-                            <p className="text-sm text-muted-foreground">{selected.providers?.name ?? '—'}</p>
-                            <p className="text-sm">{selected.caption || selected.path || '—'}</p>
+                        <div className="space-y-4">
+                            {imageUrl(selected) ? <img src={imageUrl(selected)!} alt="" className="h-56 w-full rounded-md border object-cover" /> : null}
+                            <div className="grid gap-3 rounded-md border bg-muted/20 p-3 sm:grid-cols-2">
+                                <div>
+                                    <p className="text-xs text-muted-foreground">Provider</p>
+                                    <p className="text-sm">{selected.providers?.name ?? '—'}</p>
+                                </div>
+                                <div>
+                                    <p className="text-xs text-muted-foreground">Status</p>
+                                    <p className="text-sm capitalize">{selected.status}</p>
+                                </div>
+                                <div>
+                                    <p className="text-xs text-muted-foreground">Source</p>
+                                    <p className="text-sm capitalize">{selected.source ?? '—'}</p>
+                                </div>
+                                <div>
+                                    <p className="text-xs text-muted-foreground">Sort order</p>
+                                    <p className="text-sm">{selected.sort_order ?? 0}</p>
+                                </div>
+                                <div className="sm:col-span-2">
+                                    <p className="text-xs text-muted-foreground">Caption or path</p>
+                                    <p className="text-sm break-all">{selected.caption || selected.path || '—'}</p>
+                                </div>
+                            </div>
                             <div className="flex gap-2">
+                                <Button
+                                    variant="secondary"
+                                    onClick={() => {
+                                        void updateStatus(selected.id, 'approved');
+                                        setSelected((prev) => (prev ? { ...prev, status: 'approved' } : prev));
+                                    }}
+                                >
+                                    Approve
+                                </Button>
+                                <Button
+                                    variant="outline"
+                                    onClick={() => {
+                                        void updateStatus(selected.id, 'rejected');
+                                        setSelected((prev) => (prev ? { ...prev, status: 'rejected' } : prev));
+                                    }}
+                                >
+                                    Reject
+                                </Button>
                                 <Button variant="secondary" onClick={() => setEditDraft({ ...selected })}>Edit</Button>
+                                {imageUrl(selected) ? (
+                                    <Button variant="outline" onClick={() => window.open(imageUrl(selected)!, '_blank')}>
+                                        Open Full Image
+                                    </Button>
+                                ) : null}
                                 <Button variant="outline" onClick={() => setSelected(null)}>Close</Button>
                             </div>
                         </div>
@@ -218,7 +282,12 @@ export default function AdminGalleryPage() {
             </Dialog>
             <Dialog open={!!editDraft} onOpenChange={(open) => !open && setEditDraft(null)}>
                 <DialogContent className="max-w-2xl">
-                    <DialogHeader><DialogTitle>Edit Image</DialogTitle></DialogHeader>
+                    <DialogHeader>
+                        <DialogTitle>Edit Image</DialogTitle>
+                        <DialogDescription>
+                            Update moderation metadata and placement details for this image.
+                        </DialogDescription>
+                    </DialogHeader>
                     {editDraft ? (
                         <div className="space-y-3">
                             <div className="space-y-1"><Label>Caption</Label><Textarea rows={4} value={editDraft.caption ?? ''} onChange={(e) => setEditDraft({ ...editDraft, caption: e.target.value })} /></div>

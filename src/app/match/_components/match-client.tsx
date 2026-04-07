@@ -1,14 +1,14 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { trackEvent } from '@/lib/analytics';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { toWhatsAppPhone } from '@/lib/utils';
 import { setLastConversationIdForWhatsApp } from '@/lib/whatsapp-prefill';
-import { ArrowLeft, ArrowRight, Car, Loader2, LocateFixed, Star } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Car, Check, Copy, ExternalLink, Loader2, LocateFixed, Star } from 'lucide-react';
 import { toast } from 'sonner';
 import { FlowStepHeader } from '@/components/flow-header';
 import { Input } from '@/components/ui/input';
@@ -27,6 +27,7 @@ import { useMatchProviders } from '@/features/match/hooks/useMatchProviders';
 import { useMatchMap } from '@/features/match/hooks/useMatchMap';
 import { loadMatchPageCache, saveMatchPageCache } from '@/features/match/cache/match-page-cache';
 import { MatchNoProvidersEmpty } from '@/app/match/_components/match-no-providers-empty';
+import { fetchConversationDiagnosis } from '@/lib/conversations-api';
 
 const RADIUS_OPTIONS_KM = [5, 10, 20, 50] as const;
 
@@ -72,6 +73,15 @@ function hasEnrichedSummary(
     const entry = enrichmentEntryForProvider(cache, provider);
     const summary = (entry?.reviewSummary ?? '').trim();
     return summary.length > 0;
+}
+
+function hasAnyProviderSummary(
+    cache: Record<string, EnrichmentCacheEntry>,
+    provider: MatchProvider | null
+): boolean {
+    if (!provider) return false;
+    if (hasEnrichedSummary(cache, provider)) return true;
+    return (provider.summary ?? '').trim().length > 0;
 }
 
 function hasEnrichedSummaryByPlaceId(
@@ -191,8 +201,18 @@ function providerPriorityScore(provider: MatchProvider): number {
 
 export function MatchClient({ conversationId: initialConversationId }: { conversationId?: string }) {
     const router = useRouter();
+    const pathname = usePathname();
     const searchParams = useSearchParams();
-    const conversationId = initialConversationId || searchParams.get('conversationId') || '';
+    const pathConversationId = useMemo(() => {
+        const raw = (pathname || '').split('/').filter(Boolean).pop() || '';
+        if (!raw || raw.toLowerCase() === 'match') return '';
+        return decodeURIComponent(raw);
+    }, [pathname]);
+    const conversationId =
+        initialConversationId ||
+        searchParams.get('conversationId') ||
+        pathConversationId ||
+        '';
 
     useEffect(() => {
         if (conversationId) setLastConversationIdForWhatsApp(conversationId);
@@ -219,6 +239,7 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
         setCompanyIndex,
         isProvidersLoading,
         isLoadingMoreForExpandedRadius,
+        isRefreshingProvidersInBackground,
         refreshProvidersForLocation,
     } = useMatchProviders({
         searchRadiusMeters,
@@ -227,6 +248,8 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
     const [contactOpen, setContactOpen] = useState(false);
     const [isUpdatingLocation, setIsUpdatingLocation] = useState(false);
     const [isLocatingUser, setIsLocatingUser] = useState(false);
+    const [reportLinkCopied, setReportLinkCopied] = useState(false);
+    const [resolvedReportId, setResolvedReportId] = useState('');
     // Deduplicate provider_contact analytics per provider per session.
     const providerContactFiredForProviderIdRef = useRef<string | null>(null);
 
@@ -264,9 +287,7 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
     // Enrichment cache: keyed by Google Place ID
     const [enrichmentCache, setEnrichmentCache] = useState<Record<string, EnrichmentCacheEntry>>({});
     const [isEnrichmentLoading, setIsEnrichmentLoading] = useState(false);
-    const [isDetailsWaiting, setIsDetailsWaiting] = useState(false);
-    const [detailsWaitingProviderName, setDetailsWaitingProviderName] = useState<string>('');
-    const enrichmentQueuedRef = useRef<string>('');
+    const enrichmentQueuedAtByKeyRef = useRef<Record<string, number>>({});
     const hydratedFromCacheRef = useRef(false);
     /** When sessionStorage cache had providers, skip the initial `/api/providers` fetch (avoids duplicate load). */
     const skipInitialProviderFetchRef = useRef(false);
@@ -286,7 +307,7 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
     }, []);
 
     const selectedProviderHasSummary = useMemo(
-        () => hasEnrichedSummary(enrichmentCache, selectedProvider),
+        () => hasAnyProviderSummary(enrichmentCache, selectedProvider),
         [enrichmentCache, selectedProvider]
     );
 
@@ -341,12 +362,16 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
     // Also poll briefly so newly enriched summaries become visible without reload.
     useEffect(() => {
         if (providers.length === 0) return;
-        const placeIds = providers.map((p) => p.placeId).filter(Boolean);
+        const providersNeedingSummary = providers.filter((p) => !hasAnyProviderSummary(enrichmentCache, p));
+        const placeIds = providersNeedingSummary.map((p) => p.placeId).filter(Boolean);
         if (placeIds.length === 0) return;
 
         const key = placeIds.slice().sort().join(',');
-        if (enrichmentQueuedRef.current === key) return;
-        enrichmentQueuedRef.current = key;
+        const now = Date.now();
+        const lastQueuedAt = enrichmentQueuedAtByKeyRef.current[key] ?? 0;
+        const QUEUE_RETRY_COOLDOWN_MS = 15_000;
+        if (now - lastQueuedAt < QUEUE_RETRY_COOLDOWN_MS) return;
+        enrichmentQueuedAtByKeyRef.current[key] = now;
 
         // 1. Fire enrichment queue (fire-and-forget)
         void resolveTradeContext().then(({ trade }) => {
@@ -377,7 +402,7 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
                 enrichmentCacheRef,
                 (cache) => setEnrichmentCache({ ...cache }),
                 {
-                    maxRounds: 5,
+                    maxRounds: 9,
                     initialDelayMs: 1000,
                     signal: abortController.signal,
                 }
@@ -491,6 +516,50 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
         const q = `${userLocation.lat},${userLocation.lng}`;
         return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`;
     }, [userLocation]);
+    useEffect(() => {
+        let cancelled = false;
+        void (async () => {
+            const candidates = Array.from(
+                new Set(
+                    [
+                        conversationId,
+                        searchParams.get('reportId') || '',
+                        searchParams.get('id') || '',
+                        searchParams.get('conversationId') || '',
+                    ]
+                        .map((v) => v.trim())
+                        .filter(Boolean)
+                )
+            );
+            if (candidates.length === 0) {
+                if (!cancelled) setResolvedReportId('');
+                return;
+            }
+
+            for (const candidate of candidates) {
+                const result = await fetchConversationDiagnosis(candidate);
+                if (cancelled) return;
+                if (result.ok && result.data) {
+                    setResolvedReportId(candidate);
+                    return;
+                }
+            }
+
+            if (!cancelled) setResolvedReportId(candidates[0] ?? '');
+        })();
+        return () => {
+            cancelled = true;
+        };
+    }, [conversationId, searchParams]);
+    const reportPath = useMemo(() => {
+        if (!resolvedReportId) return '';
+        return `/report/${encodeURIComponent(resolvedReportId)}`;
+    }, [resolvedReportId]);
+    const reportUrl = useMemo(() => {
+        if (!reportPath) return '';
+        if (typeof window === 'undefined') return reportPath;
+        return `${window.location.origin}${reportPath}`;
+    }, [reportPath]);
     const fetchProviders = useCallback(async () => {
         const loc = await ensureLocation();
         if (!loc) return;
@@ -691,56 +760,30 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
             provider_id: targetProvider.providerId,
             diagnosis_id: conversationId,
         });
-        const alreadyEnriched = hasEnrichedSummary(enrichmentCache, targetProvider);
-        if (alreadyEnriched) {
-            const cid = conversationId ? `?conversationId=${encodeURIComponent(conversationId)}` : '';
-            router.push(`/pro/${encodeURIComponent(targetProvider.providerId)}${cid}`);
-            return;
+        if (!hasEnrichedSummary(enrichmentCache, targetProvider)) {
+            const { trade } = await resolveTradeContext();
+            queueEnrichmentApi([targetProvider.placeId], trade || undefined);
         }
-
-        setDetailsWaitingProviderName(targetProvider.name || 'this provider');
-        setIsDetailsWaiting(true);
-        try {
-            queueEnrichmentApi([targetProvider.placeId], (await resolveTradeContext()).trade || undefined);
-            for (let attempt = 0; attempt < 20; attempt += 1) {
-                const cache = await fetchEnrichmentApi([targetProvider.placeId]);
-                if (cache) {
-                    setEnrichmentCache((prev) => ({ ...prev, ...cache }));
-                    const refreshedProvider = {
-                        ...targetProvider,
-                    };
-                    if (hasEnrichedSummary({ ...enrichmentCache, ...cache }, refreshedProvider)) {
-                        const cid = conversationId ? `?conversationId=${encodeURIComponent(conversationId)}` : '';
-                        router.push(`/pro/${encodeURIComponent(targetProvider.providerId)}${cid}`);
-                        return;
-                    }
-                }
-                await sleep(1500);
-            }
-            toast.message('We are still preparing this profile. Please try again in a moment.');
-        } finally {
-            setIsDetailsWaiting(false);
-        }
+        const cid = conversationId ? `?conversationId=${encodeURIComponent(conversationId)}` : '';
+        router.push(`/pro/${encodeURIComponent(targetProvider.providerId)}${cid}`);
     }, [conversationId, enrichmentCache, resolveTradeContext, router]);
 
-    if (isDetailsWaiting) {
-        return (
-            <main className="flex min-h-screen flex-col items-center justify-center gap-4 bg-background px-6 text-center">
-                <Loader2 className="size-7 animate-spin text-muted-foreground" aria-hidden="true" />
-                <div className="space-y-2">
-                    <h2 className="text-lg font-semibold text-foreground">
-                        Preparing Contractor Details
-                    </h2>
-                    <p className="text-sm text-muted-foreground">
-                        We are still preparing details for {detailsWaitingProviderName}. This can take a few seconds.
-                    </p>
-                </div>
-                <Button variant="secondary" onClick={() => setIsDetailsWaiting(false)}>
-                    Back to Matches
-                </Button>
-            </main>
-        );
-    }
+    const handleOpenReportInNewTab = useCallback(() => {
+        if (!reportPath) return;
+        window.open(reportPath, '_blank', 'noopener,noreferrer');
+    }, [reportPath]);
+
+    const handleCopyReportLink = useCallback(async () => {
+        if (!reportUrl) return;
+        try {
+            await navigator.clipboard.writeText(reportUrl);
+            setReportLinkCopied(true);
+            toast.success('Scandio report link copied');
+            window.setTimeout(() => setReportLinkCopied(false), 2000);
+        } catch {
+            toast.error('Could not copy report link');
+        }
+    }, [reportUrl]);
 
     return (
         <main className="flex min-h-screen flex-col bg-background">
@@ -761,6 +804,43 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
                         </p>
                     ) : null}
                 </div>
+
+                {reportPath ? (
+                    <div className="flex items-center justify-between rounded-lg border border-input bg-card p-3">
+                        <div className="min-w-0">
+                            <p className="text-sm font-semibold text-foreground">Scandio Scan</p>
+                            <p className="truncate text-xs text-muted-foreground">Open or copy your diagnosis link</p>
+                        </div>
+                        <div className="ml-3 flex shrink-0 items-center gap-2">
+                            <Button
+                                type="button"
+                                variant="secondary"
+                                size="icon"
+                                className="h-9 w-9"
+                                onClick={handleOpenReportInNewTab}
+                                aria-label="Open Scandio scan in new tab"
+                            >
+                                <ExternalLink className="size-4" aria-hidden />
+                            </Button>
+                            <Button
+                                type="button"
+                                variant="secondary"
+                                size="icon"
+                                className="h-9 w-9"
+                                onClick={() => {
+                                    void handleCopyReportLink();
+                                }}
+                                aria-label="Copy Scandio scan link"
+                            >
+                                {reportLinkCopied ? (
+                                    <Check className="size-4" aria-hidden />
+                                ) : (
+                                    <Copy className="size-4" aria-hidden />
+                                )}
+                            </Button>
+                        </div>
+                    </div>
+                ) : null}
 
                 {showBottomSkeleton ? (
                     <div className="flex flex-row items-center justify-between gap-4 truncate">
@@ -835,6 +915,8 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
                         <p className="text-xs text-muted-foreground">
                             Expanding your search radius and loading more contractors...
                         </p>
+                    ) : !showBottomSkeleton && isRefreshingProvidersInBackground ? (
+                        <p className="text-xs text-muted-foreground">Refreshing recommendations...</p>
                     ) : null}
                 </div>
 
@@ -947,12 +1029,10 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
                                     scandioSummary || fallbackSummary,
                                     selectedProvider.name
                                 );
-                                const shouldShowSummarySkeleton =
-                                    !displaySummary &&
-                                    (isEnrichmentLoading || !selectedProviderHasSummary);
+                                const shouldShowSummarySkeleton = !displaySummary && isEnrichmentLoading;
                                 const pendingText = isEnrichmentLoading
                                     ? 'Scandio summary is being prepared now.'
-                                    : 'Scandio summary will appear once ready.';
+                                    : 'No customer summary available yet.';
 
                                 return (
                                     <div className="flex flex-col gap-1">

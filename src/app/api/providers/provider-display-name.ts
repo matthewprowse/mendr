@@ -58,13 +58,7 @@ export function normalizeProviderName(name: string): string {
         return parts
             .map((part) => {
                 if (part === '-' || part === '/' || part === '') return part;
-                const apostropheParts = part.split(/(')/);
-                return apostropheParts
-                    .map((ap) => {
-                        if (ap === "'") return ap;
-                        return titleCaseWord(ap);
-                    })
-                    .join('');
+                return titleCaseWord(part);
             })
             .join('');
     };

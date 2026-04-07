@@ -11,6 +11,7 @@ import { Label } from '@/components/ui/label';
 import {
     Dialog,
     DialogContent,
+    DialogDescription,
     DialogHeader,
     DialogTitle,
 } from '@/components/ui/dialog';
@@ -45,6 +46,10 @@ type ProviderApplication = {
     source: string | null;
 };
 
+type RawProviderApplication = Omit<ProviderApplication, 'status'> & {
+    status?: unknown;
+};
+
 type LiveProviderRow = {
     id: string;
     name: string;
@@ -76,6 +81,30 @@ const STATUS_STYLES: Record<Status, string> = {
     rejected:  'bg-red-100 text-red-600 border-red-200',
 };
 const STATUSES: Status[] = ['new', 'contacted', 'approved', 'rejected'];
+
+const STATUS_ALIASES: Record<string, Status> = {
+    pending: 'new',
+    waitlist: 'new',
+    invited: 'contacted',
+    invitation_sent: 'contacted',
+    accepted: 'approved',
+    declined: 'rejected',
+    denied: 'rejected',
+};
+
+function normalizeStatus(value: unknown): Status {
+    if (typeof value !== 'string') return 'new';
+    const normalized = value.trim().toLowerCase();
+    if (STATUSES.includes(normalized as Status)) return normalized as Status;
+    return STATUS_ALIASES[normalized] ?? 'new';
+}
+
+function normalizeApplication(row: RawProviderApplication): ProviderApplication {
+    return {
+        ...row,
+        status: normalizeStatus(row.status),
+    };
+}
 
 function StatusBadge({ status, onChange }: { status: Status; onChange: (s: Status) => void }) {
     const [open, setOpen] = useState(false);
@@ -200,19 +229,23 @@ export default function AdminProvidersPage() {
     const [sending, setSending] = useState(false);
     const [applicationsPage, setApplicationsPage] = useState(0);
     const [livePage, setLivePage] = useState(0);
+    const [pageSize, setPageSize] = useState(25);
     const [selectedApplication, setSelectedApplication] = useState<ProviderApplication | null>(null);
     const [editApplication, setEditApplication] = useState<ProviderApplication | null>(null);
     const [selectedLiveProvider, setSelectedLiveProvider] = useState<LiveProviderRow | null>(null);
     const [editLiveProvider, setEditLiveProvider] = useState<LiveProviderRow | null>(null);
     const [refreshingGoogle, setRefreshingGoogle] = useState(false);
-    const PAGE_SIZE = 50;
 
     const load = useCallback(async () => {
         const [applicationsRes, liveProvidersRes] = await Promise.all([
             fetch('/api/admin/providers'),
             fetch('/api/admin/providers/live'),
         ]);
-        if (applicationsRes.ok) setEntries(await applicationsRes.json());
+        if (applicationsRes.ok) {
+            const rows = await applicationsRes.json();
+            const safeRows = Array.isArray(rows) ? (rows as RawProviderApplication[]) : [];
+            setEntries(safeRows.map(normalizeApplication));
+        }
         if (liveProvidersRes.ok) setLiveProviders(await liveProvidersRes.json());
         setLoading(false);
         setLiveLoading(false);
@@ -300,10 +333,10 @@ export default function AdminProvidersPage() {
             (p.address ?? '').toLowerCase().includes(q)
         );
     });
-    const applicationsTotalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-    const applicationsPageRows = filtered.slice(applicationsPage * PAGE_SIZE, (applicationsPage + 1) * PAGE_SIZE);
-    const liveTotalPages = Math.max(1, Math.ceil(liveFiltered.length / PAGE_SIZE));
-    const livePageRows = liveFiltered.slice(livePage * PAGE_SIZE, (livePage + 1) * PAGE_SIZE);
+    const applicationsTotalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+    const applicationsPageRows = filtered.slice(applicationsPage * pageSize, (applicationsPage + 1) * pageSize);
+    const liveTotalPages = Math.max(1, Math.ceil(liveFiltered.length / pageSize));
+    const livePageRows = liveFiltered.slice(livePage * pageSize, (livePage + 1) * pageSize);
     async function saveApplicationEdit() {
         if (!editApplication) return;
         const res = await fetch('/api/admin/providers', {
@@ -409,6 +442,15 @@ export default function AdminProvidersPage() {
             .filter(Boolean);
     }
 
+    async function copyToClipboard(value: string, label: string) {
+        try {
+            await navigator.clipboard.writeText(value);
+            toast.success(`${label} copied`);
+        } catch {
+            toast.error(`Failed to copy ${label.toLowerCase()}`);
+        }
+    }
+
     return (
         <div className="mx-auto w-full max-w-7xl px-4 pb-8 pt-4 sm:px-6 lg:px-8">
             <div className="mb-6">
@@ -466,6 +508,24 @@ export default function AdminProvidersPage() {
                 </AdminDataTable>
                 {liveTotalPages > 1 ? (
                     <div className="mt-3 flex items-center justify-end gap-2">
+                        <div className="mr-2 flex items-center gap-2">
+                            <Label htmlFor="providers-page-size-live" className="text-xs text-muted-foreground">Rows</Label>
+                            <Input
+                                id="providers-page-size-live"
+                                type="number"
+                                min={1}
+                                value={pageSize}
+                                onChange={(e) => {
+                                    const next = Number(e.target.value);
+                                    if (!Number.isFinite(next)) return;
+                                    const normalized = Math.max(1, Math.trunc(next));
+                                    setPageSize(normalized);
+                                    setLivePage(0);
+                                    setApplicationsPage(0);
+                                }}
+                                className="h-8 w-20 text-sm"
+                            />
+                        </div>
                         <Button size="sm" variant="outline" disabled={livePage === 0} onClick={() => setLivePage((p) => p - 1)}>Previous</Button>
                         <span className="text-xs text-muted-foreground">{livePage + 1} / {liveTotalPages}</span>
                         <Button size="sm" variant="outline" disabled={livePage >= liveTotalPages - 1} onClick={() => setLivePage((p) => p + 1)}>Next</Button>
@@ -532,6 +592,24 @@ export default function AdminProvidersPage() {
                 </AdminDataTable>
                 {applicationsTotalPages > 1 ? (
                     <div className="mt-3 flex items-center justify-end gap-2">
+                        <div className="mr-2 flex items-center gap-2">
+                            <Label htmlFor="providers-page-size-applications" className="text-xs text-muted-foreground">Rows</Label>
+                            <Input
+                                id="providers-page-size-applications"
+                                type="number"
+                                min={1}
+                                value={pageSize}
+                                onChange={(e) => {
+                                    const next = Number(e.target.value);
+                                    if (!Number.isFinite(next)) return;
+                                    const normalized = Math.max(1, Math.trunc(next));
+                                    setPageSize(normalized);
+                                    setLivePage(0);
+                                    setApplicationsPage(0);
+                                }}
+                                className="h-8 w-20 text-sm"
+                            />
+                        </div>
                         <Button size="sm" variant="outline" disabled={applicationsPage === 0} onClick={() => setApplicationsPage((p) => p - 1)}>Previous</Button>
                         <span className="text-xs text-muted-foreground">{applicationsPage + 1} / {applicationsTotalPages}</span>
                         <Button size="sm" variant="outline" disabled={applicationsPage >= applicationsTotalPages - 1} onClick={() => setApplicationsPage((p) => p + 1)}>Next</Button>
@@ -544,6 +622,9 @@ export default function AdminProvidersPage() {
                 <DialogContent className="max-w-lg">
                     <DialogHeader>
                         <DialogTitle>Send Email</DialogTitle>
+                        <DialogDescription>
+                            Use a template, tailor it, and send directly to the provider.
+                        </DialogDescription>
                     </DialogHeader>
                     {emailTarget && (
                         <div className="flex flex-col gap-4">
@@ -617,14 +698,83 @@ export default function AdminProvidersPage() {
             </Dialog>
             <Dialog open={!!selectedApplication} onOpenChange={(open) => !open && setSelectedApplication(null)}>
                 <DialogContent className="max-w-2xl">
-                    <DialogHeader><DialogTitle>Provider Application</DialogTitle></DialogHeader>
+                    <DialogHeader>
+                        <DialogTitle>Provider Application</DialogTitle>
+                        <DialogDescription>
+                            Review key application details, then update status or open the full edit form.
+                        </DialogDescription>
+                    </DialogHeader>
                     {selectedApplication ? (
-                        <div className="space-y-3">
-                            <p className="text-sm font-medium">{selectedApplication.contact_name}</p>
-                            <p className="text-sm text-muted-foreground">{selectedApplication.email}</p>
-                            <p className="text-sm">{selectedApplication.notes || 'No notes'}</p>
-                            <div className="flex gap-2">
-                                <Button variant="secondary" onClick={() => setEditApplication({ ...selectedApplication })}>Edit</Button>
+                        <div className="space-y-4">
+                            <div className="grid gap-3 rounded-md border bg-muted/20 p-3 sm:grid-cols-2">
+                                <div>
+                                    <p className="text-xs text-muted-foreground">Contact</p>
+                                    <p className="text-sm font-medium">{selectedApplication.contact_name}</p>
+                                </div>
+                                <div>
+                                    <p className="text-xs text-muted-foreground">Business</p>
+                                    <p className="text-sm">{selectedApplication.business_name || '—'}</p>
+                                </div>
+                                <div>
+                                    <p className="text-xs text-muted-foreground">Trade</p>
+                                    <p className="text-sm">{selectedApplication.trade}</p>
+                                </div>
+                                <div>
+                                    <p className="text-xs text-muted-foreground">Status</p>
+                                    <StatusBadge
+                                        status={selectedApplication.status}
+                                        onChange={(s) => {
+                                            void updateStatus(selectedApplication.id, s);
+                                            setSelectedApplication((prev) => (prev ? { ...prev, status: s } : prev));
+                                        }}
+                                    />
+                                </div>
+                                <div>
+                                    <p className="text-xs text-muted-foreground">Email</p>
+                                    <button
+                                        type="button"
+                                        className="text-sm text-primary underline-offset-2 hover:underline"
+                                        onClick={() => void copyToClipboard(selectedApplication.email, 'Email')}
+                                    >
+                                        {selectedApplication.email}
+                                    </button>
+                                </div>
+                                <div>
+                                    <p className="text-xs text-muted-foreground">Phone</p>
+                                    <button
+                                        type="button"
+                                        className="text-sm text-primary underline-offset-2 hover:underline"
+                                        onClick={() => void copyToClipboard(selectedApplication.phone, 'Phone')}
+                                    >
+                                        {selectedApplication.phone}
+                                    </button>
+                                </div>
+                                <div className="sm:col-span-2">
+                                    <p className="text-xs text-muted-foreground">Areas</p>
+                                    <p className="text-sm">{selectedApplication.areas || '—'}</p>
+                                </div>
+                                <div className="sm:col-span-2">
+                                    <p className="text-xs text-muted-foreground">Notes</p>
+                                    <p className="text-sm whitespace-pre-wrap">{selectedApplication.notes || 'No notes'}</p>
+                                </div>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                                <Button
+                                    variant="secondary"
+                                    onClick={() => {
+                                        setEmailTarget(selectedApplication);
+                                        setEmailTemplate('waitlist');
+                                    }}
+                                >
+                                    Send Email
+                                </Button>
+                                <Button variant="secondary" onClick={() => setEditApplication({ ...selectedApplication })}>Edit Full Details</Button>
+                                <Button
+                                    variant="outline"
+                                    onClick={() => window.open(`mailto:${selectedApplication.email}`, '_blank')}
+                                >
+                                    Open In Mail App
+                                </Button>
                                 <Button variant="outline" onClick={() => setSelectedApplication(null)}>Close</Button>
                             </div>
                         </div>
@@ -633,17 +783,51 @@ export default function AdminProvidersPage() {
             </Dialog>
             <Dialog open={!!editApplication} onOpenChange={(open) => !open && setEditApplication(null)}>
                 <DialogContent className="max-w-2xl">
-                    <DialogHeader><DialogTitle>Edit Provider Application</DialogTitle></DialogHeader>
+                    <DialogHeader>
+                        <DialogTitle>Edit Provider Application</DialogTitle>
+                        <DialogDescription>
+                            Update contact info, service coverage, and internal notes in one place.
+                        </DialogDescription>
+                    </DialogHeader>
                     {editApplication ? (
-                        <div className="space-y-2">
-                            <Input value={editApplication.contact_name} onChange={(e) => setEditApplication({ ...editApplication, contact_name: e.target.value })} placeholder="Contact name" />
-                            <Input value={editApplication.business_name ?? ''} onChange={(e) => setEditApplication({ ...editApplication, business_name: e.target.value })} placeholder="Business name" />
-                            <Input value={editApplication.trade} onChange={(e) => setEditApplication({ ...editApplication, trade: e.target.value })} placeholder="Trade" />
-                            <Input value={editApplication.phone} onChange={(e) => setEditApplication({ ...editApplication, phone: e.target.value })} placeholder="Phone" />
-                            <Input value={editApplication.email} onChange={(e) => setEditApplication({ ...editApplication, email: e.target.value })} placeholder="Email" />
-                            <Textarea rows={3} value={editApplication.areas} onChange={(e) => setEditApplication({ ...editApplication, areas: e.target.value })} />
-                            <Textarea rows={3} value={editApplication.notes ?? ''} onChange={(e) => setEditApplication({ ...editApplication, notes: e.target.value })} />
-                            <div className="flex gap-2">
+                        <div className="space-y-3">
+                            <div className="grid gap-3 sm:grid-cols-2">
+                                <div>
+                                    <Label className="text-xs">Contact name</Label>
+                                    <Input className="mt-1" value={editApplication.contact_name} onChange={(e) => setEditApplication({ ...editApplication, contact_name: e.target.value })} placeholder="Contact name" />
+                                </div>
+                                <div>
+                                    <Label className="text-xs">Business name</Label>
+                                    <Input className="mt-1" value={editApplication.business_name ?? ''} onChange={(e) => setEditApplication({ ...editApplication, business_name: e.target.value })} placeholder="Business name" />
+                                </div>
+                                <div>
+                                    <Label className="text-xs">Trade</Label>
+                                    <Input className="mt-1" value={editApplication.trade} onChange={(e) => setEditApplication({ ...editApplication, trade: e.target.value })} placeholder="Trade" />
+                                </div>
+                                <div>
+                                    <Label className="text-xs">Status</Label>
+                                    <div className="mt-1">
+                                        <StatusBadge status={editApplication.status} onChange={(s) => setEditApplication({ ...editApplication, status: s })} />
+                                    </div>
+                                </div>
+                                <div>
+                                    <Label className="text-xs">Phone</Label>
+                                    <Input className="mt-1" value={editApplication.phone} onChange={(e) => setEditApplication({ ...editApplication, phone: e.target.value })} placeholder="Phone" />
+                                </div>
+                                <div>
+                                    <Label className="text-xs">Email</Label>
+                                    <Input className="mt-1" value={editApplication.email} onChange={(e) => setEditApplication({ ...editApplication, email: e.target.value })} placeholder="Email" />
+                                </div>
+                            </div>
+                            <div>
+                                <Label className="text-xs">Areas</Label>
+                                <Textarea className="mt-1" rows={3} value={editApplication.areas} onChange={(e) => setEditApplication({ ...editApplication, areas: e.target.value })} />
+                            </div>
+                            <div>
+                                <Label className="text-xs">Internal notes</Label>
+                                <Textarea className="mt-1" rows={4} value={editApplication.notes ?? ''} onChange={(e) => setEditApplication({ ...editApplication, notes: e.target.value })} />
+                            </div>
+                            <div className="flex gap-2 pt-1">
                                 <Button onClick={() => void saveApplicationEdit()}>Save</Button>
                                 <Button variant="outline" onClick={() => setEditApplication(null)}>Cancel</Button>
                             </div>
@@ -653,21 +837,43 @@ export default function AdminProvidersPage() {
             </Dialog>
             <Dialog open={!!selectedLiveProvider} onOpenChange={(open) => !open && setSelectedLiveProvider(null)}>
                 <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
-                    <DialogHeader><DialogTitle>Live Provider</DialogTitle></DialogHeader>
+                    <DialogHeader>
+                        <DialogTitle>Live Provider</DialogTitle>
+                        <DialogDescription>
+                            Inspect quality signals and trigger quick maintenance actions.
+                        </DialogDescription>
+                    </DialogHeader>
                     {selectedLiveProvider ? (
-                        <div className="space-y-3">
-                            <p className="text-sm font-medium">{selectedLiveProvider.name}</p>
-                            <p className="text-sm text-muted-foreground">{selectedLiveProvider.address ?? '—'}</p>
-                            <p className="text-xs text-muted-foreground">
-                                Google rating:{' '}
-                                {selectedLiveProvider.rating != null
-                                    ? `${selectedLiveProvider.rating.toFixed(1)} (${selectedLiveProvider.rating_count} reviews)`
-                                    : '—'}
-                            </p>
-                            {selectedLiveProvider.google_place_id ? (
-                                <p className="text-xs text-muted-foreground break-all font-mono">
-                                    {selectedLiveProvider.google_place_id}
+                        <div className="space-y-4">
+                            <div className="rounded-md border bg-muted/20 p-3">
+                                <p className="text-sm font-medium">{selectedLiveProvider.name}</p>
+                                <p className="text-sm text-muted-foreground">{selectedLiveProvider.address ?? '—'}</p>
+                                <p className="mt-2 text-xs text-muted-foreground">
+                                    Google rating:{' '}
+                                    {selectedLiveProvider.rating != null
+                                        ? `${selectedLiveProvider.rating.toFixed(1)} (${selectedLiveProvider.rating_count} reviews)`
+                                        : '—'}
                                 </p>
+                                <div className="mt-2 grid grid-cols-3 gap-2 text-xs">
+                                    <div className="rounded border bg-background p-2">
+                                        <p className="text-muted-foreground">Outputs</p>
+                                        <p className="font-medium text-foreground">{selectedLiveProvider.output_count}</p>
+                                    </div>
+                                    <div className="rounded border bg-background p-2">
+                                        <p className="text-muted-foreground">Contacts</p>
+                                        <p className="font-medium text-foreground">{selectedLiveProvider.contact_count}</p>
+                                    </div>
+                                    <div className="rounded border bg-background p-2">
+                                        <p className="text-muted-foreground">Profile Views</p>
+                                        <p className="font-medium text-foreground">{selectedLiveProvider.profile_view_count}</p>
+                                    </div>
+                                </div>
+                            </div>
+                            {selectedLiveProvider.google_place_id ? (
+                                <div className="rounded border bg-muted/20 p-2">
+                                    <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Google Place ID</p>
+                                    <p className="text-xs break-all font-mono">{selectedLiveProvider.google_place_id}</p>
+                                </div>
                             ) : null}
                             <div className="flex flex-wrap gap-2">
                                 <Button
@@ -678,6 +884,14 @@ export default function AdminProvidersPage() {
                                 >
                                     {refreshingGoogle ? 'Refreshing…' : 'Refresh rating & reviews from Google'}
                                 </Button>
+                                {selectedLiveProvider.google_place_id ? (
+                                    <Button
+                                        variant="outline"
+                                        onClick={() => void copyToClipboard(selectedLiveProvider.google_place_id!, 'Google place id')}
+                                    >
+                                        Copy Place ID
+                                    </Button>
+                                ) : null}
                                 <Button variant="secondary" onClick={() => setEditLiveProvider({ ...selectedLiveProvider })}>Edit</Button>
                                 <Button variant="outline" onClick={() => setSelectedLiveProvider(null)}>Close</Button>
                             </div>
@@ -687,7 +901,12 @@ export default function AdminProvidersPage() {
             </Dialog>
             <Dialog open={!!editLiveProvider} onOpenChange={(open) => !open && setEditLiveProvider(null)}>
                 <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
-                    <DialogHeader><DialogTitle>Edit Live Provider</DialogTitle></DialogHeader>
+                    <DialogHeader>
+                        <DialogTitle>Edit Live Provider</DialogTitle>
+                        <DialogDescription>
+                            Keep the customer-facing profile, summary, and ranking details up to date.
+                        </DialogDescription>
+                    </DialogHeader>
                     {editLiveProvider ? (
                         <div className="space-y-3">
                             <div>

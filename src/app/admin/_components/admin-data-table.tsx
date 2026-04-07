@@ -22,9 +22,9 @@ export function AdminDataTable({
     const hasChildren = Boolean(children);
 
     return (
-        <div className="rounded-xl border border-border/50">
-            <Table>
-                <TableHeader className="bg-muted/30">
+        <div className="rounded-md border">
+            <Table className="[&_th]:h-12 [&_th]:px-4 [&_td]:px-4 [&_td]:py-3">
+                <TableHeader>
                     <TableRow>
                         {headers.map((h) => (
                             <TableHead key={h}>{h}</TableHead>
@@ -34,7 +34,7 @@ export function AdminDataTable({
                 <TableBody>
                     {loading ? (
                         <TableRow>
-                            <TableCell colSpan={span} className="py-12 text-center text-sm text-muted-foreground">
+                            <TableCell colSpan={span} className="h-24 text-center text-sm text-muted-foreground">
                                 Loading…
                             </TableCell>
                         </TableRow>
@@ -42,7 +42,7 @@ export function AdminDataTable({
                         children
                     ) : (
                         <TableRow>
-                            <TableCell colSpan={span} className="py-12 text-center text-sm text-muted-foreground">
+                            <TableCell colSpan={span} className="h-24 text-center text-sm text-muted-foreground">
                                 {emptyText}
                             </TableCell>
                         </TableRow>

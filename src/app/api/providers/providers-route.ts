@@ -270,19 +270,9 @@ export async function POST(req: NextRequest) {
                         );
 
                     if (cacheHasRichFields) {
-                        // Normalize display names (strip Pty Ltd, etc.) even when serving cache.
-                        // If we had to change anything, update cache/provider rows in the background.
-                        let mutated = false;
-                        const normalizedCached = (cachedProviders || []).map((p: any) => {
-                            if (!p || typeof p !== 'object') return p;
-                            const current = typeof p.name === 'string' ? p.name : '';
-                            const normalized = normalizeProviderName(current);
-                            if (normalized && normalized !== current) {
-                                mutated = true;
-                                return { ...p, name: normalized };
-                            }
-                            return p;
-                        });
+                        // Use cached names as-is; avoid re-normalizing and unintentionally
+                        // changing user-visible/admin-edited display names on repeat outputs.
+                        const normalizedCached = (cachedProviders || []).map((p: any) => p);
                         const originLat = Number(lat);
                         const originLng = Number(lng);
                         const radiusKm = radius / 1000;
@@ -335,16 +325,6 @@ export async function POST(req: NextRequest) {
                         }
                         if (shouldForceGoogleFetchForReviews) {
                             searchCacheExpired = true;
-                        }
-                        if (mutated) {
-                            createSupabaseAdminClient()
-                                .then((adminSupabase) =>
-                                    adminSupabase
-                                        .from('provider_search_cache')
-                                        .update({ providers: filteredCached })
-                                        .eq('query_key', searchCacheKey)
-                                )
-                                .catch(() => {});
                         }
                         // Always persist returned providers so they exist when user clicks "View profile".
                         if (!filteredCached.length && !shouldForceGoogleFetchForReviews) {
@@ -419,7 +399,7 @@ export async function POST(req: NextRequest) {
                                 if (googlePlaceIds.length > 0) {
                                     const { data: providerRowsForIds } = await supabase
                                         .from('providers')
-                                        .select('id, google_place_id, name')
+                                        .select('id, google_place_id, name, summary')
                                         .in('google_place_id', googlePlaceIds);
                                     const idByGoogle = new Map(
                                         (providerRowsForIds || []).map((r: any) => [
@@ -437,15 +417,34 @@ export async function POST(req: NextRequest) {
                                             )
                                             .map((r: any) => [String(r.google_place_id), String(r.name).trim()])
                                     );
+                                    const summaryByGoogle = new Map<string, string>(
+                                        (providerRowsForIds || [])
+                                            .filter(
+                                                (r: any) =>
+                                                    typeof r?.google_place_id === 'string' &&
+                                                    typeof r?.summary === 'string' &&
+                                                    r.summary.trim().length > 0
+                                            )
+                                            .map((r: any) => [
+                                                String(r.google_place_id),
+                                                String(r.summary).trim(),
+                                            ])
+                                    );
                                     providersWithIds = (normalizedCached || []).map((p: any) => {
                                         const pid = p?.placeId || p?.place_id;
                                         if (!pid || typeof pid !== 'string') return p;
                                         const gId = pid.startsWith('places/') ? pid : `places/${pid}`;
                                         const dbName = nameByGoogle.get(gId);
+                                        const dbSummary = summaryByGoogle.get(gId);
+                                        const hasCachedSummary =
+                                            typeof p?.summary === 'string' && p.summary.trim().length > 0;
                                         return {
                                             ...p,
                                             providerId: idByGoogle.get(gId) || p.providerId,
                                             ...(dbName ? { name: dbName } : {}),
+                                            ...(!hasCachedSummary && dbSummary
+                                                ? { summary: dbSummary }
+                                                : {}),
                                         };
                                     });
                                 }
@@ -1217,7 +1216,7 @@ export async function POST(req: NextRequest) {
                         return {
                             source: 'google',
                             google_place_id: googlePlaceId,
-                            name: normalizeProviderName(p.name),
+                            name: p.name,
                             address: p.address,
                             rating: p.rating,
                             rating_count: p.ratingCount ?? 0,

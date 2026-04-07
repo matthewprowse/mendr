@@ -1,4 +1,4 @@
-import { createServerSupabaseClient } from '@/lib/supabase-server';
+import { createSupabaseAdminClient } from '@/lib/supabase-server';
 
 export type ReportDetailServerPayload = {
     diagnosis: Record<string, unknown> | null;
@@ -25,8 +25,10 @@ export type ReportDetailServerResult =
  * Loads public report data for `/report/[id]` on the server (same fields as the client fetch).
  */
 export async function fetchReportDetailOnServer(id: string): Promise<ReportDetailServerResult> {
-    const supabase = await createServerSupabaseClient();
-    if (!supabase) {
+    let supabase: Awaited<ReturnType<typeof createSupabaseAdminClient>>;
+    try {
+        supabase = await createSupabaseAdminClient();
+    } catch {
         return { status: 'skipped' };
     }
 

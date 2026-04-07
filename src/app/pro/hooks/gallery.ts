@@ -3,6 +3,19 @@ import { createClientId } from '@/lib/client-random-id';
 import { supabase } from '@/lib/supabase';
 import type { GalleryDraftItem, GalleryImage } from '../_types/page';
 
+type ProviderImageRow = {
+    id?: unknown;
+    path?: unknown;
+    bucket?: unknown;
+    caption?: unknown;
+    source?: unknown;
+};
+
+const toProviderImageRows = (rows: unknown): ProviderImageRow[] => {
+    if (!Array.isArray(rows)) return [];
+    return rows.filter((row): row is ProviderImageRow => !!row && typeof row === 'object');
+};
+
 export function useProGallery(params: {
     resolvedProviderId: string | null;
     providerGooglePlaceId: string | null;
@@ -22,8 +35,8 @@ export function useProGallery(params: {
     useEffect(() => {
         let cancelled = false;
 
-        const mapRows = (rows: any[] | null, supabaseUrl: string) =>
-            (rows || []).map((r) => ({
+        const mapRows = (rows: ProviderImageRow[], supabaseUrl: string) =>
+            rows.map((r) => ({
                 id: String(r.id),
                 url: `${supabaseUrl}/storage/v1/object/public/${r.bucket || 'gallery'}/${r.path}`,
                 caption: typeof r.caption === 'string' ? r.caption : null,
@@ -40,7 +53,7 @@ export function useProGallery(params: {
             setIsGalleryLoading(true);
             const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
             try {
-                const { data: rows, error } = await (supabase as any)
+                const { data: rows, error } = await supabase
                     .from('provider_images')
                     .select('id, path, bucket, caption, source')
                     .eq('provider_id', resolvedProviderId)
@@ -52,7 +65,7 @@ export function useProGallery(params: {
                     setGalleryImages([]);
                     return;
                 }
-                let list = rows || [];
+                let list = toProviderImageRows(rows);
                 if (list.length === 0 && providerGooglePlaceId) {
                     setIsSyncingGoogleGallery(true);
                     try {
@@ -60,14 +73,14 @@ export function useProGallery(params: {
                             method: 'POST',
                         });
                         if (res.ok) {
-                            const { data: again } = await (supabase as any)
+                            const { data: again } = await supabase
                                 .from('provider_images')
                                 .select('id, path, bucket, caption, source')
                                 .eq('provider_id', resolvedProviderId)
                                 .eq('status', 'approved')
                                 .order('sort_order', { ascending: true })
                                 .order('id', { ascending: true });
-                            list = again || [];
+                            list = toProviderImageRows(again);
                         }
                     } finally {
                         if (!cancelled) setIsSyncingGoogleGallery(false);

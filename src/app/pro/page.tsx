@@ -1,6 +1,6 @@
-import LegacyProClientPage from './legacy-pro-client-page';
+import { redirect } from 'next/navigation';
 
 export default function ProPage() {
-    return <LegacyProClientPage />;
+    redirect('/match');
 }
 

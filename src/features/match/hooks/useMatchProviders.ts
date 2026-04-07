@@ -3,6 +3,44 @@ import { toast } from 'sonner';
 import { fetchProvidersApi } from '../api/client';
 import type { MatchLocation, MatchProvider } from '../contracts';
 
+const MATCH_PROVIDERS_CACHE_KEY = 'match.providers.cache.v1';
+const MATCH_PROVIDERS_CACHE_TTL_MS = 5 * 60 * 1000;
+
+type CachedProvidersEntry = {
+    providers: MatchProvider[];
+    cachedAt: number;
+};
+
+function readCachedProviders(requestKey: string): MatchProvider[] | null {
+    if (typeof window === 'undefined') return null;
+    try {
+        const raw = window.sessionStorage.getItem(MATCH_PROVIDERS_CACHE_KEY);
+        if (!raw) return null;
+        const parsed = JSON.parse(raw) as Record<string, CachedProvidersEntry>;
+        const entry = parsed?.[requestKey];
+        if (!entry || !Array.isArray(entry.providers)) return null;
+        if (Date.now() - Number(entry.cachedAt || 0) > MATCH_PROVIDERS_CACHE_TTL_MS) return null;
+        return entry.providers;
+    } catch {
+        return null;
+    }
+}
+
+function writeCachedProviders(requestKey: string, providers: MatchProvider[]): void {
+    if (typeof window === 'undefined') return;
+    try {
+        const raw = window.sessionStorage.getItem(MATCH_PROVIDERS_CACHE_KEY);
+        const parsed = raw ? (JSON.parse(raw) as Record<string, CachedProvidersEntry>) : {};
+        parsed[requestKey] = {
+            providers,
+            cachedAt: Date.now(),
+        };
+        window.sessionStorage.setItem(MATCH_PROVIDERS_CACHE_KEY, JSON.stringify(parsed));
+    } catch {
+        // Best-effort cache only; never block the providers flow.
+    }
+}
+
 async function waitForPageVisible(signal: AbortSignal): Promise<void> {
     if (typeof document === 'undefined') return;
     if (!document.hidden) return;
@@ -41,6 +79,7 @@ export function useMatchProviders(params: {
     const [companyIndex, setCompanyIndex] = useState(1);
     const [isProvidersLoading, setIsProvidersLoading] = useState(false);
     const [isLoadingMoreForExpandedRadius, setIsLoadingMoreForExpandedRadius] = useState(false);
+    const [isRefreshingProvidersInBackground, setIsRefreshingProvidersInBackground] = useState(false);
     const lastProvidersErrorToastAtRef = useRef<number>(0);
     const lastMissingTradeToastAtRef = useRef<number>(0);
     // Store radius in a ref so the callback stays stable across radius changes.
@@ -51,6 +90,8 @@ export function useMatchProviders(params: {
     // Keep latest providers in a ref for stable callback access.
     const providersRef = useRef<MatchProvider[]>(providers);
     providersRef.current = providers;
+    const companyIndexRef = useRef(companyIndex);
+    companyIndexRef.current = companyIndex;
     // Track what the user has already had on screen (for "prefer unseen" ordering).
     const seenPlaceIdsRef = useRef<Set<string>>(new Set());
     // AbortController ref — aborts stale in-flight requests when a newer one starts.
@@ -84,6 +125,19 @@ export function useMatchProviders(params: {
                 td.trim().toLowerCase(),
                 String(radius),
             ].join('|');
+            const cachedProviders = !expandingRadius ? readCachedProviders(requestKey) : null;
+            const hasCachedProviders = Array.isArray(cachedProviders) && cachedProviders.length > 0;
+
+            if (hasCachedProviders) {
+                setProviders(cachedProviders!);
+                providersRef.current = cachedProviders!;
+                seenPlaceIdsRef.current = new Set(
+                    cachedProviders!.map((p) => p.placeId).filter(Boolean)
+                );
+                if (companyIndexRef.current > cachedProviders!.length) {
+                    setCompanyIndex(1);
+                }
+            }
 
             const inFlight = inFlightRef.current;
             if (inFlight && inFlight.key === requestKey && !inFlight.controller.signal.aborted) {
@@ -107,7 +161,8 @@ export function useMatchProviders(params: {
             });
             inFlightRef.current = { key: requestKey, promise: inFlightPromise, controller };
 
-            setIsProvidersLoading(true);
+            setIsProvidersLoading(!hasCachedProviders);
+            setIsRefreshingProvidersInBackground(hasCachedProviders);
             setIsLoadingMoreForExpandedRadius(expandingRadius);
             try {
                 const t0 = Date.now();
@@ -211,6 +266,7 @@ export function useMatchProviders(params: {
                             fetchedProviders.map((p) => p.placeId).filter(Boolean)
                         );
                         setProviders(fetchedProviders);
+                        writeCachedProviders(requestKey, fetchedProviders);
                         setCompanyIndex(1);
                         if (process.env.NODE_ENV === 'development') {
                             console.log(
@@ -261,6 +317,7 @@ export function useMatchProviders(params: {
                 if (!controller.signal.aborted) {
                     setIsProvidersLoading(false);
                     setIsLoadingMoreForExpandedRadius(false);
+                    setIsRefreshingProvidersInBackground(false);
                 }
                 if (inFlightRef.current?.controller === controller) {
                     inFlightRef.current = null;
@@ -279,6 +336,7 @@ export function useMatchProviders(params: {
         setCompanyIndex,
         isProvidersLoading,
         isLoadingMoreForExpandedRadius,
+        isRefreshingProvidersInBackground,
         refreshProvidersForLocation,
     };
 }

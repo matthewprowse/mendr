@@ -132,41 +132,40 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
         const semaphore = createSemaphore(MAX_CONCURRENT);
 
-        // Fire-and-forget enrichment jobs. The client does not await this endpoint,
-        // so we return quickly and let the pipeline continue in the background.
-        void (async () => {
-            await Promise.all(
-                orderedProviders.map(async (p) => {
-                    const release = await semaphore();
-                    try {
-                        await Promise.race([
-                            enrichProvider(p.id as string, { trade, cacheVersion }),
-                            new Promise<void>((_, reject) =>
-                                setTimeout(
-                                    () => reject(new Error('Job timeout')),
-                                    JOB_TIMEOUT_MS
-                                )
-                            ),
-                        ]);
-                    } catch {
-                        // Individual job failures are non-fatal.
-                    } finally {
-                        release();
-                    }
-                })
-            );
-        })();
+        // IMPORTANT: run jobs within the request lifetime.
+        // In serverless environments, detached async work after returning a response
+        // is not guaranteed to continue, which can leave most summaries unprocessed.
+        await Promise.all(
+            orderedProviders.map(async (p) => {
+                const release = await semaphore();
+                try {
+                    await Promise.race([
+                        enrichProvider(p.id as string, { trade, cacheVersion }),
+                        new Promise<void>((_, reject) =>
+                            setTimeout(
+                                () => reject(new Error('Job timeout')),
+                                JOB_TIMEOUT_MS
+                            )
+                        ),
+                    ]);
+                } catch {
+                    // Individual job failures are non-fatal.
+                } finally {
+                    release();
+                }
+            })
+        );
 
-        logStage(`accepted jobs (count=${orderedProviders.length})`, 'jobs_accepted');
+        logStage(`jobs completed (count=${orderedProviders.length})`, 'jobs_completed');
         return NextResponse.json({
             queued: orderedProviders.length,
-            processed: 0,
+            processed: orderedProviders.length,
             ...(process.env.NODE_ENV === 'development'
                 ? {
                     debugTiming: {
                         totalMs: Date.now() - t0,
                         stages: stageTimings,
-                        acceptedJobs: orderedProviders.length,
+                        completedJobs: orderedProviders.length,
                     },
                 }
                 : {}),
