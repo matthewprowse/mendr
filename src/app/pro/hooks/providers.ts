@@ -21,6 +21,8 @@ export function useProProvider(placeId: string) {
     const [providerLng, setProviderLng] = useState<number | null>(null);
     const [providerSummary, setProviderSummary] = useState<string | null>(null);
     const [providerSummaryLong, setProviderSummaryLong] = useState<string | null>(null);
+    const [providerRating, setProviderRating] = useState<number | null>(null);
+    const [providerRatingCount, setProviderRatingCount] = useState<number>(0);
     const [providerPhone, setProviderPhone] = useState<string | null>(null);
     const [providerEmail, setProviderEmail] = useState<string | null>(null);
     const [providerWebsiteRaw, setProviderWebsiteRaw] = useState<string | null>(null);
@@ -49,9 +51,9 @@ export function useProProvider(placeId: string) {
                 // returns `400 Bad Request`. Retry with a minimal column set so the
                 // page still loads.
                 const selectBase =
-                    'id, google_place_id, name, summary, weekday_descriptions, address, latitude, longitude, phone, website';
+                    'id, google_place_id, name, summary, rating, rating_count, weekday_descriptions, address, latitude, longitude, phone, website';
                 const selectExtended =
-                    'id, google_place_id, name, summary, summary_long, about, past_work, specialisations, highlights, key_person, weekday_descriptions, address, latitude, longitude, phone, website';
+                    'id, google_place_id, name, summary, summary_long, about, past_work, specialisations, highlights, key_person, rating, rating_count, weekday_descriptions, address, latitude, longitude, phone, website';
 
                 const fetchRow = async (select: string) => {
                     if (isUuid(placeId)) {
@@ -88,6 +90,16 @@ export function useProProvider(placeId: string) {
                             ? data.google_place_id.trim()
                             : null;
                     if (typeof data.name === 'string') setProviderName(data.name);
+                    setProviderRating(
+                        typeof data.rating === 'number' && Number.isFinite(data.rating)
+                            ? data.rating
+                            : null
+                    );
+                    setProviderRatingCount(
+                        typeof data.rating_count === 'number' && Number.isFinite(data.rating_count)
+                            ? Math.max(0, Math.trunc(data.rating_count))
+                            : 0
+                    );
                     setProviderAddress(
                         typeof data.address === 'string' && data.address.trim() ? data.address.trim() : null
                     );
@@ -173,6 +185,8 @@ export function useProProvider(placeId: string) {
                     setProviderLng(null);
                     setProviderSummary(null);
                     setProviderSummaryLong(null);
+                    setProviderRating(null);
+                    setProviderRatingCount(0);
                     setProviderPhone(null);
                     setProviderEmail(null);
                     setProviderWebsiteRaw(null);
@@ -211,6 +225,8 @@ export function useProProvider(placeId: string) {
         providerLng,
         providerSummary,
         providerSummaryLong,
+        providerRating,
+        providerRatingCount,
         providerPhone,
         providerEmail,
         providerWebsiteRaw,

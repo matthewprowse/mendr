@@ -77,6 +77,11 @@ export default function AdminGalleryPage() {
         });
     }, [rows, query, filter]);
     const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+
+    useEffect(() => {
+        setPage((p) => Math.min(p, totalPages - 1));
+    }, [totalPages]);
+
     const paged = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
 
     async function updateStatus(id: string, status: ModerationStatus) {

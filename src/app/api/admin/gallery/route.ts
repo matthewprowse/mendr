@@ -14,11 +14,12 @@ export async function GET(req: NextRequest) {
     }
 
     const admin = await createSupabaseAdminClient();
+    // Admin needs the full queue (especially older `pending` rows). PostgREST/server may still cap rows.
     const { data, error } = await admin
         .from('provider_images')
         .select('id, created_at, provider_id, bucket, path, caption, source, sort_order, status, providers(name)')
         .order('created_at', { ascending: false })
-        .limit(300);
+        .range(0, 9999);
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     return NextResponse.json(data ?? []);

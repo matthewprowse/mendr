@@ -419,7 +419,7 @@ export async function POST(req: NextRequest) {
                                 if (googlePlaceIds.length > 0) {
                                     const { data: providerRowsForIds } = await supabase
                                         .from('providers')
-                                        .select('id, google_place_id')
+                                        .select('id, google_place_id, name')
                                         .in('google_place_id', googlePlaceIds);
                                     const idByGoogle = new Map(
                                         (providerRowsForIds || []).map((r: any) => [
@@ -427,11 +427,26 @@ export async function POST(req: NextRequest) {
                                             String(r.id),
                                         ])
                                     );
+                                    const nameByGoogle = new Map<string, string>(
+                                        (providerRowsForIds || [])
+                                            .filter(
+                                                (r: any) =>
+                                                    typeof r?.google_place_id === 'string' &&
+                                                    typeof r?.name === 'string' &&
+                                                    r.name.trim().length > 0
+                                            )
+                                            .map((r: any) => [String(r.google_place_id), String(r.name).trim()])
+                                    );
                                     providersWithIds = (normalizedCached || []).map((p: any) => {
                                         const pid = p?.placeId || p?.place_id;
                                         if (!pid || typeof pid !== 'string') return p;
                                         const gId = pid.startsWith('places/') ? pid : `places/${pid}`;
-                                        return { ...p, providerId: idByGoogle.get(gId) || p.providerId };
+                                        const dbName = nameByGoogle.get(gId);
+                                        return {
+                                            ...p,
+                                            providerId: idByGoogle.get(gId) || p.providerId,
+                                            ...(dbName ? { name: dbName } : {}),
+                                        };
                                     });
                                 }
                             }
@@ -865,7 +880,7 @@ export async function POST(req: NextRequest) {
         }
 
         // Pre-fetched providers rows — fired in parallel with provider_cache below to save a round-trip.
-        let prefetchedProvRows: { id: string; google_place_id: string }[] | null = null;
+        let prefetchedProvRows: { id: string; google_place_id: string; name?: string | null }[] | null = null;
         const dbReader = adminSupabase || supabase;
         if (dbReader && fastProviders.length > 0) {
             const placeIds = fastProviders
@@ -880,11 +895,23 @@ export async function POST(req: NextRequest) {
                         .in('google_place_id', placeIds),
                     dbReader
                         .from('providers')
-                        .select('id, google_place_id')
+                        .select('id, google_place_id, name')
                         .in('google_place_id', placeIds),
                 ]);
                 const cacheRows = cacheResult.data;
-                prefetchedProvRows = (provResult.data as { id: string; google_place_id: string }[]) ?? null;
+                prefetchedProvRows =
+                    (provResult.data as { id: string; google_place_id: string; name?: string | null }[]) ??
+                    null;
+                const nameByGoogleId = new Map<string, string>(
+                    (prefetchedProvRows || [])
+                        .filter(
+                            (r) =>
+                                typeof r.google_place_id === 'string' &&
+                                typeof r.name === 'string' &&
+                                r.name.trim().length > 0
+                        )
+                        .map((r) => [String(r.google_place_id), String(r.name).trim()])
+                );
                 const completenessByGoogleId = new Map<string, number>(
                     (cacheRows || []).map((r: any) => [
                         String(r.google_place_id),
@@ -903,6 +930,10 @@ export async function POST(req: NextRequest) {
                     (p as any).profileCompleteness = Math.max(0, Math.min(3, completeness));
                     const specs = specialisationsByGoogleId.get(gid);
                     if (specs) (p as any).specialisations = specs;
+                    // Preserve admin-edited provider names from DB instead of overwriting
+                    // with Google/search-cache values on every diagnosis run.
+                    const dbName = nameByGoogleId.get(gid);
+                    if (dbName) (p as any).name = dbName;
                 });
                 logStage(
                     `prefetch cache/providers done (candidatePlaces=${placeIds.length})`,

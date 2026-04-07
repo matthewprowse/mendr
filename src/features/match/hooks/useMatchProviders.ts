@@ -101,7 +101,7 @@ export function useMatchProviders(params: {
             abortControllerRef.current?.abort();
             const controller = new AbortController();
             abortControllerRef.current = controller;
-            let finishInFlight: (() => void) | null = null;
+            let finishInFlight: () => void = () => {};
             const inFlightPromise = new Promise<void>((resolve) => {
                 finishInFlight = resolve;
             });
@@ -265,7 +265,7 @@ export function useMatchProviders(params: {
                 if (inFlightRef.current?.controller === controller) {
                     inFlightRef.current = null;
                 }
-                finishInFlight?.();
+                finishInFlight();
             }
         },
         // Stable deps: radius read from searchRadiusMetersRef inside the callback.

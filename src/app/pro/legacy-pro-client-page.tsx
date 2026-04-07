@@ -12,6 +12,7 @@ import { createClientId } from '@/lib/client-random-id';
 import { normalizeWebsiteUrl } from '@/lib/utils';
 import { compressImage } from '@/lib/image-compression';
 import { setImageData } from '@/lib/image-store';
+import { getConsolidatedRating, getTotalReviewCount } from '@/lib/rating';
 import type { CategoryKey } from './_types/page';
 import { useProProvider } from './hooks/providers';
 import { useProReviews } from './hooks/reviews';
@@ -52,6 +53,8 @@ export default function WelcomePage() {
         providerLng,
         providerSummary,
         providerSummaryLong,
+        providerRating,
+        providerRatingCount,
         providerPhone,
         providerEmail,
         providerWebsiteRaw,
@@ -173,6 +176,25 @@ export default function WelcomePage() {
             categoryRatings.work_quality +
             categoryRatings.quote_accuracy) /
         4;
+    const scandioAverageRating = (() => {
+        const values = Object.values(scandioCategoryAggregates).filter(
+            (v): v is number => typeof v === 'number' && Number.isFinite(v)
+        );
+        if (values.length === 0) return null;
+        return values.reduce((sum, v) => sum + v, 0) / values.length;
+    })();
+    const totalReviewCount = getTotalReviewCount({
+        googleRating: providerRating,
+        googleReviewCount: googleReviewTotalFromGoogle || 0,
+        scandioRating: scandioAverageRating,
+        scandioReviewCount: scandioReviewTotalFromScandio || 0,
+    });
+    const consolidatedRating = getConsolidatedRating({
+        googleRating: providerRating,
+        googleReviewCount: googleReviewTotalFromGoogle || 0,
+        scandioRating: scandioAverageRating,
+        scandioReviewCount: scandioReviewTotalFromScandio || 0,
+    });
 
     const mapEmbedQuery = useMemo(() => {
         if (providerAddress) return providerAddress;
@@ -347,8 +369,8 @@ export default function WelcomePage() {
                 <div className="flex h-48 bg-secondary rounded-lg" />
             )}
             <div className="flex flex-col gap-2">
-                <div ref={providerTitleRef} className="flex flex-row justify-between items-center">
-                    <h1 className="text-2xl text-foreground font-bold">
+                <div ref={providerTitleRef} className="flex flex-row justify-between items-center gap-2">
+                    <h1 className="min-w-0 flex-1 truncate text-2xl text-foreground font-bold">
                         {isProviderLoading ? <Skeleton className="h-8 w-56" /> : providerName || 'Provider'}
                     </h1>
                     {isProviderLoading ? (
@@ -365,11 +387,19 @@ export default function WelcomePage() {
                         <Skeleton className="h-4 w-3/4" />
                     </div>
                 ) : (
-                    <p className="text-sm text-muted-foreground">
-                        {providerSummary?.trim()
-                            ? providerSummary.trim()
-                            : 'Short customer summary from reviews will appear here when available.'}
-                    </p>
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <div className="flex items-center gap-1">
+                            <span className="text-base leading-none text-yellow-400" aria-hidden="true">
+                                ★
+                            </span>
+                            <span className="text-sm font-semibold text-foreground">
+                                {consolidatedRating?.toFixed(1) || 'N/A'}
+                            </span>
+                            <span className="text-xs text-muted-foreground">
+                                ({totalReviewCount.toLocaleString()} Reviews)
+                            </span>
+                        </div>
+                    </div>
                 )}
             </div>
 

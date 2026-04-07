@@ -51,6 +51,16 @@ type LiveProviderRow = {
     address: string | null;
     rating: number | null;
     rating_count: number;
+    google_place_id: string | null;
+    /** Customer-facing review summary (short). */
+    summary: string;
+    /** Long profile narrative shown under About → Summary when present. */
+    summary_long: string;
+    about: string;
+    past_work: string;
+    specialisations: string[];
+    highlights: string[];
+    key_person: string;
     output_count: number;
     contact_count: number;
     profile_view_count: number;
@@ -194,6 +204,7 @@ export default function AdminProvidersPage() {
     const [editApplication, setEditApplication] = useState<ProviderApplication | null>(null);
     const [selectedLiveProvider, setSelectedLiveProvider] = useState<LiveProviderRow | null>(null);
     const [editLiveProvider, setEditLiveProvider] = useState<LiveProviderRow | null>(null);
+    const [refreshingGoogle, setRefreshingGoogle] = useState(false);
     const PAGE_SIZE = 50;
 
     const load = useCallback(async () => {
@@ -331,6 +342,13 @@ export default function AdminProvidersPage() {
                 address: editLiveProvider.address ?? '',
                 rating: editLiveProvider.rating ?? null,
                 rating_count: editLiveProvider.rating_count ?? 0,
+                summary: editLiveProvider.summary,
+                summary_long: editLiveProvider.summary_long,
+                about: editLiveProvider.about,
+                past_work: editLiveProvider.past_work,
+                key_person: editLiveProvider.key_person,
+                specialisations: editLiveProvider.specialisations,
+                highlights: editLiveProvider.highlights,
             }),
         });
         if (!res.ok) {
@@ -341,6 +359,54 @@ export default function AdminProvidersPage() {
         setSelectedLiveProvider((prev) => (prev?.id === editLiveProvider.id ? { ...prev, ...editLiveProvider } : prev));
         setEditLiveProvider(null);
         toast.success('Live provider updated');
+    }
+
+    async function refreshRatingsFromGoogle() {
+        if (!selectedLiveProvider?.google_place_id) {
+            toast.error('No Google place id on this provider');
+            return;
+        }
+        setRefreshingGoogle(true);
+        try {
+            const res = await fetch('/api/admin/providers/live', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: selectedLiveProvider.id }),
+            });
+            const data = (await res.json().catch(() => ({}))) as {
+                error?: string;
+                rating?: number | null;
+                rating_count?: number;
+                name?: string | null;
+                address?: string | null;
+                summary?: string;
+            };
+            if (!res.ok) {
+                toast.error(data.error || 'Could not refresh from Google');
+                return;
+            }
+            const patch = {
+                rating: data.rating ?? null,
+                rating_count: typeof data.rating_count === 'number' ? data.rating_count : 0,
+                ...(typeof data.name === 'string' ? { name: data.name } : {}),
+                ...(typeof data.address === 'string' ? { address: data.address } : {}),
+                ...(typeof data.summary === 'string' ? { summary: data.summary } : {}),
+            };
+            setLiveProviders((prev) =>
+                prev.map((r) => (r.id === selectedLiveProvider.id ? { ...r, ...patch } : r))
+            );
+            setSelectedLiveProvider((prev) => (prev?.id === selectedLiveProvider.id ? { ...prev, ...patch } : prev));
+            toast.success('Rating and review count updated from Google');
+        } finally {
+            setRefreshingGoogle(false);
+        }
+    }
+
+    function linesToList(text: string): string[] {
+        return text
+            .split('\n')
+            .map((s) => s.trim())
+            .filter(Boolean);
     }
 
     return (
@@ -586,13 +652,32 @@ export default function AdminProvidersPage() {
                 </DialogContent>
             </Dialog>
             <Dialog open={!!selectedLiveProvider} onOpenChange={(open) => !open && setSelectedLiveProvider(null)}>
-                <DialogContent className="max-w-xl">
+                <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
                     <DialogHeader><DialogTitle>Live Provider</DialogTitle></DialogHeader>
                     {selectedLiveProvider ? (
                         <div className="space-y-3">
                             <p className="text-sm font-medium">{selectedLiveProvider.name}</p>
                             <p className="text-sm text-muted-foreground">{selectedLiveProvider.address ?? '—'}</p>
-                            <div className="flex gap-2">
+                            <p className="text-xs text-muted-foreground">
+                                Google rating:{' '}
+                                {selectedLiveProvider.rating != null
+                                    ? `${selectedLiveProvider.rating.toFixed(1)} (${selectedLiveProvider.rating_count} reviews)`
+                                    : '—'}
+                            </p>
+                            {selectedLiveProvider.google_place_id ? (
+                                <p className="text-xs text-muted-foreground break-all font-mono">
+                                    {selectedLiveProvider.google_place_id}
+                                </p>
+                            ) : null}
+                            <div className="flex flex-wrap gap-2">
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    disabled={refreshingGoogle || !selectedLiveProvider.google_place_id}
+                                    onClick={() => void refreshRatingsFromGoogle()}
+                                >
+                                    {refreshingGoogle ? 'Refreshing…' : 'Refresh rating & reviews from Google'}
+                                </Button>
                                 <Button variant="secondary" onClick={() => setEditLiveProvider({ ...selectedLiveProvider })}>Edit</Button>
                                 <Button variant="outline" onClick={() => setSelectedLiveProvider(null)}>Close</Button>
                             </div>
@@ -601,15 +686,127 @@ export default function AdminProvidersPage() {
                 </DialogContent>
             </Dialog>
             <Dialog open={!!editLiveProvider} onOpenChange={(open) => !open && setEditLiveProvider(null)}>
-                <DialogContent className="max-w-xl">
+                <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
                     <DialogHeader><DialogTitle>Edit Live Provider</DialogTitle></DialogHeader>
                     {editLiveProvider ? (
-                        <div className="space-y-2">
-                            <Input value={editLiveProvider.name} onChange={(e) => setEditLiveProvider({ ...editLiveProvider, name: e.target.value })} placeholder="Name" />
-                            <Textarea rows={3} value={editLiveProvider.address ?? ''} onChange={(e) => setEditLiveProvider({ ...editLiveProvider, address: e.target.value })} />
-                            <Input type="number" value={editLiveProvider.rating ?? 0} onChange={(e) => setEditLiveProvider({ ...editLiveProvider, rating: Number(e.target.value) })} placeholder="Rating" />
-                            <Input type="number" value={editLiveProvider.rating_count ?? 0} onChange={(e) => setEditLiveProvider({ ...editLiveProvider, rating_count: Number(e.target.value) })} placeholder="Rating count" />
-                            <div className="flex gap-2">
+                        <div className="space-y-3">
+                            <div>
+                                <Label className="text-xs">Name</Label>
+                                <Input className="mt-1" value={editLiveProvider.name} onChange={(e) => setEditLiveProvider({ ...editLiveProvider, name: e.target.value })} placeholder="Name" />
+                            </div>
+                            <div>
+                                <Label className="text-xs">Address</Label>
+                                <Textarea className="mt-1" rows={2} value={editLiveProvider.address ?? ''} onChange={(e) => setEditLiveProvider({ ...editLiveProvider, address: e.target.value })} />
+                            </div>
+                            <div className="grid grid-cols-2 gap-2">
+                                <div>
+                                    <Label className="text-xs">Rating (manual)</Label>
+                                    <Input
+                                        className="mt-1"
+                                        type="number"
+                                        step="0.1"
+                                        value={editLiveProvider.rating ?? ''}
+                                        onChange={(e) =>
+                                            setEditLiveProvider({
+                                                ...editLiveProvider,
+                                                rating: e.target.value === '' ? null : Number(e.target.value),
+                                            })
+                                        }
+                                        placeholder="e.g. 4.8"
+                                    />
+                                </div>
+                                <div>
+                                    <Label className="text-xs">Review count (manual)</Label>
+                                    <Input
+                                        className="mt-1"
+                                        type="number"
+                                        value={editLiveProvider.rating_count ?? ''}
+                                        onChange={(e) =>
+                                            setEditLiveProvider({
+                                                ...editLiveProvider,
+                                                rating_count: e.target.value === '' ? 0 : Number(e.target.value),
+                                            })
+                                        }
+                                        placeholder="0"
+                                    />
+                                </div>
+                            </div>
+                            <p className="text-xs text-muted-foreground">
+                                Pro page “Summary” blends long summary, about, and past work. Short summary is the customer review blurb.
+                            </p>
+                            <div>
+                                <Label className="text-xs">Customer summary (short, from reviews)</Label>
+                                <Textarea
+                                    className="mt-1 text-sm"
+                                    rows={4}
+                                    value={editLiveProvider.summary}
+                                    onChange={(e) => setEditLiveProvider({ ...editLiveProvider, summary: e.target.value })}
+                                />
+                            </div>
+                            <div>
+                                <Label className="text-xs">Summary long (primary about text)</Label>
+                                <Textarea
+                                    className="mt-1 text-sm"
+                                    rows={4}
+                                    value={editLiveProvider.summary_long}
+                                    onChange={(e) => setEditLiveProvider({ ...editLiveProvider, summary_long: e.target.value })}
+                                />
+                            </div>
+                            <div>
+                                <Label className="text-xs">About</Label>
+                                <Textarea
+                                    className="mt-1 text-sm"
+                                    rows={3}
+                                    value={editLiveProvider.about}
+                                    onChange={(e) => setEditLiveProvider({ ...editLiveProvider, about: e.target.value })}
+                                />
+                            </div>
+                            <div>
+                                <Label className="text-xs">Past work</Label>
+                                <Textarea
+                                    className="mt-1 text-sm"
+                                    rows={3}
+                                    value={editLiveProvider.past_work}
+                                    onChange={(e) => setEditLiveProvider({ ...editLiveProvider, past_work: e.target.value })}
+                                />
+                            </div>
+                            <div>
+                                <Label className="text-xs">Key person</Label>
+                                <Input
+                                    className="mt-1"
+                                    value={editLiveProvider.key_person}
+                                    onChange={(e) => setEditLiveProvider({ ...editLiveProvider, key_person: e.target.value })}
+                                />
+                            </div>
+                            <div>
+                                <Label className="text-xs">Highlights (one per line)</Label>
+                                <Textarea
+                                    className="mt-1 text-sm font-mono"
+                                    rows={4}
+                                    value={editLiveProvider.highlights.join('\n')}
+                                    onChange={(e) =>
+                                        setEditLiveProvider({
+                                            ...editLiveProvider,
+                                            highlights: linesToList(e.target.value),
+                                        })
+                                    }
+                                />
+                            </div>
+                            <div>
+                                <Label className="text-xs">Specialisations (one per line)</Label>
+                                <Textarea
+                                    className="mt-1 text-sm font-mono"
+                                    rows={4}
+                                    value={editLiveProvider.specialisations.join('\n')}
+                                    onChange={(e) =>
+                                        setEditLiveProvider({
+                                            ...editLiveProvider,
+                                            specialisations: linesToList(e.target.value),
+                                        })
+                                    }
+                                />
+                            </div>
+                            <div className="flex gap-2 pt-2">
                                 <Button onClick={() => void saveLiveProviderEdit()}>Save</Button>
                                 <Button variant="outline" onClick={() => setEditLiveProvider(null)}>Cancel</Button>
                             </div>

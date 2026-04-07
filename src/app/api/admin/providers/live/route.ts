@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseAdminClient } from '@/lib/supabase-server';
+import { refreshProviderByPlaceId } from '@/lib/refresh-provider-by-place-id';
 
 function checkAdminCookie(req: NextRequest): boolean {
     const password = process.env.ADMIN_PASSWORD;
@@ -23,7 +24,9 @@ export async function GET(req: NextRequest) {
     const [{ data: providers, error: providersError }, { data: perfRows, error: perfError }] = await Promise.all([
         admin
             .from('providers')
-            .select('id, name, address, rating, rating_count')
+            .select(
+                'id, name, address, rating, rating_count, google_place_id, summary, summary_long, about, past_work, specialisations, highlights, key_person'
+            )
             .order('name', { ascending: true }),
         admin
             .from('diagnosis_events')
@@ -54,6 +57,14 @@ export async function GET(req: NextRequest) {
             address: typeof p.address === 'string' ? p.address : null,
             rating: typeof p.rating === 'number' ? p.rating : null,
             rating_count: typeof p.rating_count === 'number' ? p.rating_count : 0,
+            google_place_id: typeof p.google_place_id === 'string' ? p.google_place_id : null,
+            summary: typeof p.summary === 'string' ? p.summary : '',
+            summary_long: typeof p.summary_long === 'string' ? p.summary_long : '',
+            about: typeof p.about === 'string' ? p.about : '',
+            past_work: typeof p.past_work === 'string' ? p.past_work : '',
+            specialisations: Array.isArray(p.specialisations) ? (p.specialisations as string[]) : [],
+            highlights: Array.isArray(p.highlights) ? (p.highlights as string[]) : [],
+            key_person: typeof p.key_person === 'string' ? p.key_person : '',
             output_count: c.outputs,
             contact_count: c.contacts,
             profile_view_count: c.profileViews,
@@ -62,6 +73,47 @@ export async function GET(req: NextRequest) {
     });
 
     return NextResponse.json(payload);
+}
+
+/** Re-fetch rating, review count, and related Google data for a provider (by DB id). */
+export async function POST(req: NextRequest) {
+    if (!checkAdminCookie(req)) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    const body = await req.json().catch(() => null);
+    const id = typeof body?.id === 'string' ? body.id.trim() : '';
+    if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 });
+
+    const admin = await createSupabaseAdminClient();
+    const { data: row, error: fetchError } = await admin
+        .from('providers')
+        .select('google_place_id')
+        .eq('id', id)
+        .maybeSingle();
+
+    if (fetchError) return NextResponse.json({ error: fetchError.message }, { status: 500 });
+    const placeId = typeof row?.google_place_id === 'string' ? row.google_place_id.trim() : '';
+    if (!placeId) {
+        return NextResponse.json(
+            { error: 'This provider has no Google place id; cannot refresh from Google.' },
+            { status: 400 }
+        );
+    }
+
+    const result = await refreshProviderByPlaceId(placeId);
+    if (!result.ok) {
+        return NextResponse.json({ error: result.error }, { status: 502 });
+    }
+
+    const p = result.provider as Record<string, unknown>;
+    return NextResponse.json({
+        ok: true,
+        rating: typeof p.rating === 'number' ? p.rating : null,
+        rating_count: typeof p.rating_count === 'number' ? p.rating_count : 0,
+        name: typeof p.name === 'string' ? p.name : null,
+        address: typeof p.address === 'string' ? p.address : null,
+        summary: typeof p.summary === 'string' ? p.summary : '',
+    });
 }
 
 export async function PATCH(req: NextRequest) {
@@ -76,7 +128,31 @@ export async function PATCH(req: NextRequest) {
     if (typeof body?.address === 'string') patch.address = body.address;
     if (typeof body?.rating === 'number') patch.rating = body.rating;
     if (typeof body?.rating_count === 'number') patch.rating_count = body.rating_count;
-    if (Object.keys(patch).length === 1) {
+    if ('summary' in body && typeof body.summary === 'string') patch.summary = body.summary;
+    if ('summary_long' in body && typeof body.summary_long === 'string') patch.summary_long = body.summary_long;
+    if ('about' in body && typeof body.about === 'string') patch.about = body.about;
+    if ('past_work' in body && typeof body.past_work === 'string') patch.past_work = body.past_work;
+    if ('key_person' in body && typeof body.key_person === 'string') patch.key_person = body.key_person;
+    if ('specialisations' in body) {
+        if (!Array.isArray(body.specialisations)) {
+            return NextResponse.json({ error: 'specialisations must be an array of strings' }, { status: 400 });
+        }
+        patch.specialisations = body.specialisations
+            .filter((x: unknown): x is string => typeof x === 'string')
+            .map((s: string) => s.trim())
+            .filter(Boolean);
+    }
+    if ('highlights' in body) {
+        if (!Array.isArray(body.highlights)) {
+            return NextResponse.json({ error: 'highlights must be an array of strings' }, { status: 400 });
+        }
+        patch.highlights = body.highlights
+            .filter((x: unknown): x is string => typeof x === 'string')
+            .map((s: string) => s.trim())
+            .filter(Boolean);
+    }
+    const meaningfulKeys = Object.keys(patch).filter((k) => k !== 'updated_at');
+    if (meaningfulKeys.length === 0) {
         return NextResponse.json({ error: 'Nothing to update' }, { status: 400 });
     }
 
