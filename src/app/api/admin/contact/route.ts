@@ -34,7 +34,7 @@ export async function PATCH(req: NextRequest) {
     const id = typeof body?.id === 'string' ? body.id : '';
     if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 });
 
-    const allowed = ['status'] as const;
+    const allowed = ['status', 'name', 'email', 'subject', 'message'] as const;
     const patch: Record<string, unknown> = {};
     for (const key of allowed) {
         if (key in body) patch[key] = body[key];

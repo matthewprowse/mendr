@@ -28,6 +28,9 @@ export function AuthProvider({
     useEffect(() => {
         const AUTH_TIMEOUT_MS = 5000;
         let attemptedAnonymousSignIn = false;
+        const enableAnonAuth =
+            typeof process.env.NEXT_PUBLIC_ENABLE_ANON_AUTH === 'string' &&
+            process.env.NEXT_PUBLIC_ENABLE_ANON_AUTH.toLowerCase() === 'true';
         const initSession = async () => {
             try {
                 const sessionPromise = supabase.auth.getSession();
@@ -37,14 +40,16 @@ export function AuthProvider({
                 const result = await Promise.race([sessionPromise, timeout]);
                 const session = result?.data?.session ?? null;
 
-                if (!session && !attemptedAnonymousSignIn) {
+                if (!session && enableAnonAuth && !attemptedAnonymousSignIn) {
                     attemptedAnonymousSignIn = true;
                     try {
                         const anonRes = await supabase.auth.signInAnonymously();
-                        const anonSession = anonRes?.data?.session ?? null;
-                        setSession(anonSession);
-                        setUser(anonRes?.data?.user ?? null);
-                        return;
+                        if (!anonRes?.error) {
+                            const anonSession = anonRes?.data?.session ?? null;
+                            setSession(anonSession);
+                            setUser(anonRes?.data?.user ?? null);
+                            return;
+                        }
                     } catch {
                         // Fall through to anonymous user remaining null.
                     }

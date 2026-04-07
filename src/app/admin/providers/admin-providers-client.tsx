@@ -188,6 +188,13 @@ export default function AdminProvidersPage() {
     const [emailBody, setEmailBody] = useState('');
     const [emailSubject, setEmailSubject] = useState('');
     const [sending, setSending] = useState(false);
+    const [applicationsPage, setApplicationsPage] = useState(0);
+    const [livePage, setLivePage] = useState(0);
+    const [selectedApplication, setSelectedApplication] = useState<ProviderApplication | null>(null);
+    const [editApplication, setEditApplication] = useState<ProviderApplication | null>(null);
+    const [selectedLiveProvider, setSelectedLiveProvider] = useState<LiveProviderRow | null>(null);
+    const [editLiveProvider, setEditLiveProvider] = useState<LiveProviderRow | null>(null);
+    const PAGE_SIZE = 50;
 
     const load = useCallback(async () => {
         const [applicationsRes, liveProvidersRes] = await Promise.all([
@@ -282,6 +289,59 @@ export default function AdminProvidersPage() {
             (p.address ?? '').toLowerCase().includes(q)
         );
     });
+    const applicationsTotalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+    const applicationsPageRows = filtered.slice(applicationsPage * PAGE_SIZE, (applicationsPage + 1) * PAGE_SIZE);
+    const liveTotalPages = Math.max(1, Math.ceil(liveFiltered.length / PAGE_SIZE));
+    const livePageRows = liveFiltered.slice(livePage * PAGE_SIZE, (livePage + 1) * PAGE_SIZE);
+    async function saveApplicationEdit() {
+        if (!editApplication) return;
+        const res = await fetch('/api/admin/providers', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                id: editApplication.id,
+                contact_name: editApplication.contact_name,
+                business_name: editApplication.business_name,
+                trade: editApplication.trade,
+                phone: editApplication.phone,
+                email: editApplication.email,
+                areas: editApplication.areas,
+                founded_year: editApplication.founded_year,
+                status: editApplication.status,
+                notes: editApplication.notes,
+            }),
+        });
+        if (!res.ok) {
+            toast.error('Failed to save provider application');
+            return;
+        }
+        setEntries((prev) => prev.map((r) => (r.id === editApplication.id ? { ...r, ...editApplication } : r)));
+        setSelectedApplication((prev) => (prev?.id === editApplication.id ? { ...prev, ...editApplication } : prev));
+        setEditApplication(null);
+        toast.success('Provider application updated');
+    }
+    async function saveLiveProviderEdit() {
+        if (!editLiveProvider) return;
+        const res = await fetch('/api/admin/providers/live', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                id: editLiveProvider.id,
+                name: editLiveProvider.name,
+                address: editLiveProvider.address ?? '',
+                rating: editLiveProvider.rating ?? null,
+                rating_count: editLiveProvider.rating_count ?? 0,
+            }),
+        });
+        if (!res.ok) {
+            toast.error('Failed to save live provider');
+            return;
+        }
+        setLiveProviders((prev) => prev.map((r) => (r.id === editLiveProvider.id ? { ...r, ...editLiveProvider } : r)));
+        setSelectedLiveProvider((prev) => (prev?.id === editLiveProvider.id ? { ...prev, ...editLiveProvider } : prev));
+        setEditLiveProvider(null);
+        toast.success('Live provider updated');
+    }
 
     return (
         <div className="mx-auto w-full max-w-7xl px-4 pb-8 pt-4 sm:px-6 lg:px-8">
@@ -322,8 +382,8 @@ export default function AdminProvidersPage() {
                     loading={liveLoading}
                     emptyText="No live providers found."
                 >
-                    {liveFiltered.map((p) => (
-                        <TableRow key={p.id}>
+                    {livePageRows.map((p) => (
+                        <TableRow key={p.id} className="cursor-pointer" onClick={() => setSelectedLiveProvider(p)}>
                             <TableCell className="font-medium text-foreground">{p.name}</TableCell>
                             <TableCell className="max-w-[260px] text-muted-foreground">{p.address ?? '—'}</TableCell>
                             <TableCell className="text-muted-foreground">
@@ -338,6 +398,13 @@ export default function AdminProvidersPage() {
                         </TableRow>
                     ))}
                 </AdminDataTable>
+                {liveTotalPages > 1 ? (
+                    <div className="mt-3 flex items-center justify-end gap-2">
+                        <Button size="sm" variant="outline" disabled={livePage === 0} onClick={() => setLivePage((p) => p - 1)}>Previous</Button>
+                        <span className="text-xs text-muted-foreground">{livePage + 1} / {liveTotalPages}</span>
+                        <Button size="sm" variant="outline" disabled={livePage >= liveTotalPages - 1} onClick={() => setLivePage((p) => p + 1)}>Next</Button>
+                    </div>
+                ) : null}
             </div>
 
             <div className="flex flex-col gap-3">
@@ -348,8 +415,8 @@ export default function AdminProvidersPage() {
                     emptyText="No entries found."
                     colSpan={11}
                 >
-                    {filtered.map((e) => (
-                        <TableRow key={e.id}>
+                    {applicationsPageRows.map((e) => (
+                        <TableRow key={e.id} className="cursor-pointer" onClick={() => setSelectedApplication(e)}>
                             <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
                                 {new Date(e.created_at).toLocaleDateString('en-ZA', {
                                     day: 'numeric',
@@ -397,6 +464,13 @@ export default function AdminProvidersPage() {
                         </TableRow>
                     ))}
                 </AdminDataTable>
+                {applicationsTotalPages > 1 ? (
+                    <div className="mt-3 flex items-center justify-end gap-2">
+                        <Button size="sm" variant="outline" disabled={applicationsPage === 0} onClick={() => setApplicationsPage((p) => p - 1)}>Previous</Button>
+                        <span className="text-xs text-muted-foreground">{applicationsPage + 1} / {applicationsTotalPages}</span>
+                        <Button size="sm" variant="outline" disabled={applicationsPage >= applicationsTotalPages - 1} onClick={() => setApplicationsPage((p) => p + 1)}>Next</Button>
+                    </div>
+                ) : null}
             </div>
 
             {/* Email modal */}
@@ -473,6 +547,74 @@ export default function AdminProvidersPage() {
                             </div>
                         </div>
                     )}
+                </DialogContent>
+            </Dialog>
+            <Dialog open={!!selectedApplication} onOpenChange={(open) => !open && setSelectedApplication(null)}>
+                <DialogContent className="max-w-2xl">
+                    <DialogHeader><DialogTitle>Provider Application</DialogTitle></DialogHeader>
+                    {selectedApplication ? (
+                        <div className="space-y-3">
+                            <p className="text-sm font-medium">{selectedApplication.contact_name}</p>
+                            <p className="text-sm text-muted-foreground">{selectedApplication.email}</p>
+                            <p className="text-sm">{selectedApplication.notes || 'No notes'}</p>
+                            <div className="flex gap-2">
+                                <Button variant="secondary" onClick={() => setEditApplication({ ...selectedApplication })}>Edit</Button>
+                                <Button variant="outline" onClick={() => setSelectedApplication(null)}>Close</Button>
+                            </div>
+                        </div>
+                    ) : null}
+                </DialogContent>
+            </Dialog>
+            <Dialog open={!!editApplication} onOpenChange={(open) => !open && setEditApplication(null)}>
+                <DialogContent className="max-w-2xl">
+                    <DialogHeader><DialogTitle>Edit Provider Application</DialogTitle></DialogHeader>
+                    {editApplication ? (
+                        <div className="space-y-2">
+                            <Input value={editApplication.contact_name} onChange={(e) => setEditApplication({ ...editApplication, contact_name: e.target.value })} placeholder="Contact name" />
+                            <Input value={editApplication.business_name ?? ''} onChange={(e) => setEditApplication({ ...editApplication, business_name: e.target.value })} placeholder="Business name" />
+                            <Input value={editApplication.trade} onChange={(e) => setEditApplication({ ...editApplication, trade: e.target.value })} placeholder="Trade" />
+                            <Input value={editApplication.phone} onChange={(e) => setEditApplication({ ...editApplication, phone: e.target.value })} placeholder="Phone" />
+                            <Input value={editApplication.email} onChange={(e) => setEditApplication({ ...editApplication, email: e.target.value })} placeholder="Email" />
+                            <Textarea rows={3} value={editApplication.areas} onChange={(e) => setEditApplication({ ...editApplication, areas: e.target.value })} />
+                            <Textarea rows={3} value={editApplication.notes ?? ''} onChange={(e) => setEditApplication({ ...editApplication, notes: e.target.value })} />
+                            <div className="flex gap-2">
+                                <Button onClick={() => void saveApplicationEdit()}>Save</Button>
+                                <Button variant="outline" onClick={() => setEditApplication(null)}>Cancel</Button>
+                            </div>
+                        </div>
+                    ) : null}
+                </DialogContent>
+            </Dialog>
+            <Dialog open={!!selectedLiveProvider} onOpenChange={(open) => !open && setSelectedLiveProvider(null)}>
+                <DialogContent className="max-w-xl">
+                    <DialogHeader><DialogTitle>Live Provider</DialogTitle></DialogHeader>
+                    {selectedLiveProvider ? (
+                        <div className="space-y-3">
+                            <p className="text-sm font-medium">{selectedLiveProvider.name}</p>
+                            <p className="text-sm text-muted-foreground">{selectedLiveProvider.address ?? '—'}</p>
+                            <div className="flex gap-2">
+                                <Button variant="secondary" onClick={() => setEditLiveProvider({ ...selectedLiveProvider })}>Edit</Button>
+                                <Button variant="outline" onClick={() => setSelectedLiveProvider(null)}>Close</Button>
+                            </div>
+                        </div>
+                    ) : null}
+                </DialogContent>
+            </Dialog>
+            <Dialog open={!!editLiveProvider} onOpenChange={(open) => !open && setEditLiveProvider(null)}>
+                <DialogContent className="max-w-xl">
+                    <DialogHeader><DialogTitle>Edit Live Provider</DialogTitle></DialogHeader>
+                    {editLiveProvider ? (
+                        <div className="space-y-2">
+                            <Input value={editLiveProvider.name} onChange={(e) => setEditLiveProvider({ ...editLiveProvider, name: e.target.value })} placeholder="Name" />
+                            <Textarea rows={3} value={editLiveProvider.address ?? ''} onChange={(e) => setEditLiveProvider({ ...editLiveProvider, address: e.target.value })} />
+                            <Input type="number" value={editLiveProvider.rating ?? 0} onChange={(e) => setEditLiveProvider({ ...editLiveProvider, rating: Number(e.target.value) })} placeholder="Rating" />
+                            <Input type="number" value={editLiveProvider.rating_count ?? 0} onChange={(e) => setEditLiveProvider({ ...editLiveProvider, rating_count: Number(e.target.value) })} placeholder="Rating count" />
+                            <div className="flex gap-2">
+                                <Button onClick={() => void saveLiveProviderEdit()}>Save</Button>
+                                <Button variant="outline" onClick={() => setEditLiveProvider(null)}>Cancel</Button>
+                            </div>
+                        </div>
+                    ) : null}
                 </DialogContent>
             </Dialog>
         </div>

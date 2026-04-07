@@ -1,0 +1,75 @@
+{
+  "baseUrl": "http://localhost:3000",
+  "startedAtIso": "2026-04-06T18:15:12.514Z",
+  "finishedAtIso": "2026-04-06T18:16:10.253Z",
+  "elapsedMs": 57739,
+  "endpoints": {
+    "/api/providers": [
+      {
+        "url": "http://localhost:3000/api/providers",
+        "status": 200,
+        "method": "POST",
+        "durationMs": 10285,
+        "startedAtIso": "2026-04-06T18:15:42.475Z",
+        "endedAtIso": "2026-04-06T18:15:52.760Z"
+      }
+    ],
+    "/api/enrich/get": [
+      {
+        "url": "http://localhost:3000/api/enrich/get",
+        "status": 200,
+        "method": "POST",
+        "durationMs": 6061,
+        "startedAtIso": "2026-04-06T18:15:52.851Z",
+        "endedAtIso": "2026-04-06T18:15:58.912Z"
+      },
+      {
+        "url": "http://localhost:3000/api/enrich/get",
+        "status": 200,
+        "method": "POST",
+        "durationMs": 9080,
+        "startedAtIso": "2026-04-06T18:15:53.363Z",
+        "endedAtIso": "2026-04-06T18:16:02.443Z"
+      },
+      {
+        "url": "http://localhost:3000/api/enrich/get",
+        "status": 200,
+        "method": "POST",
+        "durationMs": 2904,
+        "startedAtIso": "2026-04-06T18:15:59.929Z",
+        "endedAtIso": "2026-04-06T18:16:02.833Z"
+      },
+      {
+        "url": "http://localhost:3000/api/enrich/get",
+        "status": 200,
+        "method": "POST",
+        "durationMs": 284,
+        "startedAtIso": "2026-04-06T18:16:04.844Z",
+        "endedAtIso": "2026-04-06T18:16:05.128Z"
+      }
+    ],
+    "/api/enrich/queue": [
+      {
+        "url": "http://localhost:3000/api/enrich/queue",
+        "status": 200,
+        "method": "POST",
+        "durationMs": 10443,
+        "startedAtIso": "2026-04-06T18:15:52.860Z",
+        "endedAtIso": "2026-04-06T18:16:03.303Z"
+      }
+    ]
+  },
+  "providersDebugTiming": null,
+  "finalUrl": "http://localhost:3000/match/c44cd5b4-c5e3-49dd-a74f-ace460e31400",
+  "consoleErrors": [
+    "[error] Failed to load resource: the server responded with a status of 404 (Not Found)"
+  ],
+  "failedApiResponses": [],
+  "artifacts": {
+    "screenshotPath": "/Users/matthewprowse/Documents/Development/Personal/Home Services/app/scripts/perf/reports/match-flow-2026-04-06T18-16-07-796Z.png",
+    "htmlPath": "/Users/matthewprowse/Documents/Development/Personal/Home Services/app/scripts/perf/reports/match-flow-2026-04-06T18-16-07-796Z.html"
+  },
+  "notes": [
+    "Seeded conversation for perf: /match/c44cd5b4-c5e3-49dd-a74f-ace460e31400"
+  ]
+}

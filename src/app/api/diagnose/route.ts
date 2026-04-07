@@ -15,6 +15,65 @@ const ALLOWED_IMAGE_ORIGINS = [
     process.env.NEXT_PUBLIC_SUPABASE_URL,
 ].filter((s): s is string => typeof s === 'string' && s.length > 0);
 const MAX_DIAGNOSE_IMAGE_BYTES = 2 * 1024 * 1024; // 2MB guardrail for model payload cost.
+const SERVICE_CATALOG_TTL_MS = 5 * 60 * 1000;
+
+let serviceCatalogCache: { labels: string[]; expiresAt: number } | null = null;
+let serviceCatalogInFlight: Promise<string[]> | null = null;
+
+function recordStage(timings: Record<string, number>, key: string, startedAt: number): void {
+    timings[key] = Date.now() - startedAt;
+}
+
+function logDiagnoseTimings(status: 'ok' | 'error', timings: Record<string, number>): void {
+    if (process.env.NODE_ENV !== 'development') return;
+    // eslint-disable-next-line no-console
+    console.log(
+        JSON.stringify({
+            type: 'diagnose_timing',
+            status,
+            timings,
+        })
+    );
+}
+
+async function getServiceCatalogFromCacheOrDb(): Promise<string[]> {
+    const now = Date.now();
+    if (serviceCatalogCache && now < serviceCatalogCache.expiresAt) {
+        return serviceCatalogCache.labels;
+    }
+    if (serviceCatalogInFlight) return serviceCatalogInFlight;
+
+    serviceCatalogInFlight = (async () => {
+        const admin = await createSupabaseAdminClient();
+        const { data } = await admin
+            .from('services')
+            .select('label')
+            .eq('active', true)
+            .order('sort_order', { ascending: true });
+        const labels = Array.isArray(data)
+            ? data
+                  .map((row: unknown) =>
+                      row && typeof row === 'object'
+                          ? String((row as { label?: unknown }).label ?? '').trim()
+                          : ''
+                  )
+                  .filter((label: string) => label.length > 0)
+            : [];
+        if (labels.length > 0) {
+            serviceCatalogCache = {
+                labels,
+                expiresAt: Date.now() + SERVICE_CATALOG_TTL_MS,
+            };
+        }
+        return labels;
+    })();
+
+    try {
+        return await serviceCatalogInFlight;
+    } finally {
+        serviceCatalogInFlight = null;
+    }
+}
 
 function isAllowedImageUrl(url: string): boolean {
     try {
@@ -285,8 +344,12 @@ function enforceUrgencyKey(text: string): string {
 }
 
 export async function POST(req: NextRequest) {
+    const timings: Record<string, number> = {};
+    const requestStartedAt = Date.now();
     // ── Rate limit ─────────────────────────────────────────────────────────────
+    const rateLimitStageStartedAt = Date.now();
     const limited = checkRateLimit(req, 'diagnose');
+    recordStage(timings, 'rate_limit_check_ms', rateLimitStageStartedAt);
     if (limited) return limited;
 
     // ── Diagnosis quota ─────────────────────────────────────────────────────────
@@ -311,6 +374,7 @@ export async function POST(req: NextRequest) {
         process.env.DISABLE_DIAGNOSIS_DAILY_QUOTA === 'true' || isRateLimitBypassed(req);
 
     if (isFirstMessage && !disableDiagnosisQuota) {
+        const quotaStageStartedAt = Date.now();
         let quotaUserId: string | null = null;
         let quotaAnonKey: string | null = null;
 
@@ -385,6 +449,7 @@ export async function POST(req: NextRequest) {
             // Non-fatal: if the usage table doesn't exist yet or query fails, allow through
             console.warn('Quota check skipped (error):', quotaErr);
         }
+        recordStage(timings, 'quota_check_ms', quotaStageStartedAt);
     }
     // ── End quota ───────────────────────────────────────────────────────────────
 
@@ -417,7 +482,9 @@ export async function POST(req: NextRequest) {
     // eslint-disable-next-line no-console
     console.log('POST /api/diagnose received request');
     try {
+        const parseStageStartedAt = Date.now();
         const body = await req.json();
+        recordStage(timings, 'parse_request_body_ms', parseStageStartedAt);
         const {
             image,
             textQuery,
@@ -534,15 +601,20 @@ export async function POST(req: NextRequest) {
 
         const isFollowUp = !!(history?.length && previousDiagnosis?.diagnosis);
         const hasUserContext = userSelectedTrade?.trade && userSelectedTrade?.diagnosis;
-        const serviceList = Array.isArray(serviceCatalog)
+        let serviceList = Array.isArray(serviceCatalog)
             ? serviceCatalog.filter((x: unknown) => typeof x === 'string' && x.trim()).map((x: string) => x.trim())
             : [];
         if (serviceList.length === 0) {
+            const serviceCatalogStageStartedAt = Date.now();
+            serviceList = await getServiceCatalogFromCacheOrDb();
+            recordStage(timings, 'service_catalog_cache_or_db_ms', serviceCatalogStageStartedAt);
+        }
+        if (serviceList.length === 0) {
             return new Response(
                 JSON.stringify({
-                    error: 'Service catalog is required for diagnosis trade mapping.',
+                    error: 'Service catalog is unavailable. Please retry shortly.',
                 }),
-                { status: 400 }
+                { status: 503 }
             );
         }
         const serviceListText = serviceList.join(', ');
@@ -726,10 +798,12 @@ CRITICAL: Output <thought> FIRST (2–3 short sentences about the likely problem
         try {
             // eslint-disable-next-line no-console
             console.log('Starting Gemini stream generation...');
+            const streamStageStartedAt = Date.now();
             const result = await model.generateContentStream({
                 contents: contents as unknown as GeminiContent[],
                 generationConfig,
             });
+            recordStage(timings, 'gemini_stream_start_ms', streamStageStartedAt);
 
             const stream = new ReadableStream({
                 async start(controller) {
@@ -753,6 +827,7 @@ CRITICAL: Output <thought> FIRST (2–3 short sentences about the likely problem
             });
 
             const durationMs = Date.now() - startedAt;
+            recordStage(timings, 'total_request_ms', requestStartedAt);
             logAiEvent({
                 endpoint: 'diagnose',
                 status: 'ok',
@@ -767,6 +842,7 @@ CRITICAL: Output <thought> FIRST (2–3 short sentences about the likely problem
                     usedGenerateContentFallback: false,
                 },
             });
+            logDiagnoseTimings('ok', timings);
 
             const adjustedStream = new ReadableStream({
                 async start(controller) {
@@ -842,10 +918,12 @@ CRITICAL: Output <thought> FIRST (2–3 short sentences about the likely problem
                 );
             }
 
+            const fallbackStageStartedAt = Date.now();
             const result = await model.generateContent({
                 contents: contents as unknown as GeminiContent[],
                 generationConfig,
             });
+            recordStage(timings, 'gemini_generate_content_fallback_ms', fallbackStageStartedAt);
 
             const resp = (result as any)?.response;
             const fullTextFromResp = resp && typeof resp.text === 'function' ? resp.text() : '';
@@ -866,6 +944,7 @@ CRITICAL: Output <thought> FIRST (2–3 short sentences about the likely problem
             }
 
             const durationMs = Date.now() - startedAt;
+            recordStage(timings, 'total_request_ms', requestStartedAt);
             logAiEvent({
                 endpoint: 'diagnose',
                 status: 'ok',
@@ -880,6 +959,7 @@ CRITICAL: Output <thought> FIRST (2–3 short sentences about the likely problem
                     usedGenerateContentFallback: true,
                 },
             });
+            logDiagnoseTimings('ok', timings);
 
             const withThought = enforceThoughtSentenceCount(
                 enforceMinThoughtLength(ensureThoughtBlock(fullText), 125),
@@ -907,6 +987,7 @@ CRITICAL: Output <thought> FIRST (2–3 short sentences about the likely problem
         }
     } catch (error: unknown) {
         const durationMs = Date.now() - startedAt;
+        recordStage(timings, 'total_request_ms', requestStartedAt);
         const maybeErr = error as { message?: unknown; toString?: unknown };
         const metaError =
             typeof maybeErr.message === 'string'
@@ -924,6 +1005,7 @@ CRITICAL: Output <thought> FIRST (2–3 short sentences about the likely problem
         });
         // eslint-disable-next-line no-console
         console.error('Gemini Diagnosis Error:', error);
+        logDiagnoseTimings('error', timings);
         const message =
             typeof maybeErr.message === 'string'
                 ? maybeErr.message

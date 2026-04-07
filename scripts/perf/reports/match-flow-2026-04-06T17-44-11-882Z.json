@@ -1,0 +1,54 @@
+{
+  "baseUrl": "http://localhost:3000",
+  "startedAtIso": "2026-04-06T17:43:10.809Z",
+  "finishedAtIso": "2026-04-06T17:44:11.882Z",
+  "elapsedMs": 61073,
+  "endpoints": {
+    "/api/providers": [
+      {
+        "url": "http://localhost:3000/api/providers",
+        "status": 200,
+        "method": "POST",
+        "durationMs": 18386,
+        "startedAtIso": "2026-04-06T17:43:35.973Z",
+        "endedAtIso": "2026-04-06T17:43:54.359Z"
+      }
+    ],
+    "/api/enrich/get": [
+      {
+        "url": "http://localhost:3000/api/enrich/get",
+        "status": 200,
+        "method": "POST",
+        "durationMs": 12049,
+        "startedAtIso": "2026-04-06T17:43:54.644Z",
+        "endedAtIso": "2026-04-06T17:44:06.693Z"
+      }
+    ],
+    "/api/enrich/queue": []
+  },
+  "providersDebugTiming": {
+    "totalMs": 10833,
+    "stages": {
+      "body_parsed": 19,
+      "cache_lookup_done": 602,
+      "places_resolved": 5715,
+      "fast_providers_prepared": 10041,
+      "providers_ranked": 10044
+    },
+    "searchCacheHit": false,
+    "placesCount": 50,
+    "providersCount": 10
+  },
+  "finalUrl": "http://localhost:3000/match/50333e67-05b1-4e7c-a44f-c814c8a5aca8",
+  "consoleErrors": [
+    "[error] Failed to load resource: the server responded with a status of 404 (Not Found)"
+  ],
+  "failedApiResponses": [],
+  "artifacts": {
+    "screenshotPath": "/Users/matthewprowse/Documents/Development/Personal/Home Services/app/scripts/perf/reports/match-flow-2026-04-06T17-44-09-415Z.png",
+    "htmlPath": "/Users/matthewprowse/Documents/Development/Personal/Home Services/app/scripts/perf/reports/match-flow-2026-04-06T17-44-09-415Z.html"
+  },
+  "notes": [
+    "Seeded conversation for perf: /match/50333e67-05b1-4e7c-a44f-c814c8a5aca8"
+  ]
+}

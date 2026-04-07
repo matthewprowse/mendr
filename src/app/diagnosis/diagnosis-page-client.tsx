@@ -22,6 +22,8 @@ import { DiagnosisLeaveDialog } from '@/components/diagnosis-leave-dialog';
 import { cleanThoughtSentenceStarts, splitDetailAndHazard } from '@/lib/diagnosis-display';
 import { createClientId } from '@/lib/client-random-id';
 import { writeMatchTradeContextStorage } from '@/lib/match-trade-context';
+import { prewarmProvidersApi } from '@/features/match/api/client';
+import { fetchActiveServiceCatalogClient } from '@/lib/services-catalog';
 import {
     fetchConversationDiagnosis,
     patchConversation,
@@ -41,6 +43,8 @@ const DIAGNOSIS_MAX_RETRIES = 3;
 function sleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
 }
+
+const DEFAULT_MATCH_RADIUS_METERS = 10_000;
 
 export default function DiagnosisPageClient({
     conversationId,
@@ -82,6 +86,33 @@ export default function DiagnosisPageClient({
     const [leaveDialogOpen, setLeaveDialogOpen] = useState(false);
     const footerRef = useRef<HTMLDivElement | null>(null);
     const [footerHeight, setFooterHeight] = useState(0);
+
+    const prewarmProvidersForConversation = useCallback(
+        (conversation: ConversationDiagnosisRow | null | undefined, diagnosisData: DiagnosisData) => {
+            const lat = conversation?.customer_lat;
+            const lng = conversation?.customer_lng;
+            const tradeRaw = (diagnosisData.trade ?? '').trim();
+            const tradeDetailRaw = (diagnosisData.trade_detail ?? '').trim();
+            if (
+                typeof lat !== 'number' ||
+                typeof lng !== 'number' ||
+                !Number.isFinite(lat) ||
+                !Number.isFinite(lng) ||
+                !tradeRaw ||
+                tradeRaw.toLowerCase() === 'n/a'
+            ) {
+                return;
+            }
+            void prewarmProvidersApi({
+                lat,
+                lng,
+                trade: tradeRaw,
+                ...(tradeDetailRaw ? { tradeDetail: tradeDetailRaw } : {}),
+                radius: DEFAULT_MATCH_RADIUS_METERS,
+            });
+        },
+        []
+    );
 
     const parseDiagnosisFromResponse = (text: string): DiagnosisData | null => {
         const jsonBlockMatch = text.match(/<json>([\s\S]*?)<\/json>/i);
@@ -191,16 +222,7 @@ export default function DiagnosisPageClient({
                     setIsDiagnosingRetrying(attempt > 1);
                     let catalog = serviceCatalog;
                     if (catalog.length === 0) {
-                        const { data } = await supabase
-                            .from('services')
-                            .select('label')
-                            .eq('active', true)
-                            .order('sort_order', { ascending: true });
-                        catalog = Array.isArray(data)
-                            ? data
-                                  .map((r: any) => String(r?.label ?? '').trim())
-                                  .filter((x: string) => x.length > 0)
-                            : [];
+                        catalog = await fetchActiveServiceCatalogClient(supabase as any);
                         if (catalog.length > 0) setServiceCatalog(catalog);
                     }
                     if (catalog.length === 0) {
@@ -333,6 +355,11 @@ export default function DiagnosisPageClient({
                         return null;
                     }
 
+                    const latestConv = await fetchConversationDiagnosis(cid);
+                    if (latestConv.ok) {
+                        prewarmProvidersForConversation(latestConv.data, diagWithThought);
+                    }
+
                     return diagWithThought;
                 }
                 setDiagnosisFailureMessage(
@@ -344,26 +371,15 @@ export default function DiagnosisPageClient({
                 setIsDiagnosingRetrying(false);
             }
         },
-        [conversationId, serviceCatalog, supabase, user?.id]
+        [conversationId, prewarmProvidersForConversation, serviceCatalog, supabase, user?.id]
     );
 
     useEffect(() => {
         let cancelled = false;
-        const loadServices = async () => {
-            const { data } = await supabase
-                .from('services')
-                .select('label')
-                .eq('active', true)
-                .order('sort_order', { ascending: true });
+        void fetchActiveServiceCatalogClient(supabase as any).then((labels) => {
             if (cancelled) return;
-            const labels = Array.isArray(data)
-                ? data
-                      .map((r: any) => String(r?.label ?? '').trim())
-                      .filter((x: string) => x.length > 0)
-                : [];
             setServiceCatalog(labels);
-        };
-        void loadServices();
+        });
         return () => {
             cancelled = true;
         };

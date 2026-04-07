@@ -37,3 +37,25 @@ export async function GET(req: NextRequest) {
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     return NextResponse.json(data ?? []);
 }
+
+export async function PATCH(req: NextRequest) {
+    if (!checkAdminCookie(req)) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    const body = await req.json().catch(() => null);
+    const id = typeof body?.id === 'string' ? body.id.trim() : '';
+    if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 });
+    const patch: Record<string, unknown> = {};
+    if (typeof body?.event_type === 'string') patch.event_type = body.event_type;
+    if (typeof body?.provider_id === 'string' || body?.provider_id === null) patch.provider_id = body.provider_id;
+    if (typeof body?.diagnosis_id === 'string' || body?.diagnosis_id === null) patch.diagnosis_id = body.diagnosis_id;
+    if (typeof body?.session_id === 'string') patch.session_id = body.session_id;
+    if (Object.keys(patch).length === 0) {
+        return NextResponse.json({ error: 'Nothing to update' }, { status: 400 });
+    }
+
+    const admin = await createSupabaseAdminClient();
+    const { error } = await admin.from('diagnosis_events').update(patch).eq('id', id);
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ ok: true });
+}

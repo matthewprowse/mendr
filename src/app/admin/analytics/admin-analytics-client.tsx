@@ -4,6 +4,10 @@ import { useCallback, useEffect, useState } from 'react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { AdminPageHeader } from '../_components/admin-page-header';
 import { AdminDataTable } from '../_components/admin-data-table';
 import { TableCell, TableRow } from '@/components/ui/table';
@@ -121,6 +125,8 @@ export default function AdminAnalyticsPage() {
     const [loading, setLoading] = useState(true);
     const [period, setPeriod] = useState<'today' | '7d'>('today');
     const [page, setPage] = useState(0);
+    const [selectedEvent, setSelectedEvent] = useState<DiagnosisEvent | null>(null);
+    const [editDraft, setEditDraft] = useState<DiagnosisEvent | null>(null);
     const PAGE_SIZE = 50;
 
     const load = useCallback(async () => {
@@ -231,6 +237,24 @@ export default function AdminAnalyticsPage() {
         (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
     ).slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
     const totalPages = Math.ceil(events.length / PAGE_SIZE);
+    async function saveEdit() {
+        if (!editDraft) return;
+        const res = await fetch('/api/admin/analytics', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                id: editDraft.id,
+                session_id: editDraft.session_id,
+                event_type: editDraft.event_type,
+                provider_id: editDraft.provider_id,
+                diagnosis_id: editDraft.diagnosis_id,
+            }),
+        });
+        if (!res.ok) return;
+        setEvents((prev) => prev.map((e) => (e.id === editDraft.id ? { ...e, ...editDraft } : e)));
+        setSelectedEvent((prev) => (prev?.id === editDraft.id ? { ...prev, ...editDraft } : prev));
+        setEditDraft(null);
+    }
 
     return (
         <div className="mx-auto w-full max-w-7xl px-4 pb-8 pt-4 sm:px-6 lg:px-8">
@@ -340,7 +364,7 @@ export default function AdminAnalyticsPage() {
                             colSpan={4}
                         >
                             {pageEvents.map((e) => (
-                                <TableRow key={e.id}>
+                                <TableRow key={e.id} className="cursor-pointer" onClick={() => setSelectedEvent(e)}>
                                     <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
                                         {new Date(e.created_at).toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit' })}
                                     </TableCell>
@@ -352,23 +376,9 @@ export default function AdminAnalyticsPage() {
                         </AdminDataTable>
                         {totalPages > 1 && (
                             <div className="mt-3 flex items-center justify-end gap-2">
-                                <button
-                                    type="button"
-                                    disabled={page === 0}
-                                    onClick={() => setPage((p) => p - 1)}
-                                    className="rounded border border-border px-3 py-1 text-xs text-muted-foreground hover:bg-muted disabled:opacity-40"
-                                >
-                                    Previous
-                                </button>
+                                <Button size="sm" variant="outline" disabled={page === 0} onClick={() => setPage((p) => p - 1)}>Previous</Button>
                                 <span className="text-xs text-muted-foreground">{page + 1} / {totalPages}</span>
-                                <button
-                                    type="button"
-                                    disabled={page >= totalPages - 1}
-                                    onClick={() => setPage((p) => p + 1)}
-                                    className="rounded border border-border px-3 py-1 text-xs text-muted-foreground hover:bg-muted disabled:opacity-40"
-                                >
-                                    Next
-                                </button>
+                                <Button size="sm" variant="outline" disabled={page >= totalPages - 1} onClick={() => setPage((p) => p + 1)}>Next</Button>
                             </div>
                         )}
                     </div>
@@ -408,6 +418,40 @@ export default function AdminAnalyticsPage() {
                     )}
                 </TabsContent>
             </Tabs>
+            <Dialog open={!!selectedEvent} onOpenChange={(open) => !open && setSelectedEvent(null)}>
+                <DialogContent className="max-w-xl">
+                    <DialogHeader><DialogTitle>Event Details</DialogTitle></DialogHeader>
+                    {selectedEvent ? (
+                        <div className="space-y-2 text-sm">
+                            <p><span className="text-muted-foreground">Session:</span> {selectedEvent.session_id}</p>
+                            <p><span className="text-muted-foreground">Event:</span> {selectedEvent.event_type}</p>
+                            <p><span className="text-muted-foreground">Provider:</span> {selectedEvent.provider_id ?? '—'}</p>
+                            <p><span className="text-muted-foreground">Diagnosis:</span> {selectedEvent.diagnosis_id ?? '—'}</p>
+                            <div className="flex gap-2">
+                                <Button variant="secondary" onClick={() => setEditDraft({ ...selectedEvent })}>Edit</Button>
+                                <Button variant="outline" onClick={() => setSelectedEvent(null)}>Close</Button>
+                            </div>
+                        </div>
+                    ) : null}
+                </DialogContent>
+            </Dialog>
+            <Dialog open={!!editDraft} onOpenChange={(open) => !open && setEditDraft(null)}>
+                <DialogContent className="max-w-xl">
+                    <DialogHeader><DialogTitle>Edit Event</DialogTitle></DialogHeader>
+                    {editDraft ? (
+                        <div className="space-y-2">
+                            <div className="space-y-1"><Label>Session ID</Label><Input value={editDraft.session_id} onChange={(e) => setEditDraft({ ...editDraft, session_id: e.target.value })} /></div>
+                            <div className="space-y-1"><Label>Event Type</Label><Input value={editDraft.event_type} onChange={(e) => setEditDraft({ ...editDraft, event_type: e.target.value as EventType })} /></div>
+                            <div className="space-y-1"><Label>Provider ID</Label><Input value={editDraft.provider_id ?? ''} onChange={(e) => setEditDraft({ ...editDraft, provider_id: e.target.value || null })} /></div>
+                            <div className="space-y-1"><Label>Diagnosis ID</Label><Input value={editDraft.diagnosis_id ?? ''} onChange={(e) => setEditDraft({ ...editDraft, diagnosis_id: e.target.value || null })} /></div>
+                            <div className="flex gap-2">
+                                <Button onClick={() => void saveEdit()}>Save</Button>
+                                <Button variant="outline" onClick={() => setEditDraft(null)}>Cancel</Button>
+                            </div>
+                        </div>
+                    ) : null}
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }

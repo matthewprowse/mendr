@@ -1,0 +1,16 @@
+{
+  "baseUrl": "http://localhost:3000",
+  "startedAtIso": "2026-04-06T17:30:12.500Z",
+  "finishedAtIso": "2026-04-06T17:32:17.021Z",
+  "elapsedMs": 124524,
+  "endpoints": {
+    "/api/providers": [],
+    "/api/enrich/get": [],
+    "/api/enrich/queue": []
+  },
+  "providersDebugTiming": null,
+  "notes": [
+    "Seeded conversation for perf: /match/c39bc689-972a-4dc6-a2bc-c10d46b467c9",
+    "Direct match mode: timed out waiting for first /api/providers response."
+  ]
+}

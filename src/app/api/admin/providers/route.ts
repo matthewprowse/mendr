@@ -34,7 +34,18 @@ export async function PATCH(req: NextRequest) {
     const id = typeof body?.id === 'string' ? body.id : '';
     if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 });
 
-    const allowed = ['status', 'notes', 'sendgrid_sent_at'] as const;
+    const allowed = [
+        'status',
+        'notes',
+        'sendgrid_sent_at',
+        'contact_name',
+        'business_name',
+        'trade',
+        'phone',
+        'email',
+        'areas',
+        'founded_year',
+    ] as const;
     const patch: Record<string, unknown> = {};
     for (const key of allowed) {
         if (key in body) patch[key] = body[key];

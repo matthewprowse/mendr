@@ -57,6 +57,7 @@ const dummyClient = {
     auth: {
         getSession: async () => ({ data: { session: null }, error: null }),
         onAuthStateChange: () => ({ data: { subscription: { unsubscribe: noop } } }),
+        signInAnonymously: async () => ({ data: { session: null, user: null }, error: null }),
         signInWithOtp: async () => ({ data: null, error: null }),
         signInWithPassword: async () => ({ data: null, error: null }),
         signInWithOAuth: async () => ({ data: null, error: null }),

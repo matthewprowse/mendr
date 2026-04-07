@@ -19,6 +19,20 @@ export type FetchProvidersApiResult = {
     data: ProvidersResponse | null;
 };
 
+const providersPrewarmCache = new Map<string, number>();
+const providersPrewarmInFlight = new Map<string, Promise<void>>();
+const PROVIDERS_PREWARM_TTL_MS = 45_000;
+
+function providersPrewarmKey(payload: ProvidersRequest): string {
+    return [
+        payload.lat.toFixed(6),
+        payload.lng.toFixed(6),
+        payload.trade.trim().toLowerCase(),
+        (payload.tradeDetail ?? '').trim().toLowerCase(),
+        String(payload.radius ?? 10_000),
+    ].join('|');
+}
+
 export async function fetchProvidersApi(
     payload: ProvidersRequest,
     options?: { signal?: AbortSignal }
@@ -31,6 +45,28 @@ export async function fetchProvidersApi(
     });
     const data = (await res.json().catch(() => null)) as ProvidersResponse | null;
     return { ok: res.ok, status: res.status, data };
+}
+
+export async function prewarmProvidersApi(payload: ProvidersRequest): Promise<void> {
+    const key = providersPrewarmKey(payload);
+    const now = Date.now();
+    const cachedUntil = providersPrewarmCache.get(key) ?? 0;
+    if (cachedUntil > now) return;
+
+    const existing = providersPrewarmInFlight.get(key);
+    if (existing) return existing;
+
+    const run = fetchProvidersApi(payload)
+        .then(() => {
+            providersPrewarmCache.set(key, Date.now() + PROVIDERS_PREWARM_TTL_MS);
+        })
+        .catch(() => undefined)
+        .finally(() => {
+            providersPrewarmInFlight.delete(key);
+        });
+
+    providersPrewarmInFlight.set(key, run);
+    return run;
 }
 
 const geocodeLatLngCache = new Map<string, GeocodeResponse | null>();

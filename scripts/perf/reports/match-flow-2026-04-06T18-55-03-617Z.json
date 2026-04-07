@@ -1,0 +1,81 @@
+{
+  "baseUrl": "http://localhost:3000",
+  "startedAtIso": "2026-04-06T18:54:12.457Z",
+  "finishedAtIso": "2026-04-06T18:55:03.611Z",
+  "elapsedMs": 51157,
+  "endpoints": {
+    "/api/providers": [
+      {
+        "url": "http://localhost:3000/api/providers",
+        "status": 200,
+        "method": "POST",
+        "durationMs": 1461,
+        "startedAtIso": "2026-04-06T18:54:19.303Z",
+        "endedAtIso": "2026-04-06T18:54:20.764Z"
+      }
+    ],
+    "/api/enrich/get": [
+      {
+        "url": "http://localhost:3000/api/enrich/get",
+        "status": 200,
+        "method": "POST",
+        "durationMs": 302,
+        "startedAtIso": "2026-04-06T18:54:20.832Z",
+        "endedAtIso": "2026-04-06T18:54:21.134Z"
+      },
+      {
+        "url": "http://localhost:3000/api/enrich/get",
+        "status": 200,
+        "method": "POST",
+        "durationMs": 609,
+        "startedAtIso": "2026-04-06T18:54:22.140Z",
+        "endedAtIso": "2026-04-06T18:54:22.749Z"
+      },
+      {
+        "url": "http://localhost:3000/api/enrich/get",
+        "status": 200,
+        "method": "POST",
+        "durationMs": 1210,
+        "startedAtIso": "2026-04-06T18:54:24.751Z",
+        "endedAtIso": "2026-04-06T18:54:25.962Z"
+      },
+      {
+        "url": "http://localhost:3000/api/enrich/get",
+        "status": 200,
+        "method": "POST",
+        "durationMs": 355,
+        "startedAtIso": "2026-04-06T18:54:29.975Z",
+        "endedAtIso": "2026-04-06T18:54:30.330Z"
+      }
+    ],
+    "/api/enrich/queue": [
+      {
+        "url": "http://localhost:3000/api/enrich/queue",
+        "status": 200,
+        "method": "POST",
+        "durationMs": 744,
+        "startedAtIso": "2026-04-06T18:54:20.833Z",
+        "endedAtIso": "2026-04-06T18:54:21.577Z"
+      },
+      {
+        "url": "http://localhost:3000/api/enrich/queue",
+        "status": 200,
+        "method": "POST",
+        "durationMs": 1801,
+        "startedAtIso": "2026-04-06T18:54:20.833Z",
+        "endedAtIso": "2026-04-06T18:54:22.634Z"
+      }
+    ]
+  },
+  "providersDebugTiming": null,
+  "finalUrl": "http://localhost:3000/match/15d43d9c-8b84-4e00-9641-884cdffe7c47",
+  "consoleErrors": [
+    "[error] Failed to load resource: the server responded with a status of 404 (Not Found)"
+  ],
+  "failedApiResponses": [],
+  "artifacts": {
+    "screenshotPath": "/Users/matthewprowse/Documents/Development/Personal/Home Services/app/scripts/perf/reports/match-flow-2026-04-06T18-54-35-776Z.png",
+    "htmlPath": "/Users/matthewprowse/Documents/Development/Personal/Home Services/app/scripts/perf/reports/match-flow-2026-04-06T18-54-35-776Z.html"
+  },
+  "notes": []
+}
