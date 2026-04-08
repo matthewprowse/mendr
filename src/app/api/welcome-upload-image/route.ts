@@ -98,7 +98,7 @@ export async function POST(req: NextRequest) {
         const imageUrl = `${supabaseUrl}/storage/v1/object/public/${bucket}/${objectPath}`;
 
         const { error: convErr } = await admin
-            .from('conversations')
+            .from('diagnoses')
             .upsert({
                 id: conversationId,
                 title: 'New Diagnosis',

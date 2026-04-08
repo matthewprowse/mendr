@@ -28,7 +28,7 @@ const providers: ProviderItem[] = [
         website: null,
         phone: null,
         summary: 'ok',
-        services: [],
+        specialisations: [],
         isOpen: null,
     },
     {
@@ -44,7 +44,7 @@ const providers: ProviderItem[] = [
         website: null,
         phone: null,
         summary: 'ok',
-        services: [],
+        specialisations: [],
         isOpen: null,
     },
 ];

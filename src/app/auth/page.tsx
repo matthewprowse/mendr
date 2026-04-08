@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import AuthLoginClient from './auth-login-client';
+import AuthLoginClient from './client';
 
 export const metadata: Metadata = {
     title: 'Sign in',

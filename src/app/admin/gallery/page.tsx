@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import AdminGalleryClient from './admin-gallery-client';
+import AdminGalleryClient from './client';
 
 export const metadata: Metadata = {
     title: 'Gallery',

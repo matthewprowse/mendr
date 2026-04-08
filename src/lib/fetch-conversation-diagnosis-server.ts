@@ -1,4 +1,4 @@
-import type { ConversationDiagnosisRow } from '@/lib/conversations-api';
+import type { ConversationDiagnosisRow } from '@/lib/diagnoses-api';
 import { createSupabaseAdminClient } from '@/lib/supabase-server';
 
 /**
@@ -10,7 +10,7 @@ export async function fetchConversationDiagnosisAdmin(
     try {
         const admin = await createSupabaseAdminClient();
         const { data, error } = await admin
-            .from('conversations')
+            .from('diagnoses')
             .select(
                 'id,image_url,diagnosis,initial_image_description,customer_lat,customer_lng,customer_address'
             )

@@ -151,15 +151,13 @@ export function isProviderRelevantForTrade(params: {
     const typesText: string[] = typesRaw.map((t) => t.replace(/_/g, ' '));
     if (typesRaw.some((t) => BANNED_TYPES.has(t))) return false;
 
-    const servicesFromAi = Array.isArray(aiData?.services)
-        ? (aiData.services as { short?: string; full?: string }[])
-        : [];
-    const servicesFromCache = Array.isArray(cached?.services)
-        ? (cached.services as { short?: string; full?: string }[])
-        : [];
-    const servicesText = [...servicesFromAi, ...servicesFromCache]
-        .flatMap((s) => [s.short, s.full])
-        .filter(Boolean)
+    // AI-extracted specialisations are the authoritative relevance signal.
+    // Google Place types ("service", "general_contractor") are kept for broad
+    // relevance filtering but contain no trade-specific information.
+    const specialisationsText = [
+        ...(Array.isArray(aiData?.specialisations) ? (aiData.specialisations as string[]) : []),
+        ...(Array.isArray(cached?.specialisations) ? (cached.specialisations as string[]) : []),
+    ]
         .join(' ')
         .toLowerCase();
 
@@ -169,7 +167,7 @@ export function isProviderRelevantForTrade(params: {
 
     const haystack = [
         name,
-        servicesText,
+        specialisationsText,
         ...typesRaw,
         ...typesText,
         (place.formattedAddress || '').toString().toLowerCase(),

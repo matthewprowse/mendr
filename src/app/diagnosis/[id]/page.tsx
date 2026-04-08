@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 
-import DiagnosisPageClient from '../diagnosis-page-client';
+import DiagnosisPageClient from '../client';
 import { fetchConversationDiagnosisAdmin } from '@/lib/fetch-conversation-diagnosis-server';
 import { fetchReportDetailOnServer } from '@/lib/fetch-report-detail-server';
 

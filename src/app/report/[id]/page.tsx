@@ -6,7 +6,7 @@
 
 import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
-import { ReportDetailContent } from './_components/report-detail-content';
+import { ReportDetailContent } from './components/report-detail-content';
 import { fetchReportDetailOnServer } from '@/lib/fetch-report-detail-server';
 
 type PageProps = {

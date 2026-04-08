@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import ContactPageClient from './contact-page-client';
+import ContactPageClient from './client';
 
 export const metadata: Metadata = {
     title: 'Contact',

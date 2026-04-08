@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import AuthResetClient from '../auth-reset-client';
+import AuthResetClient from './client';
 
 export const metadata: Metadata = {
     title: 'Reset password',

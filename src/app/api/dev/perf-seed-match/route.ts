@@ -55,7 +55,7 @@ export async function POST(req: NextRequest) {
 
     try {
         const admin = await createSupabaseAdminClient();
-        const { error } = await admin.from('conversations').insert({
+        const { error } = await admin.from('diagnoses').insert({
             id,
             title: 'Perf Seed',
             diagnosis,

@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import DiagnosisPageClient from './diagnosis-page-client';
+import DiagnosisPageClient from './client';
 
 export const metadata: Metadata = {
     title: 'Diagnosis',

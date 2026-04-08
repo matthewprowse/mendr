@@ -17,8 +17,6 @@ import { DiagnosisMetaPanel } from '@/components/diagnosis-meta-panel';
 import { DiagnosisLeaveDialog } from '@/components/diagnosis-leave-dialog';
 import { Separator } from '@/components/ui/separator';
 import { useAuth } from '@/context/auth-context';
-import { fetchConversationDiagnosis, patchConversation } from '@/lib/conversations-api';
-import { writeMatchTradeContextStorage } from '@/lib/match-trade-context';
 
 type DiagnosisPageClientProps = {
     conversationId: string;
@@ -130,49 +128,57 @@ export function DiagnosisPageClient({ conversationId }: DiagnosisPageClientProps
 
     const loadConversation = useCallback(
         async (id: string): Promise<ConversationRow | null> => {
-            const res = await fetchConversationDiagnosis(id);
-            if (!res.ok) {
+            const { data, error } = await supabase
+                .from('conversations')
+                .select('id,image_url,diagnosis,initial_image_description')
+                .eq('id', id)
+                .maybeSingle();
+            if (error) {
                 if (process.env.NODE_ENV === 'development') {
                     // eslint-disable-next-line no-console
-                    console.warn('[DiagnosisPage] loadConversation error', res.error);
+                    console.warn('[DiagnosisPage] loadConversation error', error);
                 }
                 return null;
             }
-            const data = res.data;
             if (!data) return null;
             return {
                 id: data.id,
-                image_url: data.image_url ?? null,
-                diagnosis: (data.diagnosis as DiagnosisData | null) ?? null,
-                initial_image_description: data.initial_image_description ?? null,
+                image_url: (data as any).image_url ?? null,
+                diagnosis: (data as any).diagnosis ?? null,
+                initial_image_description: (data as any).initial_image_description ?? null,
             };
         },
-        []
+        [supabase]
     );
 
     const saveConversationDiagnosis = useCallback(
-        async (diag: DiagnosisData | null, img: string | null, prompt?: string): Promise<boolean> => {
+        async (diag: DiagnosisData | null, img: string | null, prompt?: string) => {
             const deviceType =
                 typeof navigator !== 'undefined' && /Mobi|Android/i.test(navigator.userAgent)
                     ? 'mobile'
                     : 'desktop';
-            const result = await patchConversation(conversationId, {
-                title: diag?.diagnosis || 'New Diagnosis',
-                image_url: img,
-                diagnosis: diag,
-                urgency_key: (diag?.urgency_key ?? null) as string | null,
-                initial_image_description: (prompt ?? '').trim() || null,
-                device: deviceType,
-                user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : '',
-                user_id: user?.id ?? null,
-            });
-            if (!result.ok) {
-                toast.error(result.error || 'Could not save your report.');
-                return false;
+            try {
+                await supabase
+                    .from('conversations')
+                    .upsert({
+                        id: conversationId,
+                        title: diag?.diagnosis || 'New Diagnosis',
+                        image_url: img,
+                        diagnosis: diag,
+                        urgency_key: (diag?.urgency_key ?? null) as string | null,
+                        initial_image_description: (prompt ?? '').trim() || null,
+                        device: deviceType,
+                        user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : '',
+                        // Needed for RLS isolation while using guest (anonymous) sessions.
+                        user_id: user?.id ?? null,
+                    })
+                    .select('id')
+                    .single();
+            } catch {
+                // Swallow persistence errors here; the user can still see the diagnosis.
             }
-            return true;
         },
-        [conversationId, user?.id]
+        [conversationId, supabase, user?.id]
     );
 
     const runInitialDiagnosis = useCallback(
@@ -231,8 +237,7 @@ export function DiagnosisPageClient({ conversationId }: DiagnosisPageClientProps
                     return null;
                 }
                 setDiagnosis(diag);
-                const saved = await saveConversationDiagnosis(diag, img, prompt);
-                if (!saved) return null;
+                await saveConversationDiagnosis(diag, img, prompt);
                 return diag;
             } catch (e) {
                 if (process.env.NODE_ENV === 'development') {
@@ -306,8 +311,7 @@ export function DiagnosisPageClient({ conversationId }: DiagnosisPageClientProps
                 }
                 setDiagnosis(diag);
                 setRefineText('');
-                const saved = await saveConversationDiagnosis(diag, imageSrc, initialPrompt);
-                if (!saved) return;
+                await saveConversationDiagnosis(diag, imageSrc, initialPrompt);
             } catch (e) {
                 if (process.env.NODE_ENV === 'development') {
                     // eslint-disable-next-line no-console
@@ -433,8 +437,7 @@ export function DiagnosisPageClient({ conversationId }: DiagnosisPageClientProps
         try {
             // Count the diagnosis as completed only when the user confirms and proceeds to match.
             trackEvent('diagnosis_complete', { diagnosis_id: conversationId });
-            const saved = await saveConversationDiagnosis(diagnosis, imageSrc, initialPrompt);
-            if (!saved) return;
+            await saveConversationDiagnosis(diagnosis, imageSrc, initialPrompt);
             const key = `pending_diagnosis_image_url:${conversationId}`;
             try {
                 sessionStorage.removeItem(key);
@@ -442,11 +445,6 @@ export function DiagnosisPageClient({ conversationId }: DiagnosisPageClientProps
             try {
                 localStorage.removeItem(key);
             } catch {}
-            writeMatchTradeContextStorage(
-                conversationId,
-                typeof diagnosis.trade === 'string' ? diagnosis.trade : '',
-                typeof diagnosis.trade_detail === 'string' ? diagnosis.trade_detail : undefined
-            );
             router.push(`/match/${encodeURIComponent(conversationId)}`);
         } finally {
             setConfirming(false);

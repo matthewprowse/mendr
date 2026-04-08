@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import AdminDashboardClient from './admin-dashboard-client';
+import AdminDashboardClient from './client';
 
 export const metadata: Metadata = {
     title: 'Admin',

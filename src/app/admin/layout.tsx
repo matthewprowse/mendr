@@ -1,5 +1,5 @@
 import { ReactNode } from 'react';
-import { AdminHeader } from './_components/admin-header';
+import { AdminHeader } from './components/header';
 
 export default function AdminLayout({ children }: { children: ReactNode }) {
     return (

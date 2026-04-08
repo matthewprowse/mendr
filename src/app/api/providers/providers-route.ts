@@ -52,72 +52,17 @@ function getProviderResultLimitByRadius(radiusMeters: number): number {
     return 5;
 }
 
-function getTargetPlacesCountByRadius(radiusMeters: number): number {
-    const providerLimit = getProviderResultLimitByRadius(radiusMeters);
-    // Keep enough headroom for filtering/relevance, but avoid always pulling ~55 places
-    // on small-radius searches where only 5-10 final providers are needed.
-    return Math.min(55, Math.max(20, providerLimit + 10));
-}
-
-const PLACES_SEARCH_TEXT_URL = 'https://places.googleapis.com/v1/places:searchText';
-
-const PLACES_SEARCH_TEXT_FIELD_MASK =
-    'places.id,places.displayName,places.formattedAddress,places.rating,places.userRatingCount,places.nationalPhoneNumber,places.websiteUri,places.location,places.types,places.reviews,places.editorialSummary,places.reviewSummary,places.regularOpeningHours,places.currentOpeningHours,routingSummaries,nextPageToken';
-
-function isTransientPlacesHttpStatus(status: number): boolean {
-    return status === 503 || status === 502 || status === 429;
-}
-
-/** Single retry on 503 for transient Google outages. */
-async function fetchPlacesSearchText(apiKey: string, bodyObj: Record<string, unknown>): Promise<Response> {
-    const init: RequestInit = {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'X-Goog-Api-Key': apiKey,
-            'X-Goog-FieldMask': PLACES_SEARCH_TEXT_FIELD_MASK,
-        },
-        body: JSON.stringify(bodyObj),
-    };
-    let res = await fetch(PLACES_SEARCH_TEXT_URL, init);
-    if (res.status === 503) {
-        await new Promise((r) => setTimeout(r, 400));
-        res = await fetch(PLACES_SEARCH_TEXT_URL, init);
-    }
-    return res;
-}
-
 export async function POST(req: NextRequest) {
     // ── Rate limit ─────────────────────────────────────────────────────────────
     const limited = checkRateLimit(req, 'providers');
     if (limited) return limited;
 
     try {
-        const t0 = Date.now();
-        console.log('[providers] request received');
-        const stageTimings: Record<string, number> = {};
-        const logStage = (label: string, stageKey?: string) => {
-            if (process.env.NODE_ENV === 'development') {
-                const elapsed = Date.now() - t0;
-                if (stageKey) stageTimings[stageKey] = elapsed;
-                console.log(`[providers] ${label} at +${elapsed}ms`);
-            }
-        };
-        const raw = await req.text();
-        if (!raw.trim()) {
-            return NextResponse.json({ error: 'Request body required' }, { status: 400 });
-        }
-        let body: ProvidersRequestBody;
-        try {
-            body = JSON.parse(raw) as ProvidersRequestBody;
-        } catch {
-            return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
-        }
-
         const startedAt = Date.now();
         let searchCacheHit = false;
         let searchCacheExpired = false;
         let textSearchExtraPagesFetched = 0;
+        const body = (await req.json()) as ProvidersRequestBody;
         const {
             lat,
             lng,
@@ -128,7 +73,6 @@ export async function POST(req: NextRequest) {
             /** Optional specialty line from AI diagnosis (same as `conversations.diagnosis.trade_detail`). Refines Google text search. */
             tradeDetail,
         } = body;
-        logStage('body parsed', 'body_parsed');
         let supabase: Awaited<ReturnType<typeof createSupabaseServerClient>> | null = null;
         let adminSupabase: Awaited<ReturnType<typeof createSupabaseAdminClient>> | null = null;
         try {
@@ -216,21 +160,6 @@ export async function POST(req: NextRequest) {
         };
         let cachedData: any[] = [];
         let pendingCacheWrite: { key: string; placeIds: string[]; routing: any[]; nextToken: string | null } | null = null;
-        const attachDebugTiming = (
-            body: ProvidersResponseBody
-        ): ProvidersResponseBody => {
-            if (process.env.NODE_ENV !== 'development') return body;
-            return {
-                ...body,
-                debugTiming: {
-                    totalMs: Date.now() - t0,
-                    stages: { ...stageTimings },
-                    searchCacheHit,
-                    placesCount: places.length,
-                    providersCount: Array.isArray(body.providers) ? body.providers.length : 0,
-                },
-            };
-        };
 
         if (!pageToken && (adminSupabase || supabase)) {
             const latR = Math.round(Number(lat) * 1000) / 1000;
@@ -270,9 +199,19 @@ export async function POST(req: NextRequest) {
                         );
 
                     if (cacheHasRichFields) {
-                        // Use cached names as-is; avoid re-normalizing and unintentionally
-                        // changing user-visible/admin-edited display names on repeat outputs.
-                        const normalizedCached = (cachedProviders || []).map((p: any) => p);
+                        // Normalize display names (strip Pty Ltd, etc.) even when serving cache.
+                        // If we had to change anything, update cache/provider rows in the background.
+                        let mutated = false;
+                        const normalizedCached = (cachedProviders || []).map((p: any) => {
+                            if (!p || typeof p !== 'object') return p;
+                            const current = typeof p.name === 'string' ? p.name : '';
+                            const normalized = normalizeProviderName(current);
+                            if (normalized && normalized !== current) {
+                                mutated = true;
+                                return { ...p, name: normalized };
+                            }
+                            return p;
+                        });
                         const originLat = Number(lat);
                         const originLng = Number(lng);
                         const radiusKm = radius / 1000;
@@ -325,6 +264,16 @@ export async function POST(req: NextRequest) {
                         }
                         if (shouldForceGoogleFetchForReviews) {
                             searchCacheExpired = true;
+                        }
+                        if (mutated) {
+                            createSupabaseAdminClient()
+                                .then((adminSupabase) =>
+                                    adminSupabase
+                                        .from('provider_search_cache')
+                                        .update({ providers: filteredCached })
+                                        .eq('query_key', searchCacheKey)
+                                )
+                                .catch(() => {});
                         }
                         // Always persist returned providers so they exist when user clicks "View profile".
                         if (!filteredCached.length && !shouldForceGoogleFetchForReviews) {
@@ -399,7 +348,7 @@ export async function POST(req: NextRequest) {
                                 if (googlePlaceIds.length > 0) {
                                     const { data: providerRowsForIds } = await supabase
                                         .from('providers')
-                                        .select('id, google_place_id, name, summary')
+                                        .select('id, google_place_id')
                                         .in('google_place_id', googlePlaceIds);
                                     const idByGoogle = new Map(
                                         (providerRowsForIds || []).map((r: any) => [
@@ -407,45 +356,11 @@ export async function POST(req: NextRequest) {
                                             String(r.id),
                                         ])
                                     );
-                                    const nameByGoogle = new Map<string, string>(
-                                        (providerRowsForIds || [])
-                                            .filter(
-                                                (r: any) =>
-                                                    typeof r?.google_place_id === 'string' &&
-                                                    typeof r?.name === 'string' &&
-                                                    r.name.trim().length > 0
-                                            )
-                                            .map((r: any) => [String(r.google_place_id), String(r.name).trim()])
-                                    );
-                                    const summaryByGoogle = new Map<string, string>(
-                                        (providerRowsForIds || [])
-                                            .filter(
-                                                (r: any) =>
-                                                    typeof r?.google_place_id === 'string' &&
-                                                    typeof r?.summary === 'string' &&
-                                                    r.summary.trim().length > 0
-                                            )
-                                            .map((r: any) => [
-                                                String(r.google_place_id),
-                                                String(r.summary).trim(),
-                                            ])
-                                    );
                                     providersWithIds = (normalizedCached || []).map((p: any) => {
                                         const pid = p?.placeId || p?.place_id;
                                         if (!pid || typeof pid !== 'string') return p;
                                         const gId = pid.startsWith('places/') ? pid : `places/${pid}`;
-                                        const dbName = nameByGoogle.get(gId);
-                                        const dbSummary = summaryByGoogle.get(gId);
-                                        const hasCachedSummary =
-                                            typeof p?.summary === 'string' && p.summary.trim().length > 0;
-                                        return {
-                                            ...p,
-                                            providerId: idByGoogle.get(gId) || p.providerId,
-                                            ...(dbName ? { name: dbName } : {}),
-                                            ...(!hasCachedSummary && dbSummary
-                                                ? { summary: dbSummary }
-                                                : {}),
-                                        };
+                                        return { ...p, providerId: idByGoogle.get(gId) || p.providerId };
                                     });
                                 }
                             }
@@ -491,7 +406,7 @@ export async function POST(req: NextRequest) {
                     // refresh from Google rather than serving stale/minimal cached objects.
                     if (!cacheHasRichFields) {
                         searchCacheExpired = true;
-                    } else if (supabase) {
+                    } else {
                         const placeIdsFromCache = searchRow.place_ids as string[];
                         const { data: providerRows } = await supabase
                             .from('providers')
@@ -543,8 +458,6 @@ export async function POST(req: NextRequest) {
                             data = { nextPageToken: searchRow.next_page_token ?? null };
                             cachedData = orderedRows;
                         }
-                    } else {
-                        searchCacheExpired = true;
                     }
                 } else {
                     searchCacheExpired = true;
@@ -566,14 +479,19 @@ export async function POST(req: NextRequest) {
                 }
             }
         }
-        logStage(
-            `cache lookup complete (hit=${searchCacheHit ? 'yes' : 'no'}, places=${places.length})`,
-            'cache_lookup_done'
-        );
 
         if (places.length === 0) {
             // 2. Fetch providers from Google Places API
-            const response = await fetchPlacesSearchText(apiKey, {
+        const url = `https://places.googleapis.com/v1/places:searchText`;
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Goog-Api-Key': apiKey,
+                'X-Goog-FieldMask':
+                    'places.id,places.displayName,places.formattedAddress,places.rating,places.userRatingCount,places.nationalPhoneNumber,places.websiteUri,places.location,places.types,places.reviews,places.editorialSummary,places.reviewSummary,places.regularOpeningHours,places.currentOpeningHours,routingSummaries,nextPageToken',
+            },
+            body: JSON.stringify({
                 textQuery: searchQuery,
                 ...(pageToken && { pageToken }),
                 routingParameters: {
@@ -589,36 +507,14 @@ export async function POST(req: NextRequest) {
                     },
                 },
                 pageSize: 20,
-            });
+            }),
+        });
 
-            if (!response.ok) {
-                const errorText = await response.text();
-                console.error(`Google Places API Error Details: ${errorText}`);
-                if (isTransientPlacesHttpStatus(response.status)) {
-                    logAiEvent({
-                        endpoint: 'providers',
-                        status: 'error',
-                        durationMs: Date.now() - startedAt,
-                        meta: {
-                            error: errorText.slice(0, 500),
-                            placesHttpStatus: response.status,
-                        },
-                    });
-                    const message =
-                        response.status === 429
-                            ? 'Google Places is rate-limiting requests. Try again in a moment.'
-                            : 'Google Places is temporarily unavailable. Try again shortly.';
-                    return NextResponse.json(
-                        {
-                            error: message,
-                            code: 'PLACES_UNAVAILABLE',
-                            providers: [],
-                        },
-                        { status: response.status === 429 ? 429 : 503 }
-                    );
-                }
-                throw new Error(`Google Places API error (${response.status}): ${errorText}`);
-            }
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error(`Google Places API Error Details: ${errorText}`);
+            throw new Error(`Google Places API error (${response.status}): ${errorText}`);
+        }
 
             data = await response.json();
             const rawPlaces = data.places || [];
@@ -636,30 +532,38 @@ export async function POST(req: NextRequest) {
 
             const seenPlaceIds = new Set<string>(places.map((p: any) => String(p?.id ?? '')));
             let nextSearchToken = (data.nextPageToken as string | undefined) || null;
-            const targetPlacesCount = getTargetPlacesCountByRadius(radius);
             while (
                 nextSearchToken &&
                 !pageToken &&
                 textSearchExtraPagesFetched < TEXT_SEARCH_MAX_EXTRA_PAGES &&
-                places.length < targetPlacesCount
+                places.length < 55
             ) {
                 textSearchExtraPagesFetched += 1;
-                const responseMore = await fetchPlacesSearchText(apiKey, {
-                    textQuery: searchQuery,
-                    pageToken: nextSearchToken,
-                    routingParameters: {
-                        origin: {
-                            latitude: lat,
-                            longitude: lng,
-                        },
+                const responseMore = await fetch(url, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Goog-Api-Key': apiKey,
+                        'X-Goog-FieldMask':
+                            'places.id,places.displayName,places.formattedAddress,places.rating,places.userRatingCount,places.nationalPhoneNumber,places.websiteUri,places.location,places.types,places.reviews,places.editorialSummary,places.reviewSummary,places.regularOpeningHours,places.currentOpeningHours,routingSummaries,nextPageToken',
                     },
-                    locationBias: {
-                        circle: {
-                            center: { latitude: lat, longitude: lng },
-                            radius: radius,
+                    body: JSON.stringify({
+                        textQuery: searchQuery,
+                        pageToken: nextSearchToken,
+                        routingParameters: {
+                            origin: {
+                                latitude: lat,
+                                longitude: lng,
+                            },
                         },
-                    },
-                    pageSize: 20,
+                        locationBias: {
+                            circle: {
+                                center: { latitude: lat, longitude: lng },
+                                radius: radius,
+                            },
+                        },
+                        pageSize: 20,
+                    }),
                 });
                 if (!responseMore.ok) break;
                 const dataMore = await responseMore.json();
@@ -694,10 +598,6 @@ export async function POST(req: NextRequest) {
                 };
             }
         }
-        logStage(
-            `places resolved (count=${places.length}, googleExtraPages=${textSearchExtraPagesFetched})`,
-            'places_resolved'
-        );
 
         if (places.length === 0) {
             const durationMs = Date.now() - startedAt;
@@ -845,41 +745,25 @@ export async function POST(req: NextRequest) {
         let minRatingUsed = baseMinRating;
         let relevanceModeUsed: 'strict' | 'relaxed' = 'strict';
         let fastProviders = mapPlacesToFastProviders(baseMinRating, 'strict');
-        logStage(
-            `fast providers strict/base mapped (count=${fastProviders.length}, minReviews=${baseMinRating})`,
-            'fast_map_base'
-        );
         if (baseMinRating > 3 && fastProviders.length < providerLimit) {
             minRatingUsed = 3;
             fastProviders = mapPlacesToFastProviders(3, 'strict');
-            logStage(
-                `fast providers strict/relaxed-minReviews mapped (count=${fastProviders.length}, minReviews=3)`,
-                'fast_map_min3'
-            );
         }
         // Final fallback for sparse areas: include lower-review providers rather
         // than returning an unusably small list (quality is still handled by ranking).
         if (fastProviders.length < providerLimit) {
             minRatingUsed = 1;
             fastProviders = mapPlacesToFastProviders(1, 'strict');
-            logStage(
-                `fast providers strict/minReviews1 mapped (count=${fastProviders.length})`,
-                'fast_map_min1'
-            );
         }
         // If strict relevance still starves the list, relax semantic matching while
         // keeping hard safety exclusions (banned categories + geo radius).
         if (fastProviders.length < providerLimit) {
             relevanceModeUsed = 'relaxed';
             fastProviders = mapPlacesToFastProviders(minRatingUsed, 'relaxed');
-            logStage(
-                `fast providers relaxed relevance mapped (count=${fastProviders.length})`,
-                'fast_map_relaxed'
-            );
         }
 
         // Pre-fetched providers rows — fired in parallel with provider_cache below to save a round-trip.
-        let prefetchedProvRows: { id: string; google_place_id: string; name?: string | null }[] | null = null;
+        let prefetchedProvRows: { id: string; google_place_id: string }[] | null = null;
         const dbReader = adminSupabase || supabase;
         if (dbReader && fastProviders.length > 0) {
             const placeIds = fastProviders
@@ -894,23 +778,11 @@ export async function POST(req: NextRequest) {
                         .in('google_place_id', placeIds),
                     dbReader
                         .from('providers')
-                        .select('id, google_place_id, name')
+                        .select('id, google_place_id')
                         .in('google_place_id', placeIds),
                 ]);
                 const cacheRows = cacheResult.data;
-                prefetchedProvRows =
-                    (provResult.data as { id: string; google_place_id: string; name?: string | null }[]) ??
-                    null;
-                const nameByGoogleId = new Map<string, string>(
-                    (prefetchedProvRows || [])
-                        .filter(
-                            (r) =>
-                                typeof r.google_place_id === 'string' &&
-                                typeof r.name === 'string' &&
-                                r.name.trim().length > 0
-                        )
-                        .map((r) => [String(r.google_place_id), String(r.name).trim()])
-                );
+                prefetchedProvRows = (provResult.data as { id: string; google_place_id: string }[]) ?? null;
                 const completenessByGoogleId = new Map<string, number>(
                     (cacheRows || []).map((r: any) => [
                         String(r.google_place_id),
@@ -929,15 +801,7 @@ export async function POST(req: NextRequest) {
                     (p as any).profileCompleteness = Math.max(0, Math.min(3, completeness));
                     const specs = specialisationsByGoogleId.get(gid);
                     if (specs) (p as any).specialisations = specs;
-                    // Preserve admin-edited provider names from DB instead of overwriting
-                    // with Google/search-cache values on every diagnosis run.
-                    const dbName = nameByGoogleId.get(gid);
-                    if (dbName) (p as any).name = dbName;
                 });
-                logStage(
-                    `prefetch cache/providers done (candidatePlaces=${placeIds.length})`,
-                    'prefetch_cache_providers_done'
-                );
             }
         }
 
@@ -958,7 +822,6 @@ export async function POST(req: NextRequest) {
             });
             return NextResponse.json({ providers: [] });
         }
-        logStage(`fast providers prepared (count=${fastProviders.length})`, 'fast_providers_prepared');
 
         // Rank by weighted composite: relevance 40%, Bayesian rating 30%, proximity 20%, recency 10%.
         // Result count scales with radius so wider searches can surface meaningfully more providers.
@@ -967,7 +830,6 @@ export async function POST(req: NextRequest) {
             trade: tradeNorm,
         });
         const limitedProviders = rankedProviders.map((p) => ({ ...p }));
-        logStage(`providers ranked (count=${limitedProviders.length})`, 'providers_ranked');
 
         // AI summaries from real review text: use Supabase reviews when we have them; otherwise
         // Place Details (same request). This must run even when providers are not in Supabase yet
@@ -1200,10 +1062,8 @@ export async function POST(req: NextRequest) {
                 if (pid) placeById.set(pid, pl);
             }
 
-            // Fire-and-forget — do not await, do not block response.
-            void (async () => {
-                try {
-                    const adminSupabase = await createSupabaseAdminClient();
+            await createSupabaseAdminClient()
+                .then(async (adminSupabase) => {
                     const nowIso = new Date().toISOString();
                     const rows = limitedProviders.map((p) => {
                         const googlePlaceId =
@@ -1216,7 +1076,7 @@ export async function POST(req: NextRequest) {
                         return {
                             source: 'google',
                             google_place_id: googlePlaceId,
-                            name: p.name,
+                            name: normalizeProviderName(p.name),
                             address: p.address,
                             rating: p.rating,
                             rating_count: p.ratingCount ?? 0,
@@ -1421,10 +1281,13 @@ export async function POST(req: NextRequest) {
                     }
 
                     return upsertRes;
-                } catch (err) {
-                    console.error('[providers] background sync error:', err);
-                }
-            })();
+                })
+                .then(({ error }) => {
+                    if (error) {
+                        console.warn('Providers table upsert skipped:', error.message);
+                    }
+                })
+                .catch((e) => console.warn('Providers table upsert skipped:', (e as Error).message));
         }
 
         const durationMs = Date.now() - startedAt;
@@ -1457,10 +1320,7 @@ export async function POST(req: NextRequest) {
             searchQuery,
             tradeDetail: tradeDetailRaw || null,
         };
-        console.log(
-            `[providers] responding in ${Date.now() - t0}ms with ${limitedProviders.length} providers`
-        );
-        return NextResponse.json(attachDebugTiming(responseBody));
+        return NextResponse.json(responseBody);
     } catch (error: unknown) {
         logAiEvent({
             endpoint: 'providers',

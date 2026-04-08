@@ -2,7 +2,7 @@ export interface PromptProvider {
     name: string;
     rating: number;
     ratingCount: number;
-    services?: { full: string }[];
+    specialisations?: string[];
     isFavourite?: boolean;
     favouriteReason?: string;
 }

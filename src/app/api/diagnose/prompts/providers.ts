@@ -8,7 +8,7 @@ No service providers have been recommended yet. Once a trade is identified, I wi
 
     const providerLines = providers
         .map((p) => {
-            const line = `- ${p.name} (Rating: ${p.rating}, Reviews: ${p.ratingCount}, Specialities: ${p.services?.map((s) => s.full).join(', ')})`;
+            const line = `- ${p.name} (Rating: ${p.rating}, Reviews: ${p.ratingCount}, Specialities: ${p.specialisations?.join(', ') ?? 'N/A'})`;
             const pick = p.isFavourite ? " [SCANDIO'S PICK]" : '';
             const reason = p.favouriteReason ? `, Reason: ${p.favouriteReason}` : '';
             return line + pick + reason;

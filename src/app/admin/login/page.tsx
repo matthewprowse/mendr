@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import AdminLoginClient from './admin-login-client';
+import AdminLoginClient from './client';
 
 export const metadata: Metadata = {
     title: 'Admin sign in',

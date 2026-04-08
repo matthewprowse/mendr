@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import AdminReviewsClient from './admin-reviews-client';
+import AdminReviewsClient from './client';
 
 export const metadata: Metadata = {
     title: 'Reviews',

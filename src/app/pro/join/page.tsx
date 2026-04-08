@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import ProJoinPageClient from './pro-join-page-client';
+import ProJoinPageClient from './client';
 
 export const metadata: Metadata = {
     title: 'For contractors',

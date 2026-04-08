@@ -7,8 +7,8 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { normalizeWebsiteUrl } from '@/lib/utils';
-import { useProProvider } from '../hooks/providers';
-import { ProPageMap } from './_components/pro-page-map';
+import { useProProvider } from '../hooks/use-provider';
+import { ProPageMap } from './components/map';
 
 type ProProviderClientPageProps = {
     providerId: string;

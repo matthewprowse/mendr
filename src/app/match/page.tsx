@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import MatchPageClient from './match-page-client';
+import MatchPageClient from './client';
 
 export const metadata: Metadata = {
     title: 'Find providers',

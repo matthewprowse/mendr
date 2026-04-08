@@ -34,7 +34,7 @@ const followUpInstruction = buildSystemInstruction({
             name: 'Provider One',
             rating: 4.8,
             ratingCount: 142,
-            services: [{ full: 'Gate Motor Repair' }],
+            specialisations: ['Gate Motor Repair'],
             isFavourite: true,
             favouriteReason: 'Highest rating and response time',
         },

@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { FlowStepHeader } from '@/components/flow-header';
 import { getSiteLegalConfig } from '@/lib/site-legal';
-import { PrivacyPageContent } from './privacy-page-content';
+import { PrivacyPageContent } from './content';
 
 export const metadata: Metadata = {
     title: 'Privacy Policy',

@@ -1,7 +1,7 @@
 import * as React from 'react';
 import sgMail from '@sendgrid/mail';
 import { render } from '@react-email/render';
-import { ScandioAuthEmail, type ScandioAuthEmailProps } from '@/emails/scandio-auth-email';
+import { ScandioAuthEmail, type ScandioAuthEmailProps } from '@/lib/scandio-auth-email';
 import { buildSupabaseVerifyUrl } from '@/lib/supabase-verify-url';
 
 export interface AuthHookUser {

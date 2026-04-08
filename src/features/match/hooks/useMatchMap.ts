@@ -1,25 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { importLibrary } from '@googlemaps/js-api-loader';
-import { ensureGoogleMapsLoaderOptions } from '@/lib/google-maps-js-loader';
+import { importLibrary, setOptions } from '@googlemaps/js-api-loader';
 import type { MatchLocation, MatchProvider } from '../contracts';
-
-const PIN_PATH =
-    'M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z';
-
-function makeMarkerContent(color: string, scale: number): Element {
-    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    svg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
-    svg.setAttribute('viewBox', '0 0 24 24');
-    svg.setAttribute('width', `${24 * scale}`);
-    svg.setAttribute('height', `${24 * scale}`);
-    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-    path.setAttribute('d', PIN_PATH);
-    path.setAttribute('fill', color);
-    path.setAttribute('stroke', '#ffffff');
-    path.setAttribute('stroke-width', scale >= 1.5 ? '0.8' : '0.5');
-    svg.appendChild(path);
-    return svg;
-}
 
 export function useMatchMap(params: {
     userLocation: MatchLocation | null;
@@ -44,10 +25,10 @@ export function useMatchMap(params: {
     } = params;
     const mapHostRef = useRef<HTMLDivElement>(null);
     const mapRef = useRef<google.maps.Map | null>(null);
-    const markersRef = useRef<google.maps.marker.AdvancedMarkerElement[]>([]);
-    const userPinRef = useRef<google.maps.marker.AdvancedMarkerElement | null>(null);
+    const markersRef = useRef<google.maps.Marker[]>([]);
+    const userPinRef = useRef<google.maps.Marker | null>(null);
     const radiusCircleRef = useRef<google.maps.Circle | null>(null);
-    const areaPinsRef = useRef<google.maps.marker.AdvancedMarkerElement[]>([]);
+    const areaPinsRef = useRef<google.maps.Marker[]>([]);
     const areaCirclesRef = useRef<google.maps.Circle[]>([]);
     const [isMapReady, setIsMapReady] = useState(false);
 
@@ -62,7 +43,11 @@ export function useMatchMap(params: {
         if (!apiKey) return;
 
         let cancelled = false;
-        ensureGoogleMapsLoaderOptions(apiKey);
+        const globalKey = '__scandioGoogleMapsLoaderOptionsSet';
+        if (!(globalThis as any)[globalKey]) {
+            setOptions({ key: apiKey, version: 'weekly' } as any);
+            (globalThis as any)[globalKey] = true;
+        }
 
         void (async () => {
             await importLibrary('maps');
@@ -93,7 +78,7 @@ export function useMatchMap(params: {
         // Clear previous multi-area overlays.
         areaPinsRef.current.forEach((m) => {
             try {
-                m.map = null;
+                m.setMap(null);
             } catch {}
         });
         areaPinsRef.current = [];
@@ -107,7 +92,7 @@ export function useMatchMap(params: {
         if (hasUserAreas) {
             // Hide the single-radius/single-pin overlays when multi-area mode is active.
             radiusCircleRef.current?.setMap(null);
-            if (userPinRef.current) userPinRef.current.map = null;
+            userPinRef.current?.setMap(null);
         } else if (showSearchRadius && userLocation) {
             if (!radiusCircleRef.current) {
                 radiusCircleRef.current = new google.maps.Circle({
@@ -128,7 +113,7 @@ export function useMatchMap(params: {
 
         markersRef.current.forEach((m) => {
             try {
-                m.map = null;
+                m.setMap(null);
             } catch {}
         });
         markersRef.current = [];
@@ -142,14 +127,13 @@ export function useMatchMap(params: {
             .filter(Boolean) as Array<{ provider: MatchProvider; pos: { lat: number; lng: number } }>;
 
         pts.forEach(({ provider, pos }) => {
-            const marker = new google.maps.marker.AdvancedMarkerElement({
+            const marker = new google.maps.Marker({
                 map,
                 position: pos,
                 title: provider.name,
-                content: makeMarkerContent('#64748b', 1.2),
             });
             if (onMarkerClick) {
-                marker.addEventListener('gmp-click', () => onMarkerClick(provider.placeId));
+                marker.addListener('click', () => onMarkerClick(provider.placeId));
             }
             markersRef.current.push(marker);
         });
@@ -157,18 +141,17 @@ export function useMatchMap(params: {
         const pos = { lat: effectiveUserLocation.lat, lng: effectiveUserLocation.lng };
         if (!hasUserAreas && showUserPin) {
             if (!userPinRef.current) {
-                userPinRef.current = new google.maps.marker.AdvancedMarkerElement({
+                userPinRef.current = new google.maps.Marker({
                     map,
                     position: pos,
                     title: 'Your location',
-                    content: makeMarkerContent('#3b82f6', 1.25),
                 });
             } else {
-                userPinRef.current.map = map;
-                userPinRef.current.position = pos;
+                userPinRef.current.setMap(map);
+                userPinRef.current.setPosition(pos);
             }
         } else {
-            if (userPinRef.current) userPinRef.current.map = null;
+            userPinRef.current?.setMap(null);
         }
 
         if (hasUserAreas) {
@@ -187,11 +170,10 @@ export function useMatchMap(params: {
                 });
                 areaCirclesRef.current.push(circle);
 
-                const pin = new google.maps.marker.AdvancedMarkerElement({
+                const pin = new google.maps.Marker({
                     map,
                     position: areaPos,
                     title: area.location.address || 'Service area',
-                    content: makeMarkerContent('#4f46e5', 1.2),
                 });
                 areaPinsRef.current.push(pin);
             });

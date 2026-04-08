@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import WelcomePageClient from './welcome-page-client';
+import WelcomePageClient from './client';
 
 export const metadata: Metadata = {
     title: 'New Scan',

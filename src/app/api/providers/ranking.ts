@@ -42,15 +42,12 @@ function relevanceScore(
 ): number {
     if (!tradeDetail && !trade) return 0.5; // neutral when no diagnosis context
 
-    // R5: Include AI-extracted specialisations from enrichment cache in the haystack.
-    // A roofing waterproofing specialist was previously scored the same as a general contractor
-    // because Google types don't reflect their speciality. Enrichment fixes this.
+    // Ranking haystack: name + AI-extracted specialisations.
+    // Google Place types ("Service", "General Contractor") were removed —
+    // they contain no trade-specific signal. Enrichment specialisations
+    // are the authoritative source of service-level relevance.
     const haystack = [
         (provider.name ?? '').toLowerCase(),
-        ...(provider.services ?? []).flatMap((s) => [
-            (s.short ?? '').toLowerCase(),
-            (s.full ?? '').toLowerCase(),
-        ]),
         ...(provider.specialisations ?? []).map((s) => s.toLowerCase()),
     ].join(' ');
 

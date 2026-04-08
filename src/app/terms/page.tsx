@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { FlowStepHeader } from '@/components/flow-header';
 import { getSiteLegalConfig } from '@/lib/site-legal';
-import { TermsPageContent } from './terms-page-content';
+import { TermsPageContent } from './content';
 
 export const metadata: Metadata = {
     title: 'Terms of Service',

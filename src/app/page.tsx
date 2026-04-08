@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { HomeMarketingPage } from './page/_components/home-marketing-page';
+import { HomeMarketingPage } from './page/components/marketing';
 import { getSiteUrl } from '@/lib/site-url';
 
 export async function generateMetadata(): Promise<Metadata> {

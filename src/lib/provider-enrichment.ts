@@ -33,21 +33,13 @@ const MIN_IMAGE_BYTES     = 5_000;
 const MIN_SCRAPE_CHARS    = 100;
 
 function serviceLabelsFromProvider(provider: {
-    service_categories?: string[] | null;
-    services?: unknown;
+    specialisations?: string[] | null;
 }): string[] {
-    const cats = provider.service_categories;
-    if (Array.isArray(cats) && cats.length > 0) {
-        return cats.map((c) => String(c).trim()).filter(Boolean);
+    const specs = provider.specialisations;
+    if (Array.isArray(specs) && specs.length > 0) {
+        return specs.map((s) => String(s).trim()).filter(Boolean);
     }
-    const s = provider.services;
-    if (!Array.isArray(s)) return [];
-    const out: string[] = [];
-    for (const x of s as { short?: string; full?: string }[]) {
-        if (x?.short) out.push(String(x.short).trim());
-        else if (x?.full) out.push(String(x.full).trim());
-    }
-    return out.filter(Boolean);
+    return [];
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -405,7 +397,7 @@ export async function enrichProvider(
     const { data: provider, error: provErr } = await admin
         .from('providers')
         .select(
-            'id, google_place_id, website, name, summary, rating, rating_count, address, services, service_categories'
+            'id, google_place_id, website, name, summary, rating, rating_count, address, specialisations'
         )
         .eq('id', providerId)
         .single();

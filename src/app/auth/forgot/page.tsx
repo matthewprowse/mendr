@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import AuthForgotClient from '../auth-forgot-client';
+import AuthForgotClient from './client';
 
 export const metadata: Metadata = {
     title: 'Forgot password',

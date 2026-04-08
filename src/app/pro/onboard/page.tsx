@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import ProOnboardPageClient from './pro-onboard-page-client';
+import ProOnboardPageClient from './client';
 
 export const metadata: Metadata = {
     title: 'Provider onboarding',

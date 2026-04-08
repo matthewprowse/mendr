@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { ReportPageContent } from './_components/report-page-content';
+import { ReportPageContent } from './components/report-page-content';
 
 export const metadata: Metadata = {
     title: 'Report a Provider | Scandio',

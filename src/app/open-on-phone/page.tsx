@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import OpenOnPhonePageClient from './open-on-phone-page-client';
+import OpenOnPhonePageClient from './client';
 
 export const metadata: Metadata = {
     title: 'Open on phone',

@@ -28,7 +28,7 @@ export async function GET(req: NextRequest) {
 
     // Support both 'diagnosis' (new) and 'diagnosis_json' (legacy) column names.
     const { data: conv, error } = await supabase
-        .from('conversations')
+        .from('diagnoses')
         .select('id, diagnosis, diagnosis_json')
         .eq('id', conversationId)
         .maybeSingle();

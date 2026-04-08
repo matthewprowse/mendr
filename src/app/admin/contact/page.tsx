@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import AdminContactClient from './admin-contact-client';
+import AdminContactClient from './client';
 
 export const metadata: Metadata = {
     title: 'Contact messages',
