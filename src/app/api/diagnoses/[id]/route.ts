@@ -10,6 +10,7 @@ const PATCH_KEYS = new Set([
     'diagnosis',
     'urgency_key',
     'initial_image_description',
+    'customer_address',
     'device',
     'user_agent',
     'user_id',
@@ -82,7 +83,12 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
             patch[key] = v ?? null;
             continue;
         }
-        if (key === 'initial_image_description' || key === 'device' || key === 'user_agent') {
+        if (
+            key === 'initial_image_description' ||
+            key === 'customer_address' ||
+            key === 'device' ||
+            key === 'user_agent'
+        ) {
             patch[key] = typeof v === 'string' ? v : v == null ? null : String(v);
         }
     }
@@ -121,6 +127,7 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
             diagnosis: patch.diagnosis ?? null,
             urgency_key: patch.urgency_key ?? null,
             initial_image_description: patch.initial_image_description ?? null,
+            customer_address: patch.customer_address ?? null,
             device: patch.device ?? null,
             user_agent: patch.user_agent ?? null,
             user_id: patch.user_id ?? null,
@@ -129,6 +136,26 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
 
         const { error: insertErr } = await admin.from('diagnoses').insert(insertRow);
         if (insertErr) {
+            // Concurrent PATCH (e.g. React Strict Mode / double submit): another request may have
+            // inserted this id between our UPDATE (0 rows) and INSERT — retry UPDATE only.
+            const msg = insertErr.message || '';
+            const isDupPk =
+                insertErr.code === '23505' ||
+                msg.includes('duplicate key') ||
+                msg.includes('diagnoses_pkey');
+            if (isDupPk) {
+                const { data: retryUpdated, error: retryErr } = await admin
+                    .from('diagnoses')
+                    .update(patch)
+                    .eq('id', conversationId)
+                    .select('id');
+                if (retryErr) {
+                    return NextResponse.json({ error: retryErr.message }, { status: 500 });
+                }
+                if (Array.isArray(retryUpdated) && retryUpdated.length > 0) {
+                    return NextResponse.json({ ok: true });
+                }
+            }
             return NextResponse.json({ error: insertErr.message }, { status: 500 });
         }
         return NextResponse.json({ ok: true });

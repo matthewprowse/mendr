@@ -22,6 +22,7 @@ export type ConversationPatchBody = {
     diagnosis?: unknown | null;
     urgency_key?: string | null;
     initial_image_description?: string | null;
+    customer_address?: string | null;
     device?: string | null;
     user_agent?: string | null;
     user_id?: string | null;

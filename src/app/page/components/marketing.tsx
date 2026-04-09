@@ -18,6 +18,7 @@ export function HomeMarketingPage() {
                     { href: '#how-it-works', label: 'How It Works' },
                     { href: '#value', label: 'Why Scandio' },
                     { href: '/contact', label: 'Contact' },
+                    { href: '/welcome2', label: 'Welcome2' },
                     { href: '#faq', label: 'FAQ' },
                     { href: '/pro/join', label: 'For Pros' },
                 ]}

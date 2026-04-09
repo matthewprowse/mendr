@@ -343,6 +343,16 @@ function enforceUrgencyKey(text: string): string {
     }
 }
 
+function extractThoughtText(responseText: string): string {
+    const tagged =
+        responseText.match(/<(?:thought|thinking|thought_process)\s*>([\s\S]*?)<\/(?:thought|thinking|thought_process)\s*>/i)?.[1] ??
+        responseText.match(/```(?:thought|thinking)\s*([\s\S]*?)```/i)?.[1] ??
+        '';
+    if (tagged.trim()) return tagged.trim();
+    const beforeJson = responseText.split(/<json\s*>|\{[\s\n]*"[^"]*"\s*:\s*"/i)[0] ?? '';
+    return beforeJson.trim();
+}
+
 export async function POST(req: NextRequest) {
     const timings: Record<string, number> = {};
     const requestStartedAt = Date.now();
@@ -497,6 +507,7 @@ export async function POST(req: NextRequest) {
             attachments,
             initial_image_description,
             serviceCatalog,
+            analysisPhase,
         } = body;
 
         // ── Input guards ───────────────────────────────────────────────────────
@@ -601,6 +612,64 @@ export async function POST(req: NextRequest) {
 
         const isFollowUp = !!(history?.length && previousDiagnosis?.diagnosis);
         const hasUserContext = userSelectedTrade?.trade && userSelectedTrade?.diagnosis;
+        const model = getGeminiModel();
+
+        if (analysisPhase === 'image_thought_only') {
+            const imageParts: ContentPart[] = [];
+            if (typeof image === 'string' && image.trim()) {
+                const inline = await imageStringToInlineData(image.trim());
+                if (inline) imageParts.push(inline);
+            }
+            for (const att of attachmentImages) {
+                const base64Data = att.split(',')[1];
+                const mimeType = att.split(';')[0].split(':')[1];
+                if (base64Data && mimeType) {
+                    imageParts.push({ inlineData: { data: base64Data, mimeType } });
+                }
+            }
+            if (imageParts.length === 0) {
+                return new Response(
+                    JSON.stringify({ error: 'No image available for analysis.' }),
+                    { status: 400 }
+                );
+            }
+
+            const quickPrompt =
+                `Analyse ${imageParts.length > 1 ? 'these images' : 'this image'} and return only a short <thought> block (1-2 sentences) describing what is visibly wrong and likely issue pattern. ` +
+                `Do not include JSON or extra sections.`;
+            const quickResult = await model.generateContent({
+                contents: [
+                    {
+                        role: 'user',
+                        parts: [...imageParts, { text: quickPrompt }],
+                    } as unknown as GeminiContent,
+                ],
+                generationConfig: {
+                    temperature: 0.2,
+                    topP: 0.7,
+                    topK: 20,
+                    maxOutputTokens: 220,
+                },
+            });
+            const quickResp = (quickResult as any)?.response;
+            let quickText = quickResp && typeof quickResp.text === 'function' ? quickResp.text() : '';
+            if (!quickText) {
+                const parts = (quickResult as any)?.response?.candidates?.[0]?.content?.parts;
+                if (Array.isArray(parts)) {
+                    quickText = parts.map((p: any) => (typeof p?.text === 'string' ? p.text : '')).join('');
+                }
+            }
+            const thought = stripFillerSentenceStarts(extractThoughtText(String(quickText || ''))).trim();
+            const fallbackThought =
+                'Visible signs suggest a likely home maintenance issue pattern that needs a closer diagnosis.';
+            return new Response(`<thought>${thought || fallbackThought}</thought>`, {
+                headers: {
+                    'Content-Type': 'text/plain; charset=utf-8',
+                    ...quotaExtraHeaders,
+                },
+            });
+        }
+
         let serviceList = Array.isArray(serviceCatalog)
             ? serviceCatalog.filter((x: unknown) => typeof x === 'string' && x.trim()).map((x: string) => x.trim())
             : [];
@@ -639,7 +708,6 @@ export async function POST(req: NextRequest) {
 
         // Gemini v1 doesn't accept the SDK-level `systemInstruction` field.
         // Embed the same instructions directly into the first user prompt text instead.
-        const model = getGeminiModel();
 
         // Format history for Gemini. We never send image bytes in history — only stored text descriptions.
         const contents: ContentMessage[] = [];
@@ -705,7 +773,9 @@ export async function POST(req: NextRequest) {
             } else {
                 const textPrompt = hasUserContext
                     ? instructionPrefix +
-                      `The user selected "${userSelectedTrade.diagnosis}" (${userSelectedTrade.trade}) and has described their issue:
+                      `The user selected "${userSelectedTrade.diagnosis}" (${userSelectedTrade.trade}) as their preferred service, but this is only a hint. If their description clearly indicates a different trade, set diagnosis, trade, and trade_detail to the more accurate trade.
+
+The user described their issue:
 
 "${(textQuery as string).trim()}"
 
@@ -747,7 +817,7 @@ Analyse this description and provide a diagnosis. Output <thought> (2–3 short 
                 ? hasUserContext
                     ? instructionPrefix +
                       userWordsPriority +
-                      `The user selected "${userSelectedTrade.diagnosis}" (${userSelectedTrade.trade}) and has now uploaded ${imageParts.length > 1 ? 'these images' : 'this image'}. If their words above contradict that selection or the look of the photo (e.g. "it's a borehole pump not a pool pump", "actually irrigation"), you MUST set diagnosis, trade, trade_detail, and action_required to match what they said. Analyse quickly.
+                      `The user selected "${userSelectedTrade.diagnosis}" (${userSelectedTrade.trade}) as a preferred service, but it is not authoritative. If their words or the image clearly indicate a different trade, set diagnosis, trade, trade_detail, and action_required to the more accurate trade. Analyse quickly.
 
 CRITICAL: Output <thought> FIRST (2–3 short sentences), then </thought>, then <json>. Never skip the thought block.`
                     : instructionPrefix +
