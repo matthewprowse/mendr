@@ -1,52 +1,54 @@
-/**
- * Lightweight session handoff between `/welcome` and `/diagnosis/[id]`.
- * Stores only the minimum needed to bootstrap diagnosis for a conversation.
- */
+'use client';
+
+const KEY = 'scandio_scan_session_handoff_v1';
 
 export type ScanSessionHandoff = {
     conversationId: string;
-    selectedService: string | null;
-    primaryAssetDataUrl: string | null;
-    initialPrompt: string;
+    primaryAssetDataUrl?: string;
+    initialPrompt?: string;
+    selectedService?: string | null;
 };
 
-const STORAGE_KEY = 'scan_session_handoff';
-
-let memoryHandoff: ScanSessionHandoff | null = null;
-
-export function setScanSessionHandoff(handoff: ScanSessionHandoff) {
-    memoryHandoff = handoff;
-    try {
-        if (typeof window !== 'undefined' && window.sessionStorage) {
-            window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(handoff));
-        }
-    } catch {
-        // Ignore storage failures (e.g. quota, disabled storage)
-    }
-}
-
 export function getScanSessionHandoff(): ScanSessionHandoff | null {
-    if (memoryHandoff) return memoryHandoff;
+    if (typeof window === 'undefined') return null;
     try {
-        if (typeof window === 'undefined' || !window.sessionStorage) return null;
-        const raw = window.sessionStorage.getItem(STORAGE_KEY);
+        const raw = window.sessionStorage.getItem(KEY);
         if (!raw) return null;
-        const parsed = JSON.parse(raw) as ScanSessionHandoff;
-        memoryHandoff = parsed;
-        return parsed;
+        const parsed = JSON.parse(raw) as unknown;
+        if (!parsed || typeof parsed !== 'object') return null;
+        const o = parsed as Record<string, unknown>;
+        if (typeof o.conversationId !== 'string' || !o.conversationId.trim()) return null;
+        return {
+            conversationId: o.conversationId.trim(),
+            primaryAssetDataUrl:
+                typeof o.primaryAssetDataUrl === 'string' ? o.primaryAssetDataUrl : undefined,
+            initialPrompt: typeof o.initialPrompt === 'string' ? o.initialPrompt : undefined,
+            selectedService:
+                typeof o.selectedService === 'string'
+                    ? o.selectedService
+                    : o.selectedService === null
+                      ? null
+                      : undefined,
+        };
     } catch {
         return null;
     }
 }
 
-export function clearScanSessionHandoff() {
-    memoryHandoff = null;
+export function setScanSessionHandoff(payload: ScanSessionHandoff): void {
+    if (typeof window === 'undefined') return;
     try {
-        if (typeof window !== 'undefined' && window.sessionStorage) {
-            window.sessionStorage.removeItem(STORAGE_KEY);
-        }
+        window.sessionStorage.setItem(KEY, JSON.stringify(payload));
     } catch {
-        // Ignore
+        /* quota / private mode */
     }
 }
 
+export function clearScanSessionHandoff(): void {
+    if (typeof window === 'undefined') return;
+    try {
+        window.sessionStorage.removeItem(KEY);
+    } catch {
+        /* ignore */
+    }
+}

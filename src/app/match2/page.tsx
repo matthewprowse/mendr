@@ -3,7 +3,7 @@ import Match2PageClient from './client';
 
 export const metadata: Metadata = {
     title: 'Match 2',
-    description: 'Mock provider match UI for iterative redesign.',
+    description: 'Match experience preview with demo providers (same UI as provider matches).',
 };
 
 export default function Match2Page() {

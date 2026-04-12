@@ -12,12 +12,21 @@
  *
  * Net Gemini calls per provider: 2 (was up to 8).
  * Failed scrapes are retry-locked for 48 hours.
+ *
+ * Match UI uses `enrichProviderReviewSummaryFast` — one tiny Gemini call from DB reviews only
+ * (~1s budget, no scrape/images) so cards populate quickly; full `enrichProvider` can still be run elsewhere.
  */
 
+import { SchemaType } from '@google/generative-ai';
 import { createSupabaseAdminClient } from '@/lib/supabase-server';
 import { getGeminiModel } from '@/lib/ai-client';
 import { aiConfig } from '@/lib/ai-config';
 import { sanitizeCustomerSummary } from '@/lib/review-summary';
+import {
+    FAST_SUMMARY_MIN_CORPUS_CHARS,
+    FAST_SUMMARY_MIN_REVIEWS,
+    parseFastReviewSummaryModelJson,
+} from '@/lib/fast-review-summary';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -27,6 +36,8 @@ const SCRAPE_TIMEOUT_MS   = 10_000;
 const IMAGE_FETCH_TIMEOUT = 8_000;
 const CLASSIFY_TIMEOUT_MS = 8_000; // per-call; batch gets 2× this
 const AI_ENRICH_TIMEOUT   = 20_000;
+/** Single-call review summary for match cards — must exceed cold Gemini latency (2.5s caused mass timeouts in debug FAST_BRANCH). */
+const FAST_REVIEW_SUMMARY_AI_MS = 15_000;
 const MAX_IMAGES_FETCH    = 8;
 const MAX_IMAGES_CLASSIFY = 5;
 const MIN_IMAGE_BYTES     = 5_000;
@@ -350,7 +361,8 @@ Rules (British English throughout):
         const result = await withTimeout(
             model.generateContent({
                 contents: [{ role: 'user', parts: [{ text: prompt }] }],
-                generationConfig: { temperature: 0.3, maxOutputTokens: 8192 },
+                // Cap output — long JSON is unnecessary and slows generation.
+                generationConfig: { temperature: 0.3, maxOutputTokens: 4096 },
             }),
             AI_ENRICH_TIMEOUT
         );
@@ -449,12 +461,20 @@ export async function enrichProvider(
         }
     }
 
-    // ── Stage 1: Website scraping ─────────────────────────────────────────────
+    // ── Stage 1: Website scraping (reviews fetch runs in parallel from here) ─
     let websiteText = '';
     const website = typeof provider.website === 'string' ? provider.website.trim() : '';
     let rawHtml = '';
 
     console.log(`${logPrefix} Stage 1: Scraping website — ${website || '(no website)'}`);
+    const reviewsPromiseFull = admin
+        .from('reviews')
+        .select('rating, body, source')
+        .eq('provider_id', providerId)
+        .eq('status', 'approved')
+        .in('source', ['google', 'scandio'])
+        .order('published_at', { ascending: false })
+        .limit(40);
 
     if (website) {
         try {
@@ -517,20 +537,6 @@ export async function enrichProvider(
             return { ok: false, reason: 'Non-SA content detected — skipping enrichment' };
         }
     }
-
-    // ── Stage 3 (early): Fetch reviews in parallel with image classification ────
-    // Reviews are completely independent of the website scrape. Starting the DB
-    // query now means it overlaps with Stage 2 instead of running after it.
-    // The result is awaited just before the AI call in Stage 4.
-    console.log(`${logPrefix} Stage 3 (parallel): Starting review fetch`);
-    const reviewsPromise = admin
-        .from('reviews')
-        .select('rating, body, source')
-        .eq('provider_id', providerId)
-        .eq('status', 'approved')
-        .in('source', ['google', 'scandio'])
-        .order('published_at', { ascending: false })
-        .limit(40);
 
     // ── Stage 2: Image collection & batch classification (R2) ─────────────────
     // Previously: one Gemini call per image (up to 5 calls × 8 s timeout = 40 s).
@@ -610,8 +616,8 @@ export async function enrichProvider(
     const hasWorkPhotos = keptImages.some((img) => img.category === 'work_photo');
     console.log(`${logPrefix} Stage 2: Kept ${keptImages.length} images (hasWorkPhotos=${hasWorkPhotos})`);
 
-    // ── Stage 3: Await the review fetch started in parallel above ────────────
-    const { data: reviewRows } = await reviewsPromise;
+    // ── Stage 3: Await the review fetch (started in parallel with Stage 1 scrape) ─
+    const { data: reviewRows } = await reviewsPromiseFull;
 
     const reviews = Array.isArray(reviewRows) ? reviewRows : [];
     const reviewsText = reviews
@@ -751,5 +757,262 @@ export async function enrichProvider(
     }
 
     console.log(`${logPrefix} Enrichment Complete`);
+    return { ok: true };
+}
+
+/**
+ * Ensures `provider_cache` has a row visible to GET /api/enrich/get (`scrape_status=ok`) with
+ * `enriched_at` set so the match UI can leave the loading skeleton (shows "no summary" when text is null).
+ */
+async function upsertFastSummaryNoTextMarker(
+    admin: Awaited<ReturnType<typeof createSupabaseAdminClient>>,
+    params: {
+        providerId: string;
+        googlePlaceId: string;
+        cacheVersion: number;
+        logPrefix: string;
+        /** When true, GET exposes `fastSummaryInsufficient` so the client stops polling (vs retryable timeout markers). */
+        insufficientReviews?: boolean;
+    }
+): Promise<boolean> {
+    const now = new Date().toISOString();
+    const { providerId, googlePlaceId, cacheVersion, logPrefix, insufficientReviews } = params;
+    const markerStatus = insufficientReviews ? 'fast_insufficient' : 'ok';
+    const gid = googlePlaceId || '';
+
+    const { data: existing } = await admin
+        .from('provider_cache')
+        .select('provider_id')
+        .eq('provider_id', providerId)
+        .maybeSingle();
+
+    /** Minimal columns — older DBs omit response_profile, has_work_photos, etc. (insert was failing silently). */
+    if (existing?.provider_id) {
+        const { error: upErr } = await admin
+            .from('provider_cache')
+            .update({
+                review_summary: null,
+                enriched_at: now,
+                scrape_status: markerStatus,
+                cache_version: cacheVersion,
+                updated_at: now,
+            })
+            .eq('provider_id', providerId);
+        if (upErr) {
+            console.error(`${logPrefix} Cache marker update error`, upErr);
+            return false;
+        }
+    } else {
+        const { error: insErr } = await admin.from('provider_cache').insert({
+            provider_id: providerId,
+            google_place_id: gid,
+            scraped_at: now,
+            enriched_at: now,
+            scrape_status: markerStatus,
+            review_summary: null,
+            cache_version: cacheVersion,
+            updated_at: now,
+        });
+        if (insErr) {
+            console.error(`${logPrefix} Cache marker insert error`, insErr);
+            return false;
+        }
+    }
+    console.log(`${logPrefix} Fast summary marker written (no review text)`);
+    return true;
+}
+
+/**
+ * Fast path for match cards: approved Scandio/Google reviews → one short Gemini JSON → `review_summary` only.
+ * Target wall time ≈1s per provider (DB read + single small generation). No website scrape or image work.
+ */
+export async function enrichProviderReviewSummaryFast(
+    providerId: string,
+    options?: { trade?: string; cacheVersion?: number }
+): Promise<EnrichProviderResult> {
+    const admin = await createSupabaseAdminClient();
+    const targetCacheVersion =
+        typeof options?.cacheVersion === 'number' && options.cacheVersion > 0
+            ? Math.floor(options.cacheVersion)
+            : aiConfig.providerEnrichmentCacheVersion;
+
+    const { data: provider, error: provErr } = await admin
+        .from('providers')
+        .select('id, google_place_id, name')
+        .eq('id', providerId)
+        .single();
+
+    if (provErr || !provider) return { ok: false, reason: 'Provider not found' };
+
+    const logPrefix = `[enrichment-fast:${provider.name ?? providerId}]`;
+
+    const { data: cachedRow } = await admin
+        .from('provider_cache')
+        .select('review_summary, enriched_at')
+        .eq('provider_id', providerId)
+        .maybeSingle();
+
+    const existingSummary = typeof cachedRow?.review_summary === 'string' ? cachedRow.review_summary.trim() : '';
+    if (existingSummary.length > 0) {
+        console.log(`${logPrefix} Skip — review_summary already present`);
+        return { ok: true, skipped: true, reason: 'Summary cached' };
+    }
+
+    const { data: reviewRows } = await admin
+        .from('reviews')
+        .select('*')
+        .eq('provider_id', providerId)
+        .eq('status', 'approved')
+        .in('source', ['google', 'scandio'])
+        .order('published_at', { ascending: false })
+        .limit(24);
+
+    const reviews = Array.isArray(reviewRows) ? reviewRows : [];
+    const reviewBody = (r: Record<string, unknown>) => {
+        const b = typeof r.body === 'string' ? r.body.trim() : '';
+        if (b) return b;
+        const t = typeof r.text === 'string' ? r.text.trim() : '';
+        if (t) return t;
+        const c = typeof r.content === 'string' ? r.content.trim() : '';
+        return c;
+    };
+    const reviewsText = reviews
+        .map((r) => `(${r.rating ?? '?'}/5) ${reviewBody(r)}`.trim())
+        .filter((s) => s.length > 8)
+        .join('\n')
+        .slice(0, 8_000);
+
+    const gidEarly = String(provider.google_place_id ?? '');
+
+    if (reviews.length < FAST_SUMMARY_MIN_REVIEWS || reviewsText.length < FAST_SUMMARY_MIN_CORPUS_CHARS) {
+        console.log(
+            `${logPrefix} Skip — insufficient reviews (n=${reviews.length}, chars=${reviewsText.length})`
+        );
+        const marked = await upsertFastSummaryNoTextMarker(admin, {
+            providerId,
+            googlePlaceId: gidEarly,
+            cacheVersion: targetCacheVersion,
+            logPrefix,
+            insufficientReviews: true,
+        });
+        if (!marked) {
+            return { ok: false, reason: 'Cache marker insert failed (insufficient reviews path)' };
+        }
+        return { ok: true, skipped: true, reason: 'Insufficient reviews for fast summary' };
+    }
+
+    const providerName = typeof provider.name === 'string' ? provider.name.trim() : 'Business';
+    const tradeHint = typeof options?.trade === 'string' && options.trade.trim() ? options.trade.trim() : '';
+
+    /** Keep this prompt small — huge few-shot blocks caused Gemini to return truncated markdown (`\`\`\`json` only) in production logs. */
+    const prompt = `Summarise what customers say in these reviews about a South African home-services business.
+
+Rules:
+- British English. Exactly two short sentences in \`review_summary\`, max 140 characters total for that string.
+- Do not name the business, address, ratings, or review counts.
+- No audience words: homeowners, users, customers, clients, residents.
+${tradeHint ? `- Trade context: ${tradeHint}\n` : ''}
+Business label (do not repeat in text): ${providerName}
+
+Reviews:
+${reviewsText}`.trim();
+
+    let reviewSummary: string | null = null;
+    try {
+        const model = getGeminiModel();
+        const result = await withTimeout(
+            model.generateContent({
+                contents: [{ role: 'user', parts: [{ text: prompt }] }],
+                generationConfig: {
+                    temperature: 0.2,
+                    maxOutputTokens: 512,
+                    responseMimeType: 'application/json',
+                    responseSchema: {
+                        type: SchemaType.OBJECT,
+                        properties: {
+                            review_summary: {
+                                type: SchemaType.STRING,
+                                description:
+                                    'Two sentences max, 140 characters total, what reviewers say (no business name).',
+                            },
+                        },
+                        required: ['review_summary'],
+                    },
+                },
+            }),
+            FAST_REVIEW_SUMMARY_AI_MS
+        );
+        const raw = result.response.text().trim();
+        reviewSummary = parseFastReviewSummaryModelJson(raw);
+    } catch (e) {
+        const errMsg = e instanceof Error ? e.message : String(e);
+        console.log(`${logPrefix} Fast AI failed — ${errMsg}`);
+        const marked = await upsertFastSummaryNoTextMarker(admin, {
+            providerId,
+            googlePlaceId: gidEarly,
+            cacheVersion: targetCacheVersion,
+            logPrefix,
+        });
+        if (!marked) {
+            return { ok: false, reason: 'Cache marker insert failed after AI error' };
+        }
+        return { ok: true, skipped: true, reason: 'Fast summary generation failed' };
+    }
+
+    if (!reviewSummary) {
+        const marked = await upsertFastSummaryNoTextMarker(admin, {
+            providerId,
+            googlePlaceId: gidEarly,
+            cacheVersion: targetCacheVersion,
+            logPrefix,
+        });
+        if (!marked) {
+            return { ok: false, reason: 'Cache marker insert failed (empty model output)' };
+        }
+        return { ok: true, skipped: true, reason: 'Empty summary from model' };
+    }
+
+    const now = new Date().toISOString();
+    const gid = String(provider.google_place_id ?? '');
+
+    const { data: existing } = await admin
+        .from('provider_cache')
+        .select('provider_id')
+        .eq('provider_id', providerId)
+        .maybeSingle();
+
+    if (existing?.provider_id) {
+        const { error: upErr } = await admin
+            .from('provider_cache')
+            .update({
+                review_summary: reviewSummary,
+                enriched_at: now,
+                scrape_status: 'ok',
+                cache_version: targetCacheVersion,
+                updated_at: now,
+            })
+            .eq('provider_id', providerId);
+        if (upErr) {
+            console.error(`${logPrefix} Cache update error`, upErr);
+            return { ok: false, reason: 'Cache update failed' };
+        }
+    } else {
+        const { error: insErr } = await admin.from('provider_cache').insert({
+            provider_id: providerId,
+            google_place_id: gid,
+            scraped_at: now,
+            enriched_at: now,
+            scrape_status: 'ok',
+            review_summary: reviewSummary,
+            cache_version: targetCacheVersion,
+            updated_at: now,
+        });
+        if (insErr) {
+            console.error(`${logPrefix} Cache insert error`, insErr);
+            return { ok: false, reason: 'Cache insert failed' };
+        }
+    }
+
+    console.log(`${logPrefix} Fast review summary written (${reviewSummary.length} chars)`);
     return { ok: true };
 }

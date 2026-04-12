@@ -25,7 +25,7 @@ function HoursRow({ day, hours, today }: { day: string; hours?: string; today?: 
                 {day}
             </p>
             <p className={`text-sm tabular-nums ${today ? 'font-medium text-foreground' : 'text-muted-foreground'}`}>
-                {hours || '—'}
+                {hours ?? '—'}
             </p>
         </div>
     );
@@ -73,10 +73,19 @@ export function ProAboutTab(props: {
     const todayDay = dayOrderSunFirst[today.getDay()];
     const tomorrowDay = dayOrderSunFirst[(today.getDay() + 1) % 7];
     const tomorrowIndexSunFirst = dayOrderSunFirst.indexOf(tomorrowDay);
-    const restDaysChrono = Array.from({ length: 5 }, (_, i) =>
+    const restDaysAfterTomorrow = Array.from({ length: 5 }, (_, i) =>
         dayOrderSunFirst[(tomorrowIndexSunFirst + 1 + i) % 7]
-    ).filter((d) => Boolean(operatingHoursByDay[d]));
+    );
+    const hasGoogleOperatingHours = Object.keys(operatingHoursByDay).length > 0;
+    const restDaysChrono = hasGoogleOperatingHours
+        ? restDaysAfterTomorrow.filter((d) => Boolean(operatingHoursByDay[d]))
+        : restDaysAfterTomorrow;
     const hasRestDays = restDaysChrono.length > 0;
+    const hoursDisplay = (day: string) => {
+        if (!hasGoogleOperatingHours) return 'Unknown';
+        const h = operatingHoursByDay[day];
+        return h?.trim() ? h : '—';
+    };
 
     return (
         <div className="flex flex-col gap-8 mt-2">
@@ -138,11 +147,11 @@ export function ProAboutTab(props: {
                 ) : (
                     <>
                         <div className="flex flex-col">
-                            <HoursRow day={todayDay} hours={operatingHoursByDay[todayDay]} today />
-                            <HoursRow day={tomorrowDay} hours={operatingHoursByDay[tomorrowDay]} />
+                            <HoursRow day={todayDay} hours={hoursDisplay(todayDay)} today />
+                            <HoursRow day={tomorrowDay} hours={hoursDisplay(tomorrowDay)} />
                             {showAllOperatingHours &&
                                 restDaysChrono.map((d) => (
-                                    <HoursRow key={d} day={d} hours={operatingHoursByDay[d]} />
+                                    <HoursRow key={d} day={d} hours={hoursDisplay(d)} />
                                 ))}
                         </div>
                         {hasRestDays && (

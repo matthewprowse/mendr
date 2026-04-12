@@ -17,6 +17,14 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
     transpilePackages: ['geist'],
     allowedDevOrigins: ['192.168.101.239'],
+    webpack: (config, { dev }) => {
+        // Heavy routes (e.g. match + Maps) can exceed the default chunk load timeout in dev
+        // when compilation finishes after the browser request — avoids spurious ChunkLoadError.
+        if (dev) {
+            config.output = { ...config.output, chunkLoadTimeout: 120_000 };
+        }
+        return config;
+    },
     experimental: {
         // Only bundle the icons/components you actually use (big win for geist-icons + radix-ui)
         optimizePackageImports: ['geist-icons', 'radix-ui'],

@@ -114,6 +114,12 @@ export const RATE_LIMITS = {
         max: 60,
     },
 
+    // Google Custom Search + Gemini refinement for Beta cost outlook (cached per trade/region).
+    marketRatesResearch: {
+        windowMs: 10 * 60 * 1000,
+        max: 15,
+    },
+
 } as const satisfies Record<string, RateLimitConfig>;
 
 export type RateLimitBucket = keyof typeof RATE_LIMITS;

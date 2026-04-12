@@ -3,16 +3,17 @@ export interface DiagnosisData {
     diagnosis: string;
     trade: string;
     action_required: string;
+    /** Short ZAR job-level summary from the model (Beta). Structured for later comparison to invoices and completed jobs. */
     estimated_cost: string;
     /** @deprecated Call-out is now calculated from distance on report view. */
     callout_fee?: string;
     /** @deprecated Use repair_cost_range and replacement_cost_range. */
     repair_or_replacement_fee?: string;
-    /** Repair cost range, e.g. 'R800–R1,200'. */
+    /** @deprecated Not used; kept for legacy stored rows. Always empty for new diagnoses. */
     repair_cost_range?: string;
-    /** Replacement cost range, e.g. 'R2,000–R5,000'. */
+    /** @deprecated Not used; kept for legacy stored rows. Always empty for new diagnoses. */
     replacement_cost_range?: string;
-    /** Equipment and parts cost range, e.g. 'R200–R500'. */
+    /** @deprecated Not used; kept for legacy stored rows. Always empty for new diagnoses. */
     equipment_parts_range?: string;
     message?: string;
     rejected?: boolean;
@@ -32,6 +33,21 @@ export interface DiagnosisData {
      * Links to diagnosis_urgencies.key, e.g. 'immediate', 'urgent', 'soon', 'planned'.
      */
     urgency_key?: string;
+    /**
+     * Cached web research (Brave Search snippets + Gemini cost refinement) for Beta cost outlook.
+     * Written by POST /api/market-rates/research.
+     */
+    market_rates?: {
+        from_cache?: boolean;
+        fetched_at?: string;
+        region_key?: string;
+        sources?: Array<{
+            url: string;
+            title: string;
+            snippet?: string;
+            intent?: string;
+        }>;
+    };
 }
 
 export interface Message {

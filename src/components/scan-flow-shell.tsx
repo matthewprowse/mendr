@@ -88,26 +88,48 @@ export function ScanFlowShell({
                             </h3>
                         )}
                     </div>
-                    <div className="pointer-events-none absolute left-1/2 -translate-x-1/2">
-                        {headerCenter}
-                    </div>
-                    <div className="flex min-w-0 flex-1 items-center justify-end">
-                        {headerRight ? (
-                            headerRight
-                        ) : onClose ? (
-                            <Button
-                                type="button"
-                                variant="outline"
-                                size="icon"
-                                className="size-10"
-                                onClick={onClose}
-                            >
-                                <X size={20} weight="bold" className="text-foreground" />
-                            </Button>
-                        ) : (
-                            <div className="h-10 w-10" aria-hidden />
-                        )}
-                    </div>
+                    {headerCenter ? (
+                        <>
+                            <div className="flex min-h-10 min-w-0 flex-1 items-center justify-center overflow-hidden px-1">
+                                {headerCenter}
+                            </div>
+                            <div className="flex shrink-0 items-center justify-end">
+                                {headerRight ? (
+                                    headerRight
+                                ) : onClose ? (
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="icon"
+                                        className="size-10"
+                                        onClick={onClose}
+                                    >
+                                        <X size={20} weight="bold" className="text-foreground" />
+                                    </Button>
+                                ) : (
+                                    <div className="h-10 w-10" aria-hidden />
+                                )}
+                            </div>
+                        </>
+                    ) : (
+                        <div className="flex min-h-10 min-w-0 flex-1 items-center justify-end gap-2">
+                            {headerRight ? (
+                                headerRight
+                            ) : onClose ? (
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="icon"
+                                    className="size-10"
+                                    onClick={onClose}
+                                >
+                                    <X size={20} weight="bold" className="text-foreground" />
+                                </Button>
+                            ) : (
+                                <div className="h-10 w-10" aria-hidden />
+                            )}
+                        </div>
+                    )}
                 </div>
             </div>
 

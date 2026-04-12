@@ -7,7 +7,8 @@ const CACHE_TTL_MS = 30 * 60 * 1000;
 export type MatchPageCacheEntry = {
     providers: MatchProvider[];
     companyIndex: number;
-    searchRadiusKm: number;
+    /** Search radius in metres (25_000 default, 50_000 after user extends). */
+    searchRadiusMeters?: number;
     userLocation: MatchLocation | null;
     addressInput: string;
     enrichmentCache: Record<string, EnrichmentCacheEntry>;

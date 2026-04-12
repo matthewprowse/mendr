@@ -14,6 +14,7 @@
         "format:check": "prettier --check \"src/**/*.{ts,tsx,js,jsx,json,css,md}\"",
         "test:diagnose-prompts": "npx tsx scripts/test-diagnose-prompts.ts",
         "test:match-flow": "npx tsx scripts/test-match-flow.ts",
+        "test:enrichment-summary": "npx tsx scripts/test-enrichment-summary.ts",
         "perf:match-flow": "npx tsx scripts/perf/match-flow.ts",
         "scrape-providers": "npx tsx scripts/scrape-providers.ts",
         "sync-provider-reviews": "npx tsx scripts/sync-provider-reviews.ts"

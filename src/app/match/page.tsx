@@ -1,5 +1,10 @@
 import type { Metadata } from 'next';
-import MatchPageClient from './client';
+import dynamic from 'next/dynamic';
+import MatchLoading from './loading';
+
+const MatchPageClient = dynamic(() => import('./client'), {
+    loading: () => <MatchLoading />,
+});
 
 export const metadata: Metadata = {
     title: 'Find providers',

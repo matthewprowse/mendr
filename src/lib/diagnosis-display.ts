@@ -77,3 +77,30 @@ export function diagnosisSectionsDuplicate(
     if (!m || !a) return false;
     return m === a;
 }
+
+const COST_PLACEHOLDER = /^n\/a$/i;
+
+function meaningfulCostField(value: unknown): value is string {
+    if (typeof value !== 'string') return false;
+    const t = value.trim();
+    return t.length > 0 && !COST_PLACEHOLDER.test(t);
+}
+
+/** True when the summary cost line is safe to show in the Beta UI. */
+export function hasRenderableBetaCostEstimate(
+    diagnosis: Record<string, unknown> | null | undefined
+): boolean {
+    if (!diagnosis) return false;
+    return meaningfulCostField(diagnosis.estimated_cost);
+}
+
+export type BetaCostEstimateRow = { label: string; value: string };
+
+/** Single lead paragraph for the Beta cost card (`estimated_cost` only). */
+export function getBetaCostEstimateRows(
+    diagnosis: Record<string, unknown> | null | undefined
+): BetaCostEstimateRow[] {
+    if (!diagnosis) return [];
+    if (!meaningfulCostField(diagnosis.estimated_cost)) return [];
+    return [{ label: '', value: diagnosis.estimated_cost.trim() }];
+}

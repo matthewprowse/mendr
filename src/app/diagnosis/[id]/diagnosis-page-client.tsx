@@ -4,8 +4,8 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { getSupabase } from '@/lib/supabase';
 import { trackEvent } from '@/lib/analytics';
-import { getScanSessionHandoff, clearScanSessionHandoff } from '@/lib/scan-session-store';
-import type { DiagnosisData } from '@/app/chat/_components/types';
+import { getScanSessionHandoff, clearScanSessionHandoff } from '@/features/diagnosis/scan-session-store';
+import type { DiagnosisData, Provider } from '@/app/chat/components/types';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { FlowStepHeader } from '@/components/flow-header';
@@ -17,6 +17,8 @@ import { DiagnosisMetaPanel } from '@/components/diagnosis-meta-panel';
 import { DiagnosisLeaveDialog } from '@/components/diagnosis-leave-dialog';
 import { Separator } from '@/components/ui/separator';
 import { useAuth } from '@/context/auth-context';
+import { parseDiagnosisFromModelResponse } from '@/lib/parse-diagnosis-from-model-response';
+import { BetaCostEstimateCard } from '@/components/beta-cost-estimate-card';
 
 type DiagnosisPageClientProps = {
     conversationId: string;
@@ -36,76 +38,8 @@ const URGENCY_LABELS: Record<string, string> = {
     planned: 'Planned',
 };
 
-function parseDiagnosisFromResponse(text: string): DiagnosisData | null {
-    const jsonBlockMatch = text.match(/<json>([\s\S]*?)<\/json>/i);
-    const candidate = jsonBlockMatch?.[1] ?? text;
-    // Try to find the first balanced JSON object if there is surrounding text.
-    const braceMatch = candidate.match(/\{[\s\S]*\}/);
-    const toParse = braceMatch ? braceMatch[0] : candidate;
-    try {
-        const parsed = JSON.parse(toParse) as any;
-        if (!parsed || typeof parsed !== 'object' || !parsed.diagnosis) return null;
-
-        // Be defensive about unexpected key casing / missing fields coming back from the model.
-        const diagnosis = typeof parsed.diagnosis === 'string' ? parsed.diagnosis.trim() : String(parsed.diagnosis ?? '');
-        const trade = typeof parsed.trade === 'string' ? parsed.trade.trim() : String(parsed.trade ?? '');
-        const action_required =
-            typeof parsed.action_required === 'string'
-                ? parsed.action_required
-                : typeof parsed.actionRequired === 'string'
-                  ? parsed.actionRequired
-                  : '';
-        const message =
-            typeof parsed.message === 'string'
-                ? parsed.message
-                : typeof parsed.Message === 'string'
-                  ? parsed.Message
-                  : '';
-
-        const estimated_cost =
-            typeof parsed.estimated_cost === 'string'
-                ? parsed.estimated_cost
-                : typeof parsed.estimatedCost === 'string'
-                  ? parsed.estimatedCost
-                  : typeof parsed.estimated_diagnosis_sentence === 'string'
-                    ? parsed.estimated_diagnosis_sentence
-                    : '';
-
-        const trade_detailRaw =
-            typeof parsed.trade_detail === 'string'
-                ? parsed.trade_detail
-                : typeof parsed.tradeDetail === 'string'
-                  ? parsed.tradeDetail
-                  : '';
-        const urgencyRaw =
-            typeof parsed.urgency_key === 'string'
-                ? parsed.urgency_key
-                : typeof parsed.urgencyKey === 'string'
-                  ? parsed.urgencyKey
-                  : '';
-        const urgency_key = urgencyRaw.trim().toLowerCase();
-
-        return {
-            ...(parsed as DiagnosisData),
-            thinking: typeof parsed.thinking === 'string' ? parsed.thinking : '',
-            diagnosis,
-            trade,
-            action_required,
-            message: message || undefined,
-            estimated_cost,
-            trade_detail: trade_detailRaw.trim().length > 0 ? trade_detailRaw : trade,
-            urgency_key:
-                urgency_key === 'immediate' ||
-                urgency_key === 'urgent' ||
-                urgency_key === 'soon' ||
-                urgency_key === 'planned'
-                    ? urgency_key
-                    : 'soon',
-        };
-    } catch {
-        // ignore
-    }
-    return null;
+function providerHydrateSessionKey(id: string): string {
+    return `scandio_provider_hydrate_done:${id}`;
 }
 
 export function DiagnosisPageClient({ conversationId }: DiagnosisPageClientProps) {
@@ -125,6 +59,7 @@ export function DiagnosisPageClient({ conversationId }: DiagnosisPageClientProps
     const [confirming, setConfirming] = useState(false);
     const refineFileInputRef = useRef<HTMLInputElement | null>(null);
     const [leaveDialogOpen, setLeaveDialogOpen] = useState(false);
+    const providersForDiagnoseRef = useRef<Provider[]>([]);
 
     const loadConversation = useCallback(
         async (id: string): Promise<ConversationRow | null> => {
@@ -181,6 +116,102 @@ export function DiagnosisPageClient({ conversationId }: DiagnosisPageClientProps
         [conversationId, supabase, user?.id]
     );
 
+    const maybeHydrateWithProviders = useCallback(
+        async (diag: DiagnosisData, img: string, catalogIn: string[], userWords: string) => {
+            const trade = diag.trade?.trim();
+            if (!trade || trade === 'N/A') return;
+            if (diag.requires_clarification || diag.rejected || diag.unserviced) return;
+            try {
+                if (sessionStorage.getItem(providerHydrateSessionKey(conversationId)) === '1') return;
+            } catch {
+                /* private mode */
+            }
+            let catalog = catalogIn;
+            if (catalog.length === 0) {
+                const { data } = await supabase
+                    .from('services')
+                    .select('label')
+                    .eq('active', true)
+                    .order('sort_order', { ascending: true });
+                catalog = Array.isArray(data)
+                    ? data
+                          .map((r: { label?: unknown }) => String(r?.label ?? '').trim())
+                          .filter((x: string) => x.length > 0)
+                    : [];
+            }
+            if (catalog.length === 0) return;
+
+            try {
+                const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
+                    navigator.geolocation.getCurrentPosition(resolve, reject, {
+                        timeout: 15000,
+                        maximumAge: 300_000,
+                    });
+                });
+                const { latitude: lat, longitude: lng } = pos.coords;
+                const geocodeRes = await fetch('/api/geocode', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ lat, lng }),
+                });
+                if (!geocodeRes.ok) return;
+
+                const radius = 25_000;
+                const provRes = await fetch('/api/providers', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        lat,
+                        lng,
+                        trade,
+                        radius,
+                    }),
+                });
+                const provData = await provRes.json().catch(() => ({}));
+                if (!provRes.ok) return;
+                const list = Array.isArray(provData.providers) ? (provData.providers as Provider[]) : [];
+                if (list.length === 0) return;
+
+                providersForDiagnoseRef.current = list;
+
+                const res = await fetch('/api/diagnose', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        image: img,
+                        serviceCatalog: catalog,
+                        providerHydration: true,
+                        providers: list,
+                        textQuery: userWords.trim() || undefined,
+                        previousDiagnosis: {
+                            diagnosis: diag.diagnosis,
+                            trade: diag.trade,
+                            trade_detail: diag.trade_detail ?? '',
+                            message: diag.message ?? '',
+                            action_required: diag.action_required ?? '',
+                            estimated_cost: diag.estimated_cost ?? '',
+                        },
+                    }),
+                });
+                const text = await res.text();
+                if (!res.ok) return;
+                const newDiag = parseDiagnosisFromModelResponse(text);
+                if (newDiag) {
+                    setDiagnosis(newDiag);
+                    await saveConversationDiagnosis(newDiag, img, userWords);
+                }
+                try {
+                    sessionStorage.setItem(providerHydrateSessionKey(conversationId), '1');
+                } catch {
+                    /* ignore */
+                }
+            } catch {
+                /* geolocation denied, network, or hydrate failed — keep original diagnosis */
+            }
+        },
+        [conversationId, saveConversationDiagnosis, supabase]
+    );
+
     const runInitialDiagnosis = useCallback(
         async (img: string, prompt: string, selectedService: string | null) => {
             try {
@@ -231,13 +262,14 @@ export function DiagnosisPageClient({ conversationId }: DiagnosisPageClientProps
                     toast.error(errMsg);
                     return null;
                 }
-                const diag = parseDiagnosisFromResponse(text);
+                const diag = parseDiagnosisFromModelResponse(text);
                 if (!diag) {
                     toast.error('Could not understand the diagnosis response.');
                     return null;
                 }
                 setDiagnosis(diag);
                 await saveConversationDiagnosis(diag, img, prompt);
+                void maybeHydrateWithProviders(diag, img, catalog, prompt.trim());
                 return diag;
             } catch (e) {
                 if (process.env.NODE_ENV === 'development') {
@@ -248,7 +280,7 @@ export function DiagnosisPageClient({ conversationId }: DiagnosisPageClientProps
                 return null;
             }
         },
-        [saveConversationDiagnosis, serviceCatalog, supabase]
+        [maybeHydrateWithProviders, saveConversationDiagnosis, serviceCatalog, supabase]
     );
 
     const runRefinedDiagnosis = useCallback(
@@ -283,10 +315,14 @@ export function DiagnosisPageClient({ conversationId }: DiagnosisPageClientProps
                         diagnosis: diagnosis.diagnosis,
                         trade: diagnosis.trade,
                         trade_detail: diagnosis.trade_detail,
+                        message: diagnosis.message ?? '',
                         action_required: diagnosis.action_required,
                         estimated_cost: diagnosis.estimated_cost,
                     },
                 };
+                if (providersForDiagnoseRef.current.length > 0) {
+                    body.providers = providersForDiagnoseRef.current;
+                }
                 const res = await fetch('/api/diagnose', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -304,7 +340,7 @@ export function DiagnosisPageClient({ conversationId }: DiagnosisPageClientProps
                     toast.error(errMsg);
                     return;
                 }
-                const diag = parseDiagnosisFromResponse(text);
+                const diag = parseDiagnosisFromModelResponse(text);
                 if (!diag) {
                     toast.error('Could not understand the updated diagnosis.');
                     return;
@@ -312,6 +348,17 @@ export function DiagnosisPageClient({ conversationId }: DiagnosisPageClientProps
                 setDiagnosis(diag);
                 setRefineText('');
                 await saveConversationDiagnosis(diag, imageSrc, initialPrompt);
+                try {
+                    sessionStorage.removeItem(providerHydrateSessionKey(conversationId));
+                } catch {
+                    /* ignore */
+                }
+                void maybeHydrateWithProviders(
+                    diag,
+                    imageSrc,
+                    catalog,
+                    [initialPrompt, extraText].filter(Boolean).join('\n\n').trim()
+                );
             } catch (e) {
                 if (process.env.NODE_ENV === 'development') {
                     // eslint-disable-next-line no-console
@@ -322,7 +369,16 @@ export function DiagnosisPageClient({ conversationId }: DiagnosisPageClientProps
                 setRefining(false);
             }
         },
-        [diagnosis, imageSrc, initialPrompt, saveConversationDiagnosis, serviceCatalog, supabase]
+        [
+            conversationId,
+            diagnosis,
+            imageSrc,
+            initialPrompt,
+            maybeHydrateWithProviders,
+            saveConversationDiagnosis,
+            serviceCatalog,
+            supabase,
+        ]
     );
 
     useEffect(() => {
@@ -387,7 +443,7 @@ export function DiagnosisPageClient({ conversationId }: DiagnosisPageClientProps
                     const diag = await runInitialDiagnosis(
                         handoff.primaryAssetDataUrl,
                         handoff.initialPrompt ?? '',
-                        handoff.selectedService
+                        handoff.selectedService ?? null
                     );
                     if (!cancelled && !diag) {
                         // If diagnosis failed, send back to welcome so they can retry.
@@ -413,6 +469,28 @@ export function DiagnosisPageClient({ conversationId }: DiagnosisPageClientProps
                         };
                         setDiagnosis(diag);
                         setServiceType(diag.trade ?? null);
+                        if (existing.image_url) {
+                            const { data } = await supabase
+                                .from('services')
+                                .select('label')
+                                .eq('active', true)
+                                .order('sort_order', { ascending: true });
+                            const labels = Array.isArray(data)
+                                ? data
+                                      .map((r: { label?: unknown }) =>
+                                          String(r?.label ?? '').trim()
+                                      )
+                                      .filter((x: string) => x.length > 0)
+                                : [];
+                            if (!cancelled && labels.length > 0) {
+                                void maybeHydrateWithProviders(
+                                    diag,
+                                    existing.image_url,
+                                    labels,
+                                    existing.initial_image_description ?? ''
+                                );
+                            }
+                        }
                     } else if (existing.image_url) {
                         await runInitialDiagnosis(
                             existing.image_url,
@@ -429,7 +507,7 @@ export function DiagnosisPageClient({ conversationId }: DiagnosisPageClientProps
         return () => {
             cancelled = true;
         };
-    }, [conversationId, loadConversation, router, runInitialDiagnosis]);
+    }, [conversationId, loadConversation, maybeHydrateWithProviders, router, runInitialDiagnosis, supabase]);
 
     const handleConfirmYes = async () => {
         if (!diagnosis) return;
@@ -564,6 +642,13 @@ export function DiagnosisPageClient({ conversationId }: DiagnosisPageClientProps
                                             {diagnosis.action_required}
                                         </p>
                                     )}
+                                    {!diagnosis.requires_clarification &&
+                                    !diagnosis.rejected &&
+                                    !diagnosis.unserviced ? (
+                                        <div className="mt-4">
+                                            <BetaCostEstimateCard diagnosis={diagnosis} />
+                                        </div>
+                                    ) : null}
                                 </div>
                             )}
                         </section>

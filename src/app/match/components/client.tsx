@@ -1,16 +1,17 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { trackEvent } from '@/lib/analytics';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { toWhatsAppPhone } from '@/lib/utils';
+import { formatBusinessName, toWhatsAppPhone } from '@/lib/utils';
 import { setLastConversationIdForWhatsApp } from '@/lib/whatsapp-prefill';
-import { ArrowLeft, ArrowRight, Car, Check, Copy, ExternalLink, Loader2, LocateFixed, Star } from 'lucide-react';
+import { Car, MapTrifold, Star } from '@phosphor-icons/react';
+import { Loader2, LocateFixed } from 'lucide-react';
 import { toast } from 'sonner';
-import { FlowStepHeader } from '@/components/flow-header';
+import { MatchMapSheetLayout } from '@/app/match/components/match-map-sheet-layout';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import type { MatchLocation, MatchProvider } from '@/features/match/contracts';
@@ -22,15 +23,12 @@ import {
     restoreProviderTokenApi,
 } from '@/features/match/api/client';
 import type { EnrichmentCacheEntry } from '@/app/api/enrich/get/route';
+import { toGooglePlaceId } from '@/app/api/providers/persistence';
 import { useMatchConversationContext } from '@/features/match/hooks/use-match-conversation-context';
 import { useMatchProviders } from '@/features/match/hooks/use-match-providers';
 import { useMatchMap } from '@/features/match/hooks/use-match-map';
 import { loadMatchPageCache, saveMatchPageCache } from '@/features/match/cache/match-page-cache';
 import { MatchNoProvidersEmpty } from '@/app/match/components/empty';
-import { fetchConversationDiagnosis } from '@/lib/diagnoses-api';
-
-const RADIUS_OPTIONS_KM = [5, 10, 20, 50] as const;
-
 function formatProviderAddress(raw: string | null | undefined): string {
     const s = (raw ?? '').trim();
     if (!s) return '';
@@ -54,6 +52,23 @@ function formatProviderAddress(raw: string | null | undefined): string {
     return parts.join(', ');
 }
 
+function formatDuration(text: string): string {
+    return text.replace(/\bmins?\b/gi, 'Minutes').replace(/\bhrs?\b/gi, 'Hours');
+}
+
+function totalReviewCountForProvider(
+    p: MatchProvider,
+    scandioReviewCountByProviderId: Record<string, number>
+): number {
+    const pid = p.providerId;
+    const fromProvider = typeof p.scandioReviewCount === 'number' ? p.scandioReviewCount : 0;
+    const fromMap =
+        pid && typeof scandioReviewCountByProviderId[pid] === 'number'
+            ? scandioReviewCountByProviderId[pid]
+            : 0;
+    return (p.ratingCount ?? 0) + (fromProvider || fromMap);
+}
+
 function enrichmentEntryForProvider(
     cache: Record<string, EnrichmentCacheEntry>,
     provider: MatchProvider
@@ -65,26 +80,24 @@ function enrichmentEntryForProvider(
     return undefined;
 }
 
-function hasEnrichedSummary(
+/**
+ * Match card loading: resolved when we have summary text, or when fast path definitively skipped
+ * (`fast_insufficient`). Do **not** treat `enrichedAt` alone as resolved — timeout markers used
+ * `scrape_status=ok` with null summary and would otherwise block re-queue/poll after a fix.
+ */
+function matchCardEnrichmentResolved(
     cache: Record<string, EnrichmentCacheEntry>,
     provider: MatchProvider | null
 ): boolean {
     if (!provider) return false;
     const entry = enrichmentEntryForProvider(cache, provider);
     const summary = (entry?.reviewSummary ?? '').trim();
-    return summary.length > 0;
+    if (summary.length > 0) return true;
+    if (entry?.fastSummaryInsufficient) return true;
+    return false;
 }
 
-function hasAnyProviderSummary(
-    cache: Record<string, EnrichmentCacheEntry>,
-    provider: MatchProvider | null
-): boolean {
-    if (!provider) return false;
-    if (hasEnrichedSummary(cache, provider)) return true;
-    return (provider.summary ?? '').trim().length > 0;
-}
-
-function hasEnrichedSummaryByPlaceId(
+function matchCardEnrichmentResolvedByPlaceId(
     cache: Record<string, EnrichmentCacheEntry>,
     placeId: string
 ): boolean {
@@ -94,7 +107,9 @@ function hasEnrichedSummaryByPlaceId(
         cache[placeId.replace(/^places\//, '')] ||
         cache[`places/${placeId.replace(/^places\//, '')}`];
     const summary = (entry?.reviewSummary ?? '').trim();
-    return summary.length > 0;
+    if (summary.length > 0) return true;
+    if (entry?.fastSummaryInsufficient) return true;
+    return false;
 }
 
 function sleep(ms: number): Promise<void> {
@@ -111,12 +126,20 @@ async function pollEnrichment(
     options?: {
         maxRounds?: number;
         initialDelayMs?: number;
+        maxDelayMs?: number;
         signal?: AbortSignal;
         onRoundComplete?: (round: number) => void;
         onStop?: (reason: 'enriched' | 'aborted' | 'max_rounds' | 'error', rounds: number) => void;
     }
 ): Promise<void> {
-    const { maxRounds = 5, initialDelayMs = 1000, signal, onRoundComplete, onStop } = options ?? {};
+    const {
+        maxRounds = 5,
+        initialDelayMs = 400,
+        maxDelayMs = 2500,
+        signal,
+        onRoundComplete,
+        onStop,
+    } = options ?? {};
     let delay = initialDelayMs;
     let roundsCompleted = 0;
 
@@ -125,16 +148,18 @@ async function pollEnrichment(
             onStop?.('aborted', roundsCompleted);
             return;
         }
-        const pending = placeIds.filter((id) => !hasEnrichedSummaryByPlaceId(cacheRef.current, id));
+        const pending = placeIds.filter((id) => !matchCardEnrichmentResolvedByPlaceId(cacheRef.current, id));
         if (pending.length === 0) {
             onStop?.('enriched', roundsCompleted);
             return;
         }
 
-        await sleep(delay);
-        if (signal?.aborted) {
-            onStop?.('aborted', roundsCompleted);
-            return;
+        if (round > 0) {
+            await sleep(delay);
+            if (signal?.aborted) {
+                onStop?.('aborted', roundsCompleted);
+                return;
+            }
         }
 
         try {
@@ -160,7 +185,7 @@ async function pollEnrichment(
             return;
         }
 
-        delay = Math.min(delay * 2, 8000);
+        delay = Math.min(Math.round(delay * 1.5), maxDelayMs);
     }
     onStop?.('max_rounds', roundsCompleted);
 }
@@ -178,6 +203,11 @@ function formatCustomerSummary(summary: string, providerName: string): string {
     if (sentences.length <= 5) return text;
     return sentences.slice(0, 5).join(' ').trim();
 }
+
+const DEFAULT_SEARCH_RADIUS_METERS = 25_000;
+const EXTENDED_SEARCH_RADIUS_METERS = 50_000;
+/** Max providers to enqueue per /api/enrich/queue call (fast review-summary mode; keeps work bounded per request). */
+const MAX_ENRICH_QUEUE_PER_WAVE = 12;
 
 function providerPriorityScore(provider: MatchProvider): number {
     const rating = typeof provider.rating === 'number' ? provider.rating : 0;
@@ -219,8 +249,6 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
     }, [conversationId]);
 
     const [isLoading, setIsLoading] = useState(true);
-    const [searchRadiusKm, setSearchRadiusKm] = useState<number>(10);
-    const searchRadiusMeters = searchRadiusKm * 1000;
     const {
         userLocation,
         setUserLocation,
@@ -238,20 +266,22 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
         companyIndex,
         setCompanyIndex,
         isProvidersLoading,
-        isLoadingMoreForExpandedRadius,
         isRefreshingProvidersInBackground,
         refreshProvidersForLocation,
+        providersFromViewportCache,
     } = useMatchProviders({
-        searchRadiusMeters,
         resolveTradeContext,
+        conversationId,
     });
     const [contactOpen, setContactOpen] = useState(false);
     const [isUpdatingLocation, setIsUpdatingLocation] = useState(false);
     const [isLocatingUser, setIsLocatingUser] = useState(false);
-    const [reportLinkCopied, setReportLinkCopied] = useState(false);
-    const [resolvedReportId, setResolvedReportId] = useState('');
     // Deduplicate provider_contact analytics per provider per session.
     const providerContactFiredForProviderIdRef = useRef<string | null>(null);
+    const providerCardRefs = useRef<Record<string, HTMLDivElement | null>>({});
+    const [mapExpandRequestId, setMapExpandRequestId] = useState(0);
+    const [searchRadiusMeters, setSearchRadiusMeters] = useState(DEFAULT_SEARCH_RADIUS_METERS);
+    const lastProviderFetchKeyRef = useRef('');
 
     const sortedProviders = useMemo(() => {
         return [...providers]
@@ -263,17 +293,18 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
                 return (b.ratingCount ?? 0) - (a.ratingCount ?? 0);
             });
     }, [providers]);
-    const topProviders = useMemo(() => sortedProviders.slice(0, 5), [sortedProviders]);
-    const otherProviders = useMemo(() => sortedProviders.slice(5), [sortedProviders]);
-    const providerPlaceIdsKey = useMemo(
-        () => providers.map((p) => p.placeId).filter(Boolean).sort().join(','),
-        [providers]
-    );
-    const totalCompanies = topProviders.length || 1;
+    const sheetProviders = sortedProviders;
+    const totalCompanies = Math.max(sheetProviders.length, 1);
     const selectedProvider = useMemo(() => {
-        const idx = Math.min(Math.max(companyIndex - 1, 0), Math.max(topProviders.length - 1, 0));
-        return topProviders[idx] || null;
-    }, [topProviders, companyIndex]);
+        const idx = Math.min(Math.max(companyIndex - 1, 0), Math.max(sheetProviders.length - 1, 0));
+        return sheetProviders[idx] || null;
+    }, [sheetProviders, companyIndex]);
+
+    /** Keep current place id for enrich queue priority without re-running the effect when selection changes. */
+    const selectedPlaceIdForEnrichRef = useRef<string | null>(null);
+    selectedPlaceIdForEnrichRef.current = selectedProvider?.placeId
+        ? String(selectedProvider.placeId).trim()
+        : null;
 
     useEffect(() => {
         // Reset whenever the user moves to a different provider.
@@ -287,29 +318,48 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
     // Enrichment cache: keyed by Google Place ID
     const [enrichmentCache, setEnrichmentCache] = useState<Record<string, EnrichmentCacheEntry>>({});
     const [isEnrichmentLoading, setIsEnrichmentLoading] = useState(false);
-    const enrichmentQueuedAtByKeyRef = useRef<Record<string, number>>({});
+    /** After ~18s of global enrichment polling, stop per-card skeletons (still loading in background). */
+    const [summarySkeletonLongWait, setSummarySkeletonLongWait] = useState(false);
+    useEffect(() => {
+        if (!isEnrichmentLoading) {
+            setSummarySkeletonLongWait(false);
+            return;
+        }
+        const id = window.setTimeout(() => setSummarySkeletonLongWait(true), 18_000);
+        return () => window.clearTimeout(id);
+    }, [isEnrichmentLoading]);
+    /** Dedupe identical `/api/enrich/queue` batches when React re-runs the effect. */
+    const lastEnrichQueueSignatureRef = useRef<string>('');
+    /** Bumps when we need to re-run queue + poll after an empty cache (e.g. providers row race). */
+    const [enrichmentKick, setEnrichmentKick] = useState(0);
+    const enrichmentQueueRetryCountRef = useRef(0);
+
+    useEffect(() => {
+        lastProviderFetchKeyRef.current = '';
+        lastEnrichQueueSignatureRef.current = '';
+        enrichmentQueueRetryCountRef.current = 0;
+        setEnrichmentKick(0);
+    }, [conversationId]);
+
     const hydratedFromCacheRef = useRef(false);
     /** When sessionStorage cache had providers, skip the initial `/api/providers` fetch (avoids duplicate load). */
     const skipInitialProviderFetchRef = useRef(false);
-    const skipNextAutoRefreshRef = useRef(false);
-    /** After an explicit provider refresh, ignore debounced refresh briefly (avoids duplicate POST /api/providers on mount). */
-    const suppressDebouncedProviderRefreshUntilRef = useRef(0);
-    const providerRefreshDebounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const enrichmentCacheRef = useRef(enrichmentCache);
     enrichmentCacheRef.current = enrichmentCache;
 
-    const bumpSuppressDebouncedProviderRefresh = useCallback(() => {
-        suppressDebouncedProviderRefreshUntilRef.current = Date.now() + 450;
-        if (providerRefreshDebounceTimerRef.current) {
-            clearTimeout(providerRefreshDebounceTimerRef.current);
-            providerRefreshDebounceTimerRef.current = null;
-        }
-    }, []);
+    /** Re-run enrichment when any summary lands so the next wave can be queued (not just when the provider list changes). */
+    const enrichmentPendingKey = useMemo(() => {
+        return sortedProviders
+            .filter((p) => !matchCardEnrichmentResolved(enrichmentCache, p))
+            .map((p) => String(p.placeId || '').trim())
+            .filter(Boolean)
+            .sort()
+            .join(',');
+    }, [sortedProviders, enrichmentCache]);
 
-    const selectedProviderHasSummary = useMemo(
-        () => hasAnyProviderSummary(enrichmentCache, selectedProvider),
-        [enrichmentCache, selectedProvider]
-    );
+    useEffect(() => {
+        enrichmentQueueRetryCountRef.current = 0;
+    }, [enrichmentPendingKey]);
 
     useEffect(() => {
         if (!conversationId) return;
@@ -320,8 +370,6 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
 
         hydratedFromCacheRef.current = true;
         skipInitialProviderFetchRef.current = cached.providers.length > 0;
-        skipNextAutoRefreshRef.current = true;
-        setSearchRadiusKm(cached.searchRadiusKm);
         setUserLocation(cached.userLocation);
         setAddressInput(cached.addressInput);
         setProviders(cached.providers);
@@ -332,15 +380,35 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
         });
         setEnrichmentCache(cached.enrichmentCache || {});
         setScandioReviewCountByProviderId(cached.scandioReviewCountByProviderId || {});
+        if (
+            typeof cached.searchRadiusMeters === 'number' &&
+            Number.isFinite(cached.searchRadiusMeters) &&
+            cached.searchRadiusMeters > 0
+        ) {
+            setSearchRadiusMeters(cached.searchRadiusMeters);
+        }
         setIsLoading(false);
     }, [conversationId, setAddressInput, setCompanyIndex, setProviders, setUserLocation]);
+
+    useEffect(() => {
+        if (!userLocation) return;
+        if (skipInitialProviderFetchRef.current) {
+            skipInitialProviderFetchRef.current = false;
+            lastProviderFetchKeyRef.current = `${userLocation.lat.toFixed(5)},${userLocation.lng.toFixed(5)},${searchRadiusMeters}`;
+            return;
+        }
+        const fetchKey = `${userLocation.lat.toFixed(5)},${userLocation.lng.toFixed(5)},${searchRadiusMeters}`;
+        if (fetchKey === lastProviderFetchKeyRef.current) return;
+        lastProviderFetchKeyRef.current = fetchKey;
+        void refreshProvidersForLocation(userLocation, searchRadiusMeters);
+    }, [userLocation, searchRadiusMeters, refreshProvidersForLocation]);
 
     useEffect(() => {
         if (!conversationId) return;
         saveMatchPageCache(conversationId, {
             providers,
             companyIndex,
-            searchRadiusKm,
+            searchRadiusMeters,
             userLocation,
             addressInput,
             enrichmentCache,
@@ -354,59 +422,152 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
         enrichmentCache,
         providers,
         scandioReviewCountByProviderId,
-        searchRadiusKm,
+        searchRadiusMeters,
         userLocation,
     ]);
 
-    // Fire enrichment queue + fetch cache whenever the provider list changes.
-    // Also poll briefly so newly enriched summaries become visible without reload.
+    /**
+     * Card-level AI summaries (fast enrich + GET cache):
+     * - List from **viewport cache** (same area/trade in sessionStorage): show each provider’s Google
+     *   `summary` only; **no** match-page queue/poll — full review-summary work stays on `/pro/[id]`.
+     * - List from **fresh `/api/providers`**: queue fast summaries and poll GET until resolved.
+     * - **Match session cache** (`loadMatchPageCache`): restores `enrichmentCache` with the list; this
+     *   effect runs only for rows still missing cache entries.
+     */
     useEffect(() => {
-        if (providers.length === 0) return;
-        const providersNeedingSummary = providers.filter((p) => !hasAnyProviderSummary(enrichmentCache, p));
-        const placeIds = providersNeedingSummary.map((p) => p.placeId).filter(Boolean);
-        if (placeIds.length === 0) return;
+        if (providers.length === 0) {
+            setIsEnrichmentLoading(false);
+            return;
+        }
+        if (providersFromViewportCache) {
+            setIsEnrichmentLoading(false);
+            return;
+        }
+        if (!enrichmentPendingKey) {
+            setIsEnrichmentLoading(false);
+            return;
+        }
 
-        const key = placeIds.slice().sort().join(',');
-        const now = Date.now();
-        const lastQueuedAt = enrichmentQueuedAtByKeyRef.current[key] ?? 0;
-        const QUEUE_RETRY_COOLDOWN_MS = 15_000;
-        if (now - lastQueuedAt < QUEUE_RETRY_COOLDOWN_MS) return;
-        enrichmentQueuedAtByKeyRef.current[key] = now;
+        const providersNeedingSummary = sortedProviders.filter(
+            (p) => !matchCardEnrichmentResolved(enrichmentCache, p)
+        );
+        const pendingPlaceIds = providersNeedingSummary
+            .map((p) => String(p.placeId || '').trim())
+            .filter(Boolean);
+        if (pendingPlaceIds.length === 0) {
+            setIsEnrichmentLoading(false);
+            return;
+        }
 
-        // 1. Fire enrichment queue (fire-and-forget)
-        void resolveTradeContext().then(({ trade }) => {
-            queueEnrichmentApi(placeIds, trade || undefined, {
-                priorityPlaceId: selectedProvider?.placeId,
-            });
+        const queueSet = new Set(pendingPlaceIds.slice(0, MAX_ENRICH_QUEUE_PER_WAVE));
+        const selId = selectedPlaceIdForEnrichRef.current ?? '';
+        if (selId && pendingPlaceIds.includes(selId)) {
+            queueSet.add(selId);
+        }
+        const queuePlaceIds = Array.from(queueSet);
+        const queueProviderIdsAligned = queuePlaceIds.map((pl) => {
+            const row = providersNeedingSummary.find((x) => String(x.placeId || '').trim() === pl);
+            return row?.providerId?.trim() ?? '';
         });
 
-        // 2. Fetch existing cache entries for immediate display, then short polling.
+        const placeToProviderId: Record<string, string> = {};
+        for (const p of providersNeedingSummary) {
+            const pl = String(p.placeId || '').trim();
+            const pid = p.providerId?.trim();
+            if (!pl || !pid) continue;
+            placeToProviderId[pl] = pid;
+            const raw = pl.replace(/^places\//, '');
+            if (raw !== pl) placeToProviderId[raw] = pid;
+            placeToProviderId[toGooglePlaceId(pl)] = pid;
+        }
+        const providerIdsAlignedForPlaces = (ids: string[]) =>
+            ids.map(
+                (id) =>
+                    placeToProviderId[id] ??
+                    placeToProviderId[id.replace(/^places\//, '')] ??
+                    placeToProviderId[toGooglePlaceId(id)] ??
+                    ''
+            );
+
+        const queueSig =
+            queuePlaceIds.slice().sort().join(',') +
+            '|' +
+            queueProviderIdsAligned.filter(Boolean).slice().sort().join(',');
+
+        const shouldQueue = Boolean(queueSig && queueSig !== lastEnrichQueueSignatureRef.current);
+        if (shouldQueue) {
+            lastEnrichQueueSignatureRef.current = queueSig;
+        }
+
         let cancelled = false;
         const abortController = new AbortController();
         setIsEnrichmentLoading(true);
         void (async () => {
             const mergeCache = (cache: Record<string, EnrichmentCacheEntry> | null) => {
                 if (cancelled || !cache) return;
-                setEnrichmentCache((prev) => {
-                    const next = { ...prev, ...cache };
-                    enrichmentCacheRef.current = next;
-                    return next;
-                });
+                // Update ref synchronously so `pollEnrichment` sees merged data immediately (React state
+                // commits async; without this, round 0 re-fetches and polls for seconds even when cached).
+                const next = { ...enrichmentCacheRef.current, ...cache };
+                enrichmentCacheRef.current = next;
+                setEnrichmentCache(next);
             };
 
-            const initial = await fetchEnrichmentApi(placeIds);
+            // Do not await queue: /api/enrich/queue runs all Gemini jobs before responding (long-pending
+            // request) and would block the first GET + poll. Fire-and-forget; polling picks up cache.
+            if (shouldQueue) {
+                void resolveTradeContext()
+                    .then(({ trade }) =>
+                        queueEnrichmentApi(queuePlaceIds, trade || undefined, {
+                            priorityPlaceId: selId || undefined,
+                            providerIds: queueProviderIdsAligned.some(Boolean)
+                                ? queueProviderIdsAligned
+                                : undefined,
+                        })
+                    )
+                    .catch(() => {});
+            }
+            if (cancelled) return;
+
+            const initial = await fetchEnrichmentApi(pendingPlaceIds, {
+                providerIdsAligned: providerIdsAlignedForPlaces(pendingPlaceIds),
+            });
             mergeCache(initial);
+            const allResolvedAfterInitial = pendingPlaceIds.every((id) =>
+                matchCardEnrichmentResolvedByPlaceId(enrichmentCacheRef.current, id)
+            );
+            if (allResolvedAfterInitial) {
+                return;
+            }
             await pollEnrichment(
-                placeIds,
-                fetchEnrichmentApi,
+                pendingPlaceIds,
+                (ids) =>
+                    fetchEnrichmentApi(ids, {
+                        providerIdsAligned: providerIdsAlignedForPlaces(ids),
+                    }),
                 enrichmentCacheRef,
-                (cache) => setEnrichmentCache({ ...cache }),
+                (cache) => {
+                    enrichmentCacheRef.current = cache;
+                    setEnrichmentCache(cache);
+                },
                 {
-                    maxRounds: 9,
-                    initialDelayMs: 1000,
+                    maxRounds: 14,
+                    initialDelayMs: 280,
+                    maxDelayMs: 2400,
                     signal: abortController.signal,
                 }
             );
+
+            if (!cancelled) {
+                const ref = enrichmentCacheRef.current;
+                const stillUnresolved = pendingPlaceIds.some(
+                    (id) => !matchCardEnrichmentResolvedByPlaceId(ref, id)
+                );
+                if (stillUnresolved && enrichmentQueueRetryCountRef.current < 3) {
+                    enrichmentQueueRetryCountRef.current += 1;
+                    lastEnrichQueueSignatureRef.current = '';
+                    setEnrichmentKick((k) => k + 1);
+                }
+            }
         })().finally(() => {
             if (!cancelled) setIsEnrichmentLoading(false);
         });
@@ -414,60 +575,15 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
         return () => {
             cancelled = true;
             abortController.abort();
-        };
-    }, [providerPlaceIdsKey, resolveTradeContext, selectedProvider?.placeId]);
-
-    useEffect(() => {
-        if (!selectedProvider?.placeId || selectedProviderHasSummary) return;
-        let cancelled = false;
-        const abortController = new AbortController();
-
-        void (async () => {
-            const trade = (await resolveTradeContext()).trade || undefined;
-            queueEnrichmentApi([selectedProvider.placeId], trade, {
-                priorityPlaceId: selectedProvider.placeId,
-            });
-            await pollEnrichment(
-                [selectedProvider.placeId],
-                fetchEnrichmentApi,
-                enrichmentCacheRef,
-                (cache) => setEnrichmentCache({ ...cache }),
-                {
-                    maxRounds: 6,
-                    initialDelayMs: 500,
-                    signal: abortController.signal,
-                    onRoundComplete: (round) => {
-                        if (process.env.NODE_ENV === 'development') {
-                            const entry = enrichmentEntryForProvider(
-                                enrichmentCacheRef.current,
-                                selectedProvider
-                            );
-                            if ((entry?.reviewSummary ?? '').trim().length > 0) {
-                                console.log(
-                                    `[enrichment] selected provider enriched after ${round + 1} round(s)`
-                                );
-                            }
-                        }
-                    },
-                    onStop: (reason, rounds) => {
-                        if (process.env.NODE_ENV !== 'development') return;
-                        console.log(
-                            `[enrichment] selected provider polling stopped: ${reason} after ${rounds} round(s)`
-                        );
-                    },
-                }
-            );
-        })();
-
-        return () => {
-            cancelled = true;
-            abortController.abort();
+            // Always clear: if `cancelled` is true, `finally` above skips setState and loading stuck true (infinite skeleton).
+            setIsEnrichmentLoading(false);
         };
     }, [
+        enrichmentPendingKey,
+        providers.length,
+        providersFromViewportCache,
         resolveTradeContext,
-        selectedProvider?.placeId,
-        selectedProvider?.providerId,
-        selectedProviderHasSummary,
+        enrichmentKick,
     ]);
 
     useEffect(() => {
@@ -494,78 +610,35 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
         };
     }, [selectedProvider?.providerId, scandioReviewCountByProviderId]);
 
-    const lastProvidersErrorToastAtRef = useRef<number>(0);
+    const normalizePlaceKey = useCallback((id: string) => id.replace(/^places\//, '').trim(), []);
+
+    const handleMapMarkerClick = useCallback(
+        (placeId: string) => {
+            const target = normalizePlaceKey(placeId);
+            const idx = sortedProviders.findIndex((p) => normalizePlaceKey(p.placeId) === target);
+            if (idx >= 0) {
+                setCompanyIndex(idx + 1);
+                setMapExpandRequestId((n) => n + 1);
+            }
+        },
+        [normalizePlaceKey, sortedProviders, setCompanyIndex]
+    );
+
     const { mapHostRef } = useMatchMap({
         userLocation,
         providers,
+        onMarkerClick: handleMapMarkerClick,
+        showSearchRadius: true,
         searchRadiusMeters,
-        onMarkerClick: (placeId) => {
-            const idx = topProviders.findIndex((p) => p.placeId === placeId);
-            if (idx >= 0) setCompanyIndex(idx + 1);
-        },
+        showUserPin: true,
+        selectedPlaceId: selectedProvider?.placeId ?? null,
+        viewportSearch: false,
     });
 
     useEffect(() => {
-        if (topProviders.length === 0) return;
-        setCompanyIndex((prev) => Math.min(Math.max(prev, 1), topProviders.length));
-    }, [topProviders.length, setCompanyIndex]);
-
-
-    const googleMapsLink = useMemo(() => {
-        if (!userLocation) return '';
-        const q = `${userLocation.lat},${userLocation.lng}`;
-        return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`;
-    }, [userLocation]);
-    useEffect(() => {
-        let cancelled = false;
-        void (async () => {
-            const candidates = Array.from(
-                new Set(
-                    [
-                        conversationId,
-                        searchParams.get('reportId') || '',
-                        searchParams.get('id') || '',
-                        searchParams.get('conversationId') || '',
-                    ]
-                        .map((v) => v.trim())
-                        .filter(Boolean)
-                )
-            );
-            if (candidates.length === 0) {
-                if (!cancelled) setResolvedReportId('');
-                return;
-            }
-
-            for (const candidate of candidates) {
-                const result = await fetchConversationDiagnosis(candidate);
-                if (cancelled) return;
-                if (result.ok && result.data) {
-                    setResolvedReportId(candidate);
-                    return;
-                }
-            }
-
-            if (!cancelled) setResolvedReportId(candidates[0] ?? '');
-        })();
-        return () => {
-            cancelled = true;
-        };
-    }, [conversationId, searchParams]);
-    const reportPath = useMemo(() => {
-        if (!resolvedReportId) return '';
-        return `/report/${encodeURIComponent(resolvedReportId)}`;
-    }, [resolvedReportId]);
-    const reportUrl = useMemo(() => {
-        if (!reportPath) return '';
-        if (typeof window === 'undefined') return reportPath;
-        return `${window.location.origin}${reportPath}`;
-    }, [reportPath]);
-    const fetchProviders = useCallback(async () => {
-        const loc = await ensureLocation();
-        if (!loc) return;
-        await refreshProvidersForLocation(loc);
-        bumpSuppressDebouncedProviderRefresh();
-    }, [bumpSuppressDebouncedProviderRefresh, ensureLocation, refreshProvidersForLocation]);
+        if (sheetProviders.length === 0) return;
+        setCompanyIndex((prev) => Math.min(Math.max(prev, 1), sheetProviders.length));
+    }, [sheetProviders.length, setCompanyIndex]);
 
     const updateLocationFromAddress = useCallback(
         async (address: string) => {
@@ -577,6 +650,8 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
             setIsLoading(true);
             setProviders([]);
             setCompanyIndex(1);
+            setSearchRadiusMeters(DEFAULT_SEARCH_RADIUS_METERS);
+            lastProviderFetchKeyRef.current = '';
 
             try {
                 const coordMatch = trimmed.match(/^\s*(-?\d+(?:\.\d+)?)\s*[, ]\s*(-?\d+(?:\.\d+)?)\s*$/);
@@ -613,20 +688,19 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
                 setAddressInput(loc.address);
 
                 await persistConversationLocation(loc);
-
-                await refreshProvidersForLocation(loc);
-                bumpSuppressDebouncedProviderRefresh();
             } finally {
                 setIsUpdatingLocation(false);
                 setIsLoading(false);
             }
         },
-        [bumpSuppressDebouncedProviderRefresh, conversationId, persistConversationLocation, refreshProvidersForLocation]
+        [conversationId, persistConversationLocation, setUserLocation]
     );
 
     const handleUseCurrentLocation = useCallback(async () => {
         setIsLocatingUser(true);
         setIsLoading(true);
+        setSearchRadiusMeters(DEFAULT_SEARCH_RADIUS_METERS);
+        lastProviderFetchKeyRef.current = '';
         try {
             const coords = await getCurrentCoordinates();
             if (!coords) {
@@ -639,17 +713,13 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
             setUserLocation(loc);
             setAddressInput(formattedAddress);
             await persistConversationLocation(loc);
-            await refreshProvidersForLocation(loc);
-            bumpSuppressDebouncedProviderRefresh();
         } finally {
             setIsLocatingUser(false);
             setIsLoading(false);
         }
     }, [
-        bumpSuppressDebouncedProviderRefresh,
         getCurrentCoordinates,
         persistConversationLocation,
-        refreshProvidersForLocation,
         reverseGeocodeLatLng,
         setAddressInput,
         setUserLocation,
@@ -664,7 +734,7 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
             }
             setIsLoading(true);
             try {
-                await fetchProviders();
+                await ensureLocation();
             } finally {
                 if (!cancelled) setIsLoading(false);
             }
@@ -673,33 +743,12 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
         return () => {
             cancelled = true;
         };
-    }, [conversationId, fetchProviders]);
+    }, [conversationId, ensureLocation]);
 
     useEffect(() => {
         if (!userLocation) return;
         setAddressInput(userLocation.address || `${userLocation.lat}, ${userLocation.lng}`);
     }, [userLocation]);
-
-    // Debounce radius/location changes so rapid badge clicks settle before firing.
-    useEffect(() => {
-        if (!userLocation) return;
-        if (isUpdatingLocation) return;
-        if (skipNextAutoRefreshRef.current) {
-            skipNextAutoRefreshRef.current = false;
-            return;
-        }
-        const timer = setTimeout(() => {
-            if (Date.now() < suppressDebouncedProviderRefreshUntilRef.current) return;
-            void refreshProvidersForLocation(userLocation);
-        }, 300);
-        providerRefreshDebounceTimerRef.current = timer;
-        return () => {
-            clearTimeout(timer);
-            if (providerRefreshDebounceTimerRef.current === timer) {
-                providerRefreshDebounceTimerRef.current = null;
-            }
-        };
-    }, [isUpdatingLocation, refreshProvidersForLocation, searchRadiusMeters, userLocation]);
 
     const goPrev = () => setCompanyIndex((v) => Math.max(1, v - 1));
     const goNext = () => setCompanyIndex((v) => Math.min(totalCompanies, v + 1));
@@ -760,439 +809,343 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
             provider_id: targetProvider.providerId,
             diagnosis_id: conversationId,
         });
-        if (!hasEnrichedSummary(enrichmentCache, targetProvider)) {
+        if (!matchCardEnrichmentResolved(enrichmentCache, targetProvider)) {
             const { trade } = await resolveTradeContext();
-            queueEnrichmentApi([targetProvider.placeId], trade || undefined);
+            void queueEnrichmentApi([targetProvider.placeId], trade || undefined, {
+                priorityPlaceId: targetProvider.placeId,
+                providerIds: [targetProvider.providerId],
+            }).catch(() => {});
         }
         const cid = conversationId ? `?conversationId=${encodeURIComponent(conversationId)}` : '';
         router.push(`/pro/${encodeURIComponent(targetProvider.providerId)}${cid}`);
     }, [conversationId, enrichmentCache, resolveTradeContext, router]);
 
-    const handleOpenReportInNewTab = useCallback(() => {
-        if (!reportPath) return;
-        window.open(reportPath, '_blank', 'noopener,noreferrer');
-    }, [reportPath]);
-
-    const handleCopyReportLink = useCallback(async () => {
-        if (!reportUrl) return;
-        try {
-            await navigator.clipboard.writeText(reportUrl);
-            setReportLinkCopied(true);
-            toast.success('Scandio report link copied');
-            window.setTimeout(() => setReportLinkCopied(false), 2000);
-        } catch {
-            toast.error('Could not copy report link');
-        }
-    }, [reportUrl]);
-
     return (
-        <main className="flex min-h-screen flex-col bg-background">
-            <FlowStepHeader step={3} onBack={() => router.back()} />
-            <div className="mx-auto flex w-full max-w-xl flex-1 flex-col gap-4 px-4 pb-4 pt-20 sm:px-6">
-                <div className="flex flex-col gap-2">
-                    <h1 className="text-3xl font-semibold text-foreground">Header Name</h1>
-                    <p className="text-sm text-muted-foreground">
-                        Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore.
+        <MatchMapSheetLayout
+            onClose={() => router.back()}
+            expandRequestId={mapExpandRequestId}
+            scrollToKey={selectedProvider?.placeId ?? null}
+            getScrollTarget={() =>
+                selectedProvider
+                    ? providerCardRefs.current[selectedProvider.placeId] ?? null
+                    : null
+            }
+            headerRight={
+                <div className="flex w-full min-w-0 items-center gap-2">
+                    <Input
+                        id="match-address-input"
+                        placeholder="Your address"
+                        className="h-10 min-w-0 flex-1 text-sm"
+                        value={addressInput}
+                        onChange={(e) => setAddressInput(e.target.value)}
+                        onKeyDown={(e) => {
+                            if (e.key !== 'Enter') return;
+                            void updateLocationFromAddress(addressInput);
+                        }}
+                        disabled={isUpdatingLocation || isLoading}
+                    />
+                    <button
+                        type="button"
+                        aria-label="Use current location"
+                        className="inline-flex size-10 shrink-0 items-center justify-center rounded-md border border-input bg-background text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground disabled:opacity-50"
+                        disabled={isUpdatingLocation || isLoading || isLocatingUser}
+                        onClick={() => {
+                            void handleUseCurrentLocation();
+                        }}
+                    >
+                        {isLocatingUser ? (
+                            <Loader2 className="size-4 animate-spin" />
+                        ) : (
+                            <LocateFixed className="size-4" />
+                        )}
+                    </button>
+                </div>
+            }
+            mapSlot={<div ref={mapHostRef} className="absolute inset-0 h-full w-full" />}
+            mapLoadingOverlay={
+                showBottomSkeleton || !userLocation ? (
+                    <div className="pointer-events-none absolute inset-0 z-[1] flex items-center justify-center bg-muted/50">
+                        <p className="px-4 text-center text-xs text-muted-foreground">
+                            {isLoading || isProvidersLoading
+                                ? 'Finding service providers…'
+                                : 'Add your address or use current location'}
+                        </p>
+                    </div>
+                ) : null
+            }
+        >
+                <div className="flex flex-col gap-1 text-center">
+                    <p className="text-sm font-semibold text-foreground">
+                        {!showBottomSkeleton && sheetProviders.length > 0
+                            ? `${sheetProviders.length} Service Provider${sheetProviders.length === 1 ? '' : 's'}`
+                            : 'Providers'}
                     </p>
-                </div>
-
-                <div className="relative h-52 w-full overflow-hidden rounded-lg bg-secondary">
-                    <div ref={mapHostRef} className="absolute inset-0 h-full w-full rounded-lg" />
-                    {!userLocation || isLoading ? (
-                        <p className="relative z-10 flex h-full items-center justify-center px-4 text-xs text-muted-foreground">
-                            {isLoading ? 'Finding Service Providers...' : null}
-                        </p>
-                    ) : null}
-                </div>
-
-                {reportPath ? (
-                    <div className="flex items-center justify-between rounded-lg border border-input bg-card p-3">
-                        <div className="min-w-0">
-                            <p className="text-sm font-semibold text-foreground">Scandio Scan</p>
-                            <p className="truncate text-xs text-muted-foreground">Open or copy your diagnosis link</p>
-                        </div>
-                        <div className="ml-3 flex shrink-0 items-center gap-2">
-                            <Button
-                                type="button"
-                                variant="secondary"
-                                size="icon"
-                                className="h-9 w-9"
-                                onClick={handleOpenReportInNewTab}
-                                aria-label="Open Scandio scan in new tab"
-                            >
-                                <ExternalLink className="size-4" aria-hidden />
-                            </Button>
-                            <Button
-                                type="button"
-                                variant="secondary"
-                                size="icon"
-                                className="h-9 w-9"
-                                onClick={() => {
-                                    void handleCopyReportLink();
-                                }}
-                                aria-label="Copy Scandio scan link"
-                            >
-                                {reportLinkCopied ? (
-                                    <Check className="size-4" aria-hidden />
-                                ) : (
-                                    <Copy className="size-4" aria-hidden />
-                                )}
-                            </Button>
-                        </div>
-                    </div>
-                ) : null}
-
-                {showBottomSkeleton ? (
-                    <div className="flex flex-row items-center justify-between gap-4 truncate">
-                        <Skeleton className="h-4 w-56" />
-                        <Skeleton className="h-4 w-20" />
-                    </div>
-                ) : selectedProvider ? (
-                    <div className="flex flex-row items-center justify-between gap-4 truncate">
-                        <p className="truncate text-sm">
-                            {formatProviderAddress(selectedProvider.address) || 'Address not available'}
-                        </p>
-                        <span className="inline-flex items-center gap-1.5 text-sm text-muted-foreground">
-                            <Car className="size-4" aria-hidden="true" />
-                            {selectedProvider.durationText
-                                ? selectedProvider.durationText.replace(/\bmin\b/gi, 'Minutes')
-                                : 'Not available'}
-                        </span>
-                    </div>
-                ) : null}
-
-                <div className="space-y-4 rounded-lg border border-input bg-card p-4">
-                    <div className="relative">
-                        <Input
-                            id="match-address-input"
-                            placeholder="Enter your address"
-                            className="h-10 pr-11 text-sm"
-                            value={addressInput}
-                            onChange={(e) => setAddressInput(e.target.value)}
-                            onKeyDown={(e) => {
-                                if (e.key !== 'Enter') return;
-                                void updateLocationFromAddress(addressInput);
-                            }}
-                            disabled={isUpdatingLocation || isLoading}
-                        />
-                        <button
-                            type="button"
-                            aria-label="Use current location"
-                            className="absolute inset-y-0 right-1 my-1 inline-flex w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground disabled:opacity-50"
-                            disabled={isUpdatingLocation || isLoading || isLocatingUser}
-                            onClick={() => {
-                                void handleUseCurrentLocation();
-                            }}
-                        >
-                            {isLocatingUser ? (
-                                <Loader2 className="size-4 animate-spin" />
-                            ) : (
-                                <LocateFixed className="size-4" />
-                            )}
-                        </button>
-                    </div>
-                    <div className="flex flex-row items-center justify-between">
-                        <label className="text-sm font-medium text-foreground">Search Radius</label>
-                        <div className="flex flex-row items-center gap-2 overflow-x-auto">
-                            {RADIUS_OPTIONS_KM.map((km) => {
-                                const isActive = searchRadiusKm === km;
-                                return (
-                                    <Badge
-                                        key={km}
-                                        variant={isActive ? 'default' : 'secondary'}
-                                        className="shrink-0 cursor-pointer rounded-full"
-                                        role="button"
-                                        aria-pressed={isActive}
-                                        onClick={() => setSearchRadiusKm(km)}
-                                    >
-                                        {km} km
-                                    </Badge>
-                                );
-                            })}
-                        </div>
-                    </div>
-                    {!showBottomSkeleton && isLoadingMoreForExpandedRadius ? (
+                    {!showBottomSkeleton && userLocation ? (
                         <p className="text-xs text-muted-foreground">
-                            Expanding your search radius and loading more contractors...
+                            Within {searchRadiusMeters >= EXTENDED_SEARCH_RADIUS_METERS ? 50 : 25} km of your
+                            address
                         </p>
-                    ) : !showBottomSkeleton && isRefreshingProvidersInBackground ? (
-                        <p className="text-xs text-muted-foreground">Refreshing recommendations...</p>
+                    ) : null}
+                    {!showBottomSkeleton && isRefreshingProvidersInBackground ? (
+                        <p className="text-xs text-muted-foreground">Updating results for this view…</p>
                     ) : null}
                 </div>
 
-                <div className="flex flex-col gap-4">
-                <div
-                    className={
-                        noProviders
-                            ? 'flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-4'
-                            : 'flex flex-row justify-between items-center'
-                    }
-                >
-                    <div className="min-w-0">
-                        <h3 className="text-xl font-bold text-foregroundimage.png">Top Recommendations</h3>
-                        {noProviders ? (
-                            <p className="mt-1 text-sm text-muted-foreground">
-                                We couldn&apos;t find matching contractors for this location yet.
-                            </p>
-                        ) : null}
-                    </div>
-                    {!noProviders ? (
-                        <div className="flex flex-row gap-2 shrink-0">
-                            <Button
-                                variant="secondary"
-                                className="h-10 w-10"
-                                aria-label="Previous Company"
-                                onClick={goPrev}
-                                disabled={showBottomSkeleton || companyIndex === 1}
-                            >
-                                {showBottomSkeleton ? <Skeleton className="h-4 w-4" /> : <ArrowLeft className="size-5" aria-hidden="true" />}
-                            </Button>
-                            <Button
-                                variant="secondary"
-                                className="h-10 w-10"
-                                aria-label="Next Company"
-                                onClick={goNext}
-                                disabled={showBottomSkeleton || companyIndex === totalCompanies}
-                            >
-                                {showBottomSkeleton ? <Skeleton className="h-4 w-4" /> : <ArrowRight className="size-5" aria-hidden="true" />}
-                            </Button>
-                        </div>
-                    ) : null}
-                </div>
                 {showBottomSkeleton ? (
-                <div className="flex flex-col gap-4 p-4 border border-input rounded-lg bg-card">
+                    <>
+                        <h3 className="text-xl font-bold text-foreground">Top Recommendations</h3>
                         <div className="flex flex-col gap-4">
-                            <div className="flex flex-col gap-2">
-                                <Skeleton className="h-6 w-56" />
-                                <Skeleton className="h-4 w-full" />
-                            </div>
-                            <div className="flex flex-col gap-1">
-                                <Skeleton className="h-4 w-40" />
-                                <Skeleton className="h-4 w-full" />
-                                <Skeleton className="h-4 w-3/4" />
-                            </div>
-                            <div className="flex flex-row gap-2">
-                                <Skeleton className="flex-1 h-10" />
-                                <Skeleton className="flex-1 h-10" />
-                            </div>
-                        </div>
-                </div>
-                    ) : noProviders ? (
-                        <MatchNoProvidersEmpty onEditAddress={focusAddressSearch} />
-                    ) : (
-                <div className="flex flex-col gap-4 p-4 border border-input rounded-lg bg-card">
-                        <>
-                            <div className="flex flex-col gap-2">
-                                <h3 className="text-lg text-foreground font-bold truncate">
-                                    {selectedProvider?.name}
-                                </h3>
-                                <div className="flex flex-row items-center gap-2">
-                                    <Star className="size-5 text-yellow-500 fill-yellow-500" aria-hidden="true" />
-                                    <p className="text-sm text-foreground font-bold">
-                                        {selectedProvider?.rating != null ? selectedProvider.rating.toFixed(1) : 'Not available'}
-                                    </p>
-                                    <p className="text-xs text-muted-foreground">
-                                        {(() => {
-                                            const pid = selectedProvider?.providerId;
-                                            const scandioCountFromProvider =
-                                                typeof selectedProvider?.scandioReviewCount === 'number'
-                                                    ? selectedProvider.scandioReviewCount
-                                                    : 0;
-                                            const scandioCountFromMap =
-                                                pid && typeof scandioReviewCountByProviderId[pid] === 'number'
-                                                    ? scandioReviewCountByProviderId[pid]
-                                                    : 0;
-                                            const scandioCount = scandioCountFromProvider || scandioCountFromMap;
-                                            const googleCount = selectedProvider?.ratingCount ?? 0;
-                                            return `(${googleCount + scandioCount} reviews)`;
-                                        })()}
-                                    </p>
-                                    {typeof selectedProvider?.isOpen === 'boolean' ? (
-                                        <Badge
-                                            variant="secondary"
-                                        >
-                                            {selectedProvider.isOpen ? 'Open' : 'Closed'}
-                                        </Badge>
-                                    ) : null}
-                                </div>
-                            </div>
-
-                            {(() => {
-                                if (!selectedProvider) return null;
-                                const enrich = enrichmentEntryForProvider(
-                                    enrichmentCache,
-                                    selectedProvider
-                                );
-                                const scandioSummary = (enrich?.reviewSummary ?? '').trim();
-                                const fallbackSummary = (selectedProvider.summary ?? '').trim();
-                                const displaySummary = formatCustomerSummary(
-                                    scandioSummary || fallbackSummary,
-                                    selectedProvider.name
-                                );
-                                const pendingText = isEnrichmentLoading
-                                    ? 'Scandio summary is being prepared now.'
-                                    : 'No customer summary available yet.';
-
-                                return (
-                                    <div className="flex flex-col gap-1">
-                                        <p
-                                            className="text-sm text-muted-foreground"
-                                            style={{
-                                                display: '-webkit-box',
-                                                WebkitLineClamp: 4 as any,
-                                                WebkitBoxOrient: 'vertical',
-                                                overflow: 'hidden',
-                                            }}
-                                        >
-                                            {displaySummary || pendingText}
-                                        </p>
+                            {Array.from({ length: 3 }).map((_, i) => (
+                                <div
+                                    key={`sk-${i}`}
+                                    className="flex flex-col gap-4 rounded-lg border border-border bg-background p-6"
+                                >
+                                    <div className="space-y-2">
+                                        <Skeleton className="h-6 w-56" />
+                                        <Skeleton className="h-4 w-44" />
                                     </div>
-                                );
-                            })()}
+                                    <Skeleton className="h-4 w-full" />
+                                    <Skeleton className="h-4 w-[92%]" />
+                                    <div className="flex gap-4">
+                                        <Skeleton className="h-10 flex-1" />
+                                        <Skeleton className="h-10 flex-1" />
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </>
+                ) : noProviders ? (
+                    <MatchNoProvidersEmpty onEditAddress={focusAddressSearch} />
+                ) : (
+                    <div className="flex flex-col gap-4">
+                        {sheetProviders.map((provider, idx) => {
+                            const enrich = enrichmentEntryForProvider(enrichmentCache, provider);
+                            const scandioSummary = (enrich?.reviewSummary ?? '').trim();
+                            const googleSummary = (provider.summary ?? '').trim();
+                            const providerAiSummary = (provider.enrichmentReviewSummary ?? '').trim();
+                            const displaySummary =
+                                scandioSummary || googleSummary || providerAiSummary;
+                            const reviewCount = totalReviewCountForProvider(
+                                provider,
+                                scandioReviewCountByProviderId
+                            );
+                            const enrichmentResolved = matchCardEnrichmentResolved(
+                                enrichmentCache,
+                                provider
+                            );
+                            const showSummarySkeleton =
+                                !displaySummary &&
+                                !enrichmentResolved &&
+                                isEnrichmentLoading &&
+                                !summarySkeletonLongWait;
 
-                            <div className="flex flex-row gap-2">
-                                <Popover
-                                    open={contactOpen}
-                                    onOpenChange={(open) => {
-                                        setContactOpen(open);
-                                        if (open) trackProviderContactOnceOnOpen();
-                                    }}
-                                >
-                                    <PopoverTrigger asChild>
-                                        <Button
-                                            variant="default"
-                                            className="flex flex-1 h-10"
-                                            disabled={!selectedProvider}
-                                        >
-                                            Contact Contractor
-                                        </Button>
-                                    </PopoverTrigger>
-                                    <PopoverContent
-                                        className="w-64 p-3 rounded-md shadow-xl border-input"
-                                        align="start"
-                                        side="top"
-                                        sideOffset={4}
-                                    >
-                                        <div className="flex flex-col gap-3">
-                                            <Button
-                                                variant="secondary"
-                                                className="w-full"
-                                                onClick={() => {
-                                                    const phone = toWhatsAppPhone(selectedProvider?.phone);
-                                                    if (phone) {
-                                                        trackContactIntent('whatsapp');
-                                                        window.open(
-                                                            `https://wa.me/${phone}`,
-                                                            '_blank',
-                                                            'noopener,noreferrer'
-                                                        );
-                                                    }
-                                                    setContactOpen(false);
-                                                }}
-                                                disabled={!toWhatsAppPhone(selectedProvider?.phone)}
-                                            >
-                                                WhatsApp
-                                            </Button>
-                                            <p className="text-xs text-muted-foreground text-center">
-                                                Start on WhatsApp, call them, or send an email.
-                                            </p>
-                                            <div className="flex flex-row gap-2">
-                                                <Button
-                                                    variant="ghost"
-                                                    className="flex-1 h-10"
-                                                    onClick={() => {
-                                                        if (selectedProvider?.phone) {
-                                                            trackContactIntent('phone');
-                                                            window.location.href = `tel:${selectedProvider.phone}`;
-                                                        }
-                                                        setContactOpen(false);
-                                                    }}
-                                                    disabled={!selectedProvider?.phone}
-                                                >
-                                                    Phone
-                                                </Button>
-                                                <Button
-                                                    variant="ghost"
-                                                    className="flex-1 h-10"
-                                                    onClick={() => {
-                                                        if (selectedProvider?.website) {
-                                                            trackContactIntent('email');
-                                                            window.location.href = `mailto:${selectedProvider.website}`;
-                                                        }
-                                                        setContactOpen(false);
-                                                    }}
-                                                    disabled={!selectedProvider?.website}
-                                                >
-                                                    Email
-                                                </Button>
-                                            </div>
-                                        </div>
-                                    </PopoverContent>
-                                </Popover>
-                                <Button
-                                    variant="ghost"
-                                    className="flex flex-1 h-10"
-                                    onClick={() => {
-                                        void openProviderDetails(selectedProvider);
-                                    }}
-                                    disabled={!selectedProvider?.providerId}
-                                >
-                                    View Profile
-                                </Button>
-                            </div>
-                        </>
-                </div>
-                    )}
-
-                {!showBottomSkeleton && otherProviders.length > 0 ? (
-                    <div className="flex flex-col gap-2">
-                        <h3 className="text-sm font-semibold text-foreground">Other recommendations</h3>
-                        <div>
-                            <div className="flex flex-col gap-2 pr-1">
-                                {otherProviders.map((provider) => (
+                            return (
+                                <Fragment key={provider.placeId}>
+                                    {idx === 0 ? (
+                                        <h3 className="text-xl font-bold text-foreground">Top Recommendations</h3>
+                                    ) : null}
                                     <div
-                                        key={provider.placeId}
-                                        className="flex items-center justify-between gap-3 rounded-lg border border-input bg-card px-3 py-2.5"
+                                        ref={(el) => {
+                                            providerCardRefs.current[provider.placeId] = el;
+                                        }}
+                                        className="flex flex-col gap-4 rounded-lg border border-border bg-background p-6"
                                     >
-                                        <div className="min-w-0 flex-1">
-                                            <p className="truncate text-sm font-medium text-foreground">{provider.name}</p>
-                                            <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
-                                                <span className="inline-flex items-center gap-1">
-                                                    <Star className="size-3.5 fill-yellow-500 text-yellow-500" aria-hidden="true" />
-                                                    {provider.rating != null ? provider.rating.toFixed(1) : '—'}
-                                                </span>
-                                                <span>
-                                                    {(provider.ratingCount ?? 0) +
-                                                        (typeof provider.scandioReviewCount === 'number'
-                                                            ? provider.scandioReviewCount
-                                                            : 0)} reviews
-                                                </span>
+                                        <div className="flex flex-col gap-2">
+                                            <h3 className="truncate text-lg font-bold text-foreground">
+                                                {formatBusinessName(provider.name)}
+                                            </h3>
+                                            <div className="flex flex-row flex-wrap items-center gap-2">
+                                                <Star
+                                                    className="size-5 shrink-0 text-yellow-500"
+                                                    weight="fill"
+                                                    aria-hidden="true"
+                                                />
+                                                <p className="text-sm font-bold text-foreground tabular-nums">
+                                                    {provider.rating != null ? provider.rating.toFixed(1) : 'N/A'}
+                                                </p>
+                                                <p className="text-xs text-muted-foreground">
+                                                    {reviewCount}{' '}
+                                                    {reviewCount === 1 ? 'Review' : 'Reviews'}
+                                                </p>
                                                 {typeof provider.isOpen === 'boolean' ? (
-                                                    <Badge variant="secondary" className="h-5 px-2 text-[10px]">
+                                                    <Badge variant="secondary">
                                                         {provider.isOpen ? 'Open' : 'Closed'}
                                                     </Badge>
                                                 ) : null}
                                             </div>
                                         </div>
-                                        <Button
-                                            variant="secondary"
-                                            className="h-8 shrink-0 px-3"
-                                            onClick={() => {
-                                                void openProviderDetails(provider);
-                                            }}
-                                            disabled={!provider.providerId}
-                                        >
-                                            View
-                                        </Button>
+
+                                        <div className="flex flex-col gap-4">
+                                            {displaySummary ? (
+                                                <p className="text-sm text-muted-foreground">
+                                                    {formatCustomerSummary(displaySummary, provider.name)}
+                                                </p>
+                                            ) : showSummarySkeleton ? (
+                                                <div
+                                                    className="flex flex-col gap-2"
+                                                    aria-busy="true"
+                                                    aria-label="Loading Review Summary"
+                                                >
+                                                    <Skeleton className="h-3.5 w-full" />
+                                                    <Skeleton className="h-3.5 w-[94%]" />
+                                                    <Skeleton className="h-3.5 w-[78%]" />
+                                                </div>
+                                            ) : isEnrichmentLoading && summarySkeletonLongWait ? (
+                                                <p className="text-sm text-muted-foreground">
+                                                    Review summary is taking longer than usual — open the profile
+                                                    for full details.
+                                                </p>
+                                            ) : !isEnrichmentLoading ? (
+                                                <p className="text-sm text-muted-foreground">
+                                                    We're still generating this summary...
+
+                                                </p>
+                                            ) : null}
+                                            <div className="flex flex-col gap-2 text-xs text-muted-foreground">
+                                                <div className="flex items-start gap-2">
+                                                    <MapTrifold
+                                                        className="mt-0.5 size-3.5 shrink-0 text-muted-foreground"
+                                                        aria-hidden="true"
+                                                    />
+                                                    <span className="min-w-0 break-words">
+                                                        {formatProviderAddress(provider.address) ||
+                                                            'Address not available'}
+                                                    </span>
+                                                </div>
+                                                {provider.durationText ? (
+                                                    <div className="flex items-center gap-2">
+                                                        <Car
+                                                            className="size-3.5 shrink-0 text-muted-foreground"
+                                                            aria-hidden="true"
+                                                        />
+                                                        <span>{formatDuration(provider.durationText)}</span>
+                                                    </div>
+                                                ) : null}
+                                            </div>
+                                        </div>
+
+                                        <div className="flex flex-row justify-end gap-4">
+                                            <Button
+                                                type="button"
+                                                variant="ghost"
+                                                className="h-10 flex-1"
+                                                onClick={() => {
+                                                    void openProviderDetails(provider);
+                                                }}
+                                                disabled={!provider.providerId}
+                                            >
+                                                View More
+                                            </Button>
+                                            <Popover
+                                                open={contactOpen && companyIndex - 1 === idx}
+                                                onOpenChange={(open) => {
+                                                    if (open) setCompanyIndex(idx + 1);
+                                                    setContactOpen(open);
+                                                    if (open) trackProviderContactOnceOnOpen();
+                                                }}
+                                            >
+                                                <PopoverTrigger asChild>
+                                                    <Button type="button" className="h-10 flex-1">
+                                                        Contact Contractor
+                                                    </Button>
+                                                </PopoverTrigger>
+                                                <PopoverContent
+                                                    className="w-64 rounded-md border-input p-3 shadow-xl"
+                                                    align="start"
+                                                    side="top"
+                                                    sideOffset={4}
+                                                >
+                                                    <div className="flex flex-col gap-3">
+                                                        <Button
+                                                            variant="secondary"
+                                                            className="w-full"
+                                                            onClick={() => {
+                                                                const phone = toWhatsAppPhone(provider.phone);
+                                                                if (phone) {
+                                                                    trackContactIntent('whatsapp');
+                                                                    window.open(
+                                                                        `https://wa.me/${phone}`,
+                                                                        '_blank',
+                                                                        'noopener,noreferrer'
+                                                                    );
+                                                                }
+                                                                setContactOpen(false);
+                                                            }}
+                                                            disabled={!toWhatsAppPhone(provider.phone)}
+                                                        >
+                                                            WhatsApp
+                                                        </Button>
+                                                        <p className="text-center text-xs text-muted-foreground">
+                                                            Start on WhatsApp, call them, or send an email.
+                                                        </p>
+                                                        <div className="flex flex-row gap-2">
+                                                            <Button
+                                                                variant="ghost"
+                                                                className="h-9 flex-1"
+                                                                onClick={() => {
+                                                                    if (provider.phone) {
+                                                                        trackContactIntent('phone');
+                                                                        window.location.href = `tel:${provider.phone}`;
+                                                                    }
+                                                                    setContactOpen(false);
+                                                                }}
+                                                                disabled={!provider.phone}
+                                                            >
+                                                                Phone
+                                                            </Button>
+                                                            <Button
+                                                                variant="ghost"
+                                                                className="h-9 flex-1"
+                                                                onClick={() => {
+                                                                    if (provider.website) {
+                                                                        trackContactIntent('email');
+                                                                        window.location.href = `mailto:${provider.website}`;
+                                                                    }
+                                                                    setContactOpen(false);
+                                                                }}
+                                                                disabled={!provider.website}
+                                                            >
+                                                                Email
+                                                            </Button>
+                                                        </div>
+                                                    </div>
+                                                </PopoverContent>
+                                            </Popover>
+                                        </div>
                                     </div>
-                                ))}
-                            </div>
-                        </div>
+                                </Fragment>
+                            );
+                        })}
+                    </div>
+                )}
+
+                {!showBottomSkeleton && !noProviders && userLocation ? (
+                    <div className="flex flex-col gap-2">
+                        {searchRadiusMeters < EXTENDED_SEARCH_RADIUS_METERS ? (
+                            <Button
+                                type="button"
+                                variant="secondary"
+                                size="sm"
+                                className="w-fit self-center"
+                                disabled={isProvidersLoading}
+                                onClick={() => {
+                                    setSearchRadiusMeters(EXTENDED_SEARCH_RADIUS_METERS);
+                                    trackEvent('match_extend_radius', {
+                                        diagnosis_id: conversationId || undefined,
+                                        radius_km: 50,
+                                    });
+                                }}
+                            >
+                                {isProvidersLoading ? 'Updating…' : 'Extend Search Radius'}
+                            </Button>
+                        ) : (
+                            <p className="text-center text-xs text-muted-foreground">
+                                You are searching within 50 km. Change your address above to narrow results.
+                            </p>
+                        )}
                     </div>
                 ) : null}
-                </div>
-                </div>
-        </main>
+        </MatchMapSheetLayout>
     );
 }
 

@@ -6,6 +6,8 @@ export interface ProvidersRequestBody {
     pageToken?: string;
     searchQuery?: string;
     tradeDetail?: string;
+    /** Fast path for map-first UX: return eligible providers without slow DB enrich steps. */
+    quick?: boolean;
 }
 
 export interface ProviderSummaryMeta {

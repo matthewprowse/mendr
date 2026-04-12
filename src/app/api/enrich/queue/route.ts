@@ -2,10 +2,12 @@
  * POST /api/enrich/queue
  *
  * Accepts a list of Google Place IDs and an optional trade hint.
- * Maps each to a providers.id then runs the enrichment pipeline with
- * max 10 concurrent jobs and a 30-second per-job timeout.
+ * Maps each to a providers.id then runs enrichment with max 10 concurrent jobs.
  *
- * Body: { placeIds: string[]; trade?: string }
+ * Body: { placeIds: string[]; trade?: string; mode?: 'full'; ... }
+ *
+ * - Default (omit mode or `summary_fast`): DB reviews + one small Gemini call (~1s) — no scrape/images.
+ * - `full`: scrape + images + combined AI — 30s per-job cap.
  *
  * The client fires this without awaiting the response (fire-and-forget).
  * maxDuration is set to 300s so Vercel Pro does not kill in-flight jobs.
@@ -16,12 +18,15 @@ export const maxDuration = 300;
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseAdminClient } from '@/lib/supabase-server';
-import { enrichProvider } from '@/lib/provider-enrichment';
-import { toGooglePlaceId } from '@/app/api/providers/persistence';
+import { enrichProvider, enrichProviderReviewSummaryFast } from '@/lib/provider-enrichment';
+import { expandPlaceIdsForDbQuery, toGooglePlaceId } from '@/app/api/providers/persistence';
 import { checkRateLimit } from '@/lib/rate-limit-config';
 
 const MAX_CONCURRENT = 10;
-const JOB_TIMEOUT_MS = 30_000;
+const JOB_TIMEOUT_FULL_MS = 30_000;
+/** Wall budget for fast review-summary jobs (Gemini + DB; slightly above model timeout). */
+/** Must cover cold DB + Gemini; 8s caused silent timeouts before cache upsert (see debug S_GET rows=0). */
+const JOB_TIMEOUT_SUMMARY_FAST_MS = 30_000;
 const MAX_PLACE_IDS  = 30;
 
 // ── Simple semaphore ──────────────────────────────────────────────────────────
@@ -71,20 +76,39 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         };
         const body = await req.json().catch(() => null) as {
             placeIds?: unknown;
+            providerIds?: unknown;
             trade?: unknown;
             priorityPlaceId?: unknown;
             cacheVersion?: unknown;
+            mode?: unknown;
         } | null;
 
-        if (!body || !Array.isArray(body.placeIds) || body.placeIds.length === 0) {
-            return NextResponse.json({ error: 'placeIds array required' }, { status: 400 });
-        }
+        const rawPlaces = body && Array.isArray(body.placeIds) ? body.placeIds : [];
+        const rawProviderIds =
+            body && Array.isArray(body.providerIds)
+                ? (body.providerIds as unknown[]).filter((id) => typeof id === 'string' && id.trim())
+                : [];
 
-        const placeIds = (body.placeIds as string[])
+        const placeIds = (rawPlaces as string[])
             .filter((id) => typeof id === 'string' && id.trim())
             .map((id) => toGooglePlaceId(id.trim()))
             .slice(0, MAX_PLACE_IDS);
-        logStage(`normalized place ids (count=${placeIds.length})`, 'place_ids_normalized');
+        const UUID_RE =
+            /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        const providerIdsFromBody = (rawProviderIds as string[])
+            .map((id) => (typeof id === 'string' ? id.trim() : ''))
+            .slice(0, MAX_PLACE_IDS);
+        const nonEmptyProviderIds = providerIdsFromBody.filter((id) => UUID_RE.test(id));
+
+        if (placeIds.length === 0 && nonEmptyProviderIds.length === 0) {
+            return NextResponse.json({ error: 'placeIds or providerIds required' }, { status: 400 });
+        }
+
+        const placeIdsForQuery = placeIds.length > 0 ? expandPlaceIdsForDbQuery(placeIds) : [];
+        logStage(
+            `place ids (count=${placeIds.length}), provider uuids (count=${nonEmptyProviderIds.length}), queryVariants=${placeIdsForQuery.length}`,
+            'place_ids_normalized'
+        );
 
         const trade = typeof body.trade === 'string' && body.trade.trim()
             ? body.trade.trim()
@@ -104,23 +128,57 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
                 ? Math.floor(cacheVersionRaw)
                 : undefined;
 
-        // Resolve Google Place IDs → internal provider UUIDs
-        const admin = await createSupabaseAdminClient();
-        const { data: providers } = await admin
-            .from('providers')
-            .select('id, google_place_id')
-            .in('google_place_id', placeIds);
-        logStage(`providers resolved (count=${providers?.length ?? 0})`, 'providers_resolved');
+        const modeRaw = typeof body.mode === 'string' ? body.mode.trim().toLowerCase() : '';
+        // Default: fast review-summary path (~1s/provider). Opt in to full scrape pipeline with mode "full".
+        const summaryFast = modeRaw !== 'full' && modeRaw !== 'enrich_full';
+        const runJob = summaryFast
+            ? async (id: string) => {
+                  const r = await enrichProviderReviewSummaryFast(id, { trade, cacheVersion });
+                  if (!r.ok) throw new Error(r.reason ?? 'Fast enrich failed');
+              }
+            : async (id: string) => {
+                  const r = await enrichProvider(id, { trade, cacheVersion });
+                  if (!r.ok) throw new Error(r.reason ?? 'Enrich failed');
+              };
+        const jobTimeoutMs = summaryFast ? JOB_TIMEOUT_SUMMARY_FAST_MS : JOB_TIMEOUT_FULL_MS;
 
-        if (!providers || providers.length === 0) {
+        // Resolve Google Place IDs → internal provider UUIDs (fallback: internal UUIDs from match cards)
+        const admin = await createSupabaseAdminClient();
+        let providers: { id: string; google_place_id: string }[] = [];
+
+        if (placeIdsForQuery.length > 0) {
+            const { data: byPlace } = await admin
+                .from('providers')
+                .select('id, google_place_id')
+                .in('google_place_id', placeIdsForQuery);
+            providers = (byPlace ?? []) as { id: string; google_place_id: string }[];
+            logStage(`providers by place (count=${providers.length})`, 'providers_resolved');
+        }
+
+        if (providers.length === 0 && nonEmptyProviderIds.length > 0) {
+            const { data: byId } = await admin
+                .from('providers')
+                .select('id, google_place_id')
+                .in('id', nonEmptyProviderIds);
+            const rows = (byId ?? []) as { id: string; google_place_id: string }[];
+            const orderMap = new Map(nonEmptyProviderIds.map((id, idx) => [id, idx]));
+            providers = [...rows].sort(
+                (a, b) =>
+                    (orderMap.get(String(a.id)) ?? Number.MAX_SAFE_INTEGER) -
+                    (orderMap.get(String(b.id)) ?? Number.MAX_SAFE_INTEGER)
+            );
+            logStage(`providers by id fallback (count=${providers.length})`, 'providers_by_uuid');
+        }
+
+        if (providers.length === 0) {
             return NextResponse.json({ queued: 0, processed: 0 });
         }
 
         const inputOrder = new Map<string, number>();
         placeIds.forEach((id, idx) => inputOrder.set(id, idx));
         const orderedProviders = [...providers].sort((a, b) => {
-            const aId = String((a as any).google_place_id ?? '');
-            const bId = String((b as any).google_place_id ?? '');
+            const aId = String((a as { google_place_id?: string }).google_place_id ?? '');
+            const bId = String((b as { google_place_id?: string }).google_place_id ?? '');
             if (priorityPlaceId) {
                 if (aId === priorityPlaceId && bId !== priorityPlaceId) return -1;
                 if (bId === priorityPlaceId && aId !== priorityPlaceId) return 1;
@@ -138,18 +196,19 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         await Promise.all(
             orderedProviders.map(async (p) => {
                 const release = await semaphore();
+                const pid = String(p.id);
                 try {
                     await Promise.race([
-                        enrichProvider(p.id as string, { trade, cacheVersion }),
+                        runJob(pid),
                         new Promise<void>((_, reject) =>
                             setTimeout(
                                 () => reject(new Error('Job timeout')),
-                                JOB_TIMEOUT_MS
+                                jobTimeoutMs
                             )
                         ),
                     ]);
                 } catch {
-                    // Individual job failures are non-fatal.
+                    /* job failed or timed out — enrichProvider* logs details */
                 } finally {
                     release();
                 }

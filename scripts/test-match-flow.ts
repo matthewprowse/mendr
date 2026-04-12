@@ -1,3 +1,7 @@
+/**
+ * Lightweight checks for match ranking / providers query helpers.
+ * Fast Gemini review-summary JSON parsing: `npm run test:enrichment-summary`.
+ */
 import assert from 'node:assert/strict';
 import { buildProviderQuery } from '../src/app/api/providers/query-builder';
 import { rankProviders } from '../src/app/api/providers/ranking';

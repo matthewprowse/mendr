@@ -391,7 +391,7 @@ export default function WelcomePage() {
                         <Skeleton className="h-8 w-24 rounded-full" />
                     ) : (
                         <Badge variant="secondary">
-                            {providerIsOpen === true ? 'Open' : providerIsOpen === false ? 'Closed' : '—'}
+                            {providerIsOpen === true ? 'Open' : providerIsOpen === false ? 'Closed' : 'Unknown'}
                         </Badge>
                     )}
                 </div>

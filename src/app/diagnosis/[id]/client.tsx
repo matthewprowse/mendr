@@ -19,6 +19,8 @@ import { Separator } from '@/components/ui/separator';
 import { useAuth } from '@/context/auth-context';
 import { fetchConversationDiagnosis, patchConversation } from '@/lib/diagnoses-api';
 import { writeMatchTradeContextStorage } from '@/lib/match-trade-context';
+import { parseDiagnosisFromModelResponse } from '@/lib/parse-diagnosis-from-model-response';
+import { BetaCostEstimateCard } from '@/components/beta-cost-estimate-card';
 
 type DiagnosisPageClientProps = {
     conversationId: string;
@@ -37,78 +39,6 @@ const URGENCY_LABELS: Record<string, string> = {
     soon: 'Soon',
     planned: 'Planned',
 };
-
-function parseDiagnosisFromResponse(text: string): DiagnosisData | null {
-    const jsonBlockMatch = text.match(/<json>([\s\S]*?)<\/json>/i);
-    const candidate = jsonBlockMatch?.[1] ?? text;
-    // Try to find the first balanced JSON object if there is surrounding text.
-    const braceMatch = candidate.match(/\{[\s\S]*\}/);
-    const toParse = braceMatch ? braceMatch[0] : candidate;
-    try {
-        const parsed = JSON.parse(toParse) as any;
-        if (!parsed || typeof parsed !== 'object' || !parsed.diagnosis) return null;
-
-        // Be defensive about unexpected key casing / missing fields coming back from the model.
-        const diagnosis = typeof parsed.diagnosis === 'string' ? parsed.diagnosis.trim() : String(parsed.diagnosis ?? '');
-        const trade = typeof parsed.trade === 'string' ? parsed.trade.trim() : String(parsed.trade ?? '');
-        const action_required =
-            typeof parsed.action_required === 'string'
-                ? parsed.action_required
-                : typeof parsed.actionRequired === 'string'
-                  ? parsed.actionRequired
-                  : '';
-        const message =
-            typeof parsed.message === 'string'
-                ? parsed.message
-                : typeof parsed.Message === 'string'
-                  ? parsed.Message
-                  : '';
-
-        const estimated_cost =
-            typeof parsed.estimated_cost === 'string'
-                ? parsed.estimated_cost
-                : typeof parsed.estimatedCost === 'string'
-                  ? parsed.estimatedCost
-                  : typeof parsed.estimated_diagnosis_sentence === 'string'
-                    ? parsed.estimated_diagnosis_sentence
-                    : '';
-
-        const trade_detailRaw =
-            typeof parsed.trade_detail === 'string'
-                ? parsed.trade_detail
-                : typeof parsed.tradeDetail === 'string'
-                  ? parsed.tradeDetail
-                  : '';
-        const urgencyRaw =
-            typeof parsed.urgency_key === 'string'
-                ? parsed.urgency_key
-                : typeof parsed.urgencyKey === 'string'
-                  ? parsed.urgencyKey
-                  : '';
-        const urgency_key = urgencyRaw.trim().toLowerCase();
-
-        return {
-            ...(parsed as DiagnosisData),
-            thinking: typeof parsed.thinking === 'string' ? parsed.thinking : '',
-            diagnosis,
-            trade,
-            action_required,
-            message: message || undefined,
-            estimated_cost,
-            trade_detail: trade_detailRaw.trim().length > 0 ? trade_detailRaw : trade,
-            urgency_key:
-                urgency_key === 'immediate' ||
-                urgency_key === 'urgent' ||
-                urgency_key === 'soon' ||
-                urgency_key === 'planned'
-                    ? urgency_key
-                    : 'soon',
-        };
-    } catch {
-        // ignore
-    }
-    return null;
-}
 
 export function DiagnosisPageClient({ conversationId }: DiagnosisPageClientProps) {
     const router = useRouter();
@@ -225,7 +155,7 @@ export function DiagnosisPageClient({ conversationId }: DiagnosisPageClientProps
                     toast.error(errMsg);
                     return null;
                 }
-                const diag = parseDiagnosisFromResponse(text);
+                const diag = parseDiagnosisFromModelResponse(text);
                 if (!diag) {
                     toast.error('Could not understand the diagnosis response.');
                     return null;
@@ -299,7 +229,7 @@ export function DiagnosisPageClient({ conversationId }: DiagnosisPageClientProps
                     toast.error(errMsg);
                     return;
                 }
-                const diag = parseDiagnosisFromResponse(text);
+                const diag = parseDiagnosisFromModelResponse(text);
                 if (!diag) {
                     toast.error('Could not understand the updated diagnosis.');
                     return;
@@ -383,7 +313,7 @@ export function DiagnosisPageClient({ conversationId }: DiagnosisPageClientProps
                     const diag = await runInitialDiagnosis(
                         handoff.primaryAssetDataUrl,
                         handoff.initialPrompt ?? '',
-                        handoff.selectedService
+                        handoff.selectedService ?? null
                     );
                     if (!cancelled && !diag) {
                         // If diagnosis failed, send back to welcome so they can retry.
@@ -566,6 +496,13 @@ export function DiagnosisPageClient({ conversationId }: DiagnosisPageClientProps
                                             {diagnosis.action_required}
                                         </p>
                                     )}
+                                    {!diagnosis.requires_clarification &&
+                                    !diagnosis.rejected &&
+                                    !diagnosis.unserviced ? (
+                                        <div className="mt-4">
+                                            <BetaCostEstimateCard diagnosis={diagnosis} />
+                                        </div>
+                                    ) : null}
                                 </div>
                             )}
                         </section>

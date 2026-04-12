@@ -41,6 +41,7 @@ export type ProvidersRequest = {
     radius?: number;
     pageToken?: string;
     searchQuery?: string;
+    quick?: boolean;
 };
 
 export type ProvidersResponse = {

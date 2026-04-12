@@ -3,9 +3,9 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { getSupabase } from '@/lib/supabase';
-import type { DiagnosisData, Provider } from '@/app/chat/_components/types';
-import { ProviderCard } from '@/app/chat/_components/provider-card';
-import { ProvidersMap } from '@/app/chat/_components/providers-map';
+import type { DiagnosisData, Provider } from '@/app/chat/components/types';
+import { ProviderCard } from '@/app/chat/components/provider-card';
+import { ProvidersMap } from '@/app/chat/components/providers-map';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, ArrowRight } from '@/lib/icons';
 import { AppHeader } from '@/components/app-header';

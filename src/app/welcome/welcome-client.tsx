@@ -263,7 +263,7 @@ export default function WelcomePageClient() {
     };
 
     const handleStartDiagnosis = async () => {
-        if (!photoFile) return;
+        if (!photoFile || !locationValue.trim()) return;
 
         setIsStartingDiagnosis(true);
         try {
@@ -338,7 +338,9 @@ export default function WelcomePageClient() {
                     <Button
                         type="button"
                         className="h-10 w-full"
-                        disabled={!photoFile || isStartingDiagnosis}
+                        disabled={
+                            !photoFile || !locationValue.trim() || isStartingDiagnosis
+                        }
                         onClick={() => void handleStartDiagnosis()}
                     >
                         {isStartingDiagnosis ? "Starting…" : "Start Diagnosis"}

@@ -62,7 +62,7 @@ export function ProProviderClientPage({ providerId }: ProProviderClientPageProps
                     ) : null}
                     <div className="flex flex-wrap items-center gap-2 pt-1">
                         <Badge variant="secondary">
-                            {providerIsOpen === true ? 'Open now' : providerIsOpen === false ? 'Closed now' : 'Status unknown'}
+                            {providerIsOpen === true ? 'Open now' : providerIsOpen === false ? 'Closed now' : 'Unknown'}
                         </Badge>
                         {providerSpecialisations.slice(0, 4).map((item) => (
                             <Badge key={item} variant="outline">

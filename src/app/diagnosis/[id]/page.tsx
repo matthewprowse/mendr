@@ -11,7 +11,7 @@ type PageProps = {
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
     const { id } = await params;
     const base: Metadata = {
-        title: 'Diagnosis',
+        title: 'Your Diagnosis',
         description:
             'Review your home maintenance diagnosis on Scandio. Check what we found from your photo, add context if needed, and continue to find a specialist.',
     };
@@ -21,7 +21,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
         if (typeof d.diagnosis === 'string' && d.diagnosis && d.diagnosis !== 'N/A') {
             return {
                 ...base,
-                title: `${d.diagnosis.slice(0, 55)} | Diagnosis`,
+                title: `${d.diagnosis.slice(0, 55)} | Your Diagnosis`,
             };
         }
     }

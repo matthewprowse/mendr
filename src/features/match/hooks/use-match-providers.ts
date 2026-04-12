@@ -1,6 +1,6 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { fetchProvidersApi } from '../api/client';
+import { fetchProvidersApi, prefetchEnrichmentForMatchProviders } from '../api/client';
 import type { MatchLocation, MatchProvider } from '../contracts';
 
 const MATCH_PROVIDERS_CACHE_KEY = 'match.providers.cache.v1';
@@ -41,29 +41,53 @@ function writeCachedProviders(requestKey: string, providers: MatchProvider[]): v
     }
 }
 
-async function waitForPageVisible(signal: AbortSignal): Promise<void> {
+function buildViewportRequestKey(
+    loc: MatchLocation,
+    trade: string,
+    tradeDetail: string,
+    radiusMeters: number
+): string {
+    // Bucket viewport searches so tiny pans/zooms can instantly reuse nearby results.
+    // 3 decimals ~= 110m buckets; radius bucketed to 500m bands.
+    const latBucket = loc.lat.toFixed(3);
+    const lngBucket = loc.lng.toFixed(3);
+    const radiusBucket = String(Math.max(500, Math.round(radiusMeters / 500) * 500));
+    return [
+        latBucket,
+        lngBucket,
+        trade.trim().toLowerCase(),
+        tradeDetail.trim().toLowerCase(),
+        radiusBucket,
+    ].join('|');
+}
+
+async function waitForPageVisible(signal: AbortSignal, maxWaitMs = 2500): Promise<void> {
     if (typeof document === 'undefined') return;
     if (!document.hidden) return;
 
-    await new Promise<void>((resolve) => {
-        const onAbort = () => cleanup(resolve);
-        const onVis = () => {
-            if (!document.hidden) cleanup(resolve);
-        };
-        const cleanup = (done: () => void) => {
-            document.removeEventListener('visibilitychange', onVis);
-            signal.removeEventListener('abort', onAbort);
-            done();
-        };
+    await Promise.race([
+        new Promise<void>((resolve) => {
+            const onAbort = () => cleanup(resolve);
+            const onVis = () => {
+                if (!document.hidden) cleanup(resolve);
+            };
+            const cleanup = (done: () => void) => {
+                document.removeEventListener('visibilitychange', onVis);
+                signal.removeEventListener('abort', onAbort);
+                done();
+            };
 
-        document.addEventListener('visibilitychange', onVis, { passive: true });
-        signal.addEventListener('abort', onAbort, { passive: true } as any);
-    });
+            document.addEventListener('visibilitychange', onVis, { passive: true });
+            signal.addEventListener('abort', onAbort, { passive: true } as any);
+        }),
+        new Promise<void>((resolve) => {
+            const t = setTimeout(resolve, maxWaitMs);
+            signal.addEventListener('abort', () => clearTimeout(t), { once: true });
+        }),
+    ]);
 }
 
 function isSuspendedNetworkError(err: unknown): boolean {
-    // In practice, a suspended tab often yields a generic TypeError("Failed to fetch")
-    // with a console line showing net::ERR_NETWORK_IO_SUSPENDED.
     if (err instanceof DOMException && err.name === 'AbortError') return false;
     if (!(err instanceof Error)) return false;
     const msg = `${err.name} ${err.message}`.toLowerCase();
@@ -71,37 +95,52 @@ function isSuspendedNetworkError(err: unknown): boolean {
 }
 
 export function useMatchProviders(params: {
-    searchRadiusMeters: number;
     resolveTradeContext: () => Promise<{ trade: string; trade_detail: string }>;
+    /** When it changes, in-memory trade cache is cleared. */
+    conversationId?: string;
 }) {
-    const { searchRadiusMeters, resolveTradeContext } = params;
+    const { resolveTradeContext, conversationId } = params;
     const [providers, setProviders] = useState<MatchProvider[]>([]);
     const [companyIndex, setCompanyIndex] = useState(1);
     const [isProvidersLoading, setIsProvidersLoading] = useState(false);
-    const [isLoadingMoreForExpandedRadius, setIsLoadingMoreForExpandedRadius] = useState(false);
     const [isRefreshingProvidersInBackground, setIsRefreshingProvidersInBackground] = useState(false);
+    /**
+     * True while the visible list was seeded from the viewport sessionStorage cache (same area/trade).
+     * Match page skips card-level enrich/queue until a fresh `/api/providers` response replaces the list.
+     */
+    const [providersFromViewportCache, setProvidersFromViewportCache] = useState(false);
     const lastProvidersErrorToastAtRef = useRef<number>(0);
     const lastMissingTradeToastAtRef = useRef<number>(0);
-    // Store radius in a ref so the callback stays stable across radius changes.
-    const searchRadiusMetersRef = useRef(searchRadiusMeters);
-    searchRadiusMetersRef.current = searchRadiusMeters;
-    // Track previous radius so we can detect "expanded radius" fetches and append.
-    const previousRadiusRef = useRef(searchRadiusMeters);
-    // Keep latest providers in a ref for stable callback access.
     const providersRef = useRef<MatchProvider[]>(providers);
     providersRef.current = providers;
     const companyIndexRef = useRef(companyIndex);
     companyIndexRef.current = companyIndex;
-    // Track what the user has already had on screen (for "prefer unseen" ordering).
     const seenPlaceIdsRef = useRef<Set<string>>(new Set());
-    // AbortController ref — aborts stale in-flight requests when a newer one starts.
     const abortControllerRef = useRef<AbortController | null>(null);
-    // In-flight de-dupe for identical request parameters.
-    const inFlightRef = useRef<{ key: string; promise: Promise<void>; controller: AbortController } | null>(null);
+    const inFlightRef = useRef<{ key: string; promise: Promise<void>; controller: AbortController } | null>(
+        null
+    );
+    const tradeContextConvRef = useRef<string | undefined>(undefined);
+    const tradeContextCacheRef = useRef<{ trade: string; trade_detail: string } | null>(null);
+    if (tradeContextConvRef.current !== conversationId) {
+        tradeContextConvRef.current = conversationId;
+        tradeContextCacheRef.current = null;
+    }
+
+    useEffect(() => {
+        setProvidersFromViewportCache(false);
+    }, [conversationId]);
 
     const refreshProvidersForLocation = useCallback(
-        async (loc: MatchLocation) => {
-            const { trade: t, trade_detail: td } = await resolveTradeContext();
+        async (loc: MatchLocation, radiusMeters: number) => {
+            let t = tradeContextCacheRef.current?.trade ?? '';
+            let td = tradeContextCacheRef.current?.trade_detail ?? '';
+            if (!t) {
+                const r = await resolveTradeContext();
+                t = r.trade;
+                td = r.trade_detail;
+                if (t) tradeContextCacheRef.current = { trade: t, trade_detail: td };
+            }
             if (!t) {
                 const tNow = Date.now();
                 if (tNow - lastMissingTradeToastAtRef.current > 12_000) {
@@ -113,22 +152,13 @@ export function useMatchProviders(params: {
                 return;
             }
 
-            const radius = searchRadiusMetersRef.current;
-            const previousRadius = previousRadiusRef.current;
-            const expandingRadius =
-                radius > previousRadius && providersRef.current.length > 0;
-            previousRadiusRef.current = radius;
-            const requestKey = [
-                loc.lat.toFixed(6),
-                loc.lng.toFixed(6),
-                t.trim().toLowerCase(),
-                td.trim().toLowerCase(),
-                String(radius),
-            ].join('|');
-            const cachedProviders = !expandingRadius ? readCachedProviders(requestKey) : null;
+            const radius = Math.round(radiusMeters);
+            const requestKey = buildViewportRequestKey(loc, t, td, radius);
+            const cachedProviders = readCachedProviders(requestKey);
             const hasCachedProviders = Array.isArray(cachedProviders) && cachedProviders.length > 0;
 
             if (hasCachedProviders) {
+                setProvidersFromViewportCache(true);
                 setProviders(cachedProviders!);
                 providersRef.current = cachedProviders!;
                 seenPlaceIdsRef.current = new Set(
@@ -137,6 +167,8 @@ export function useMatchProviders(params: {
                 if (companyIndexRef.current > cachedProviders!.length) {
                     setCompanyIndex(1);
                 }
+            } else {
+                setProvidersFromViewportCache(false);
             }
 
             const inFlight = inFlightRef.current;
@@ -148,10 +180,6 @@ export function useMatchProviders(params: {
                 return;
             }
 
-            // Do not time-throttle by (lat,lng,radius): switching service radius and back within a few
-            // seconds must refetch — a global 8s skip previously left the wrong radius’s results on screen.
-
-            // Cancel any stale in-flight request; only the latest response updates state.
             abortControllerRef.current?.abort();
             const controller = new AbortController();
             abortControllerRef.current = controller;
@@ -163,14 +191,11 @@ export function useMatchProviders(params: {
 
             setIsProvidersLoading(!hasCachedProviders);
             setIsRefreshingProvidersInBackground(hasCachedProviders);
-            setIsLoadingMoreForExpandedRadius(expandingRadius);
             try {
                 const t0 = Date.now();
                 if (process.env.NODE_ENV === 'development') {
-                    console.log('[match] fetching providers...');
+                    console.log('[match] fetching providers (viewport)…');
                 }
-                // If the browser has backgrounded/suspended this tab, fetching can fail with
-                // net::ERR_NETWORK_IO_SUSPENDED. Wait until we’re visible again.
                 await waitForPageVisible(controller.signal);
                 if (controller.signal.aborted) return;
 
@@ -181,10 +206,10 @@ export function useMatchProviders(params: {
                         trade: t,
                         ...(td ? { tradeDetail: td } : {}),
                         radius,
+                        quick: true,
                     },
                     { signal: controller.signal }
                 );
-                // Ignore responses that were superseded by a newer request.
                 if (controller.signal.aborted) return;
 
                 const firstPage = firstResult.data;
@@ -192,87 +217,19 @@ export function useMatchProviders(params: {
                 if (firstResult.ok && Array.isArray(firstPage?.providers)) {
                     const fetchedProviders: MatchProvider[] = [...firstPage.providers];
 
-                    // When expanding radius, pull a few more pages (if available) so the user actually
-                    // sees additional providers at larger radii.
-                    if (expandingRadius && firstPage.searchQuery) {
-                        const MAX_EXTRA_PAGES = 3;
-                        let nextToken = firstPage.nextPageToken ?? null;
-                        let pagesFetched = 0;
-                        while (nextToken && pagesFetched < MAX_EXTRA_PAGES) {
-                            await waitForPageVisible(controller.signal);
-                            if (controller.signal.aborted) return;
-                            const nextResult = await fetchProvidersApi(
-                                {
-                                    lat: loc.lat,
-                                    lng: loc.lng,
-                                    trade: t,
-                                    ...(td ? { tradeDetail: td } : {}),
-                                    radius,
-                                    pageToken: nextToken,
-                                    searchQuery: firstPage.searchQuery,
-                                },
-                                { signal: controller.signal }
-                            );
-                            if (controller.signal.aborted) return;
-                            const nextPage = nextResult.data;
-                            if (nextResult.ok && Array.isArray(nextPage?.providers)) {
-                                fetchedProviders.push(...nextPage.providers);
-                            }
-                            nextToken = nextPage?.nextPageToken ?? null;
-                            pagesFetched += 1;
-                        }
-                    }
+                    prefetchEnrichmentForMatchProviders(fetchedProviders);
 
-                    if (expandingRadius) {
-                        // Mark everything currently on screen as "seen" so newly fetched providers
-                        // can be preferred in ordering without reshuffling the existing set.
-                        providersRef.current.forEach((p) => {
-                            if (p?.placeId) seenPlaceIdsRef.current.add(p.placeId);
-                        });
-
-                        const seen = new Set(
-                            providersRef.current.map((p) => p.placeId)
+                    seenPlaceIdsRef.current = new Set(
+                        fetchedProviders.map((p) => p.placeId).filter(Boolean)
+                    );
+                    setProvidersFromViewportCache(false);
+                    setProviders(fetchedProviders);
+                    writeCachedProviders(requestKey, fetchedProviders);
+                    setCompanyIndex(1);
+                    if (process.env.NODE_ENV === 'development') {
+                        console.log(
+                            `[match] providers received in ${Date.now() - t0}ms — ${fetchedProviders.length} results`
                         );
-                        const additionalAll = fetchedProviders.filter((p) => {
-                            if (seen.has(p.placeId)) return false;
-                            seen.add(p.placeId);
-                            return true;
-                        });
-
-                        // Prefer providers the user has NOT seen before in this session.
-                        const unseenAdditional = additionalAll.filter(
-                            (p) => !seenPlaceIdsRef.current.has(p.placeId)
-                        );
-                        const seenAdditional = additionalAll.filter((p) =>
-                            seenPlaceIdsRef.current.has(p.placeId)
-                        );
-                        const additional = [...unseenAdditional, ...seenAdditional];
-
-                        if (additional.length > 0) {
-                            additional.forEach((p) => seenPlaceIdsRef.current.add(p.placeId));
-                            setProviders([...providersRef.current, ...additional]);
-                        } else {
-                            // Keep current list if expansion returned no new providers.
-                            setProviders(providersRef.current);
-                        }
-                        if (process.env.NODE_ENV === 'development') {
-                            console.log(
-                                `[match] providers received in ${Date.now() - t0}ms — ${fetchedProviders.length} results`
-                            );
-                        }
-                    } else {
-                        // New search: reset "seen" history.
-                        seenPlaceIdsRef.current = new Set(
-                            fetchedProviders.map((p) => p.placeId).filter(Boolean)
-                        );
-                        setProviders(fetchedProviders);
-                        writeCachedProviders(requestKey, fetchedProviders);
-                        setCompanyIndex(1);
-                        if (process.env.NODE_ENV === 'development') {
-                            console.log(
-                                `[match] providers received in ${Date.now() - t0}ms — ${fetchedProviders.length} results`
-                            );
-                        }
                     }
                     return;
                 }
@@ -286,17 +243,15 @@ export function useMatchProviders(params: {
                                 'Search temporarily unavailable. Please try again in a moment.'
                         );
                     }
-                    if (!expandingRadius) {
-                        setProviders([]);
-                        setCompanyIndex(1);
-                    }
+                    setProvidersFromViewportCache(false);
+                    setProviders([]);
+                    setCompanyIndex(1);
                     return;
                 }
 
-                if (!expandingRadius) {
-                    setProviders([]);
-                    setCompanyIndex(1);
-                }
+                setProvidersFromViewportCache(false);
+                setProviders([]);
+                setCompanyIndex(1);
                 const msg = firstPage?.error || 'Failed to fetch providers';
                 const tNow = Date.now();
                 if (tNow - lastProvidersErrorToastAtRef.current > 5000) {
@@ -304,9 +259,7 @@ export function useMatchProviders(params: {
                     toast.error(msg);
                 }
             } catch (err) {
-                // AbortError is expected when a newer request cancels this one — don't toast.
                 if (err instanceof Error && err.name === 'AbortError') return;
-                // If the browser suspended IO (background tab / power saver), don’t treat it as a hard error.
                 if (isSuspendedNetworkError(err) && typeof document !== 'undefined' && document.hidden) return;
                 const tNow = Date.now();
                 if (tNow - lastProvidersErrorToastAtRef.current > 5000) {
@@ -316,7 +269,6 @@ export function useMatchProviders(params: {
             } finally {
                 if (!controller.signal.aborted) {
                     setIsProvidersLoading(false);
-                    setIsLoadingMoreForExpandedRadius(false);
                     setIsRefreshingProvidersInBackground(false);
                 }
                 if (inFlightRef.current?.controller === controller) {
@@ -325,7 +277,6 @@ export function useMatchProviders(params: {
                 finishInFlight();
             }
         },
-        // Stable deps: radius read from searchRadiusMetersRef inside the callback.
         [resolveTradeContext]
     );
 
@@ -335,8 +286,8 @@ export function useMatchProviders(params: {
         companyIndex,
         setCompanyIndex,
         isProvidersLoading,
-        isLoadingMoreForExpandedRadius,
         isRefreshingProvidersInBackground,
         refreshProvidersForLocation,
+        providersFromViewportCache,
     };
 }

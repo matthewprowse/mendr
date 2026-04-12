@@ -27,12 +27,13 @@ type EventType =
     | 'welcome_start'
     | 'diagnosis_complete'
     | 'match_view'
+    | 'match_extend_radius'
     | 'provider_contact'
     | 'provider_profile_view';
 
 export function trackEvent(
     event_type: EventType,
-    extra?: { provider_id?: string; diagnosis_id?: string }
+    extra?: { provider_id?: string; diagnosis_id?: string; radius_km?: number }
 ): void {
     const session_id = getSessionId();
     const payload = { event_type, session_id, ...extra };

@@ -16,6 +16,7 @@ import {
     reportThoughtsParagraph,
     splitDetailAndHazard,
 } from '@/lib/diagnosis-display';
+import { BetaCostEstimateCard } from '@/components/beta-cost-estimate-card';
 
 type ReportData = {
     diagnosis: Record<string, unknown> | null;
@@ -297,9 +298,6 @@ export function ReportDetailContent({ reportId }: ReportDetailContentProps) {
     const directionsHref = mapDestination
         ? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(mapDestination)}`
         : null;
-    const mapEmbedSrc = mapDestination
-        ? `https://maps.google.com/maps?q=${encodeURIComponent(mapDestination)}&z=15&output=embed`
-        : null;
 
     // ── Render ─────────────────────────────────────────────────────────────────
 
@@ -369,6 +367,13 @@ export function ReportDetailContent({ reportId }: ReportDetailContentProps) {
                             {reportData.customer_address}
                         </p>
                     )}
+                    {directionsHref ? (
+                        <Button variant="secondary" className="h-10 w-full sm:w-auto" asChild>
+                            <a href={directionsHref} target="_blank" rel="noopener noreferrer">
+                                Get Directions
+                            </a>
+                        </Button>
+                    ) : null}
                 </div>
 
                 {/* ── Unrelated / unserviced notices ── */}
@@ -416,6 +421,10 @@ export function ReportDetailContent({ reportId }: ReportDetailContentProps) {
                     </div>
                 ) : null}
 
+                {!isRejected && !isUnserviced ? (
+                    <BetaCostEstimateCard diagnosis={diag} />
+                ) : null}
+
                 {/* ── Extra photos ── */}
                 {extraImages.length > 0 && (
                     <div className="flex flex-col gap-3">
@@ -434,32 +443,6 @@ export function ReportDetailContent({ reportId }: ReportDetailContentProps) {
                                 </div>
                             ))}
                         </div>
-                    </div>
-                )}
-
-                {/* ── Location / map ── */}
-                {mapEmbedSrc && (
-                    <div className="flex flex-col gap-3">
-                        <p className="text-sm text-foreground font-medium">Location</p>
-                        <div className="overflow-hidden rounded-lg border border-border bg-secondary">
-                            <div className="h-52 w-full">
-                                <iframe
-                                    title="Job location"
-                                    src={mapEmbedSrc}
-                                    className="h-full w-full border-0 block"
-                                    allowFullScreen
-                                    loading="lazy"
-                                    referrerPolicy="no-referrer-when-downgrade"
-                                />
-                            </div>
-                        </div>
-                        {directionsHref && (
-                            <Button variant="secondary" className="w-full h-10" asChild>
-                                <a href={directionsHref} target="_blank" rel="noopener noreferrer">
-                                    Get Directions
-                                </a>
-                            </Button>
-                        )}
                     </div>
                 )}
 

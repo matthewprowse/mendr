@@ -13,18 +13,27 @@ import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Skeleton } from '@/components/ui/skeleton';
-import type { DiagnosisData } from '@/app/chat/components/types';
+import type { DiagnosisData, Provider } from '@/app/chat/components/types';
 import { DiagnosisLeaveDialog } from '@/components/diagnosis-leave-dialog';
 import { ScanFlowShell } from '@/components/scan-flow-shell';
+import { BetaCostEstimateCard } from '@/components/beta-cost-estimate-card';
 import { cleanThoughtSentenceStarts, splitDetailAndHazard } from '@/lib/diagnosis-display';
+import { parseDiagnosisFromModelResponse } from '@/lib/parse-diagnosis-from-model-response';
+import {
+    consumeDiagnoseNdjsonStream,
+    DiagnoseStreamHttpError,
+    responseLooksLikeDiagnoseNdjson,
+} from '@/lib/diagnose-ndjson-stream';
 import { writeMatchTradeContextStorage } from '@/lib/match-trade-context';
 import { prewarmProvidersApi } from '@/features/match/api/client';
 import { fetchActiveServiceCatalogClient } from '@/lib/services-catalog';
 import {
     fetchConversationDiagnosis,
+    invalidateConversationDiagnosisCache,
     patchConversation,
     type ConversationDiagnosisRow,
 } from '@/lib/diagnoses-api';
+import { mergeMarketRatesResponseIntoDiagnosis } from '@/lib/market-rates/merge-client';
 import { useAuth } from '@/context/auth-context';
 import { ArrowLeft, DownloadSimple, Share } from '@phosphor-icons/react';
 import { Separator } from '@/components/ui/separator';
@@ -44,6 +53,15 @@ function sleep(ms: number): Promise<void> {
 }
 
 const DEFAULT_MATCH_RADIUS_METERS = 10_000;
+
+function providerHydrateSessionKey(id: string): string {
+    return `scandio_provider_hydrate_done:${id}`;
+}
+
+/** Single UX for unsupported trade and unrelated / non-maintenance photos (see `isServiceBlocked`). */
+const DIAGNOSIS_REJECT_HEADLINE = 'We Can’t Match This Job on Scandio Yet';
+const DIAGNOSIS_REJECT_DETAIL =
+    'Either this does not look like a home repair or maintenance issue we can assess from your photo, or it is not a service on Scandio’s list yet. Add a clearer photo or a few words about the job below, then tap Re-Scan Report. If we still cannot match you, you will need to reach a specialist outside Scandio.';
 
 export default function DiagnosisPageClient({
     conversationId,
@@ -84,6 +102,7 @@ export default function DiagnosisPageClient({
     const [diagnosisFailureMessage, setDiagnosisFailureMessage] = useState<string | null>(null);
     const [isPageLoading, setIsPageLoading] = useState(true);
     const didRunDiagnosisRef = useRef<string | null>(null);
+    const thoughtStreamGenRef = useRef(0);
     const [imageSrc, setImageSrc] = useState<string | null>(null);
     const [customerAddress, setCustomerAddress] = useState<string>('');
     const [selectedTradeHint, setSelectedTradeHint] = useState<string>('');
@@ -92,6 +111,9 @@ export default function DiagnosisPageClient({
     const [footerHeight, setFooterHeight] = useState(0);
     const headerTitleAnchorRef = useRef<HTMLHeadingElement | null>(null);
     const [useStickyHeaderName, setUseStickyHeaderName] = useState(false);
+    const [diagnosisForCostUi, setDiagnosisForCostUi] = useState<DiagnosisData | null>(null);
+    const savedCustomerCoordsRef = useRef<{ lat: number; lng: number } | null>(null);
+    const providersForDiagnoseRef = useRef<Provider[]>([]);
 
     const prewarmProvidersForConversation = useCallback(
         (conversation: ConversationDiagnosisRow | null | undefined, diagnosisData: DiagnosisData) => {
@@ -119,78 +141,6 @@ export default function DiagnosisPageClient({
         },
         []
     );
-
-    const parseDiagnosisFromResponse = (text: string): DiagnosisData | null => {
-        const jsonBlockMatch = text.match(/<json>([\s\S]*?)<\/json>/i);
-        const candidate = jsonBlockMatch?.[1] ?? text;
-        const braceMatch = candidate.match(/\{[\s\S]*\}/);
-        const toParse = braceMatch ? braceMatch[0] : candidate;
-        try {
-            const parsed = JSON.parse(toParse) as any;
-            if (!parsed || typeof parsed !== 'object' || !parsed.diagnosis) return null;
-
-            // Be defensive about unexpected key casing / missing fields coming back from the model.
-            const diagnosis = typeof parsed.diagnosis === 'string' ? parsed.diagnosis.trim() : String(parsed.diagnosis ?? '');
-            const trade = typeof parsed.trade === 'string' ? parsed.trade.trim() : String(parsed.trade ?? '');
-            const action_required =
-                typeof parsed.action_required === 'string'
-                    ? parsed.action_required
-                    : typeof parsed.actionRequired === 'string'
-                      ? parsed.actionRequired
-                      : '';
-            const message =
-                typeof parsed.message === 'string'
-                    ? parsed.message
-                    : typeof parsed.Message === 'string'
-                      ? parsed.Message
-                      : '';
-            const estimated_cost =
-                typeof parsed.estimated_cost === 'string'
-                    ? parsed.estimated_cost
-                    : typeof parsed.estimatedCost === 'string'
-                      ? parsed.estimatedCost
-                      : typeof parsed.estimated_diagnosis_sentence === 'string'
-                        ? parsed.estimated_diagnosis_sentence
-                        : '';
-
-            const trade_detailRaw =
-                typeof parsed.trade_detail === 'string'
-                    ? parsed.trade_detail
-                    : typeof parsed.tradeDetail === 'string'
-                      ? parsed.tradeDetail
-                      : '';
-            const urgencyRaw =
-                typeof parsed.urgency_key === 'string'
-                    ? parsed.urgency_key
-                    : typeof parsed.urgencyKey === 'string'
-                      ? parsed.urgencyKey
-                      : '';
-            const urgency_key = urgencyRaw.trim().toLowerCase();
-
-            return {
-                // Preserve all other fields, but ensure the required strings exist.
-                ...(parsed as DiagnosisData),
-                thinking: typeof parsed.thinking === 'string' ? parsed.thinking : '',
-                diagnosis,
-                trade,
-                action_required,
-                // If the model omitted action_required, we still allow message to render in the report.
-                message: message || undefined,
-                estimated_cost,
-                trade_detail: trade_detailRaw.trim().length > 0 ? trade_detailRaw : trade,
-                urgency_key:
-                    urgency_key === 'immediate' ||
-                    urgency_key === 'urgent' ||
-                    urgency_key === 'soon' ||
-                    urgency_key === 'planned'
-                        ? urgency_key
-                        : 'soon',
-            };
-        } catch {
-            // ignore
-        }
-        return null;
-    };
 
     const parseThoughtFromResponse = (text: string): string => {
         // Accept all known thought wrappers produced by the model.
@@ -251,6 +201,161 @@ export default function DiagnosisPageClient({
               }
             : {};
 
+    const maybeHydrateWithProviders = useCallback(
+        async (diag: DiagnosisData, img: string, catalogIn: string[], userWords: string) => {
+            const cid = conversationId ?? null;
+            if (!cid) return;
+            const trade = diag.trade?.trim();
+            if (!trade || trade === 'N/A') return;
+            if (diag.requires_clarification || diag.rejected || diag.unserviced) return;
+            try {
+                if (sessionStorage.getItem(providerHydrateSessionKey(cid)) === '1') return;
+            } catch {
+                /* private mode */
+            }
+
+            let catalog = catalogIn;
+            if (catalog.length === 0) {
+                catalog = await fetchActiveServiceCatalogClient(supabase as any);
+            }
+            if (catalog.length === 0) return;
+
+            try {
+                let lat: number;
+                let lng: number;
+                const saved = savedCustomerCoordsRef.current;
+                if (
+                    saved &&
+                    typeof saved.lat === 'number' &&
+                    typeof saved.lng === 'number' &&
+                    Number.isFinite(saved.lat) &&
+                    Number.isFinite(saved.lng)
+                ) {
+                    lat = saved.lat;
+                    lng = saved.lng;
+                } else {
+                    const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
+                        navigator.geolocation.getCurrentPosition(resolve, reject, {
+                            timeout: 15000,
+                            maximumAge: 300_000,
+                        });
+                    });
+                    lat = pos.coords.latitude;
+                    lng = pos.coords.longitude;
+                }
+
+                const geocodeRes = await fetch('/api/geocode', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ lat, lng }),
+                });
+                if (!geocodeRes.ok) return;
+
+                const provRes = await fetch('/api/providers', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        lat,
+                        lng,
+                        trade,
+                        radius: 25_000,
+                    }),
+                });
+                const provData = await provRes.json().catch(() => ({}));
+                if (!provRes.ok) return;
+                const list = Array.isArray(provData.providers) ? (provData.providers as Provider[]) : [];
+                if (list.length === 0) return;
+
+                providersForDiagnoseRef.current = list;
+
+                const res = await fetch('/api/diagnose', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        image: img,
+                        serviceCatalog: catalog,
+                        providerHydration: true,
+                        providers: list,
+                        textQuery: userWords.trim() || undefined,
+                        previousDiagnosis: {
+                            diagnosis: diag.diagnosis,
+                            trade: diag.trade,
+                            trade_detail: diag.trade_detail ?? '',
+                            message: diag.message ?? '',
+                            action_required: diag.action_required ?? '',
+                            estimated_cost: diag.estimated_cost ?? '',
+                        },
+                    }),
+                });
+                const text = await res.text();
+                if (!res.ok) return;
+                const parsed = parseDiagnosisFromModelResponse(text);
+                if (!parsed) return;
+
+                const thoughtFromJson =
+                    Array.isArray((parsed as any)?.image_descriptions) &&
+                    typeof (parsed as any).image_descriptions[0] === 'string'
+                        ? String((parsed as any).image_descriptions[0]).trim()
+                        : '';
+                const thought =
+                    parseThoughtFromResponse(text) ||
+                    (parsed.thinking ?? '').trim() ||
+                    thoughtFromJson;
+                const diagWithThought: DiagnosisData = { ...parsed, thinking: thought };
+                const detail =
+                    (diagWithThought.action_required ?? '').trim() ||
+                    (diagWithThought.message ?? '').trim() ||
+                    '';
+                const split = splitDetailAndHazard(detail);
+                setDiagnosisDetailText(split.detail);
+                setHazardText(split.hazard);
+                setTradeLabel((diagWithThought.trade ?? '').trim());
+                setTradeDetailLabel((diagWithThought.trade_detail ?? '').trim());
+                setUrgencyKey((diagWithThought.urgency_key as any) ?? 'soon');
+                setRequiresClarification(Boolean(diagWithThought.requires_clarification));
+                setIsRejectedDiagnosis(Boolean((diagWithThought as any).rejected));
+                setIsUnservicedDiagnosis(Boolean((diagWithThought as any).unserviced));
+                setActionRequiredRaw((diagWithThought.action_required ?? '').trim());
+                setDiagnosisTitle(diagWithThought.diagnosis);
+                setDiagnosisForCostUi(diagWithThought);
+                const finalThoughtRaw = (thought || '').trim();
+                setThoughtText(
+                    finalThoughtRaw ? cleanThoughtSentenceStarts(finalThoughtRaw) : ''
+                );
+
+                const deviceType =
+                    typeof navigator !== 'undefined' && /Mobi|Android/i.test(navigator.userAgent)
+                        ? 'mobile'
+                        : 'desktop';
+                const saveResult = await patchConversation(cid, {
+                    title: diagWithThought.diagnosis || 'New Diagnosis',
+                    image_url: img,
+                    diagnosis: diagWithThought as unknown,
+                    urgency_key: diagWithThought.urgency_key ?? null,
+                    device: deviceType,
+                    user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : '',
+                    user_id: user?.id ?? null,
+                });
+                if (saveResult.ok) {
+                    try {
+                        sessionStorage.setItem(providerHydrateSessionKey(cid), '1');
+                    } catch {
+                        /* ignore */
+                    }
+                }
+            } catch {
+                /* geolocation, network, or hydrate failed */
+            }
+        },
+        [conversationId, supabase, user?.id]
+    );
+
+    useEffect(() => {
+        return () => {
+            thoughtStreamGenRef.current += 1;
+        };
+    }, []);
+
     const runInitialDiagnosis = useCallback(
         async (img: string, prompt: string, selectedService: string | null) => {
             const cid = conversationId ?? null;
@@ -258,13 +363,71 @@ export default function DiagnosisPageClient({
             if (!cid) return null;
             if (didRunDiagnosisRef.current === cid) return null;
             didRunDiagnosisRef.current = cid;
+            thoughtStreamGenRef.current += 1;
+            setThoughtText('');
             setIsDiagnosing(true);
             setIsImageAnalysing(true);
             setIsDiagnosingRetrying(false);
             setIsDetailStageReady(false);
             setDiagnosisFailureMessage(null);
             try {
+                const fetchDiagnoseScan = async (
+                    payload: Record<string, unknown>,
+                    onThought: (t: string) => void,
+                    gen: number
+                ): Promise<string> => {
+                    const res = await fetch('/api/diagnose', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ ...payload, stream: true }),
+                    });
+                    if (!res.ok) {
+                        const t = await res.text();
+                        throw new DiagnoseStreamHttpError(res.status, t);
+                    }
+                    const routeThought = (txt: string) => {
+                        if (thoughtStreamGenRef.current !== gen) return;
+                        onThought(txt);
+                    };
+                    if (responseLooksLikeDiagnoseNdjson(res)) {
+                        return consumeDiagnoseNdjsonStream(res, { onThought: routeThought });
+                    }
+                    const full = await res.text();
+                    const extracted = parseThoughtFromResponse(full).trim();
+                    if (extracted) routeThought(extracted);
+                    return full;
+                };
+
+                const applyRateLimitOrQuotaMessage = (bodyText: string) => {
+                    try {
+                        const parsed = JSON.parse(bodyText);
+                        const retryAfterSeconds = Number(parsed?.retryAfterSeconds);
+                        const waitMinutes = Number.isFinite(retryAfterSeconds)
+                            ? Math.max(1, Math.ceil(retryAfterSeconds / 60))
+                            : null;
+                        const waitText = waitMinutes
+                            ? `${waitMinutes} minute${waitMinutes === 1 ? '' : 's'}`
+                            : 'a few minutes';
+                        const isRateLimited = String(parsed?.error || '').toLowerCase() === 'rate_limited';
+                        const isQuotaExceeded = String(parsed?.error || '').toLowerCase() === 'quota_exceeded';
+                        setDiagnosisFailureMessage(
+                            isRateLimited
+                                ? `You are sending requests too quickly. Please wait about ${waitText}, then tap Retry Report.`
+                                : isQuotaExceeded
+                                  ? String(parsed?.message || 'You have reached your diagnosis limit for now.')
+                                  : String(
+                                        parsed?.message ||
+                                            parsed?.error ||
+                                            'Scandio is busy right now. Please try again shortly.'
+                                    )
+                        );
+                    } catch {
+                        setDiagnosisFailureMessage('Scandio is busy right now. Please try again shortly.');
+                    }
+                };
+
                 for (let attempt = 1; attempt <= DIAGNOSIS_MAX_RETRIES; attempt += 1) {
+                    let imageThoughtRaw = '';
                     setIsDiagnosingRetrying(attempt > 1);
                     const catalog = await parseServiceCatalogOrFail();
                     if (!catalog) {
@@ -275,64 +438,44 @@ export default function DiagnosisPageClient({
                         return null;
                     }
 
-                    // Step 1: Image-only analysis to show thought immediately.
-                    const imageAnalysisRes = await fetch('/api/diagnose', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            image: img,
-                            analysisPhase: 'image_thought_only',
-                            serviceCatalog: catalog,
-                            textQuery:
-                                'Analyse only the photo first. Output <thought> only about what is visibly happening and likely issue pattern. Keep it concise and practical.',
-                            ...buildSelectedTradePayload(selectedService),
-                        }),
-                    });
-                    const imageAnalysisText = await imageAnalysisRes.text();
-                    if (!imageAnalysisRes.ok) {
-                        if (imageAnalysisRes.status === 429) {
-                            try {
-                                const parsed = JSON.parse(imageAnalysisText);
-                                const retryAfterSeconds = Number(parsed?.retryAfterSeconds);
-                                const waitMinutes = Number.isFinite(retryAfterSeconds)
-                                    ? Math.max(1, Math.ceil(retryAfterSeconds / 60))
-                                    : null;
-                                const waitText = waitMinutes
-                                    ? `${waitMinutes} minute${waitMinutes === 1 ? '' : 's'}`
-                                    : 'a few minutes';
-                                const isRateLimited =
-                                    String(parsed?.error || '').toLowerCase() === 'rate_limited';
-                                const isQuotaExceeded =
-                                    String(parsed?.error || '').toLowerCase() === 'quota_exceeded';
-                                setDiagnosisFailureMessage(
-                                    isRateLimited
-                                        ? `You are sending requests too quickly. Please wait about ${waitText}, then tap Retry Report.`
-                                        : isQuotaExceeded
-                                          ? String(parsed?.message || 'You have reached your diagnosis limit for now.')
-                                          : String(
-                                                parsed?.message ||
-                                                    parsed?.error ||
-                                                    'Scandio is busy right now. Please try again shortly.'
-                                            )
-                                );
-                            } catch {
-                                setDiagnosisFailureMessage(
-                                    'Scandio is busy right now. Please try again shortly.'
-                                );
+                    thoughtStreamGenRef.current += 1;
+                    const genImg = thoughtStreamGenRef.current;
+                    let imageAnalysisText: string;
+                    try {
+                        imageAnalysisText = await fetchDiagnoseScan(
+                            {
+                                image: img,
+                                analysisPhase: 'image_thought_only',
+                                serviceCatalog: catalog,
+                                textQuery:
+                                    'Analyse only the photo first. Output <thought> only about what is visibly happening and likely issue pattern. Keep it concise and practical.',
+                                ...buildSelectedTradePayload(selectedService),
+                            },
+                            (t) => setThoughtText(t),
+                            genImg
+                        );
+                    } catch (e) {
+                        if (e instanceof DiagnoseStreamHttpError) {
+                            if (e.status === 429) {
+                                applyRateLimitOrQuotaMessage(e.bodyText);
+                                return null;
                             }
+                            if (attempt < DIAGNOSIS_MAX_RETRIES) {
+                                await sleep(700 * attempt);
+                                continue;
+                            }
+                            setDiagnosisFailureMessage(
+                                'We could not finish your Scandio Report automatically. Please retry now.'
+                            );
                             return null;
                         }
-                        if (attempt < DIAGNOSIS_MAX_RETRIES) {
-                            await sleep(700 * attempt);
-                            continue;
-                        }
-                        setDiagnosisFailureMessage(
-                            'We could not finish your Scandio Report automatically. Please retry now.'
-                        );
-                        return null;
+                        throw e;
                     }
 
-                    const imageThought = cleanThoughtSentenceStarts(parseThoughtFromResponse(imageAnalysisText));
+                    imageThoughtRaw = parseThoughtFromResponse(imageAnalysisText).trim();
+                    const imageThought = imageThoughtRaw
+                        ? cleanThoughtSentenceStarts(imageThoughtRaw)
+                        : '';
                     if (imageThought) {
                         setThoughtText(imageThought);
                         if (cid) {
@@ -345,63 +488,45 @@ export default function DiagnosisPageClient({
                     }
                     setIsImageAnalysing(false);
 
-                    // Step 2: Full diagnosis after image thought has been shown.
-                    const res = await fetch('/api/diagnose', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            image: img,
-                            serviceCatalog: catalog,
-                            ...(buildPromptWithContext(prompt).trim()
-                                ? { textQuery: buildPromptWithContext(prompt).trim() }
-                                : {}),
-                            ...buildSelectedTradePayload(selectedService),
-                            ...(imageThought ? { initial_image_description: imageThought } : {}),
-                        }),
-                    });
-
-                    const text = await res.text();
-                    if (!res.ok) {
-                        // Quota/rate-limit should surface immediately; retries won't help.
-                        if (res.status === 429) {
-                            try {
-                                const parsed = JSON.parse(text);
-                                const retryAfterSeconds = Number(parsed?.retryAfterSeconds);
-                                const waitMinutes = Number.isFinite(retryAfterSeconds)
-                                    ? Math.max(1, Math.ceil(retryAfterSeconds / 60))
-                                    : null;
-                                const waitText = waitMinutes ? `${waitMinutes} minute${waitMinutes === 1 ? '' : 's'}` : 'a few minutes';
-                                const isRateLimited = String(parsed?.error || '').toLowerCase() === 'rate_limited';
-                                const isQuotaExceeded = String(parsed?.error || '').toLowerCase() === 'quota_exceeded';
-                                setDiagnosisFailureMessage(
-                                    isRateLimited
-                                        ? `You are sending requests too quickly. Please wait about ${waitText}, then tap Retry Report.`
-                                        : isQuotaExceeded
-                                          ? String(parsed?.message || 'You have reached your diagnosis limit for now.')
-                                          : String(
-                                                parsed?.message ||
-                                                    parsed?.error ||
-                                                    'Scandio is busy right now. Please try again shortly.'
-                                            )
-                                );
-                            } catch {
-                                setDiagnosisFailureMessage(
-                                    'Scandio is busy right now. Please try again shortly.'
-                                );
+                    thoughtStreamGenRef.current += 1;
+                    const genFull = thoughtStreamGenRef.current;
+                    let text: string;
+                    try {
+                        text = await fetchDiagnoseScan(
+                            {
+                                image: img,
+                                serviceCatalog: catalog,
+                                ...(buildPromptWithContext(prompt).trim()
+                                    ? { textQuery: buildPromptWithContext(prompt).trim() }
+                                    : {}),
+                                ...buildSelectedTradePayload(selectedService),
+                                ...(imageThought ? { initial_image_description: imageThought } : {}),
+                                ...(providersForDiagnoseRef.current.length > 0
+                                    ? { providers: providersForDiagnoseRef.current }
+                                    : {}),
+                            },
+                            (t) => setThoughtText(t),
+                            genFull
+                        );
+                    } catch (e) {
+                        if (e instanceof DiagnoseStreamHttpError) {
+                            if (e.status === 429) {
+                                applyRateLimitOrQuotaMessage(e.bodyText);
+                                return null;
                             }
+                            if (attempt < DIAGNOSIS_MAX_RETRIES) {
+                                await sleep(700 * attempt);
+                                continue;
+                            }
+                            setDiagnosisFailureMessage(
+                                'We could not finish your Scandio Report automatically. Please retry now.'
+                            );
                             return null;
                         }
-                        if (attempt < DIAGNOSIS_MAX_RETRIES) {
-                            await sleep(700 * attempt);
-                            continue;
-                        }
-                        setDiagnosisFailureMessage(
-                            'We could not finish your Scandio Report automatically. Please retry now.'
-                        );
-                        return null;
+                        throw e;
                     }
 
-                    const diag = parseDiagnosisFromResponse(text);
+                    const diag = parseDiagnosisFromModelResponse(text);
                     if (!diag) {
                         if (attempt < DIAGNOSIS_MAX_RETRIES) {
                             await sleep(700 * attempt);
@@ -422,9 +547,7 @@ export default function DiagnosisPageClient({
                         parseThoughtFromResponse(text) ||
                         (diag.thinking ?? '').trim() ||
                         thoughtFromJson;
-                    setThoughtText(cleanThoughtSentenceStarts(thought || imageThought));
-                    await new Promise((resolve) => setTimeout(resolve, 120));
-                    setIsDetailStageReady(true);
+                    const finalThoughtRaw = (thought || imageThoughtRaw).trim();
                     const diagWithThought: DiagnosisData = { ...diag, thinking: thought };
                     const detail =
                         (diagWithThought.action_required ?? '').trim() ||
@@ -442,6 +565,11 @@ export default function DiagnosisPageClient({
                     setActionRequiredRaw((diagWithThought.action_required ?? '').trim());
                     setDiagnosisTitle(diagWithThought.diagnosis);
                     setDiagnosisFailureMessage(null);
+                    setDiagnosisForCostUi(diagWithThought);
+                    setIsDetailStageReady(true);
+                    setThoughtText(
+                        finalThoughtRaw ? cleanThoughtSentenceStarts(finalThoughtRaw) : ''
+                    );
 
                     const deviceType =
                         typeof navigator !== 'undefined' && /Mobi|Android/i.test(navigator.userAgent)
@@ -470,6 +598,39 @@ export default function DiagnosisPageClient({
                         prewarmProvidersForConversation(latestConv.data, diagWithThought);
                     }
 
+                    void maybeHydrateWithProviders(
+                        diagWithThought,
+                        img,
+                        catalog,
+                        buildPromptWithContext(prompt).trim()
+                    );
+
+                    void (async () => {
+                        try {
+                            const addr =
+                                typeof customerAddress === 'string' ? customerAddress.trim() : '';
+                            const res = await fetch('/api/market-rates/research', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    trade: diagWithThought.trade,
+                                    tradeDetail: diagWithThought.trade_detail,
+                                    customerAddress: addr,
+                                    conversationId: cid,
+                                    baselineDiagnosis: diagWithThought,
+                                }),
+                            });
+                            const json = (await res.json()) as Record<string, unknown>;
+                            if (!json?.ok) return;
+                            invalidateConversationDiagnosisCache(cid);
+                            setDiagnosisForCostUi((prev) =>
+                                mergeMarketRatesResponseIntoDiagnosis(prev, json)
+                            );
+                        } catch {
+                            /* ignore */
+                        }
+                    })();
+
                     return diagWithThought;
                 }
                 setDiagnosisFailureMessage(
@@ -485,6 +646,8 @@ export default function DiagnosisPageClient({
         [
             buildPromptWithContext,
             conversationId,
+            customerAddress,
+            maybeHydrateWithProviders,
             parseServiceCatalogOrFail,
             prewarmProvidersForConversation,
             user?.id,
@@ -508,6 +671,7 @@ export default function DiagnosisPageClient({
             if (!conversationId) return;
             // Reset guard when the route id changes.
             didRunDiagnosisRef.current = null;
+            setDiagnosisForCostUi(null);
             setDiagnosisTitle('Diagnosing…');
             // URL saved on /welcome after a successful upload — used if the client cannot read
             // the conversation row yet (slow network) or RLS hides rows created via the admin API.
@@ -536,6 +700,19 @@ export default function DiagnosisPageClient({
             const data = conv.ok ? conv.data : null;
 
             if (cancelled) return;
+            const clat = data != null ? (data as ConversationDiagnosisRow).customer_lat : null;
+            const clng = data != null ? (data as ConversationDiagnosisRow).customer_lng : null;
+            if (
+                typeof clat === 'number' &&
+                typeof clng === 'number' &&
+                Number.isFinite(clat) &&
+                Number.isFinite(clng)
+            ) {
+                savedCustomerCoordsRef.current = { lat: clat, lng: clng };
+            } else {
+                savedCustomerCoordsRef.current = null;
+            }
+
             const img = (data as any)?.image_url as string | null;
             const imageUrlForDiagnosis = (img && String(img).trim()) || pendingImageUrl || null;
             setImageSrc(imageUrlForDiagnosis);
@@ -582,6 +759,19 @@ export default function DiagnosisPageClient({
                 setTradeLabel((existingDiagnosis.trade ?? '').trim());
                 setTradeDetailLabel((existingDiagnosis.trade_detail ?? '').trim());
                 setUrgencyKey(((existingDiagnosis.urgency_key as any) ?? 'soon') as any);
+                setDiagnosisForCostUi(existingDiagnosis);
+                if (imageUrlForDiagnosis) {
+                    const catalog = await fetchActiveServiceCatalogClient(supabase as any);
+                    if (!cancelled && catalog.length > 0) {
+                        setServiceCatalog(catalog);
+                        void maybeHydrateWithProviders(
+                            existingDiagnosis,
+                            imageUrlForDiagnosis,
+                            catalog,
+                            prompt
+                        );
+                    }
+                }
                 return;
             }
 
@@ -605,7 +795,61 @@ export default function DiagnosisPageClient({
         return () => {
             cancelled = true;
         };
-    }, [conversationId, runInitialDiagnosis, supabase, tradeFromQuery, prefetchedConversation]);
+    }, [
+        conversationId,
+        maybeHydrateWithProviders,
+        runInitialDiagnosis,
+        supabase,
+        tradeFromQuery,
+        prefetchedConversation,
+    ]);
+
+    useEffect(() => {
+        if (!conversationId) return;
+        const d = diagnosisForCostUi;
+        if (!d?.diagnosis?.trim()) return;
+        if (d.requires_clarification || d.rejected || d.unserviced) return;
+        const src = d.market_rates?.sources;
+        if (Array.isArray(src) && src.length > 0) return;
+
+        let cancelled = false;
+        void (async () => {
+            try {
+                const res = await fetch('/api/market-rates/research', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        trade: d.trade,
+                        tradeDetail: d.trade_detail,
+                        customerAddress: customerAddress.trim(),
+                        conversationId,
+                        baselineDiagnosis: d,
+                    }),
+                });
+                const json = (await res.json()) as Record<string, unknown>;
+                if (cancelled || !json?.ok) return;
+                invalidateConversationDiagnosisCache(conversationId);
+                setDiagnosisForCostUi((prev) =>
+                    mergeMarketRatesResponseIntoDiagnosis(prev, json)
+                );
+            } catch {
+                /* ignore */
+            }
+        })();
+        return () => {
+            cancelled = true;
+        };
+    }, [
+        conversationId,
+        customerAddress,
+        diagnosisForCostUi?.diagnosis,
+        diagnosisForCostUi?.trade,
+        diagnosisForCostUi?.trade_detail,
+        diagnosisForCostUi?.requires_clarification,
+        diagnosisForCostUi?.rejected,
+        diagnosisForCostUi?.unserviced,
+        diagnosisForCostUi?.market_rates?.sources?.length,
+    ]);
 
     useEffect(() => {
         const footerEl = footerRef.current;
@@ -644,8 +888,6 @@ export default function DiagnosisPageClient({
         tradeLabel.trim().toLowerCase() === 'n/a' ||
         diagnosisTitle.toLowerCase().includes('not currently supported') ||
         diagnosisTitle.toLowerCase().includes('not on scandio');
-    /** Off-topic or non-home photo: show unrelated UX even if the model labelled it “unsupported”. */
-    const isUnsupportedOnly = isUnsupportedDiagnosis && !isUnrelatedDiagnosis;
     const isServiceBlocked = isUnsupportedDiagnosis || isUnrelatedDiagnosis;
 
     const scanForMatchEligibility = `${diagnosisTitle}\n${thoughtText}\n${diagnosisDetailText}\n${hazardText}`.toLowerCase();
@@ -674,19 +916,19 @@ export default function DiagnosisPageClient({
         !isMatchBlocked &&
         diagnosisTitle.trim().length > 0 &&
         !diagnosisTitle.toLowerCase().includes('diagnosing');
-    const fallbackUnsupportedDetail =
-        serviceCatalog.length > 0
-            ? `This job does not look like a service Scandio supports yet. Right now we support: ${serviceCatalog.join(', ')}. If that seems wrong, add more detail below and we will take another look.`
-            : 'This job does not look like a service Scandio supports yet. If that seems wrong, add more detail below and we will take another look.';
-    const fallbackUnrelatedDetail =
-        'This photo does not look like a home repair or maintenance issue. Share a photo of the actual problem, or tell us what is wrong below, and we will try again.';
-    const resolvedDetailText = isUnrelatedDiagnosis
-        ? diagnosisDetailText || fallbackUnrelatedDetail
-        : diagnosisDetailText || (isUnsupportedOnly ? fallbackUnsupportedDetail : '');
+    const resolvedDetailText = isServiceBlocked
+        ? DIAGNOSIS_REJECT_DETAIL
+        : diagnosisDetailText;
 
-    const diagnosisHeadline = isUnsupportedOnly
-        ? 'This Type of Job Is Not on Scandio Yet'
-        : diagnosisTitle;
+    const diagnosisHeadline = isServiceBlocked ? DIAGNOSIS_REJECT_HEADLINE : diagnosisTitle;
+
+    const pageTitle = 'Your Diagnosis';
+    const pageSubtitle =
+        'This summary reflects what we could see in your photo and anything you added in chat. If something looks off, add a bit more detail below—then continue when you are ready to find contractors.';
+    const stickyHeaderTitle =
+        showSkeleton || !isDetailStageReady
+            ? diagnosisTitle.trim() || 'Diagnosing…'
+            : diagnosisHeadline;
 
     const contentBottomPadding = 72;
 
@@ -728,6 +970,12 @@ export default function DiagnosisPageClient({
         setInfoText('');
 
         if (conversationId) {
+            try {
+                sessionStorage.removeItem(providerHydrateSessionKey(conversationId));
+            } catch {
+                /* ignore */
+            }
+            providersForDiagnoseRef.current = [];
             const noteSave = await patchConversation(conversationId, {
                 initial_image_description: joinedInfo || null,
             });
@@ -823,17 +1071,14 @@ export default function DiagnosisPageClient({
                 constrainContentWidth
                 footer={diagnosisFooter}
                 headerLeft={
-                    <Button
-                        variant="outline"
-                        className="size-10"
-                        onClick={() => router.back()}
-                    >
-                        <ArrowLeft size={24} weight="bold" className="text-foreground" />
-                    </Button>
+                    <ArrowLeft size={24} weight="bold" className="text-foreground" />
                 }
                 headerCenter={
-                    <h3 className="text-xl font-semibold tracking-tight text-foreground">
-                        {useStickyHeaderName ? 'Header Name' : 'Scandio'}
+                    <h3
+                        className="block min-w-0 w-full max-w-full truncate text-center text-xl font-semibold text-foreground"
+                        title={useStickyHeaderName ? stickyHeaderTitle : undefined}
+                    >
+                        {useStickyHeaderName ? stickyHeaderTitle : 'Scandio'}
                     </h3>
                 }
                 headerRight={
@@ -852,12 +1097,19 @@ export default function DiagnosisPageClient({
                 }
             >
                 <div className="flex flex-col gap-1">
-                    <h1 ref={headerTitleAnchorRef} className="text-2xl font-semibold tracking-tight text-foreground">
-                        Header Name
+                    <h1 ref={headerTitleAnchorRef} className="text-3xl font-semibold tracking-tight text-foreground">
+                        {pageTitle}
                     </h1>
-                    <p className="text-sm text-muted-foreground">
-                        Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.
-                    </p>
+                    {isPageLoading ? (
+                        <div className="flex max-w-xl flex-col gap-2" aria-hidden>
+                            <Skeleton className="h-4 w-full max-w-md" />
+                            <Skeleton className="h-4 w-[92%] max-w-lg" />
+                        </div>
+                    ) : (
+                        <p className="max-w-xl text-sm leading-relaxed text-muted-foreground">
+                            {pageSubtitle}
+                        </p>
+                    )}
                 </div>
 
                 {customerInfoItems.length > 0 ? (
@@ -874,24 +1126,29 @@ export default function DiagnosisPageClient({
                 ) : null}
 
                 <div className="flex flex-col gap-6 rounded-lg border border-border bg-background p-6 text-left">
-                    <div className="flex flex-col gap-4">
-                        <div className="flex flex-row items-center justify-between gap-4">
+                    <div className="flex flex-col gap-5">
+                        <div className="flex flex-row items-start justify-between gap-3">
                             {showSkeleton || !isDetailStageReady ? (
-                                <Skeleton className="h-8 w-1/2" />
+                                <div className="flex min-w-0 flex-1 flex-col gap-2">
+                                    <Skeleton className="h-7 w-[88%] max-w-md" />
+                                    <Skeleton className="h-7 w-[62%] max-w-sm md:hidden" />
+                                </div>
                             ) : (
-                                <h2 className="text-lg font-bold text-foreground">{diagnosisHeadline}</h2>
+                                <h2 className="min-w-0 flex-1 text-lg font-bold text-foreground">
+                                    {diagnosisHeadline}
+                                </h2>
                             )}
                             {showSkeleton || !isDetailStageReady ? (
-                                <Skeleton className="h-6 w-18 rounded-full" />
+                                <Skeleton className="h-7 w-24 shrink-0 rounded-full" />
                             ) : (
-                                <Badge variant="secondary">
-                                    {tradeLabel || selectedTradeHint || 'Not Specified'}
+                                <Badge variant="secondary" className="shrink-0">
+                                    {isServiceBlocked ? 'Can’t match' : tradeLabel || selectedTradeHint || 'Not Specified'}
                                 </Badge>
                             )}
                         </div>
                         <div className="flex flex-col gap-4">
                             {showImageSkeleton ? (
-                                <Skeleton className="h-48 w-full rounded-lg" />
+                                <Skeleton className="aspect-[4/3] w-full rounded-lg md:h-48 md:aspect-auto" />
                             ) : (
                                 <div className="h-48 w-full rounded-lg border border-border bg-secondary object-cover">
                                     {imageSrc ? (
@@ -907,10 +1164,11 @@ export default function DiagnosisPageClient({
                                 </div>
                             )}
                             {showThoughtSkeleton ? (
-                                <div className="flex flex-col gap-2">
-                                    <Skeleton className="h-4 w-full" />
-                                    <Skeleton className="h-4 w-11/12" />
-                                    <Skeleton className="h-4 w-4/5" />
+                                <div className="flex flex-col gap-2.5" aria-busy="true" aria-label="Loading analysis">
+                                    <Skeleton className="h-3.5 w-full" />
+                                    <Skeleton className="h-3.5 w-[94%]" />
+                                    <Skeleton className="h-3.5 w-[88%]" />
+                                    <Skeleton className="h-3.5 w-[76%]" />
                                     {isDiagnosingRetrying ? (
                                         <p className="text-xs text-muted-foreground">
                                             We&apos;re Retrying Automatically
@@ -927,22 +1185,36 @@ export default function DiagnosisPageClient({
 
                     <div className="flex flex-col gap-4">
                         {showSkeleton || !isDetailStageReady ? (
-                            <div className="flex flex-col gap-2">
-                                <Skeleton className="h-4 w-full" />
-                                <Skeleton className="h-4 w-11/12" />
-                                <Skeleton className="h-4 w-4/5" />
+                            <div className="flex flex-col gap-4" aria-busy="true" aria-label="Loading diagnosis details">
+                                <div className="flex flex-col gap-2.5">
+                                    <Skeleton className="h-4 w-full" />
+                                    <Skeleton className="h-4 w-[96%]" />
+                                    <Skeleton className="h-4 w-full" />
+                                    <Skeleton className="h-4 w-[82%]" />
+                                </div>
+                                <div className="rounded-lg border border-border/60 bg-secondary/40 p-4">
+                                    <Skeleton className="mb-3 h-3 w-32" />
+                                    <Skeleton className="h-3 w-full" />
+                                    <Skeleton className="mt-2 h-3 w-[90%]" />
+                                    <Skeleton className="mt-4 h-9 w-full rounded-md" />
+                                </div>
                             </div>
                         ) : hasDiagnosisFailure ? (
                             <p className="text-sm text-foreground">{diagnosisFailureMessage}</p>
                         ) : (
                             <>
                                 <p className="text-sm text-foreground">{resolvedDetailText}</p>
-                                {hazardText ? <p className="text-sm text-foreground">{hazardText}</p> : null}
+                                {hazardText && !isServiceBlocked ? (
+                                    <p className="text-sm text-foreground">{hazardText}</p>
+                                ) : null}
+                                {diagnosisForCostUi && !isServiceBlocked && !requiresClarification ? (
+                                    <BetaCostEstimateCard diagnosis={diagnosisForCostUi} />
+                                ) : null}
                             </>
                         )}
-                        {isUnsupportedOnly && serviceCatalog.length > 0 ? (
+                        {isServiceBlocked && serviceCatalog.length > 0 ? (
                             <p className="text-sm text-muted-foreground">
-                                Supported Services on Scandio: {serviceCatalog.join(', ')}.
+                                Trades Scandio can match today: {serviceCatalog.join(', ')}.
                             </p>
                         ) : null}
                     </div>
@@ -958,9 +1230,7 @@ export default function DiagnosisPageClient({
                             value={infoText}
                             onChange={(e) => setInfoText(e.target.value)}
                         />
-                        <p className="text-xs text-muted-foreground">
-                            Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.
-                        </p>
+                        <p className="text-xs text-muted-foreground">Optional. Not a substitute for a site visit.</p>
                     </div>
                 ) : (
                     <button

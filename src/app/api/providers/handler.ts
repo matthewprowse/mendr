@@ -127,7 +127,9 @@ export async function POST(req: NextRequest) {
             searchQuery: providedSearchQuery,
             /** Optional specialty line from AI diagnosis (same as `conversations.diagnosis.trade_detail`). Refines Google text search. */
             tradeDetail,
+            quick,
         } = body;
+        const quickMode = quick === true;
         logStage('body parsed', 'body_parsed');
         let supabase: Awaited<ReturnType<typeof createSupabaseServerClient>> | null = null;
         let adminSupabase: Awaited<ReturnType<typeof createSupabaseAdminClient>> | null = null;
@@ -967,10 +969,25 @@ export async function POST(req: NextRequest) {
         const limitedProviders = rankedProviders.map((p) => ({ ...p }));
         logStage(`providers ranked (count=${limitedProviders.length})`, 'providers_ranked');
 
+        // Attach internal provider IDs as early as possible so the UI can route to /pro/[id]
+        // even when quick mode skips slower DB augment steps.
+        if (prefetchedProvRows && prefetchedProvRows.length > 0) {
+            const providerIdByGoogle = new Map<string, string>(
+                prefetchedProvRows.map((r) => [String(r.google_place_id), String(r.id)])
+            );
+            limitedProviders.forEach((p: any) => {
+                const rawPid = p?.placeId || p?.place_id;
+                if (typeof rawPid !== 'string') return;
+                const googlePlaceId = toGooglePlaceId(rawPid);
+                const providerId = providerIdByGoogle.get(googlePlaceId);
+                if (providerId) p.providerId = providerId;
+            });
+        }
+
         // AI summaries from real review text: use Supabase reviews when we have them; otherwise
         // Place Details (same request). This must run even when providers are not in Supabase yet
         // (previously we bailed out and left the template "Customers typically…" summary).
-        if (limitedProviders.length > 0) {
+        if (!quickMode && limitedProviders.length > 0) {
             try {
                 const googleIds = limitedProviders
                     .map((p) =>
@@ -1444,6 +1461,7 @@ export async function POST(req: NextRequest) {
                 minReviewThreshold: minRatingUsed,
                 relevanceMode: relevanceModeUsed,
                 fastProviderCountBeforeRank: fastProviders.length,
+                quickMode,
             },
         });
 

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { importLibrary } from '@googlemaps/js-api-loader';
 import { ensureGoogleMapsLoaderOptions } from '@/lib/google-maps-js-loader';
+import { boundsToSearchDisk } from '../map-viewport';
 import type { MatchLocation, MatchProvider } from '../contracts';
 
 const PIN_PATH =
@@ -21,27 +22,46 @@ function makeMarkerContent(color: string, scale: number): Element {
     return svg;
 }
 
+function normalizePlaceKey(id: string): string {
+    return id.replace(/^places\//, '').trim();
+}
+
+export type ViewportSearchPayload = {
+    lat: number;
+    lng: number;
+    radiusMeters: number;
+};
+
 export function useMatchMap(params: {
     userLocation: MatchLocation | null;
     providers: MatchProvider[];
-    searchRadiusMeters: number;
+    /** Used when `showSearchRadius` draws the legacy circle (non–viewport-search mode). */
+    searchRadiusMeters?: number;
     onMarkerClick?: (providerPlaceId: string) => void;
-    /** When false, the search-radius circle is not drawn (e.g. pro onboard: pin only). Default true. */
     showSearchRadius?: boolean;
-    /** When true, drop a marker at `userLocation`. Default false (match flow uses the circle + provider pins). */
     showUserPin?: boolean;
-    /** Optional multi-zone overlay (used by pro onboard multi service areas). */
     userAreas?: Array<{ location: MatchLocation; radiusMeters: number }>;
+    selectedPlaceId?: string | null;
+    /** When true, map camera follows the user; providers load from visible bounds (idle). */
+    viewportSearch?: boolean;
+    onViewportSearch?: (payload: ViewportSearchPayload) => void;
 }) {
     const {
         userLocation,
         providers,
-        searchRadiusMeters,
+        searchRadiusMeters = 10_000,
         onMarkerClick,
         showSearchRadius = true,
         showUserPin = false,
         userAreas = [],
+        selectedPlaceId = null,
+        viewportSearch = false,
+        onViewportSearch,
     } = params;
+
+    const onViewportSearchRef = useRef(onViewportSearch);
+    onViewportSearchRef.current = onViewportSearch;
+
     const mapHostRef = useRef<HTMLDivElement>(null);
     const mapRef = useRef<google.maps.Map | null>(null);
     const markersRef = useRef<google.maps.marker.AdvancedMarkerElement[]>([]);
@@ -50,13 +70,14 @@ export function useMatchMap(params: {
     const areaPinsRef = useRef<google.maps.marker.AdvancedMarkerElement[]>([]);
     const areaCirclesRef = useRef<google.maps.Circle[]>([]);
     const [isMapReady, setIsMapReady] = useState(false);
+    const viewportSearchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const lastViewportPanKeyRef = useRef<string | null>(null);
+    const lastViewportSearchKeyRef = useRef<string | null>(null);
 
     useEffect(() => {
         if (!mapHostRef.current) return;
         if (mapRef.current) return;
-        const initialCenter =
-            userAreas[0]?.location ??
-            userLocation;
+        const initialCenter = userAreas[0]?.location ?? userLocation;
         if (!initialCenter) return;
         const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || process.env.NEXT_PUBLIC_GOOGLE_PLACES_API_KEY;
         if (!apiKey) return;
@@ -70,10 +91,11 @@ export function useMatchMap(params: {
             if (cancelled || !mapHostRef.current) return;
             mapRef.current = new google.maps.Map(mapHostRef.current, {
                 center: { lat: initialCenter.lat, lng: initialCenter.lng },
-                zoom: 12,
+                zoom: viewportSearch ? 12 : 12,
                 mapId: 'scandio-match-map',
                 disableDefaultUI: true,
                 clickableIcons: false,
+                gestureHandling: viewportSearch ? 'greedy' : undefined,
             });
             setIsMapReady(true);
         })();
@@ -81,7 +103,7 @@ export function useMatchMap(params: {
         return () => {
             cancelled = true;
         };
-    }, [userAreas, userLocation]);
+    }, [userAreas, userLocation, viewportSearch]);
 
     useEffect(() => {
         const map = mapRef.current;
@@ -90,7 +112,6 @@ export function useMatchMap(params: {
         const effectiveUserLocation = hasUserAreas ? userAreas[0]?.location ?? null : userLocation;
         if (!effectiveUserLocation) return;
 
-        // Clear previous multi-area overlays.
         areaPinsRef.current.forEach((m) => {
             try {
                 m.map = null;
@@ -105,10 +126,9 @@ export function useMatchMap(params: {
         areaCirclesRef.current = [];
 
         if (hasUserAreas) {
-            // Hide the single-radius/single-pin overlays when multi-area mode is active.
             radiusCircleRef.current?.setMap(null);
             if (userPinRef.current) userPinRef.current.map = null;
-        } else if (showSearchRadius && userLocation) {
+        } else if (showSearchRadius && userLocation && !viewportSearch) {
             if (!radiusCircleRef.current) {
                 radiusCircleRef.current = new google.maps.Circle({
                     strokeColor: '#4f46e5',
@@ -141,12 +161,16 @@ export function useMatchMap(params: {
             )
             .filter(Boolean) as Array<{ provider: MatchProvider; pos: { lat: number; lng: number } }>;
 
+        const selectedKey = selectedPlaceId ? normalizePlaceKey(selectedPlaceId) : '';
+
         pts.forEach(({ provider, pos }) => {
+            const pid = normalizePlaceKey(provider.placeId);
+            const isSelected = Boolean(selectedKey && pid === selectedKey);
             const marker = new google.maps.marker.AdvancedMarkerElement({
                 map,
                 position: pos,
                 title: provider.name,
-                content: makeMarkerContent('#64748b', 1.2),
+                content: makeMarkerContent(isSelected ? '#EA4335' : '#64748b', isSelected ? 1.8 : 1.2),
             });
             if (onMarkerClick) {
                 marker.addEventListener('gmp-click', () => onMarkerClick(provider.placeId));
@@ -197,8 +221,11 @@ export function useMatchMap(params: {
             });
         }
 
-        const singleUserView =
-            !hasUserAreas && !showSearchRadius && pts.length === 0 && showUserPin;
+        if (viewportSearch) {
+            return;
+        }
+
+        const singleUserView = !hasUserAreas && !showSearchRadius && pts.length === 0 && showUserPin;
 
         if (singleUserView) {
             map.setCenter(pos);
@@ -233,7 +260,78 @@ export function useMatchMap(params: {
         try {
             map.fitBounds(bounds, 48);
         } catch {}
-    }, [isMapReady, onMarkerClick, providers, searchRadiusMeters, showSearchRadius, showUserPin, userAreas, userLocation]);
+    }, [
+        isMapReady,
+        onMarkerClick,
+        providers,
+        searchRadiusMeters,
+        selectedPlaceId,
+        showSearchRadius,
+        showUserPin,
+        userAreas,
+        userLocation,
+        viewportSearch,
+    ]);
+
+    useEffect(() => {
+        const map = mapRef.current;
+        if (!map || !isMapReady || !viewportSearch) return;
+
+        const run = () => {
+            const cb = onViewportSearchRef.current;
+            if (!cb) return;
+            const b = map.getBounds();
+            if (!b) return;
+            const disk = boundsToSearchDisk(b);
+            const searchKey = `${disk.lat.toFixed(3)},${disk.lng.toFixed(3)}|${Math.round(disk.radiusMeters / 500) * 500}`;
+            if (lastViewportSearchKeyRef.current === searchKey) return;
+            lastViewportSearchKeyRef.current = searchKey;
+            cb(disk);
+        };
+
+        const scheduleRun = () => {
+            if (viewportSearchDebounceRef.current) clearTimeout(viewportSearchDebounceRef.current);
+            viewportSearchDebounceRef.current = setTimeout(() => {
+                viewportSearchDebounceRef.current = null;
+                run();
+            }, 100);
+        };
+
+        let isFirstIdle = true;
+        const onIdle = () => {
+            if (viewportSearchDebounceRef.current) clearTimeout(viewportSearchDebounceRef.current);
+            if (isFirstIdle) {
+                isFirstIdle = false;
+                queueMicrotask(run);
+                return;
+            }
+            scheduleRun();
+        };
+
+        const listeners: google.maps.MapsEventListener[] = [
+            google.maps.event.addListener(map, 'idle', onIdle),
+            google.maps.event.addListener(map, 'dragend', () => scheduleRun()),
+            google.maps.event.addListener(map, 'zoom_changed', () => scheduleRun()),
+        ];
+
+        return () => {
+            if (viewportSearchDebounceRef.current) {
+                clearTimeout(viewportSearchDebounceRef.current);
+                viewportSearchDebounceRef.current = null;
+            }
+            listeners.forEach((l) => l.remove());
+        };
+    }, [isMapReady, viewportSearch]);
+
+    useEffect(() => {
+        const map = mapRef.current;
+        if (!map || !isMapReady || !viewportSearch || !userLocation) return;
+        const addr = userLocation.address.trim();
+        const panKey = addr ? `addr:${addr}` : `ll:${userLocation.lat.toFixed(4)},${userLocation.lng.toFixed(4)}`;
+        if (lastViewportPanKeyRef.current === panKey) return;
+        lastViewportPanKeyRef.current = panKey;
+        map.panTo({ lat: userLocation.lat, lng: userLocation.lng });
+    }, [isMapReady, userLocation, viewportSearch]);
 
     return {
         mapHostRef,

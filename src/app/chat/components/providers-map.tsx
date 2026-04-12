@@ -41,6 +41,14 @@ type ProvidersMapProps = {
 const DEFAULT_MAP_INNER_CLASS =
     'relative w-full aspect-[4/3] sm:aspect-auto sm:h-[460px]';
 
+/** Fewer POI and area labels on the basemap (may be overridden by cloud Map ID styling). */
+const MAP_BASE_CLUTTER_STYLES: google.maps.MapTypeStyle[] = [
+    { featureType: 'poi', elementType: 'labels', stylers: [{ visibility: 'off' }] },
+    { featureType: 'poi.business', stylers: [{ visibility: 'off' }] },
+    { featureType: 'administrative', elementType: 'labels', stylers: [{ visibility: 'off' }] },
+    { featureType: 'administrative.neighborhood', stylers: [{ visibility: 'off' }] },
+];
+
 function getDistanceText(
     provider: Provider,
     userLocation: { lat: number; lng: number } | null
@@ -328,6 +336,7 @@ export function ProvidersMap({
                     ? { lat: userLocation.lat, lng: userLocation.lng }
                     : { lat: -33.9249, lng: 18.4241 };
 
+                const mapIdFromEnv = (process.env.NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID ?? '').trim();
                 const map = new google.maps.Map(containerRef.current, {
                     center,
                     zoom: 12,
@@ -337,7 +346,8 @@ export function ProvidersMap({
                     scaleControl: false,
                     streetViewControl: false,
                     fullscreenControl: false,
-                    mapId: 'providers-map',
+                    mapId: mapIdFromEnv || 'providers-map',
+                    styles: MAP_BASE_CLUTTER_STYLES,
                 });
 
                 mapRef.current = map;

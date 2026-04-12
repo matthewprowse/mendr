@@ -4,7 +4,9 @@ import { getGeminiModel } from '@/lib/ai-client';
 import { logAiEvent } from '@/lib/ai-logging';
 import { checkRateLimit, isRateLimitBypassed } from '@/lib/rate-limit-config';
 import { createSupabaseServerClient, createSupabaseAdminClient } from '@/lib/supabase-server';
+import { normalizeProvidersForPrompt } from '@/lib/diagnose-prompt-providers';
 import { buildSystemInstruction } from './prompts';
+import { buildProviderHydrationPromptBlock } from './prompts/provider-hydration';
 import {
     buildUnrelatedImageMessage,
     buildUnsupportedHomeServiceMessage,
@@ -353,6 +355,42 @@ function extractThoughtText(responseText: string): string {
     return beforeJson.trim();
 }
 
+/** Best-effort inner text of the thought tag while the model is still streaming. */
+function extractPartialThoughtInner(accum: string): string | null {
+    const openRe = /<(?:thought|thinking|thought_process)\b[^>]*>/i;
+    const openMatch = accum.match(openRe);
+    if (!openMatch || openMatch.index === undefined) return null;
+    const start = openMatch.index + openMatch[0].length;
+    const rest = accum.slice(start);
+    const closeMatch = rest.match(/<\/(?:thought|thinking|thought_process)\s*>/i);
+    if (closeMatch && closeMatch.index !== undefined) {
+        return rest.slice(0, closeMatch.index);
+    }
+    return rest;
+}
+
+function applyDiagnosePostProcess(fullText: string, serviceList: string[]): string {
+    const withThought = enforceThoughtSentenceCount(
+        enforceMinThoughtLength(ensureThoughtBlock(fullText), 125),
+        2,
+        3
+    );
+    const withThoughtStyle = withThought.replace(
+        /<thought>([\s\S]*?)<\/thought>/i,
+        (_m, t) => `<thought>${stripFillerSentenceStarts(String(t || ''))}</thought>`
+    );
+    return enforceUrgencyKey(
+        enforceLanguageStyleInJson(
+            enforceUnsupportedHomeServiceResponse(
+                enforceUnrelatedImageResponse(
+                    enforceTradeFromServiceCatalog(withThoughtStyle, serviceList)
+                ),
+                serviceList
+            )
+        )
+    );
+}
+
 export async function POST(req: NextRequest) {
     const timings: Record<string, number> = {};
     const requestStartedAt = Date.now();
@@ -508,7 +546,10 @@ export async function POST(req: NextRequest) {
             initial_image_description,
             serviceCatalog,
             analysisPhase,
+            stream: streamResponse,
+            providerHydration,
         } = body;
+        const wantsStream = streamResponse === true;
 
         // ── Input guards ───────────────────────────────────────────────────────
         if (Array.isArray(history) && history.length > 20) {
@@ -569,6 +610,34 @@ export async function POST(req: NextRequest) {
             );
         }
 
+        const normalizedProviders = normalizeProvidersForPrompt(providers) ?? [];
+        const providersForPrompt = normalizedProviders.length > 0 ? normalizedProviders : undefined;
+        const providerHydrationRequested = providerHydration === true;
+        const prevDiagForHydration = previousDiagnosis as
+            | {
+                  diagnosis?: string;
+                  trade?: string;
+                  trade_detail?: string;
+                  message?: string;
+                  action_required?: string;
+                  estimated_cost?: string;
+              }
+            | null
+            | undefined;
+        const isProviderHydration = Boolean(
+            providerHydrationRequested &&
+                providersForPrompt &&
+                providersForPrompt.length > 0 &&
+                prevDiagForHydration &&
+                typeof prevDiagForHydration.diagnosis === 'string' &&
+                prevDiagForHydration.diagnosis.trim().length > 0 &&
+                typeof image === 'string' &&
+                image.trim().length > 0 &&
+                !isTextOnly
+        );
+        const isFollowUp =
+            !!(history?.length && prevDiagForHydration?.diagnosis) || isProviderHydration;
+
         const arrayBufferToBase64 = (buffer: ArrayBuffer): string => {
             // Works in both Node and browser-like runtimes.
             if (typeof Buffer !== 'undefined') {
@@ -610,7 +679,6 @@ export async function POST(req: NextRequest) {
             }
         };
 
-        const isFollowUp = !!(history?.length && previousDiagnosis?.diagnosis);
         const hasUserContext = userSelectedTrade?.trade && userSelectedTrade?.diagnosis;
         const model = getGeminiModel();
 
@@ -637,19 +705,76 @@ export async function POST(req: NextRequest) {
             const quickPrompt =
                 `Analyse ${imageParts.length > 1 ? 'these images' : 'this image'} and return only a short <thought> block (1-2 sentences) describing what is visibly wrong and likely issue pattern. ` +
                 `Do not include JSON or extra sections.`;
+            const quickContents = [
+                {
+                    role: 'user',
+                    parts: [...imageParts, { text: quickPrompt }],
+                } as unknown as GeminiContent,
+            ];
+            const quickGenerationConfig = {
+                temperature: 0.2,
+                topP: 0.7,
+                topK: 20,
+                maxOutputTokens: 220,
+            };
+            const fallbackThought =
+                'Visible signs suggest a likely home maintenance issue pattern that needs a closer diagnosis.';
+
+            if (wantsStream) {
+                try {
+                    const quickStream = await model.generateContentStream({
+                        contents: quickContents,
+                        generationConfig: quickGenerationConfig,
+                    });
+                    return new Response(
+                        new ReadableStream({
+                            async start(controller) {
+                                const encoder = new TextEncoder();
+                                const emit = (o: unknown) =>
+                                    controller.enqueue(encoder.encode(`${JSON.stringify(o)}\n`));
+                                let accum = '';
+                                let lastThought = '';
+                                try {
+                                    for await (const chunk of quickStream.stream) {
+                                        const piece = chunk.text();
+                                        if (!piece) continue;
+                                        accum += piece;
+                                        const inner = extractPartialThoughtInner(accum);
+                                        if (inner !== null && inner !== lastThought) {
+                                            lastThought = inner;
+                                            emit({ type: 'thought', text: inner });
+                                        }
+                                    }
+                                    const thought = stripFillerSentenceStarts(
+                                        extractThoughtText(String(accum || ''))
+                                    ).trim();
+                                    emit({
+                                        type: 'complete',
+                                        full: `<thought>${thought || fallbackThought}</thought>`,
+                                    });
+                                } catch (e) {
+                                    controller.error(e);
+                                } finally {
+                                    controller.close();
+                                }
+                            },
+                        }),
+                        {
+                            headers: {
+                                'Content-Type': 'application/x-ndjson; charset=utf-8',
+                                'Cache-Control': 'no-store',
+                                ...quotaExtraHeaders,
+                            },
+                        }
+                    );
+                } catch {
+                    // fall through to non-streaming quick path
+                }
+            }
+
             const quickResult = await model.generateContent({
-                contents: [
-                    {
-                        role: 'user',
-                        parts: [...imageParts, { text: quickPrompt }],
-                    } as unknown as GeminiContent,
-                ],
-                generationConfig: {
-                    temperature: 0.2,
-                    topP: 0.7,
-                    topK: 20,
-                    maxOutputTokens: 220,
-                },
+                contents: quickContents,
+                generationConfig: quickGenerationConfig,
             });
             const quickResp = (quickResult as any)?.response;
             let quickText = quickResp && typeof quickResp.text === 'function' ? quickResp.text() : '';
@@ -660,8 +785,33 @@ export async function POST(req: NextRequest) {
                 }
             }
             const thought = stripFillerSentenceStarts(extractThoughtText(String(quickText || ''))).trim();
-            const fallbackThought =
-                'Visible signs suggest a likely home maintenance issue pattern that needs a closer diagnosis.';
+            if (wantsStream) {
+                const wrapped = `<thought>${thought || fallbackThought}</thought>`;
+                return new Response(
+                    new ReadableStream({
+                        start(controller) {
+                            const encoder = new TextEncoder();
+                            const inner = extractPartialThoughtInner(wrapped);
+                            if (inner) {
+                                controller.enqueue(
+                                    encoder.encode(`${JSON.stringify({ type: 'thought', text: inner })}\n`)
+                                );
+                            }
+                            controller.enqueue(
+                                encoder.encode(`${JSON.stringify({ type: 'complete', full: wrapped })}\n`)
+                            );
+                            controller.close();
+                        },
+                    }),
+                    {
+                        headers: {
+                            'Content-Type': 'application/x-ndjson; charset=utf-8',
+                            'Cache-Control': 'no-store',
+                            ...quotaExtraHeaders,
+                        },
+                    }
+                );
+            }
             return new Response(`<thought>${thought || fallbackThought}</thought>`, {
                 headers: {
                     'Content-Type': 'text/plain; charset=utf-8',
@@ -699,12 +849,19 @@ export async function POST(req: NextRequest) {
             isTextOnlyNoAttachments: isTextOnly && !hasAttachments,
             serviceListText,
             feedback,
-            providers,
-            previousDiagnosis,
+            providers: providersForPrompt,
+            previousDiagnosis: prevDiagForHydration ?? previousDiagnosis,
             diagnosisRejected,
         });
 
-        const instructionPrefix = `${systemInstruction.trim()}\n\n`;
+        const userOriginalWordsHydration = (
+            typeof textQuery === 'string' ? textQuery : ''
+        ).trim();
+        const hydrationAppendix =
+            isProviderHydration && prevDiagForHydration
+                ? `\n\n${buildProviderHydrationPromptBlock(userOriginalWordsHydration, prevDiagForHydration)}`
+                : '';
+        const instructionPrefix = `${systemInstruction.trim()}${hydrationAppendix}\n\n`;
 
         // Gemini v1 doesn't accept the SDK-level `systemInstruction` field.
         // Embed the same instructions directly into the first user prompt text instead.
@@ -813,19 +970,25 @@ Analyse this description and provide a diagnosis. Output <thought> (2–3 short 
                 userTextQuery.length > 0
                     ? `USER'S OWN WORDS ABOUT THE ISSUE (read first; if these disagree with a visual guess, trust the user on equipment type and job context):\n${JSON.stringify(userTextQuery)}\n\n`
                     : '';
-            const imagePrompt = !history?.length
-                ? hasUserContext
-                    ? instructionPrefix +
-                      userWordsPriority +
-                      `The user selected "${userSelectedTrade.diagnosis}" (${userSelectedTrade.trade}) as a preferred service, but it is not authoritative. If their words or the image clearly indicate a different trade, set diagnosis, trade, trade_detail, and action_required to the more accurate trade. Analyse quickly.
+            const imagePrompt = isProviderHydration && !history?.length
+                ? instructionPrefix +
+                  userWordsPriority +
+                  `PROVIDER HYDRATION PASS: Re-read ${imageParts.length > 1 ? 'these images' : 'this image'} and output a full Scandio response. Follow PROVIDER HYDRATION TURN in your instructions; keep established diagnosis fields stable unless clearly wrong.
 
 CRITICAL: Output <thought> FIRST (2–3 short sentences), then </thought>, then <json>. Never skip the thought block.`
-                    : instructionPrefix +
-                      userWordsPriority +
-                      `Analyse ${imageParts.length > 1 ? 'these images' : 'this image'}.
+                : !history?.length
+                  ? hasUserContext
+                      ? instructionPrefix +
+                        userWordsPriority +
+                        `The user selected "${userSelectedTrade.diagnosis}" (${userSelectedTrade.trade}) as a preferred service, but it is not authoritative. If their words or the image clearly indicate a different trade, set diagnosis, trade, trade_detail, and action_required to the more accurate trade. Analyse quickly.
+
+CRITICAL: Output <thought> FIRST (2–3 short sentences), then </thought>, then <json>. Never skip the thought block.`
+                      : instructionPrefix +
+                        userWordsPriority +
+                        `Analyse ${imageParts.length > 1 ? 'these images' : 'this image'}.
 
 CRITICAL: Output <thought> FIRST (2–3 short sentences about the likely problem only in plain language). Never skip the thought block; the user sees it in real time.`
-                : hasImagesToAnalyse
+                  : hasImagesToAnalyse
                   ? instructionPrefix +
                       `The user has uploaded new images for you to analyse.${userTextQuery ? ` Their message: "${userTextQuery}"` : ''} Provide a FULL diagnosis: identify the equipment/issue, set diagnosis, action_required, estimated_cost, and trade. Do NOT ask for clarification when the equipment is recognisable (e.g. gate motor, geyser, DB board) — diagnose it and recommend providers. Output <thought> FIRST (2–3 sentences), then </thought>, then <json>.`
                   : null;
@@ -859,7 +1022,7 @@ CRITICAL: Output <thought> FIRST (2–3 short sentences about the likely problem
         }
 
         const generationConfig = {
-            temperature: 0.35,
+            temperature: isProviderHydration ? 0.22 : 0.35,
             topP: 0.8,
             topK: 40,
             maxOutputTokens: 2048,
@@ -874,6 +1037,68 @@ CRITICAL: Output <thought> FIRST (2–3 short sentences about the likely problem
                 generationConfig,
             });
             recordStage(timings, 'gemini_stream_start_ms', streamStageStartedAt);
+
+            if (wantsStream) {
+                return new Response(
+                    new ReadableStream({
+                        async start(controller) {
+                            const encoder = new TextEncoder();
+                            const emit = (o: unknown) =>
+                                controller.enqueue(encoder.encode(`${JSON.stringify(o)}\n`));
+                            let accum = '';
+                            let lastThought = '';
+                            try {
+                                // eslint-disable-next-line no-console
+                                console.log('Awaiting first chunk from Gemini (NDJSON stream)...');
+                                for await (const chunk of result.stream) {
+                                    const text = chunk.text();
+                                    if (!text) continue;
+                                    accum += text;
+                                    const inner = extractPartialThoughtInner(accum);
+                                    if (inner !== null && inner !== lastThought) {
+                                        lastThought = inner;
+                                        emit({ type: 'thought', text: inner });
+                                    }
+                                }
+                                const adjusted = applyDiagnosePostProcess(accum, serviceList);
+                                emit({ type: 'complete', full: adjusted });
+                                // eslint-disable-next-line no-console
+                                console.log('Gemini NDJSON stream completed successfully');
+                            } catch (e) {
+                                console.error('Error during Gemini NDJSON stream iteration:', e);
+                                controller.error(e);
+                                return;
+                            }
+                            const durationMs = Date.now() - startedAt;
+                            recordStage(timings, 'total_request_ms', requestStartedAt);
+                            logAiEvent({
+                                endpoint: 'diagnose',
+                                status: 'ok',
+                                durationMs,
+                                meta: {
+                                    isTextOnly,
+                                    isFollowUp,
+                                    hasUserContext,
+                                    hasImage: Boolean(image),
+                                    attachmentsCount: attachmentImages.length,
+                                    historyLength: Array.isArray(history) ? history.length : 0,
+                                    usedGenerateContentFallback: false,
+                                    ndjsonStream: true,
+                                },
+                            });
+                            logDiagnoseTimings('ok', timings);
+                            controller.close();
+                        },
+                    }),
+                    {
+                        headers: {
+                            'Content-Type': 'application/x-ndjson; charset=utf-8',
+                            'Cache-Control': 'no-store',
+                            ...quotaExtraHeaders,
+                        },
+                    }
+                );
+            }
 
             const stream = new ReadableStream({
                 async start(controller) {
@@ -927,23 +1152,7 @@ CRITICAL: Output <thought> FIRST (2–3 short sentences about the likely problem
                             fullText += decoder.decode(value, { stream: true });
                         }
                         fullText += decoder.decode();
-                        const withThought = enforceThoughtSentenceCount(
-                            enforceMinThoughtLength(ensureThoughtBlock(fullText), 125),
-                            2,
-                            3
-                        );
-                        const withThoughtStyle = withThought.replace(
-                            /<thought>([\s\S]*?)<\/thought>/i,
-                            (_m, t) => `<thought>${stripFillerSentenceStarts(String(t || ''))}</thought>`
-                        );
-                        const adjusted = enforceUrgencyKey(enforceLanguageStyleInJson(
-                            enforceUnsupportedHomeServiceResponse(
-                                enforceUnrelatedImageResponse(
-                                    enforceTradeFromServiceCatalog(withThoughtStyle, serviceList)
-                                ),
-                                serviceList
-                            )
-                        ));
+                        const adjusted = applyDiagnosePostProcess(fullText, serviceList);
                         controller.enqueue(encoder.encode(adjusted));
                     } catch (e) {
                         controller.error(e);
@@ -1031,23 +1240,38 @@ CRITICAL: Output <thought> FIRST (2–3 short sentences about the likely problem
             });
             logDiagnoseTimings('ok', timings);
 
-            const withThought = enforceThoughtSentenceCount(
-                enforceMinThoughtLength(ensureThoughtBlock(fullText), 125),
-                2,
-                3
-            );
-            const withThoughtStyle = withThought.replace(
-                /<thought>([\s\S]*?)<\/thought>/i,
-                (_m, t) => `<thought>${stripFillerSentenceStarts(String(t || ''))}</thought>`
-            );
-            const adjusted = enforceUrgencyKey(enforceLanguageStyleInJson(
-                enforceUnsupportedHomeServiceResponse(
-                    enforceUnrelatedImageResponse(
-                        enforceTradeFromServiceCatalog(withThoughtStyle, serviceList)
-                    ),
-                    serviceList
-                )
-            ));
+            const adjusted = applyDiagnosePostProcess(fullText, serviceList);
+
+            if (wantsStream) {
+                const thoughtInner =
+                    extractPartialThoughtInner(adjusted) ?? extractThoughtText(adjusted) ?? '';
+                return new Response(
+                    new ReadableStream({
+                        start(controller) {
+                            const encoder = new TextEncoder();
+                            if (thoughtInner.trim()) {
+                                controller.enqueue(
+                                    encoder.encode(
+                                        `${JSON.stringify({ type: 'thought', text: thoughtInner })}\n`
+                                    )
+                                );
+                            }
+                            controller.enqueue(
+                                encoder.encode(`${JSON.stringify({ type: 'complete', full: adjusted })}\n`)
+                            );
+                            controller.close();
+                        },
+                    }),
+                    {
+                        headers: {
+                            'Content-Type': 'application/x-ndjson; charset=utf-8',
+                            'Cache-Control': 'no-store',
+                            ...quotaExtraHeaders,
+                        },
+                    }
+                );
+            }
+
             return new Response(adjusted, {
                 headers: {
                     'Content-Type': 'text/plain; charset=utf-8',

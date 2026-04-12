@@ -48,19 +48,23 @@ export function useMatchConversationContext(conversationId: string) {
         }
 
         let api: Awaited<ReturnType<typeof fetchConversationDiagnosis>>;
+        let parsedFromApi = false;
         try {
             api = await fetchConversationDiagnosis(conversationId);
             if (api.ok && api.data?.diagnosis != null) {
                 const parsed = fromDiagnosis(api.data.diagnosis);
-                if (parsed) return parsed;
+                if (parsed) {
+                    parsedFromApi = true;
+                    return parsed;
+                }
             }
         } catch {
             api = { ok: false, status: 0, error: 'unknown' };
         }
 
-        // Only fall back to direct Supabase when the API request was not a definitive HTTP response (e.g. network drop).
-        const networkOnlyFailure = api.ok === false && api.status === 0;
-        if (networkOnlyFailure) {
+        // Fall back to direct Supabase whenever API parsing didn't produce a usable
+        // trade context (covers network drops + auth/session/API edge cases).
+        if (!parsedFromApi) {
             try {
                 const { data, error } = await (supabase as any)
                     .from('diagnoses')
@@ -87,7 +91,7 @@ export function useMatchConversationContext(conversationId: string) {
         async (loc: MatchLocation) => {
             if (!conversationId) return;
             try {
-                const res = await fetch('/api/conversations/location', {
+                const res = await fetch('/api/diagnoses/location', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -123,7 +127,7 @@ export function useMatchConversationContext(conversationId: string) {
             navigator.geolocation.getCurrentPosition(
                 (pos) => resolve(pos.coords),
                 (err) => reject(err),
-                { enableHighAccuracy: true, timeout: 12000, maximumAge: 120000 }
+                { enableHighAccuracy: false, timeout: 7000, maximumAge: 300000 }
             );
         }).catch(() => null);
         if (!coords) return null;

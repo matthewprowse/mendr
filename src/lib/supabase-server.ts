@@ -1,6 +1,8 @@
 import { createServerClient } from '@supabase/ssr';
-import { createClient } from '@supabase/supabase-js';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
+
+let serviceRoleClient: SupabaseClient | null = null;
 
 /**
  * Cookie-aware Supabase client for Route Handlers and auth flows (anon key + user session).
@@ -36,15 +38,18 @@ export async function createSupabaseServerClient() {
  * Service-role client for trusted server-only operations (bypasses RLS).
  */
 export async function createSupabaseAdminClient() {
+    if (serviceRoleClient) return serviceRoleClient;
+
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
     if (!url || !key) {
         throw new Error('Missing SUPABASE_SERVICE_ROLE_KEY');
     }
 
-    return createClient(url, key, {
+    serviceRoleClient = createClient(url, key, {
         auth: { persistSession: false, autoRefreshToken: false },
     });
+    return serviceRoleClient;
 }
 
 /**

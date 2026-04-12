@@ -406,6 +406,8 @@ export async function POST(req: NextRequest) {
                     // refresh from Google rather than serving stale/minimal cached objects.
                     if (!cacheHasRichFields) {
                         searchCacheExpired = true;
+                    } else if (!supabase) {
+                        searchCacheExpired = true;
                     } else {
                         const placeIdsFromCache = searchRow.place_ids as string[];
                         const { data: providerRows } = await supabase
@@ -1066,26 +1068,27 @@ export async function POST(req: NextRequest) {
                 .then(async (adminSupabase) => {
                     const nowIso = new Date().toISOString();
                     const rows = limitedProviders.map((p) => {
+                        const row = p as ProviderItem & { services?: unknown[] };
                         const googlePlaceId =
-                            typeof p.placeId === 'string' && p.placeId.startsWith('places/')
-                                ? p.placeId
-                                : `places/${p.placeId}`;
-                        const openingHours = (p as any).weekdayDescriptions;
+                            typeof row.placeId === 'string' && row.placeId.startsWith('places/')
+                                ? row.placeId
+                                : `places/${row.placeId}`;
+                        const openingHours = (row as any).weekdayDescriptions;
                         const hoursArray = formatWeekdayDescriptionsTo24h(openingHours) ?? [];
 
                         return {
                             source: 'google',
                             google_place_id: googlePlaceId,
-                            name: normalizeProviderName(p.name),
-                            address: p.address,
-                            rating: p.rating,
-                            rating_count: p.ratingCount ?? 0,
-                            phone: p.phone,
-                            website: p.website,
-                            latitude: p.latitude,
-                            longitude: p.longitude,
-                            summary: p.summary ?? '',
-                            services: p.services ?? [],
+                            name: normalizeProviderName(row.name),
+                            address: row.address,
+                            rating: row.rating,
+                            rating_count: row.ratingCount ?? 0,
+                            phone: row.phone,
+                            website: row.website,
+                            latitude: row.latitude,
+                            longitude: row.longitude,
+                            summary: row.summary ?? '',
+                            services: row.services ?? [],
                             service_categories: canonicalServiceLabel ? [canonicalServiceLabel] : [],
                             weekday_descriptions: hoursArray.length > 0 ? hoursArray : null,
                             last_updated: nowIso,

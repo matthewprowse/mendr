@@ -8,6 +8,7 @@ import {
     normalizeProfileTextForStorage,
 } from '@/lib/provider-profile-clean';
 import { sanitizeCustomerSummary } from '@/lib/review-summary';
+import { aiConfig } from '@/lib/ai-config';
 
 type ProviderRow = {
     id?: unknown;
@@ -195,12 +196,15 @@ export function useProProvider(placeId: string) {
                     if (queuePlaceId && lastQueuedPlaceIdRef.current !== queuePlaceId) {
                         lastQueuedPlaceIdRef.current = queuePlaceId;
                         // Load cached data immediately from providers, then refresh enrichment in background.
+                        // Full scrape + images + combined AI (not match’s fast review-summary-only path).
                         void fetch('/api/enrich/queue', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
                                 placeIds: [queuePlaceId],
                                 priorityPlaceId: queuePlaceId,
+                                mode: 'full',
+                                cacheVersion: aiConfig.providerEnrichmentCacheVersion,
                             }),
                         }).catch(() => undefined);
                     }

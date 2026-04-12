@@ -1,6 +1,11 @@
 import type { Metadata } from 'next';
-import MatchPageClient from '../client';
+import dynamic from 'next/dynamic';
+import MatchLoading from '../loading';
 import { fetchReportDetailOnServer } from '@/lib/fetch-report-detail-server';
+
+const MatchPageClient = dynamic(() => import('../client'), {
+    loading: () => <MatchLoading />,
+});
 
 type PageProps = {
     params: Promise<{ id: string }>;

@@ -13,7 +13,7 @@ The user already has a diagnosis: "${previousDiagnosis.diagnosis}" (trade: ${pre
 
 - When the user provides NEW substantive information (e.g. describes the actual issue, says "actually it's X", "it's a garage door", "I need gate repair", "it's a borehole pump not a pool pump", corrects the initial selection, or shares a new image): You MUST discard the previous diagnosis/trade when they conflict and set diagnosis and trade to match the user. Give a proper diagnosis if you have 85%+ confidence after applying their correction.
 
-- For simple questions ("What?", "Are you sure?", "Why?", "Hello?", "hi") or when the user has NOT shared new details: Answer in 'message'. Set diagnosis="${previousDiagnosis.diagnosis}", trade="${previousDiagnosis.trade || 'N/A'}", trade_detail=${JSON.stringify(typeof previousDiagnosis.trade_detail === 'string' ? previousDiagnosis.trade_detail : '')}, and use similar action_required/estimated_cost/repair_cost_range/replacement_cost_range/equipment_parts_range. DO NOT re-diagnose.
+- For simple questions ("What?", "Are you sure?", "Why?", "Hello?", "hi") or when the user has NOT shared new details: Answer in 'message'. Set diagnosis="${previousDiagnosis.diagnosis}", trade="${previousDiagnosis.trade || 'N/A'}", trade_detail=${JSON.stringify(typeof previousDiagnosis.trade_detail === 'string' ? previousDiagnosis.trade_detail : '')}, and use similar action_required and estimated_cost (keep repair_cost_range, replacement_cost_range, equipment_parts_range as ""). DO NOT re-diagnose.
 
 - If confidence < 85 on any change: set requires_clarification: true and ask one more specific question to narrow down the diagnosis.
 
