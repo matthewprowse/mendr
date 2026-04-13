@@ -199,7 +199,13 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
 
         hydratedFromCacheRef.current = true;
         skipNextAutoRefreshRef.current = true;
-        setSearchRadiusKm(cached.searchRadiusKm);
+        const cachedRadiusKm =
+            typeof (cached as { searchRadiusKm?: unknown }).searchRadiusKm === 'number'
+                ? ((cached as { searchRadiusKm?: number }).searchRadiusKm as number)
+                : typeof cached.searchRadiusMeters === 'number'
+                  ? Math.max(1, Math.round(cached.searchRadiusMeters / 1000))
+                  : 10;
+        setSearchRadiusKm(cachedRadiusKm);
         setUserLocation(cached.userLocation);
         setAddressInput(cached.addressInput);
         setProviders(cached.providers);
@@ -218,7 +224,7 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
         saveMatchPageCache(conversationId, {
             providers,
             companyIndex,
-            searchRadiusKm,
+            searchRadiusMeters,
             userLocation,
             addressInput,
             enrichmentCache,
@@ -232,7 +238,7 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
         enrichmentCache,
         providers,
         scandioReviewCountByProviderId,
-        searchRadiusKm,
+        searchRadiusMeters,
         userLocation,
     ]);
 

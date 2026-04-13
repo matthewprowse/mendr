@@ -94,15 +94,16 @@ export function useMatchProviders(params: {
                 );
                 // Ignore responses that were superseded by a newer request.
                 if (controller.signal.aborted) return;
+                const firstPageData = firstPage?.data;
 
-                if (Array.isArray(firstPage?.providers)) {
-                    const fetchedProviders: MatchProvider[] = [...firstPage.providers];
+                if (Array.isArray(firstPageData?.providers)) {
+                    const fetchedProviders: MatchProvider[] = [...firstPageData.providers];
 
                     // When expanding radius, pull a few more pages (if available) so the user actually
                     // sees additional providers at larger radii.
-                    if (expandingRadius && firstPage.searchQuery) {
+                    if (expandingRadius && firstPageData.searchQuery) {
                         const MAX_EXTRA_PAGES = 3;
-                        let nextToken = firstPage.nextPageToken ?? null;
+                        let nextToken = firstPageData.nextPageToken ?? null;
                         let pagesFetched = 0;
                         while (nextToken && pagesFetched < MAX_EXTRA_PAGES) {
                             await waitForPageVisible(controller.signal);
@@ -115,15 +116,15 @@ export function useMatchProviders(params: {
                                     ...(td ? { tradeDetail: td } : {}),
                                     radius,
                                     pageToken: nextToken,
-                                    searchQuery: firstPage.searchQuery,
+                                    searchQuery: firstPageData.searchQuery,
                                 },
                                 { signal: controller.signal }
                             );
                             if (controller.signal.aborted) return;
-                            if (Array.isArray(nextPage?.providers)) {
-                                fetchedProviders.push(...nextPage.providers);
+                            if (Array.isArray(nextPage?.data?.providers)) {
+                                fetchedProviders.push(...nextPage.data.providers);
                             }
-                            nextToken = nextPage?.nextPageToken ?? null;
+                            nextToken = nextPage?.data?.nextPageToken ?? null;
                             pagesFetched += 1;
                         }
                     }
@@ -174,7 +175,7 @@ export function useMatchProviders(params: {
                     setProviders([]);
                     setCompanyIndex(1);
                 }
-                const msg = firstPage?.error || 'Failed to fetch providers';
+                const msg = firstPageData?.error || 'Failed to fetch providers';
                 const tNow = Date.now();
                 if (tNow - lastProvidersErrorToastAtRef.current > 5000) {
                     lastProvidersErrorToastAtRef.current = tNow;
