@@ -83,10 +83,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
             mode?: unknown;
         } | null;
 
-        const rawPlaces = body && Array.isArray(body.placeIds) ? body.placeIds : [];
+        const parsedBody = body ?? {};
+        const rawPlaces = Array.isArray(parsedBody.placeIds) ? parsedBody.placeIds : [];
         const rawProviderIds =
-            body && Array.isArray(body.providerIds)
-                ? (body.providerIds as unknown[]).filter((id) => typeof id === 'string' && id.trim())
+            Array.isArray(parsedBody.providerIds)
+                ? (parsedBody.providerIds as unknown[]).filter((id) => typeof id === 'string' && id.trim())
                 : [];
 
         const placeIds = (rawPlaces as string[])
@@ -110,25 +111,26 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
             'place_ids_normalized'
         );
 
-        const trade = typeof body.trade === 'string' && body.trade.trim()
-            ? body.trade.trim()
+        const trade = typeof parsedBody.trade === 'string' && parsedBody.trade.trim()
+            ? parsedBody.trade.trim()
             : undefined;
         const priorityPlaceId =
-            typeof body.priorityPlaceId === 'string' && body.priorityPlaceId.trim()
-                ? toGooglePlaceId(body.priorityPlaceId.trim())
+            typeof parsedBody.priorityPlaceId === 'string' && parsedBody.priorityPlaceId.trim()
+                ? toGooglePlaceId(parsedBody.priorityPlaceId.trim())
                 : null;
         const cacheVersionRaw =
-            typeof body.cacheVersion === 'number'
-                ? body.cacheVersion
-                : typeof body.cacheVersion === 'string'
-                  ? Number.parseInt(body.cacheVersion, 10)
+            typeof parsedBody.cacheVersion === 'number'
+                ? parsedBody.cacheVersion
+                : typeof parsedBody.cacheVersion === 'string'
+                  ? Number.parseInt(parsedBody.cacheVersion, 10)
                   : NaN;
         const cacheVersion =
             Number.isFinite(cacheVersionRaw) && cacheVersionRaw > 0
                 ? Math.floor(cacheVersionRaw)
                 : undefined;
 
-        const modeRaw = typeof body.mode === 'string' ? body.mode.trim().toLowerCase() : '';
+        const modeRaw =
+            typeof parsedBody.mode === 'string' ? parsedBody.mode.trim().toLowerCase() : '';
         // Default: fast review-summary path (~1s/provider). Opt in to full scrape pipeline with mode "full".
         const summaryFast = modeRaw !== 'full' && modeRaw !== 'enrich_full';
         const runJob = summaryFast
