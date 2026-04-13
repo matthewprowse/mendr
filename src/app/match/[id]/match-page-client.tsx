@@ -152,7 +152,7 @@ export function MatchPageClient({ conversationId }: MatchPageClientProps) {
                 // Persist location back to the conversation for future visits.
                 if (typeof lat === 'number' && typeof lng === 'number') {
                     void supabase
-                        .from('conversations')
+                        .from('diagnoses')
                         .update({ customer_lat: lat, customer_lng: lng })
                         .eq('id', conversationId);
                 }
@@ -199,7 +199,7 @@ export function MatchPageClient({ conversationId }: MatchPageClientProps) {
             // can hydrate from the backend instead of re-running the search.
             try {
                 await (supabase as any)
-                    .from('conversations')
+                    .from('diagnoses')
                     .update({
                         providers: {
                             providers: finalProviders,
@@ -229,7 +229,7 @@ export function MatchPageClient({ conversationId }: MatchPageClientProps) {
             try {
                 const [{ data: conv }, { data: msgs }] = await Promise.all([
                     supabase
-                        .from('conversations')
+                        .from('diagnoses')
                         .select(
                             'id,diagnosis,customer_lat,customer_lng,customer_address,providers'
                         )
@@ -290,7 +290,7 @@ export function MatchPageClient({ conversationId }: MatchPageClientProps) {
                     // to scan messages or hit the providers API again.
                     try {
                         await (supabase as any)
-                            .from('conversations')
+                            .from('diagnoses')
                             .update({
                                 providers: {
                                     providers: fromMsgProviders,

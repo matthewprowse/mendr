@@ -20,7 +20,8 @@ export async function GET() {
             .limit(20000),
         admin
             .from('providers')
-            .select('id', { count: 'exact', head: true }),
+            .select('id', { count: 'exact', head: true })
+            .eq('is_active', true),
         admin
             .from('services')
             .select('label')

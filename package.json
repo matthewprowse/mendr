@@ -17,7 +17,8 @@
         "test:enrichment-summary": "npx tsx scripts/test-enrichment-summary.ts",
         "perf:match-flow": "npx tsx scripts/perf/match-flow.ts",
         "scrape-providers": "npx tsx scripts/scrape-providers.ts",
-        "sync-provider-reviews": "npx tsx scripts/sync-provider-reviews.ts"
+        "sync-provider-reviews": "npx tsx scripts/sync-provider-reviews.ts",
+        "check:diagnoses-table": "sh -c 'if grep -rE \"from\\(['\"'\"']conversations['\"'\"']\\)\" src scripts --include=\"*.ts\" --include=\"*.tsx\" -q; then echo \"Use diagnoses table, not conversations\"; exit 1; fi'"
     },
     "dependencies": {
         "@google/generative-ai": "^0.24.1",
@@ -30,6 +31,7 @@
         "@sendgrid/mail": "^8.1.6",
         "@supabase/ssr": "^0.8.0",
         "@supabase/supabase-js": "^2.95.3",
+        "@upstash/redis": "^1.37.0",
         "class-variance-authority": "^0.7.1",
         "clsx": "^2.1.1",
         "date-fns": "^4.1.0",

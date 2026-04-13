@@ -165,7 +165,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
                           });
 
                 const [provRes, cacheByPlaceRes, cacheByClientRes] = await Promise.all([
-                    admin.from('providers').select('id, google_place_id').in('google_place_id', placeIdsForQuery),
+                    admin
+                        .from('providers')
+                        .select('id, google_place_id')
+                        .eq('is_active', true)
+                        .in('google_place_id', placeIdsForQuery),
                     admin
                         .from('provider_cache')
                         .select(PROVIDER_CACHE_SELECT_MATCH)

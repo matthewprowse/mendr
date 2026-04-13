@@ -24,7 +24,7 @@ export function useMatchConversationContext(conversationId: string) {
         if (!conversationId) return { trade: '', trade_detail: '' };
         try {
             const { data } = await (supabase as any)
-                .from('conversations')
+                .from('diagnoses')
                 .select('diagnosis')
                 .eq('id', conversationId)
                 .maybeSingle();
@@ -42,7 +42,7 @@ export function useMatchConversationContext(conversationId: string) {
         async (loc: MatchLocation) => {
             if (!conversationId) return;
             try {
-                await (supabase as any).from('conversations').upsert({
+                await (supabase as any).from('diagnoses').upsert({
                     id: conversationId,
                     customer_lat: loc.lat,
                     customer_lng: loc.lng,
@@ -79,7 +79,7 @@ export function useMatchConversationContext(conversationId: string) {
         if (!conversationId) return null;
         try {
             const { data } = await (supabase as any)
-                .from('conversations')
+                .from('diagnoses')
                 .select('customer_lat, customer_lng, customer_address')
                 .eq('id', conversationId)
                 .maybeSingle();

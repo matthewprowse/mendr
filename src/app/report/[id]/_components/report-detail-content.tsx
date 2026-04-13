@@ -78,7 +78,7 @@ export function ReportDetailContent({ reportId }: ReportDetailContentProps) {
             let conv: Record<string, unknown> | null = null;
 
             const { data: d1, error: e1 } = await supabase
-                .from('conversations')
+                .from('diagnoses')
                 .select(
                     'diagnosis, image_url, customer_address, customer_lat, customer_lng, initial_image_description'
                 )
@@ -96,7 +96,7 @@ export function ReportDetailContent({ reportId }: ReportDetailContentProps) {
                     msg.includes('does not exist')
                 ) {
                     const { data: d2, error: e2 } = await supabase
-                        .from('conversations')
+                        .from('diagnoses')
                         .select(
                             'diagnosis_json, image_url, customer_address, customer_lat, customer_lng, initial_image_description'
                         )

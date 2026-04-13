@@ -895,6 +895,7 @@ export async function POST(req: NextRequest) {
                     dbReader
                         .from('providers')
                         .select('id, google_place_id, name')
+                        .eq('is_active', true)
                         .in('google_place_id', placeIds),
                 ]);
                 const cacheRows = cacheResult.data;
@@ -1258,6 +1259,7 @@ export async function POST(req: NextRequest) {
                     const { data: providerRows, error: provErr } = await adminSupabase
                         .from('providers')
                         .select('id, google_place_id, reviews_synced_at')
+                        .eq('is_active', true)
                         .in('google_place_id', googleIds);
                     if (provErr) {
                         console.warn('Reviews upsert skipped:', provErr.message);
@@ -1370,7 +1372,7 @@ export async function POST(req: NextRequest) {
                         const { error: reviewsErr } = await adminSupabase
                             .from('reviews')
                             .upsert(reviewPayload, {
-                                onConflict: 'source,source_ref',
+                                onConflict: 'provider_id,source,source_ref',
                             });
                         if (reviewsErr) {
                             console.warn('Reviews upsert skipped:', reviewsErr.message);

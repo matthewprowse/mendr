@@ -64,7 +64,7 @@ export function DiagnosisPageClient({ conversationId }: DiagnosisPageClientProps
     const loadConversation = useCallback(
         async (id: string): Promise<ConversationRow | null> => {
             const { data, error } = await supabase
-                .from('conversations')
+                .from('diagnoses')
                 .select('id,image_url,diagnosis,initial_image_description')
                 .eq('id', id)
                 .maybeSingle();
@@ -94,7 +94,7 @@ export function DiagnosisPageClient({ conversationId }: DiagnosisPageClientProps
                     : 'desktop';
             try {
                 await supabase
-                    .from('conversations')
+                    .from('diagnoses')
                     .upsert({
                         id: conversationId,
                         title: diag?.diagnosis || 'New Diagnosis',

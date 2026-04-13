@@ -88,6 +88,7 @@ export function useProProvider(placeId: string) {
                             .from('providers')
                             .select(select)
                             .eq('id', placeId)
+                            .eq('is_active', true)
                             .maybeSingle();
                         if (error) throw error;
                         return toProviderRow(row);
@@ -98,6 +99,7 @@ export function useProProvider(placeId: string) {
                         .from('providers')
                         .select(select)
                         .eq('google_place_id', googlePlaceId)
+                        .eq('is_active', true)
                         .maybeSingle();
                     if (error) throw error;
                     return toProviderRow(row);

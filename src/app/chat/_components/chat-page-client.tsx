@@ -14,6 +14,7 @@ import { compressImage } from '@/lib/image-compression';
 import { openInNewTab } from '@/lib/open-in-new-tab';
 import { toast } from 'sonner';
 
+import { DIAGNOSIS_MIN_CONFIDENCE_FOR_PROVIDERS } from '@/lib/diagnosis-confidence';
 import { sanitizeAiContent, tryParseDiagnosisJson, extractMessageFromRaw } from '@/lib/utils';
 import { tradeToServiceLabel } from '@/lib/services';
 import type { ServiceLabel } from '@/lib/service-icons';
@@ -136,7 +137,7 @@ export function ChatPageClient({ conversationId, initialTrade }: ChatPageClientP
             try {
                 const fetchPromise = (async () => {
                     const [convResult, msgsResult] = await Promise.all([
-                        supabase.from('conversations').select('*').eq('id', id),
+                        supabase.from('diagnoses').select('*').eq('id', id),
                         supabase
                             .from('messages')
                             .select('*')
@@ -306,7 +307,7 @@ export function ChatPageClient({ conversationId, initialTrade }: ChatPageClientP
             payload.user_id = user.id;
         }
 
-        const { error } = await (supabase as any).from('conversations').upsert(payload);
+        const { error } = await (supabase as any).from('diagnoses').upsert(payload);
         if (error && typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
             console.warn('[Supabase] conversation:', error.code, error.message);
         } else if (!error) {
@@ -314,7 +315,7 @@ export function ChatPageClient({ conversationId, initialTrade }: ChatPageClientP
                 action: 'CONVERSATION_SAVED',
                 type: 'DIAGNOSTIC',
                 entityId: id,
-                entityType: 'conversations',
+                entityType: 'diagnoses',
                 payload: { has_diagnosis: !!finalDiagnosis },
             });
         }
@@ -861,7 +862,7 @@ export function ChatPageClient({ conversationId, initialTrade }: ChatPageClientP
                     // Persist so reloads use the Supabase URL (not data:/blob).
                     if (id) {
                         void (supabase as any)
-                            .from('conversations')
+                            .from('diagnoses')
                             .update({ image_url: storedImageUrl })
                             .eq('id', id);
                     }
@@ -1006,7 +1007,7 @@ export function ChatPageClient({ conversationId, initialTrade }: ChatPageClientP
                                 !parsedJson.unserviced &&
                                 parsedJson.trade &&
                                 parsedJson.trade !== 'N/A' &&
-                                conf >= 85;
+                                conf >= DIAGNOSIS_MIN_CONFIDENCE_FOR_PROVIDERS;
                             // Fetch providers immediately when we identify an actual issue (diagnosis + trade) — don't wait for high confidence
                             const canFetchEarly =
                                 parsedJson.diagnosis &&
@@ -1261,7 +1262,7 @@ export function ChatPageClient({ conversationId, initialTrade }: ChatPageClientP
                     {
                         event: 'UPDATE',
                         schema: 'public',
-                        table: 'conversations',
+                        table: 'diagnoses',
                         filter: `id=eq.${id}`,
                     },
                     (payload: { new: { diagnosis?: DiagnosisData } }) => {
@@ -1519,7 +1520,7 @@ export function ChatPageClient({ conversationId, initialTrade }: ChatPageClientP
                             const diag = { thinking: currentThinking, ...parsedJson };
                             setDiagnosis(diag);
                             const canShowProvs =
-                                conf >= 85 &&
+                                conf >= DIAGNOSIS_MIN_CONFIDENCE_FOR_PROVIDERS &&
                                 !parsedJson.requires_clarification &&
                                 !parsedJson.rejected &&
                                 !parsedJson.unserviced &&
@@ -1735,7 +1736,7 @@ export function ChatPageClient({ conversationId, initialTrade }: ChatPageClientP
                                 setDiagnosis(fullDiag);
                                 const tradeVal = diagObj.trade;
                                 const canShowProvs =
-                                    conf >= 85 &&
+                                    conf >= DIAGNOSIS_MIN_CONFIDENCE_FOR_PROVIDERS &&
                                     !(parsed.requires_clarification as boolean) &&
                                     !(parsed.rejected as boolean) &&
                                     !(parsed.unserviced as boolean) &&
@@ -1920,7 +1921,7 @@ export function ChatPageClient({ conversationId, initialTrade }: ChatPageClientP
                     providersFetchedForStream = true;
                     const conf = (finalParsed.confidence as number) ?? 0;
                     const canShowProvs =
-                        conf >= 85 &&
+                        conf >= DIAGNOSIS_MIN_CONFIDENCE_FOR_PROVIDERS &&
                         !finalParsed.requires_clarification &&
                         !finalParsed.rejected &&
                         !finalParsed.unserviced &&
@@ -2203,7 +2204,7 @@ export function ChatPageClient({ conversationId, initialTrade }: ChatPageClientP
                                     undefined
                                 );
                                 const canShowProvs =
-                                    conf >= 85 &&
+                                    conf >= DIAGNOSIS_MIN_CONFIDENCE_FOR_PROVIDERS &&
                                     !parsedJson.requires_clarification &&
                                     !parsedJson.rejected &&
                                     !parsedJson.unserviced &&

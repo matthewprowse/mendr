@@ -1,9 +1,12 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import type { Content as GeminiContent } from '@google/generative-ai';
-import { getGeminiModel } from '@/lib/ai-client';
+import { GEMINI_MODEL_NAME, getDiagnosisModel } from '@/lib/ai-diagnosis-backend';
 import { logAiEvent } from '@/lib/ai-logging';
+import { logIfDiagnosisJsonShapeUnexpected } from './diagnosis-json-validate';
+import { DIAGNOSE_PROMPT_VERSION } from './prompts/prompt-version';
 import { checkRateLimit, isRateLimitBypassed } from '@/lib/rate-limit-config';
 import { createSupabaseServerClient, createSupabaseAdminClient } from '@/lib/supabase-server';
+import { getServiceCatalogLabelsCached } from '@/lib/service-catalog-server';
 import { normalizeProvidersForPrompt } from '@/lib/diagnose-prompt-providers';
 import { buildSystemInstruction } from './prompts';
 import { buildProviderHydrationPromptBlock } from './prompts/provider-hydration';
@@ -17,10 +20,19 @@ const ALLOWED_IMAGE_ORIGINS = [
     process.env.NEXT_PUBLIC_SUPABASE_URL,
 ].filter((s): s is string => typeof s === 'string' && s.length > 0);
 const MAX_DIAGNOSE_IMAGE_BYTES = 2 * 1024 * 1024; // 2MB guardrail for model payload cost.
-const SERVICE_CATALOG_TTL_MS = 5 * 60 * 1000;
+/** Echoed on successful diagnosis responses for debugging; matches values embedded in <json>. */
+const DIAGNOSE_RESPONSE_META_HEADERS: Record<string, string> = {
+    'X-Scandio-Prompt-Version': DIAGNOSE_PROMPT_VERSION,
+    'X-Scandio-Ai-Model': GEMINI_MODEL_NAME,
+};
 
-let serviceCatalogCache: { labels: string[]; expiresAt: number } | null = null;
-let serviceCatalogInFlight: Promise<string[]> | null = null;
+function diagnoseAiLogMeta(extra: Record<string, unknown> = {}): Record<string, unknown> {
+    return {
+        promptVersion: DIAGNOSE_PROMPT_VERSION,
+        model: GEMINI_MODEL_NAME,
+        ...extra,
+    };
+}
 
 function recordStage(timings: Record<string, number>, key: string, startedAt: number): void {
     timings[key] = Date.now() - startedAt;
@@ -36,45 +48,6 @@ function logDiagnoseTimings(status: 'ok' | 'error', timings: Record<string, numb
             timings,
         })
     );
-}
-
-async function getServiceCatalogFromCacheOrDb(): Promise<string[]> {
-    const now = Date.now();
-    if (serviceCatalogCache && now < serviceCatalogCache.expiresAt) {
-        return serviceCatalogCache.labels;
-    }
-    if (serviceCatalogInFlight) return serviceCatalogInFlight;
-
-    serviceCatalogInFlight = (async () => {
-        const admin = await createSupabaseAdminClient();
-        const { data } = await admin
-            .from('services')
-            .select('label')
-            .eq('active', true)
-            .order('sort_order', { ascending: true });
-        const labels = Array.isArray(data)
-            ? data
-                  .map((row: unknown) =>
-                      row && typeof row === 'object'
-                          ? String((row as { label?: unknown }).label ?? '').trim()
-                          : ''
-                  )
-                  .filter((label: string) => label.length > 0)
-            : [];
-        if (labels.length > 0) {
-            serviceCatalogCache = {
-                labels,
-                expiresAt: Date.now() + SERVICE_CATALOG_TTL_MS,
-            };
-        }
-        return labels;
-    })();
-
-    try {
-        return await serviceCatalogInFlight;
-    } finally {
-        serviceCatalogInFlight = null;
-    }
 }
 
 function isAllowedImageUrl(url: string): boolean {
@@ -369,6 +342,21 @@ function extractPartialThoughtInner(accum: string): string | null {
     return rest;
 }
 
+function injectDiagnosisMetadata(text: string): string {
+    const jsonMatch = text.match(/<json>([\s\S]*?)<\/json>/i);
+    if (!jsonMatch?.[1]) return text;
+    try {
+        const parsed = JSON.parse(jsonMatch[1]) as Record<string, unknown>;
+        parsed.prompt_version = DIAGNOSE_PROMPT_VERSION;
+        parsed.ai_model = GEMINI_MODEL_NAME;
+        logIfDiagnosisJsonShapeUnexpected(parsed);
+        const replaced = `<json>${JSON.stringify(parsed)}</json>`;
+        return text.replace(jsonMatch[0], replaced);
+    } catch {
+        return text;
+    }
+}
+
 function applyDiagnosePostProcess(fullText: string, serviceList: string[]): string {
     const withThought = enforceThoughtSentenceCount(
         enforceMinThoughtLength(ensureThoughtBlock(fullText), 125),
@@ -379,13 +367,15 @@ function applyDiagnosePostProcess(fullText: string, serviceList: string[]): stri
         /<thought>([\s\S]*?)<\/thought>/i,
         (_m, t) => `<thought>${stripFillerSentenceStarts(String(t || ''))}</thought>`
     );
-    return enforceUrgencyKey(
-        enforceLanguageStyleInJson(
-            enforceUnsupportedHomeServiceResponse(
-                enforceUnrelatedImageResponse(
-                    enforceTradeFromServiceCatalog(withThoughtStyle, serviceList)
-                ),
-                serviceList
+    return injectDiagnosisMetadata(
+        enforceUrgencyKey(
+            enforceLanguageStyleInJson(
+                enforceUnsupportedHomeServiceResponse(
+                    enforceUnrelatedImageResponse(
+                        enforceTradeFromServiceCatalog(withThoughtStyle, serviceList)
+                    ),
+                    serviceList
+                )
             )
         )
     );
@@ -680,7 +670,7 @@ export async function POST(req: NextRequest) {
         };
 
         const hasUserContext = userSelectedTrade?.trade && userSelectedTrade?.diagnosis;
-        const model = getGeminiModel();
+        const model = getDiagnosisModel();
 
         if (analysisPhase === 'image_thought_only') {
             const imageParts: ContentPart[] = [];
@@ -763,6 +753,7 @@ export async function POST(req: NextRequest) {
                             headers: {
                                 'Content-Type': 'application/x-ndjson; charset=utf-8',
                                 'Cache-Control': 'no-store',
+                                ...DIAGNOSE_RESPONSE_META_HEADERS,
                                 ...quotaExtraHeaders,
                             },
                         }
@@ -807,6 +798,7 @@ export async function POST(req: NextRequest) {
                         headers: {
                             'Content-Type': 'application/x-ndjson; charset=utf-8',
                             'Cache-Control': 'no-store',
+                            ...DIAGNOSE_RESPONSE_META_HEADERS,
                             ...quotaExtraHeaders,
                         },
                     }
@@ -815,6 +807,7 @@ export async function POST(req: NextRequest) {
             return new Response(`<thought>${thought || fallbackThought}</thought>`, {
                 headers: {
                     'Content-Type': 'text/plain; charset=utf-8',
+                    ...DIAGNOSE_RESPONSE_META_HEADERS,
                     ...quotaExtraHeaders,
                 },
             });
@@ -825,7 +818,7 @@ export async function POST(req: NextRequest) {
             : [];
         if (serviceList.length === 0) {
             const serviceCatalogStageStartedAt = Date.now();
-            serviceList = await getServiceCatalogFromCacheOrDb();
+            serviceList = await getServiceCatalogLabelsCached();
             recordStage(timings, 'service_catalog_cache_or_db_ms', serviceCatalogStageStartedAt);
         }
         if (serviceList.length === 0) {
@@ -1075,7 +1068,7 @@ CRITICAL: Output <thought> FIRST (2–3 short sentences about the likely problem
                                 endpoint: 'diagnose',
                                 status: 'ok',
                                 durationMs,
-                                meta: {
+                                meta: diagnoseAiLogMeta({
                                     isTextOnly,
                                     isFollowUp,
                                     hasUserContext,
@@ -1084,7 +1077,7 @@ CRITICAL: Output <thought> FIRST (2–3 short sentences about the likely problem
                                     historyLength: Array.isArray(history) ? history.length : 0,
                                     usedGenerateContentFallback: false,
                                     ndjsonStream: true,
-                                },
+                                }),
                             });
                             logDiagnoseTimings('ok', timings);
                             controller.close();
@@ -1094,6 +1087,7 @@ CRITICAL: Output <thought> FIRST (2–3 short sentences about the likely problem
                         headers: {
                             'Content-Type': 'application/x-ndjson; charset=utf-8',
                             'Cache-Control': 'no-store',
+                            ...DIAGNOSE_RESPONSE_META_HEADERS,
                             ...quotaExtraHeaders,
                         },
                     }
@@ -1127,7 +1121,7 @@ CRITICAL: Output <thought> FIRST (2–3 short sentences about the likely problem
                 endpoint: 'diagnose',
                 status: 'ok',
                 durationMs,
-                meta: {
+                meta: diagnoseAiLogMeta({
                     isTextOnly,
                     isFollowUp,
                     hasUserContext,
@@ -1135,7 +1129,7 @@ CRITICAL: Output <thought> FIRST (2–3 short sentences about the likely problem
                     attachmentsCount: attachmentImages.length,
                     historyLength: Array.isArray(history) ? history.length : 0,
                     usedGenerateContentFallback: false,
-                },
+                }),
             });
             logDiagnoseTimings('ok', timings);
 
@@ -1167,6 +1161,7 @@ CRITICAL: Output <thought> FIRST (2–3 short sentences about the likely problem
                 headers: {
                     'Content-Type': 'text/plain; charset=utf-8',
                     'Transfer-Encoding': 'chunked',
+                    ...DIAGNOSE_RESPONSE_META_HEADERS,
                     ...quotaExtraHeaders,
                 },
             });
@@ -1228,7 +1223,7 @@ CRITICAL: Output <thought> FIRST (2–3 short sentences about the likely problem
                 endpoint: 'diagnose',
                 status: 'ok',
                 durationMs,
-                meta: {
+                meta: diagnoseAiLogMeta({
                     isTextOnly,
                     isFollowUp,
                     hasUserContext,
@@ -1236,7 +1231,7 @@ CRITICAL: Output <thought> FIRST (2–3 short sentences about the likely problem
                     attachmentsCount: attachmentImages.length,
                     historyLength: Array.isArray(history) ? history.length : 0,
                     usedGenerateContentFallback: true,
-                },
+                }),
             });
             logDiagnoseTimings('ok', timings);
 
@@ -1266,6 +1261,7 @@ CRITICAL: Output <thought> FIRST (2–3 short sentences about the likely problem
                         headers: {
                             'Content-Type': 'application/x-ndjson; charset=utf-8',
                             'Cache-Control': 'no-store',
+                            ...DIAGNOSE_RESPONSE_META_HEADERS,
                             ...quotaExtraHeaders,
                         },
                     }
@@ -1275,6 +1271,7 @@ CRITICAL: Output <thought> FIRST (2–3 short sentences about the likely problem
             return new Response(adjusted, {
                 headers: {
                     'Content-Type': 'text/plain; charset=utf-8',
+                    ...DIAGNOSE_RESPONSE_META_HEADERS,
                     ...quotaExtraHeaders,
                 },
             });
@@ -1293,9 +1290,9 @@ CRITICAL: Output <thought> FIRST (2–3 short sentences about the likely problem
             endpoint: 'diagnose',
             status: 'error',
             durationMs,
-            meta: {
+            meta: diagnoseAiLogMeta({
                 error: metaError,
-            },
+            }),
         });
         // eslint-disable-next-line no-console
         console.error('Gemini Diagnosis Error:', error);

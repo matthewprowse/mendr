@@ -150,6 +150,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
             const { data: byPlace } = await admin
                 .from('providers')
                 .select('id, google_place_id')
+                .eq('is_active', true)
                 .in('google_place_id', placeIdsForQuery);
             providers = (byPlace ?? []) as { id: string; google_place_id: string }[];
             logStage(`providers by place (count=${providers.length})`, 'providers_resolved');
@@ -159,6 +160,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
             const { data: byId } = await admin
                 .from('providers')
                 .select('id, google_place_id')
+                .eq('is_active', true)
                 .in('id', nonEmptyProviderIds);
             const rows = (byId ?? []) as { id: string; google_place_id: string }[];
             const orderMap = new Map(nonEmptyProviderIds.map((id, idx) => [id, idx]));

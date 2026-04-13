@@ -53,6 +53,7 @@ export function useProReviews(placeId: string) {
                         .from('providers')
                         .select('id, google_place_id, rating_count')
                         .eq('google_place_id', googlePlaceId)
+                        .eq('is_active', true)
                         .maybeSingle();
                     providerId = providerRow?.id ? String(providerRow.id) : null;
                     if (cancelled) return;

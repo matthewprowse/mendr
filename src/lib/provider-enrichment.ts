@@ -30,8 +30,10 @@ import {
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const CACHE_TTL_MS        = 14 * 24 * 60 * 60 * 1000;
-const FAILED_RETRY_MS     = 48 * 60 * 60 * 1000;
+const CACHE_TTL_MS = 14 * 24 * 60 * 60 * 1000;
+/** After a low-quality AI enrichment, allow retry sooner than full cache TTL. */
+const LOW_QUALITY_RETRY_MS = 24 * 60 * 60 * 1000;
+const FAILED_RETRY_MS = 48 * 60 * 60 * 1000;
 const SCRAPE_TIMEOUT_MS   = 10_000;
 const IMAGE_FETCH_TIMEOUT = 8_000;
 const CLASSIFY_TIMEOUT_MS = 8_000; // per-call; batch gets 2× this
@@ -293,6 +295,29 @@ interface CombinedEnrichmentOutput extends AiEnrichmentOutput {
     highlights: string[];
 }
 
+/**
+ * Reject obviously bad combined outputs so they are not promoted to public provider copy;
+ * `enrichment_quality` in DB marks rows for shorter retry (see LOW_QUALITY_RETRY_MS).
+ */
+function assessCombinedEnrichmentQuality(params: {
+    websiteText: string;
+    combined: CombinedEnrichmentOutput | null;
+    normalizedSpecialisations: string[];
+}): 'ok' | 'low' {
+    if (!params.combined) return 'low';
+    const bio = (params.combined.bio ?? '').trim();
+    if (bio.length < 40) return 'low';
+    if (/as an artificial intelligence|lorem ipsum/i.test(bio)) return 'low';
+    const words = bio.split(/\s+/).filter(Boolean);
+    if (words.length >= 12) {
+        const unique = new Set(words.map((w) => w.toLowerCase().replace(/[^a-z0-9]/g, '')));
+        if (unique.size / words.length < 0.35) return 'low';
+    }
+    const hasScrape = params.websiteText.trim().length >= MIN_SCRAPE_CHARS;
+    if (hasScrape && params.normalizedSpecialisations.length === 0) return 'low';
+    return 'ok';
+}
+
 function computeProfileCompleteness(params: {
     websiteText: string;
     enrichment: AiEnrichmentOutput | null;
@@ -412,7 +437,8 @@ export async function enrichProvider(
             'id, google_place_id, website, name, summary, rating, rating_count, address, specialisations'
         )
         .eq('id', providerId)
-        .single();
+        .eq('is_active', true)
+        .maybeSingle();
 
     if (provErr || !provider) return { ok: false, reason: 'Provider not found' };
 
@@ -424,34 +450,59 @@ export async function enrichProvider(
     // Check cache staleness
     const { data: cached } = await admin
         .from('provider_cache')
-        .select('scrape_status, scraped_at, enriched_at, cache_version')
+        .select('scrape_status, scraped_at, enriched_at, cache_version, enrichment_quality')
         .eq('provider_id', providerId)
         .maybeSingle();
 
     if (cached?.scraped_at) {
-        const age = Date.now() - new Date(cached.scraped_at).getTime();
+        const scrapeAge = Date.now() - new Date(cached.scraped_at).getTime();
         const cachedVersion =
             typeof cached.cache_version === 'number' ? cached.cache_version : 0;
         const isVersionMatch = cachedVersion === targetCacheVersion;
+        const quality =
+            typeof (cached as { enrichment_quality?: string }).enrichment_quality === 'string'
+                ? (cached as { enrichment_quality: string }).enrichment_quality
+                : null;
+        const enrichedAt = cached.enriched_at;
+        const enrichAge = enrichedAt ? Date.now() - new Date(enrichedAt).getTime() : Infinity;
+
         // Only skip if BOTH the scrape AND the AI enrichment completed successfully.
         // If enriched_at is null the AI call failed last time — we must retry even if
         // the scrape itself was marked 'ok' and is within the 14-day TTL.
-        if (cached.scrape_status === 'ok' && cached.enriched_at && age < CACHE_TTL_MS && isVersionMatch) {
+        if (
+            cached.scrape_status === 'ok' &&
+            enrichedAt &&
+            quality !== 'low' &&
+            scrapeAge < CACHE_TTL_MS &&
+            isVersionMatch
+        ) {
             console.log(
                 `${logPrefix} Skipping — cache fresh (scraped=${cached.scraped_at}, enriched=${cached.enriched_at}, version=${cachedVersion})`
             );
             return { ok: true, skipped: true, reason: 'Cache fresh' };
         }
-        if (cached.scrape_status === 'ok' && cached.enriched_at && age < CACHE_TTL_MS && !isVersionMatch) {
+        if (
+            cached.scrape_status === 'ok' &&
+            enrichedAt &&
+            quality === 'low' &&
+            enrichAge < LOW_QUALITY_RETRY_MS &&
+            isVersionMatch
+        ) {
+            console.log(
+                `${logPrefix} Skipping — low-quality enrichment retry cooling off (enriched=${cached.enriched_at})`
+            );
+            return { ok: true, skipped: true, reason: 'Low quality retry cooling off' };
+        }
+        if (cached.scrape_status === 'ok' && cached.enriched_at && scrapeAge < CACHE_TTL_MS && !isVersionMatch) {
             console.log(
                 `${logPrefix} Cache version mismatch (cached=${cachedVersion}, target=${targetCacheVersion}) — rerunning enrichment`
             );
         }
-        if (cached.scrape_status === 'failed' && age < FAILED_RETRY_MS && isVersionMatch) {
+        if (cached.scrape_status === 'failed' && scrapeAge < FAILED_RETRY_MS && isVersionMatch) {
             console.log(`${logPrefix} Skipping — scrape failed recently, retry locked`);
             return { ok: true, skipped: true, reason: 'Failed recently, retry locked' };
         }
-        if (cached.scrape_status === 'failed' && age < FAILED_RETRY_MS && !isVersionMatch) {
+        if (cached.scrape_status === 'failed' && scrapeAge < FAILED_RETRY_MS && !isVersionMatch) {
             console.log(
                 `${logPrefix} Failed retry lock bypassed due to version change (cached=${cachedVersion}, target=${targetCacheVersion})`
             );
@@ -656,6 +707,21 @@ export async function enrichProvider(
     const normalizedSpecialisations = normalizeSpecialisations(combined?.specialisations ?? []);
     const normalizedHighlights = normalizeHighlights(combined?.highlights ?? []);
 
+    const enrichmentQuality = assessCombinedEnrichmentQuality({
+        websiteText,
+        combined,
+        normalizedSpecialisations,
+    });
+    if (enrichmentQuality === 'low' && combined) {
+        console.log(
+            JSON.stringify({
+                type: 'enrichment_quality_low',
+                provider_id: providerId,
+                provider_name: provider.name ?? null,
+            })
+        );
+    }
+
     const enrichment: AiEnrichmentOutput | null = combined
         ? {
               bio: combined.bio,
@@ -703,6 +769,7 @@ export async function enrichProvider(
             highlights: normalizedHighlights.length ? normalizedHighlights : null,
             cache_version: targetCacheVersion,
             updated_at: now,
+            enrichment_quality: combined ? enrichmentQuality : null,
         },
         { onConflict: 'provider_id' }
     );
@@ -710,6 +777,12 @@ export async function enrichProvider(
     // ── Stage 6: Update provider profile copy from combined output ─────────────
     console.log(`${logPrefix} Stage 6: Updating providers table`);
     try {
+        if (enrichmentQuality !== 'ok') {
+            console.log(`${logPrefix} Stage 6: Skipped — enrichment quality gate (not promoted to public providers row)`);
+            console.log(`${logPrefix} Enrichment Complete`);
+            return { ok: true };
+        }
+
         const aboutBusiness = combined?.about_business?.trim() ?? '';
         const pastWork = combined?.past_work?.trim() ?? '';
         const narrativeParts = [aboutBusiness, pastWork].filter(Boolean);
@@ -840,7 +913,8 @@ export async function enrichProviderReviewSummaryFast(
         .from('providers')
         .select('id, google_place_id, name')
         .eq('id', providerId)
-        .single();
+        .eq('is_active', true)
+        .maybeSingle();
 
     if (provErr || !provider) return { ok: false, reason: 'Provider not found' };
 

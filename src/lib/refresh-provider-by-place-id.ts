@@ -156,7 +156,7 @@ export async function refreshProviderByPlaceId(rawPlaceId: string): Promise<Refr
     if (reviewPayload.length > 0) {
         const upsertRes = await adminSupabase
             .from('reviews')
-            .upsert(reviewPayload, { onConflict: 'source,source_ref' });
+            .upsert(reviewPayload, { onConflict: 'provider_id,source,source_ref' });
         if (upsertRes.error && process.env.NODE_ENV === 'development') {
             // eslint-disable-next-line no-console
             console.error('Reviews upsert failed:', upsertRes.error.message);

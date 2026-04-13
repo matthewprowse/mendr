@@ -34,6 +34,30 @@ export async function fetchActiveServiceCatalogClient(
     if (clientCatalogInFlight) return clientCatalogInFlight;
 
     clientCatalogInFlight = (async () => {
+        if (typeof window !== 'undefined') {
+            try {
+                const res = await fetch('/api/service-catalog', { credentials: 'same-origin' });
+                if (res.ok) {
+                    const body = (await res.json()) as { labels?: unknown };
+                    const raw = body?.labels;
+                    if (Array.isArray(raw)) {
+                        const labels = raw
+                            .map((x) => (typeof x === 'string' ? x.trim() : ''))
+                            .filter((s) => s.length > 0);
+                        if (labels.length > 0) {
+                            clientCatalogCache = {
+                                labels,
+                                expiresAt: Date.now() + CLIENT_CATALOG_TTL_MS,
+                            };
+                            return labels;
+                        }
+                    }
+                }
+            } catch {
+                // Fall back to Supabase (RLS allows public read of services).
+            }
+        }
+
         const { data } = await supabase
             .from('services')
             .select('label')
