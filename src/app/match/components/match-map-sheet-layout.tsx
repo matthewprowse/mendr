@@ -6,6 +6,7 @@ import {
     useEffect,
     useRef,
     useState,
+    useSyncExternalStore,
     type ReactNode,
 } from 'react';
 import { ScanFlowShell } from '@/components/scan-flow-shell';
@@ -16,6 +17,20 @@ const HEADER_STOP_TOP_PX = 80;
 const SHEET_MIN_HEIGHT_PX = 348;
 const SHEET_MAX_RADIUS_PX = 16;
 const SHEET_RADIUS_REDUCTION_DISTANCE_PX = 196;
+
+const DESKTOP_SPLIT_MQ = '(min-width: 1024px)';
+
+function subscribeDesktopSplit(onStoreChange: () => void) {
+    if (typeof window === 'undefined') return () => {};
+    const mq = window.matchMedia(DESKTOP_SPLIT_MQ);
+    mq.addEventListener('change', onStoreChange);
+    return () => mq.removeEventListener('change', onStoreChange);
+}
+
+function getDesktopSplitSnapshot() {
+    if (typeof window === 'undefined') return false;
+    return window.matchMedia(DESKTOP_SPLIT_MQ).matches;
+}
 
 export type MatchMapSheetLayoutProps = {
     onClose: () => void;
@@ -44,6 +59,12 @@ export const MatchMapSheetLayout = forwardRef<HTMLDivElement, MatchMapSheetLayou
         },
         ref
     ) {
+        const isDesktopLayout = useSyncExternalStore(
+            subscribeDesktopSplit,
+            getDesktopSplitSnapshot,
+            () => false
+        );
+
         const [sheetMode, setSheetMode] = useState<'half' | 'full'>('half');
         const [sheetTopPx, setSheetTopPx] = useState<number | null>(null);
         const [isDraggingSheet, setIsDraggingSheet] = useState(false);
@@ -87,8 +108,10 @@ export const MatchMapSheetLayout = forwardRef<HTMLDivElement, MatchMapSheetLayou
         }, [sheetTopPx]);
 
         useEffect(() => {
-            if (typeof window === 'undefined') return;
-            setSheetTopFromScroll();
+            if (typeof window === 'undefined' || isDesktopLayout) return;
+            const raf = requestAnimationFrame(() => {
+                setSheetTopFromScroll();
+            });
             const onResize = () => {
                 if (sheetMode === 'full') {
                     setSheetTopPx(HEADER_STOP_TOP_PX);
@@ -97,8 +120,11 @@ export const MatchMapSheetLayout = forwardRef<HTMLDivElement, MatchMapSheetLayou
                 }
             };
             window.addEventListener('resize', onResize);
-            return () => window.removeEventListener('resize', onResize);
-        }, [getCollapsedTop, setSheetTopFromScroll, sheetMode]);
+            return () => {
+                cancelAnimationFrame(raf);
+                window.removeEventListener('resize', onResize);
+            };
+        }, [getCollapsedTop, isDesktopLayout, setSheetTopFromScroll, sheetMode]);
 
         useEffect(() => {
             if (!scrollToKey) {
@@ -130,9 +156,12 @@ export const MatchMapSheetLayout = forwardRef<HTMLDivElement, MatchMapSheetLayou
         }, []);
 
         useEffect(() => {
-            if (!expandRequestId) return;
-            expandSheet();
-        }, [expandRequestId, expandSheet]);
+            if (isDesktopLayout || !expandRequestId) return;
+            const raf = requestAnimationFrame(() => {
+                expandSheet();
+            });
+            return () => cancelAnimationFrame(raf);
+        }, [expandRequestId, expandSheet, isDesktopLayout]);
 
         const handleSheetDragStart = useCallback(
             (clientY: number) => {
@@ -173,6 +202,7 @@ export const MatchMapSheetLayout = forwardRef<HTMLDivElement, MatchMapSheetLayou
         }, [getCollapsedTop, isDraggingSheet, sheetTopPx]);
 
         useEffect(() => {
+            if (isDesktopLayout) return;
             const el = listScrollRef.current;
             if (!el) return;
 
@@ -223,7 +253,7 @@ export const MatchMapSheetLayout = forwardRef<HTMLDivElement, MatchMapSheetLayou
                 el.removeEventListener('touchstart', onTouchStart);
                 el.removeEventListener('touchmove', onTouchMove);
             };
-        }, [getCollapsedTop, isDraggingSheet]);
+        }, [getCollapsedTop, isDesktopLayout, isDraggingSheet]);
 
         const collapsedTop = getCollapsedTop();
         const baseTop = sheetTopPx ?? collapsedTop;
@@ -235,7 +265,7 @@ export const MatchMapSheetLayout = forwardRef<HTMLDivElement, MatchMapSheetLayou
         const dynamicTopRadius =
             baseTop >= radiusReductionStartTop ? SHEET_MAX_RADIUS_PX : SHEET_MAX_RADIUS_PX * radiusProgress;
         const isSheetFullyStretched = baseTop <= HEADER_STOP_TOP_PX + 0.5;
-        const isSheetContentScrollable = isSheetFullyStretched;
+        const isSheetContentScrollable = isDesktopLayout || isSheetFullyStretched;
 
         useEffect(() => {
             const el = listScrollRef.current;
@@ -246,6 +276,7 @@ export const MatchMapSheetLayout = forwardRef<HTMLDivElement, MatchMapSheetLayou
         }, [isSheetContentScrollable]);
 
         useEffect(() => {
+            if (isDesktopLayout) return;
             const el = listScrollRef.current;
             if (!el) return;
 
@@ -284,10 +315,10 @@ export const MatchMapSheetLayout = forwardRef<HTMLDivElement, MatchMapSheetLayou
 
             el.addEventListener('wheel', onWheel, { passive: false });
             return () => el.removeEventListener('wheel', onWheel);
-        }, [getCollapsedTop, isDraggingSheet]);
+        }, [getCollapsedTop, isDesktopLayout, isDraggingSheet]);
 
         useEffect(() => {
-            if (typeof window === 'undefined' || !isDraggingSheet) return;
+            if (typeof window === 'undefined' || !isDraggingSheet || isDesktopLayout) return;
             const onMouseMove = (event: MouseEvent) => handleSheetDragMove(event.clientY);
             const onMouseUp = () => handleSheetDragEnd();
             const onTouchMove = (event: TouchEvent) => {
@@ -307,7 +338,7 @@ export const MatchMapSheetLayout = forwardRef<HTMLDivElement, MatchMapSheetLayou
                 window.removeEventListener('touchmove', onTouchMove);
                 window.removeEventListener('touchend', onTouchEnd);
             };
-        }, [handleSheetDragEnd, handleSheetDragMove, isDraggingSheet]);
+        }, [handleSheetDragEnd, handleSheetDragMove, isDesktopLayout, isDraggingSheet]);
 
         return (
             <ScanFlowShell
@@ -315,8 +346,9 @@ export const MatchMapSheetLayout = forwardRef<HTMLDivElement, MatchMapSheetLayou
                 constrainContentWidth
                 logoClassName="hidden"
                 headerClassName="bg-background shadow-md"
-                contentWrapperClassName="p-0 pt-20 gap-0 min-h-screen"
-                contentClassName="relative mx-auto w-full max-w-3xl gap-0 p-0 pb-[52dvh]"
+                headerInnerClassName="max-w-3xl lg:max-w-7xl"
+                contentWrapperClassName="p-0 gap-0 min-h-screen pt-20 lg:flex lg:min-h-0 lg:flex-1 lg:flex-col lg:p-4 lg:pt-20"
+                contentClassName="relative mx-auto flex w-full max-w-3xl flex-col gap-0 p-0 pb-[52dvh] lg:max-w-7xl lg:min-h-0 lg:flex-1 lg:flex-row lg:gap-3 lg:overflow-hidden lg:bg-transparent lg:p-0 lg:pb-0"
                 headerLeft={
                     <Button variant="outline" className="size-10" type="button" onClick={onClose}>
                         <ArrowLeft size={24} weight="bold" className="text-foreground" />
@@ -325,40 +357,69 @@ export const MatchMapSheetLayout = forwardRef<HTMLDivElement, MatchMapSheetLayou
                 headerRight={headerRight}
             >
                 <div
-                    className="fixed inset-x-0 z-20 overflow-hidden bg-muted"
-                    style={{ top: `${HEADER_STOP_TOP_PX}px`, bottom: 0 }}
+                    className={
+                        isDesktopLayout
+                            ? 'relative z-20 flex min-h-0 w-full flex-1 flex-col overflow-hidden bg-background p-3 lg:h-[min(920px,calc(100dvh-9rem))] lg:w-1/2'
+                            : 'fixed inset-x-0 bottom-0 z-20 flex flex-col overflow-hidden bg-background px-3 pt-2'
+                    }
+                    style={
+                        isDesktopLayout
+                            ? undefined
+                            : {
+                                  top: `${HEADER_STOP_TOP_PX}px`,
+                                  bottom: `calc(100dvh - ${baseTop}px + 16px)`,
+                              }
+                    }
                 >
-                    {mapSlot}
-                    {mapLoadingOverlay}
+                    <div
+                        className={
+                            isDesktopLayout
+                                ? 'relative min-h-0 flex-1 overflow-hidden rounded-xl border border-border bg-background shadow-sm'
+                                : 'relative min-h-0 flex-1 overflow-hidden rounded-t-xl border border-border bg-background shadow-sm'
+                        }
+                    >
+                        {mapSlot}
+                        {mapLoadingOverlay}
+                    </div>
                 </div>
 
                 <div
-                    className="fixed inset-x-0 z-30 mx-auto flex w-full max-w-3xl touch-pan-y flex-col gap-4 overflow-y-auto border-t border-border bg-background px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 shadow-lg"
+                    className={
+                        isDesktopLayout
+                            ? 'relative z-30 flex min-h-0 w-full flex-1 touch-pan-y flex-col gap-4 overflow-y-auto border-border bg-background px-4 pb-4 pt-4 shadow-lg lg:h-[min(920px,calc(100dvh-9rem))] lg:w-1/2 lg:border-l lg:border-t-0 lg:px-5 lg:py-5 lg:shadow-none'
+                            : 'fixed inset-x-0 z-30 mx-auto flex w-full max-w-3xl touch-pan-y flex-col gap-4 border-t border-border bg-background px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 shadow-lg'
+                    }
                     ref={setListRef}
-                    style={{
-                        top: `${baseTop}px`,
-                        height: `calc(100dvh - ${baseTop}px)`,
-                        minHeight: `${SHEET_MIN_HEIGHT_PX}px`,
-                        borderTopLeftRadius: dynamicTopRadius,
-                        borderTopRightRadius: dynamicTopRadius,
-                        willChange: 'top, border-top-left-radius, border-top-right-radius',
-                        overflowY: isSheetContentScrollable ? 'auto' : 'hidden',
-                    }}
+                    style={
+                        isDesktopLayout
+                            ? undefined
+                            : {
+                                  top: `${baseTop}px`,
+                                  height: `calc(100dvh - ${baseTop}px)`,
+                                  minHeight: `${SHEET_MIN_HEIGHT_PX}px`,
+                                  borderTopLeftRadius: dynamicTopRadius,
+                                  borderTopRightRadius: dynamicTopRadius,
+                                  willChange: 'top, border-top-left-radius, border-top-right-radius',
+                                  overflowY: isSheetContentScrollable ? 'auto' : 'hidden',
+                              }
+                    }
                 >
-                    <button
-                        type="button"
-                        onClick={expandSheet}
-                        onMouseDown={(event) => handleSheetDragStart(event.clientY)}
-                        onTouchStart={(event) => {
-                            const touch = event.touches[0];
-                            if (!touch) return;
-                            handleSheetDragStart(touch.clientY);
-                        }}
-                        className="mx-auto flex h-5 w-20 items-center justify-center"
-                        aria-label="Expand provider list"
-                    >
-                        <span className="h-1.5 w-10 rounded-full bg-muted" />
-                    </button>
+                    {!isDesktopLayout ? (
+                        <button
+                            type="button"
+                            onClick={expandSheet}
+                            onMouseDown={(event) => handleSheetDragStart(event.clientY)}
+                            onTouchStart={(event) => {
+                                const touch = event.touches[0];
+                                if (!touch) return;
+                                handleSheetDragStart(touch.clientY);
+                            }}
+                            className="mx-auto flex h-5 w-20 items-center justify-center"
+                            aria-label="Expand provider list"
+                        >
+                            <span className="h-1.5 w-10 rounded-full bg-muted" />
+                        </button>
+                    ) : null}
                     {children}
                 </div>
             </ScanFlowShell>

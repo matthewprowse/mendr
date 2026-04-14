@@ -5,16 +5,22 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 
 // Singleton instance to avoid "Multiple GoTrueClient instances" warning
 let supabaseInstance: any = null;
+let hasWarnedMissingEnv = false;
 
 export const getSupabase = () => {
     if (typeof window === 'undefined') return dummyClient;
 
     if (!supabaseInstance) {
         if (!supabaseUrl || !supabaseAnonKey) {
-            console.warn(
-                'Supabase environment variables are missing. Client will not be initialized.'
-            );
-            return dummyClient;
+            // Avoid noisy production logs when auth is intentionally disabled.
+            if (process.env.NODE_ENV !== 'production' && !hasWarnedMissingEnv) {
+                console.warn(
+                    'Supabase environment variables are missing. Client will not be initialized.'
+                );
+                hasWarnedMissingEnv = true;
+            }
+            supabaseInstance = dummyClient;
+            return supabaseInstance;
         }
 
         supabaseInstance = createBrowserClient(supabaseUrl, supabaseAnonKey, {

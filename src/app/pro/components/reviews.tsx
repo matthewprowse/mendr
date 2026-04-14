@@ -169,7 +169,7 @@ export function ProReviewsTab(props: {
             </div>
 
             {(isReviewsLoading || scandioReviewsCount > 0 || isOperatingHoursLoading) && (
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-2 gap-2 lg:grid-cols-4 lg:gap-3">
                     {isReviewsLoading || isOperatingHoursLoading
                         ? SCANDIO_CATEGORY_ROWS.map((row) => (
                               <div key={row.key} className="flex flex-col px-4 p-3 border border-input/75 rounded-lg">
@@ -212,7 +212,10 @@ export function ProReviewsTab(props: {
                 </div>
 
                 <Dialog open={shareOpen} onOpenChange={setShareOpen}>
-                    <DialogContent showCloseButton={false} className="max-h-[min(90vh,640px)] overflow-y-auto sm:max-w-lg">
+                    <DialogContent
+                        showCloseButton={false}
+                        className="max-h-[min(90vh,640px)] overflow-y-auto sm:max-w-lg lg:max-w-2xl"
+                    >
                         <form onSubmit={onShareSubmit} className="flex flex-col gap-6">
                             <DialogHeader className="text-left gap-1">
                                 <DialogTitle className="text-left leading-none">Share Experience</DialogTitle>
@@ -265,7 +268,7 @@ export function ProReviewsTab(props: {
                                 <p className="text-xs text-muted-foreground">
                                     Rate each area below. The descriptions explain what each score reflects.
                                 </p>
-                                <div className="grid grid-cols-2 gap-3">
+                                <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
                                     {SCANDIO_CATEGORY_ROWS.map((row) => (
                                         <CategoryStarRatingRow
                                             key={row.key}

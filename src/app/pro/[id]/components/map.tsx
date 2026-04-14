@@ -28,7 +28,7 @@ export function ProPageMap({ apiKey, provider }: ProPageMapProps) {
 
     if (!apiKey) {
         return (
-            <div className="flex h-48 w-full items-center justify-center rounded-xl border border-border bg-muted/40 text-sm text-muted-foreground">
+            <div className="flex h-48 w-full items-center justify-center rounded-xl border border-border bg-muted/40 text-sm text-muted-foreground sm:h-52 lg:h-64 xl:h-72">
                 Map unavailable (no API key)
             </div>
         );
@@ -44,7 +44,7 @@ export function ProPageMap({ apiKey, provider }: ProPageMapProps) {
                 userLocation={null}
                 hideFloatingCard
                 className="w-full"
-                mapInnerClassName="relative h-48 w-full"
+                mapInnerClassName="relative h-48 w-full sm:h-52 lg:h-64 xl:h-72 2xl:h-80"
             />
         </div>
     );

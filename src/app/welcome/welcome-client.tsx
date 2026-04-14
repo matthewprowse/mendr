@@ -439,15 +439,15 @@ export default function WelcomePageClient() {
                                                 </Button>
                                             </div>
                                         ) : (
-                                            <div className="flex items-center justify-between">
-                                                <div className="flex items-center">
+                                            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                                <div className="flex min-w-0 items-center">
                                                     {/* eslint-disable-next-line @next/next/no-img-element */}
                                                     <img
                                                         src={photoPreviewUrl}
                                                         alt="Selected Photo"
                                                         className="min-w-24 min-h-24 max-w-24 max-h-24 object-cover rounded-lg border border-border"
                                                     />
-                                                    <p className="text-sm text-foreground px-4">
+                                                    <p className="min-w-0 truncate px-4 text-sm text-foreground">
                                                         {photoFileName
                                                             ? truncateFileNameKeepExtension(photoFileName)
                                                             : "Selected Photo"}
@@ -457,6 +457,7 @@ export default function WelcomePageClient() {
                                                     type="button"
                                                     variant="secondary"
                                                     size="sm"
+                                                    className="w-full sm:w-auto"
                                                     onClick={() => {
                                                         if (photoPreviewUrl) {
                                                             URL.revokeObjectURL(photoPreviewUrl);
@@ -541,10 +542,12 @@ export default function WelcomePageClient() {
                             key={cardKey}
                             type="button"
                             onClick={() => setExpandedCard(cardKey)}
-                            className="flex flex-row justify-between items-center px-6 py-3.5 bg-background border border-border rounded-lg text-left"
+                            className="flex w-full items-center justify-between gap-3 px-6 py-3.5 bg-background border border-border rounded-lg text-left"
                         >
-                            <p className="text-sm text-muted-foreground">{card.title}</p>
-                            <p className="text-sm text-foreground font-medium">{card.collapsedCta}</p>
+                            <p className="min-w-0 text-sm text-muted-foreground">{card.title}</p>
+                            <p className="min-w-0 truncate text-right text-sm text-foreground font-medium">
+                                {card.collapsedCta}
+                            </p>
                         </button>
                     );
                 })}

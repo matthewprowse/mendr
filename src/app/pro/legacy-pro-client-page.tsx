@@ -312,12 +312,12 @@ export default function WelcomePage() {
             <div className="fixed inset-x-0 top-0 z-50 bg-background">
                 <div
                     ref={headerBarRef}
-                    className="mx-auto flex h-18 w-full max-w-xl flex-row items-center justify-between px-4 sm:px-6"
+                    className="mx-auto flex h-18 w-full max-w-xl flex-row items-center justify-between px-4 sm:px-6 lg:max-w-4xl lg:px-8 xl:max-w-5xl 2xl:max-w-6xl"
                 >
                     <Button variant="secondary" size="icon" className="h-10 w-10" onClick={handleBackToMatch}>
                         <ArrowLeft className="size-5" />
                     </Button>
-                    <h3 className="truncate text-center text-lg font-semibold text-foreground max-w-[min(300px,58vw)]">
+                    <h3 className="max-w-[min(300px,58vw)] truncate text-center text-lg font-semibold text-foreground lg:max-w-md xl:max-w-lg xl:text-xl">
                         {showProviderInHeader ? (
                             isProviderLoading ? (
                                 <Skeleton className="h-5 w-40 mx-auto" />
@@ -345,12 +345,12 @@ export default function WelcomePage() {
                 </div>
             </div>
 
-            <div className="mx-auto flex w-full max-w-xl flex-1 flex-col gap-6 px-4 pb-[calc(6rem+env(safe-area-inset-bottom))] pt-20 sm:px-6">
+            <div className="mx-auto flex w-full max-w-xl flex-1 flex-col gap-6 px-4 pb-[calc(6rem+env(safe-area-inset-bottom))] pt-20 sm:px-6 lg:max-w-4xl lg:gap-8 lg:px-8 xl:max-w-5xl 2xl:max-w-6xl">
 
             {isProviderLoading || isGalleryLoading || isSyncingGoogleGallery ? (
-                <Skeleton className="h-48 w-full rounded-lg" />
+                <Skeleton className="h-48 w-full rounded-lg sm:h-52 lg:h-64" />
             ) : bannerImage ? (
-                <div className="relative h-48 w-full overflow-hidden rounded-lg bg-secondary">
+                <div className="relative h-48 w-full overflow-hidden rounded-lg bg-secondary sm:h-52 lg:h-64 xl:h-72">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                         src={bannerImage.url}
@@ -359,12 +359,15 @@ export default function WelcomePage() {
                     />
                 </div>
             ) : (
-                <div className="flex h-48 bg-secondary rounded-lg" />
+                <div className="flex h-48 rounded-lg bg-secondary sm:h-52 lg:h-64 xl:h-72" />
             )}
-            <div className="flex flex-col gap-2">
-                <div ref={providerTitleRef} className="flex flex-row justify-between items-start gap-3">
-                    <div className="min-w-0 flex flex-col gap-1">
-                        <h1 className="truncate text-2xl text-foreground font-bold">
+            <div className="flex flex-col gap-2 lg:gap-3">
+                <div
+                    ref={providerTitleRef}
+                    className="flex flex-row items-start justify-between gap-3 lg:items-center"
+                >
+                    <div className="flex min-w-0 flex-col gap-1">
+                        <h1 className="truncate text-2xl font-bold text-foreground lg:text-3xl">
                             {isProviderLoading ? <Skeleton className="h-8 w-56" /> : providerName || 'Provider'}
                         </h1>
                         {isProviderLoading || isOperatingHoursLoading ? (
@@ -416,7 +419,7 @@ export default function WelcomePage() {
             >
                 <div
                     ref={tabsStickyRef}
-                    className="sticky top-[72px] z-40 -mx-4 bg-background px-4 pt-0 pb-4 backdrop-blur sm:-mx-6 sm:px-6"
+                    className="sticky top-[72px] z-40 -mx-4 bg-background px-4 pb-4 pt-0 backdrop-blur sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8"
                 >
                     <TabsList className="grid h-10 w-full grid-cols-3 items-stretch">
                         <TabsTrigger
@@ -533,8 +536,8 @@ export default function WelcomePage() {
 
             </div>
 
-            <div className="fixed inset-x-0 bottom-0 z-50 bg-background/95 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur">
-                <div className="mx-auto flex w-full max-w-xl flex-row gap-2 px-4 sm:px-6">
+            <div className="fixed inset-x-0 bottom-0 z-50 border-t border-border/60 bg-background/95 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur supports-[backdrop-filter]:bg-background/80">
+                <div className="mx-auto flex w-full max-w-xl flex-row gap-2 px-4 sm:px-6 lg:max-w-4xl lg:gap-3 lg:px-8 xl:max-w-5xl 2xl:max-w-6xl">
                     {websiteHref ? (
                         <Button variant="ghost" className="flex flex-1 h-10" asChild>
                             <a href={websiteHref} target="_blank" rel="noopener noreferrer">

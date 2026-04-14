@@ -93,7 +93,7 @@ export function ProGalleryTab(props: {
             </Button>
 
             <div className="flex flex-col gap-2">
-                <div className="grid grid-cols-2 gap-2 md:grid-cols-3">
+                <div className="grid grid-cols-2 gap-2 sm:gap-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4">
                     {isGalleryLoading || isSyncingGoogleGallery
                         ? Array.from({ length: 6 }).map((_, i) => (
                               <Skeleton key={i} className="aspect-square rounded-xl" />

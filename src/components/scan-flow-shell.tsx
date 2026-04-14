@@ -1,7 +1,6 @@
 "use client";
 
 import type { RefObject } from "react";
-import Image from "next/image";
 import { X } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -32,6 +31,8 @@ export type ScanFlowShellProps = {
     brandText?: string;
     headerLeft?: React.ReactNode;
     headerCenter?: React.ReactNode;
+    /** Merged onto the header row inner container (default max-w-3xl). */
+    headerInnerClassName?: string;
 };
 
 const DEFAULT_FOOTER_RESERVE = 112;
@@ -55,6 +56,7 @@ export function ScanFlowShell({
     brandText = "Scandio",
     headerLeft,
     headerCenter,
+    headerInnerClassName,
 }: ScanFlowShellProps) {
     const bottomPad =
         contentBottomPadding ?? (footer ? DEFAULT_FOOTER_RESERVE : 24);
@@ -76,7 +78,12 @@ export function ScanFlowShell({
                     headerClassName
                 )}
             >
-                <div className="relative mx-auto flex w-full max-w-3xl items-center gap-2">
+                <div
+                    className={cn(
+                        "relative mx-auto flex w-full max-w-3xl items-center gap-2",
+                        headerInnerClassName
+                    )}
+                >
                     <div className="flex shrink-0 items-center">
                         {headerLeft ? (
                             headerLeft

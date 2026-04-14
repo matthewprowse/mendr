@@ -88,8 +88,8 @@ export function ProAboutTab(props: {
     };
 
     return (
-        <div className="flex flex-col gap-8 mt-2">
-
+        <div className="mt-2 flex flex-col gap-8 lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(260px,36%)] lg:items-start lg:gap-x-8 lg:gap-y-0 xl:grid-cols-[minmax(0,1fr)_minmax(300px,38%)] xl:gap-x-10">
+            <div className="flex min-w-0 flex-col gap-8">
             {/* ── About ── */}
             {isOperatingHoursLoading ? (
                 <div className="flex flex-col gap-2">
@@ -166,12 +166,13 @@ export function ProAboutTab(props: {
                     </>
                 )}
             </div>
+            </div>
 
-            {/* ── Location ── */}
-            <div className="flex flex-col gap-3">
+            {/* ── Location (right column on lg; full width below on mobile) ── */}
+            <div className="flex min-w-0 flex-col gap-3 lg:sticky lg:top-24 lg:self-start">
                 <h3 className="text-base font-semibold text-foreground">Location</h3>
                 {isOperatingHoursLoading ? (
-                    <Skeleton className="h-48 w-full rounded-xl" />
+                    <Skeleton className="h-48 w-full rounded-xl sm:h-52 lg:h-56 xl:h-64" />
                 ) : hasMapCoords && mapsApiKey && providerLat != null && providerLng != null ? (
                     <ProPageMap
                         apiKey={mapsApiKey}
@@ -184,7 +185,7 @@ export function ProAboutTab(props: {
                     />
                 ) : mapEmbedSrc ? (
                     <div className="relative w-full overflow-hidden rounded-xl border border-border bg-card">
-                        <div className="h-48 w-full">
+                        <div className="h-48 w-full sm:h-52 lg:h-56 xl:h-64">
                             <iframe
                                 title="Provider location"
                                 src={mapEmbedSrc}
@@ -197,9 +198,9 @@ export function ProAboutTab(props: {
                     </div>
                 ) : null}
                 {!isOperatingHoursLoading && (addressDisplayLine || directionsHref) && (
-                    <div className="flex flex-row items-center justify-between gap-3">
+                    <div className="flex flex-row flex-wrap items-center justify-between gap-3 lg:flex-col lg:items-stretch">
                         {addressDisplayLine && (
-                            <p className="min-w-0 flex-1 truncate text-sm text-muted-foreground">
+                            <p className="min-w-0 flex-1 text-sm text-muted-foreground lg:flex-none lg:break-words lg:leading-relaxed">
                                 {addressDisplayLine}
                             </p>
                         )}

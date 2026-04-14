@@ -834,7 +834,7 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
                 <div className="flex w-full min-w-0 items-center gap-2">
                     <Input
                         id="match-address-input"
-                        placeholder="Your address"
+                        placeholder="Search address"
                         className="h-10 min-w-0 flex-1 text-sm"
                         value={addressInput}
                         onChange={(e) => setAddressInput(e.target.value)}
@@ -864,7 +864,7 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
             mapSlot={<div ref={mapHostRef} className="absolute inset-0 h-full w-full" />}
             mapLoadingOverlay={
                 showBottomSkeleton || !userLocation ? (
-                    <div className="pointer-events-none absolute inset-0 z-[1] flex items-center justify-center bg-muted/50">
+                    <div className="pointer-events-none absolute inset-0 z-[1] flex items-center justify-center bg-background/70">
                         <p className="px-4 text-center text-xs text-muted-foreground">
                             {isLoading || isProvidersLoading
                                 ? 'Finding service providers…'

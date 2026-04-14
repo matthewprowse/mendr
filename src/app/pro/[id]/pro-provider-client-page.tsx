@@ -36,7 +36,7 @@ export function ProProviderClientPage({ providerId }: ProProviderClientPageProps
     return (
         <main className="min-h-screen bg-background">
             <header className="sticky top-0 z-40 border-b border-border/60 bg-background/95 backdrop-blur">
-                <div className="mx-auto flex h-14 w-full max-w-5xl items-center gap-3 px-4">
+                <div className="mx-auto flex h-14 w-full max-w-5xl items-center gap-3 px-4 lg:px-8 xl:max-w-6xl">
                     <Button variant="ghost" size="icon" onClick={() => router.back()} aria-label="Go back">
                         <ArrowLeft className="size-4" />
                     </Button>
@@ -48,12 +48,14 @@ export function ProProviderClientPage({ providerId }: ProProviderClientPageProps
                 </div>
             </header>
 
-            <section className="mx-auto flex w-full max-w-5xl flex-col gap-5 px-4 py-5">
+            <section className="mx-auto flex w-full max-w-5xl flex-col gap-5 px-4 py-5 lg:gap-8 lg:px-8 xl:max-w-6xl">
                 <div className="space-y-2">
                     {isProviderLoading ? (
                         <Skeleton className="h-8 w-56" />
                     ) : (
-                        <h1 className="text-2xl font-bold text-foreground">{providerName || 'Provider'}</h1>
+                        <h1 className="text-2xl font-bold text-foreground lg:text-3xl">
+                            {providerName || 'Provider'}
+                        </h1>
                     )}
                     {isProviderLoading ? (
                         <Skeleton className="h-4 w-72" />
