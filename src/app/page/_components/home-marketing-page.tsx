@@ -1,6 +1,12 @@
-import { HomeMarketingPageClient } from '@/app/page/_components/home-marketing-page-client';
+/**
+ * DEPRECATED — do not import.
+ *
+ * The canonical customer marketing page is:
+ *   app/src/app/page/components/marketing.tsx  (HomeMarketingPage)
+ *
+ * This _components folder is superseded by page/components.
+ * These files are kept only to preserve git history.
+ */
 
-/** Server-composed marketing home: static sections render as HTML; motion and FAQ are client islands. */
-export function HomeMarketingPage() {
-    return <HomeMarketingPageClient />;
-}
+export {};
+

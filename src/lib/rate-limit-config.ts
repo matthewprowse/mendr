@@ -45,6 +45,24 @@ export const RATE_LIMITS = {
         max: 20,
     },
 
+    // Onboarding: Places Text Search (contractor business lookup).
+    onboardingSearch: {
+        windowMs: 60 * 1000,
+        max: 15,
+    },
+
+    // Onboarding: Place Details + cached reads (per selected business).
+    onboardingPlaceDetails: {
+        windowMs: 60 * 1000,
+        max: 25,
+    },
+
+    // Provider application file uploads (registration cert, KYC, certifications).
+    providerApplicationUpload: {
+        windowMs: 60 * 60 * 1000,
+        max: 40,
+    },
+
     // Google Directions API. Has 7-day Supabase cache; most requests are free.
     directions: {
         windowMs: 60 * 1000, // 1 minute
@@ -69,6 +87,18 @@ export const RATE_LIMITS = {
     uploadImage: {
         windowMs: 60 * 60 * 1000, // 1 hour
         max: 20,
+    },
+
+    // Voice note transcription via Google Speech-to-Text.
+    transcribe: {
+        windowMs: 60 * 1000, // 1 minute
+        max: 20,
+    },
+
+    // Onboarding step-1 description quality check (no external APIs).
+    validateStartDescription: {
+        windowMs: 60 * 1000,
+        max: 40,
     },
 
     // ── Database read/write endpoints ──────────────────────────────────────────
@@ -118,6 +148,13 @@ export const RATE_LIMITS = {
     marketRatesResearch: {
         windowMs: 10 * 60 * 1000,
         max: 15,
+    },
+
+    // Public applicant edit page — token validation + save. Tight to prevent
+    // token enumeration. Legitimate applicants need at most a handful of calls.
+    applicationEdit: {
+        windowMs: 15 * 60 * 1000, // 15 minutes
+        max: 20,
     },
 
 } as const satisfies Record<string, RateLimitConfig>;

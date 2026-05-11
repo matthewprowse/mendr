@@ -10,24 +10,42 @@ const securityHeaders = [
     // Restrict browser feature access — only camera/mic where needed.
     {
         key: 'Permissions-Policy',
-        value: 'camera=(), microphone=(), geolocation=(self), interest-cohort=()',
+        value: 'camera=(), microphone=(self), geolocation=(self)',
     },
 ];
 
 const nextConfig: NextConfig = {
+    outputFileTracingRoot: process.cwd(),
     transpilePackages: ['geist'],
     allowedDevOrigins: ['192.168.101.239'],
     webpack: (config, { dev }) => {
         // Heavy routes (e.g. match + Maps) can exceed the default chunk load timeout in dev
         // when compilation finishes after the browser request — avoids spurious ChunkLoadError.
-        if (dev) {
-            config.output = { ...config.output, chunkLoadTimeout: 120_000 };
+        // Mutate `output` in place — replacing the object can break Next's CSS/font webpack setup.
+        if (dev && config.output) {
+            config.output.chunkLoadTimeout = 120_000;
         }
         return config;
     },
+    // Next 16: Turbopack is the default dev bundler; an explicit `turbopack` key is required when a
+    // `webpack` function is present (our hook only affects webpack builds / `next dev --webpack`).
+    turbopack: {},
     experimental: {
         // Only bundle the icons/components you actually use (big win for geist-icons + radix-ui)
-        optimizePackageImports: ['geist-icons', 'radix-ui'],
+        optimizePackageImports: ['geist-icons'],
+    },
+    async redirects() {
+        return [
+            // /welcome → /start (301 permanent)
+            { source: '/welcome', destination: '/start', permanent: true },
+            // /pro/* → /contractors/* (301 permanent)
+            { source: '/pro/join',               destination: '/contractors',                    permanent: true },
+            { source: '/pro/onboard',            destination: '/contractors/network',            permanent: true },
+            { source: '/pro/application/edit',   destination: '/contractors/application/edit',   permanent: true },
+            { source: '/pro/:id',                destination: '/contractors/:id',                permanent: true },
+            // /api/pro/* → /api/contractors/*
+            { source: '/api/pro/application/edit', destination: '/api/contractors/application/edit', permanent: true },
+        ];
     },
     async headers() {
         return [

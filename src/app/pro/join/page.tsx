@@ -1,11 +1,6 @@
-import type { Metadata } from 'next';
-import ProJoinPageClient from './client';
+import { redirect } from 'next/navigation';
 
-export const metadata: Metadata = {
-    title: 'For contractors',
-    description: 'Join the Scandio provider network and receive informed homeowner enquiries.',
-};
-
+/** Permanent redirect — route moved to /contractors */
 export default function ProJoinPage() {
-    return <ProJoinPageClient />;
+    redirect('/contractors');
 }

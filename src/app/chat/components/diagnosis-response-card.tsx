@@ -202,7 +202,7 @@ export function DiagnosisResponseCard({
                         {!hasLocation && onRequestLocation && (
                                 <div className="flex flex-wrap items-center gap-2">
                                     <Button onClick={() => onRequestLocation(trade)}>
-                                        Use my location
+                                        Use Current Location
                                     </Button>
                                     <Popover
                                         open={addressPopoverOpen}

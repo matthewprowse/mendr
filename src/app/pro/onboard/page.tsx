@@ -1,12 +1,6 @@
-import type { Metadata } from 'next';
-import ProOnboardPageClient from './client';
+import { redirect } from 'next/navigation';
 
-export const metadata: Metadata = {
-    title: 'Provider onboarding',
-    description: 'Complete your Scandio provider profile and service areas.',
-    robots: { index: false, follow: false },
-};
-
+/** Permanent redirect — route moved to /contractors/network */
 export default function ProOnboardPage() {
-    return <ProOnboardPageClient />;
+    redirect('/contractors/network');
 }

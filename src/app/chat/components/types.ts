@@ -26,13 +26,48 @@ export interface DiagnosisData {
      * Used to improve provider match relevance scoring.
      */
     trade_detail?: string;
+    /** Agent 2a routing slug from taxonomy (e.g. garage_door_fault). */
+    subcategory_id?: string;
     /** 0–100. Below 85: ask for more photos/context before showing providers. */
     confidence?: number;
+    /**
+     * 2–4 short clarifying statements (from the user's perspective) that the AI
+     * needs answered before it can produce a confident diagnosis.
+     * Only present when requires_clarification is true.
+     * e.g. ["It's a gas geyser", "The issue started after heavy rain"]
+     */
+    clarification_questions?: string[];
     /**
      * Normalized urgency key from SQL reference data.
      * Links to diagnosis_urgencies.key, e.g. 'immediate', 'urgent', 'soon', 'planned'.
      */
     urgency_key?: string;
+    /**
+     * Consumer-friendly one-sentence translation of urgency_key for the homeowner.
+     * e.g. "Book within the next couple of days before the fault spreads."
+     */
+    urgency_sentence?: string;
+    /**
+     * Predicted invoice line-item names for this repair.
+     * e.g. ["Call-out fee", "Capacitor replacement", "Labour (1–2 hours)"]
+     * Only present when a confident diagnosis was made.
+     */
+    expected_parts?: string[];
+    /**
+     * Retail / installed ZAR estimates per {@link expected_parts} line item.
+     * Filled after diagnosis via `/api/parts-prices` and persisted on `diagnoses.diagnosis` JSON.
+     */
+    expected_part_prices?: Array<{
+        part_name: string;
+        variant?: string;
+        price_min: number | null;
+        price_max: number | null;
+        price_display: string | null;
+        min_price?: number | null;
+        max_price?: number | null;
+        price_displayed?: string | null;
+        from_cache?: boolean;
+    }>;
     /**
      * Cached web research (Brave Search snippets + Gemini cost refinement) for Beta cost outlook.
      * Written by POST /api/market-rates/research.

@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { Facebook, Instagram, Linkedin, Twitter } from 'lucide-react';
+import { CheckCircle, XCircle } from '@phosphor-icons/react';
 import { LandingHeader } from '@/components/landing-header';
 import { Placeholder } from '@/components/placeholder';
 import { Badge } from '@/components/ui/badge';
@@ -39,40 +40,121 @@ const VALUE_BENTO = [
 const FAQS = [
     {
         q: 'Is it free to join right now?',
-        a: 'Yes. The founding phase is free to join. Scandio does not take commission on jobs completed through your business.',
+        a: 'Yes. Joining during the founding phase is completely free. There is no application fee, no monthly subscription cost during onboarding, and Scandio does not take commission on any jobs you complete through the platform. This founding period is how we build a high-quality provider network before rolling out paid plans. Providers who join now lock in favourable terms and are given advance notice before any pricing changes take effect, with no automatic billing surprises.',
     },
     {
-        q: 'What type of leads should we expect?',
-        a: 'Scandio is designed to send informed homeowner enquiries where diagnosis context is already available. This improves first-contact quality compared with generic cold enquiries.',
+        q: 'What kind of enquiries will we actually receive?',
+        a: 'Enquiries through Scandio come from homeowners who have already been through a structured AI diagnosis of their problem. That means when a homeowner contacts you, they can typically tell you what the likely fault is, roughly how urgent it is, and what they have already observed — rather than just saying "something is broken." In practice this reduces the back-and-forth that usually happens before a site visit. You spend less time clarifying the problem and more time quoting and doing the work. The enquiry quality is meaningfully different from a generic directory listing or cold lead.',
     },
     {
-        q: 'How are providers recommended to homeowners?',
-        a: 'Recommendations are based on service relevance, local fit, and profile quality signals. We use layered ranking rather than a single filter.',
+        q: 'How does Scandio decide which providers to recommend?',
+        a: 'Recommendations are produced by a composite ranking algorithm that weighs four signals: service relevance (how closely your trade and specialisation match the diagnosed problem), your Bayesian-smoothed rating (which prevents a handful of five-star reviews from inflating a sparse profile), geographic proximity to the homeowner, and recent activity. No single signal dominates. A highly-rated provider who is 12 km away may rank above a closer provider with fewer reviews and a weaker specialisation match. Profile completeness also adds a small but meaningful boost — providers with photos, a detailed bio, and listed specialisations consistently perform better in matching.',
     },
     {
-        q: 'Can we control where we are shown?',
-        a: 'Yes. Operating area and service categories are core inputs in recommendation relevance, so matching aligns with your practical service radius.',
+        q: 'Can we control which areas and trades we appear in?',
+        a: 'Yes, and this is one of the most important parts of your profile to get right. Your operating area and service categories are the primary inputs to how matching calculates relevance. If you set your radius to cover Cape Town\'s southern suburbs, you will not appear in recommendations for homeowners in the northern suburbs. If your trade is set to Electrical with a specialisation in DB board upgrades, a homeowner diagnosed with a gate motor fault is unlikely to see you — which is the intended behaviour. Setting these accurately means the enquiries you receive are genuinely within your operational scope, which reduces wasted call-outs.',
     },
     {
-        q: 'Do we need to use Scandio pricing tools?',
-        a: 'No. You keep control of your own quoting and pricing process. Scandio focuses on diagnosis context and qualified matching.',
+        q: 'Do we need to use Scandio\'s pricing or quoting tools?',
+        a: 'No. Scandio does not have a built-in quoting tool and has no interest in sitting between you and your pricing process. The platform is focused entirely on diagnosis context and qualified matching. Once a homeowner contacts you through Scandio, everything from that point — how you quote, how you invoice, how you communicate — is handled entirely through your own existing process. You keep full commercial control over every job.',
     },
     {
-        q: 'What does profile quality affect?',
-        a: 'Profile completeness improves homeowner trust, click-through behaviour, and downstream contact quality.',
+        q: 'What happens if a homeowner\'s diagnosis turns out to be wrong?',
+        a: 'Scandio\'s AI diagnosis is an informed starting point, not a guaranteed assessment. Homeowners are shown a confidence score alongside every diagnosis, and are reminded that a site assessment is needed before any work is confirmed. In practice, this means your team arrives with a reasonable hypothesis about the fault rather than a blank slate — but you still do the professional assessment on-site. If the actual problem differs from the diagnosis, that is a normal part of the trade and is fully expected. The diagnosis is there to improve the quality of the first conversation, not to replace your expertise.',
     },
     {
-        q: 'When do paid plans begin?',
-        a: 'Paid plan timelines are communicated in advance. Founding providers are informed before any pricing changes take effect.',
+        q: 'How does profile quality affect how often we are shown?',
+        a: 'Profile completeness directly influences your ranking score and how homeowners perceive you when comparing providers side by side. A profile with verified work photos, a well-written bio, specific trade specialisations, and a good volume of genuine reviews consistently outperforms a sparse profile with the same rating. Homeowners see your profile summary, highlights, and review snapshot when choosing who to contact — a detailed profile gives them the confidence to reach out rather than scroll past. Profile quality is not a one-off setup; it compounds over time as reviews accumulate and your specialisations become more specific.',
+    },
+    {
+        q: 'When do paid plans start and how much notice will we get?',
+        a: 'Paid plans are planned for later in 2025, once the platform has a stable homeowner base and consistent enquiry volume. Founding providers will receive a minimum of 30 days\' written notice before any billing begins, and will be given the option to select a plan or opt out before any charges are made. There will be no automatic upgrade from the free founding tier to a paid plan — it will always require your explicit confirmation. The plan tiers and pricing are shown below so you know exactly what to expect.',
+    },
+    {
+        q: 'Is Scandio available outside Cape Town?',
+        a: 'Cape Town is where Scandio launched and where the founding provider network is being built. Geographic expansion is planned but will follow homeowner demand — the platform will open new areas once there is enough volume in a region to make provider matching meaningful. If your business operates in another South African city or region, you are welcome to apply now and we will notify you as coverage expands to your area.',
     },
     {
         q: 'How do we get started?',
-        a: 'Use the application flow on this page. Once approved, you can complete profile setup and begin receiving informed enquiries.',
+        a: 'Click the "Apply To Join The Network" button on this page. The application takes around five minutes and covers your business details, trade categories, and operating area. Once reviewed and approved — typically within a few business days — you will receive a link to complete your full profile setup, including photos, specialisations, and credentials. After that, you are live in the matching system and will begin appearing in relevant homeowner recommendations.',
     },
 ];
 
+const PRICING_TIERS = [
+    {
+        name: 'Starter',
+        price: 'R249',
+        period: '/month',
+        description: 'Everything you need to get listed and start receiving informed homeowner enquiries in your area.',
+        cta: 'Apply For Free',
+        ctaHref: '/pro/onboard',
+        highlighted: false,
+        features: [
+            { label: 'Profile listing in Scandio matching', included: true },
+            { label: 'Service category and area matching', included: true },
+            { label: 'Up to 30 homeowner enquiries per month', included: true },
+            { label: 'AI-generated bio from your profile data', included: true },
+            { label: 'Work photo gallery (up to 10 photos)', included: true },
+            { label: 'Review aggregation and display', included: true },
+            { label: 'Basic match analytics (views, clicks)', included: true },
+            { label: 'Priority placement in results', included: false },
+            { label: 'Highlighted "Recommended" badge', included: false },
+            { label: 'Extended service areas (up to 3 zones)', included: false },
+            { label: 'Advanced analytics and enquiry trends', included: false },
+            { label: 'Dedicated account support', included: false },
+        ],
+    },
+    {
+        name: 'Professional',
+        price: 'R649',
+        period: '/month',
+        description: 'For established businesses ready to grow volume and stand out in a competitive service area.',
+        cta: 'Apply For Free',
+        ctaHref: '/pro/onboard',
+        highlighted: true,
+        badge: 'Most Popular',
+        features: [
+            { label: 'Everything in Starter', included: true },
+            { label: 'Up to 100 homeowner enquiries per month', included: true },
+            { label: 'Priority placement in search results', included: true },
+            { label: 'Highlighted "Recommended" badge on profile', included: true },
+            { label: 'Work photo gallery (up to 40 photos)', included: true },
+            { label: 'Extended service areas (up to 3 zones)', included: true },
+            { label: 'AI-generated specialisation highlights', included: true },
+            { label: 'Advanced analytics and enquiry trends', included: true },
+            { label: 'WhatsApp enquiry routing', included: true },
+            { label: 'Unlimited enquiries per month', included: false },
+            { label: 'Featured placement above standard results', included: false },
+            { label: 'Dedicated account support', included: false },
+        ],
+    },
+    {
+        name: 'Premium',
+        price: 'R1 249',
+        period: '/month',
+        description: 'Maximum visibility and unlimited capacity for high-volume businesses operating across multiple areas.',
+        cta: 'Apply For Free',
+        ctaHref: '/pro/onboard',
+        highlighted: false,
+        features: [
+            { label: 'Everything in Professional', included: true },
+            { label: 'Unlimited homeowner enquiries per month', included: true },
+            { label: 'Featured placement above all standard results', included: true },
+            { label: 'Up to 6 service zone coverage areas', included: true },
+            { label: 'Unlimited work photo gallery', included: true },
+            { label: 'Multi-trade profile support', included: true },
+            { label: 'Full enquiry history and conversion analytics', included: true },
+            { label: 'Early access to new Scandio features', included: true },
+            { label: 'Dedicated account support and onboarding', included: true },
+            { label: 'Custom profile highlights and positioning', included: true },
+            { label: 'Priority review verification', included: true },
+            { label: 'Co-marketing in homeowner communications', included: true },
+        ],
+    },
+] as const;
+
 const SOCIAL_LINKS = [
-    { href: 'https://x.com/', label: 'X', icon: Twitter },
+    { href: 'https://x.com/', label: 'X', icon: Twitter }, // Twitter icon kept for brand consistency
     { href: 'https://www.linkedin.com/', label: 'LinkedIn', icon: Linkedin },
     { href: 'https://www.instagram.com/', label: 'Instagram', icon: Instagram },
     { href: 'https://www.facebook.com/', label: 'Facebook', icon: Facebook },
@@ -85,6 +167,7 @@ export default function ProJoinPage() {
                 navLinks={[
                     { href: '#how-it-works', label: 'How It Works' },
                     { href: '#value', label: 'Why Join' },
+                    { href: '#pricing', label: 'Pricing' },
                     { href: '#faq', label: 'FAQ' },
                     { href: '/', label: 'For Homeowners' },
                     { href: '/contact', label: 'Contact' },
@@ -92,6 +175,8 @@ export default function ProJoinPage() {
                 logoHref="/pro/join"
                 showTrades={false}
                 logoBadge={<Badge variant="secondary">Pro</Badge>}
+                mobileCtaHref="/pro/onboard"
+                mobileCtaLabel="Apply To Join The Network"
             />
 
             <main className="flex-1">
@@ -183,6 +268,85 @@ export default function ProJoinPage() {
                     </div>
                 </section>
 
+                {/* ── Pricing ─────────────────────────────────────────────────────── */}
+                <section id="pricing" className="scroll-mt-16 py-16 sm:py-20">
+                    <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+                        <div className="mx-auto mb-10 max-w-3xl text-center sm:mb-14">
+                            <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">Simple, Transparent Pricing</h2>
+                            <p className="mt-3 text-base text-muted-foreground">
+                                Join for free during the founding phase. Paid plans begin later in 2025. Founding providers receive 30 days&apos; notice before billing starts.
+                            </p>
+                        </div>
+                        <div className="grid gap-6 lg:grid-cols-3">
+                            {PRICING_TIERS.map((tier) => (
+                                <div
+                                    key={tier.name}
+                                    className={[
+                                        'relative flex flex-col rounded-2xl border p-6 sm:p-8',
+                                        tier.highlighted
+                                            ? 'border-foreground bg-foreground text-background shadow-xl'
+                                            : 'border-border/60 bg-background',
+                                    ].join(' ')}
+                                >
+                                    {'badge' in tier && tier.badge && (
+                                        <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-foreground px-3 py-1 text-xs font-semibold text-background ring-2 ring-background">
+                                            {tier.badge}
+                                        </span>
+                                    )}
+                                    <div className="mb-6">
+                                        <p className={['text-sm font-semibold uppercase tracking-wider', tier.highlighted ? 'text-background/60' : 'text-muted-foreground'].join(' ')}>
+                                            {tier.name}
+                                        </p>
+                                        <div className="mt-2 flex items-end gap-1">
+                                            <span className="text-4xl font-bold tracking-tight">{tier.price}</span>
+                                            <span className={['mb-1 text-sm', tier.highlighted ? 'text-background/60' : 'text-muted-foreground'].join(' ')}>{tier.period}</span>
+                                        </div>
+                                        <p className={['mt-3 text-sm leading-relaxed', tier.highlighted ? 'text-background/75' : 'text-muted-foreground'].join(' ')}>
+                                            {tier.description}
+                                        </p>
+                                    </div>
+                                    <ul className="mb-8 flex-1 space-y-3">
+                                        {tier.features.map((feature) => (
+                                            <li key={feature.label} className="flex items-start gap-3">
+                                                {feature.included ? (
+                                                    <CheckCircle
+                                                        weight="fill"
+                                                        className={['mt-0.5 h-4 w-4 shrink-0', tier.highlighted ? 'text-background' : 'text-foreground'].join(' ')}
+                                                    />
+                                                ) : (
+                                                    <XCircle
+                                                        weight="regular"
+                                                        className={['mt-0.5 h-4 w-4 shrink-0', tier.highlighted ? 'text-background/30' : 'text-muted-foreground/30'].join(' ')}
+                                                    />
+                                                )}
+                                                <span className={[
+                                                    'text-sm',
+                                                    feature.included
+                                                        ? tier.highlighted ? 'text-background' : 'text-foreground'
+                                                        : tier.highlighted ? 'text-background/40' : 'text-muted-foreground/50',
+                                                ].join(' ')}>
+                                                    {feature.label}
+                                                </span>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                    <Button
+                                        asChild
+                                        size="lg"
+                                        className={tier.highlighted ? 'bg-background text-foreground hover:bg-background/90' : ''}
+                                        variant={tier.highlighted ? 'default' : 'outline'}
+                                    >
+                                        <Link href={tier.ctaHref}>{tier.cta}</Link>
+                                    </Button>
+                                </div>
+                            ))}
+                        </div>
+                        <p className="mt-8 text-center text-sm text-muted-foreground">
+                            All plans are free during the founding phase. No credit card required to join.
+                        </p>
+                    </div>
+                </section>
+
                 <section id="faq" className="scroll-mt-16 py-16 sm:py-20">
                     <div className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8">
                         <div className="mb-10 text-center sm:mb-12">
@@ -238,7 +402,7 @@ export default function ProJoinPage() {
                         <div>
                             <p className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Explore</p>
                             <nav className="mt-3 flex flex-col gap-2">
-                                {([['How It Works', '#how-it-works'], ['Why Join', '#value'], ['FAQ', '#faq']] as [string, string][]).map(([label, href]) => (
+                                {([['How It Works', '#how-it-works'], ['Why Join', '#value'], ['Pricing', '#pricing'], ['FAQ', '#faq']] as [string, string][]).map(([label, href]) => (
                                     <Link key={`${label}-${href}`} href={href} className="text-sm text-muted-foreground transition-colors hover:text-foreground">
                                         {label}
                                     </Link>

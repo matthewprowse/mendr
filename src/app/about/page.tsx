@@ -1,14 +1,55 @@
 import Link from 'next/link';
+import type { Metadata } from 'next';
 import { LandingHeader } from '@/components/landing-header';
 import { Button } from '@/components/ui/button';
+import { getSiteUrl } from '@/lib/site-url';
+
+export async function generateMetadata(): Promise<Metadata> {
+    const base = getSiteUrl();
+    return {
+        title: 'About Scandio — Home Fault Diagnosis for Western Cape Homeowners',
+        description:
+            'Scandio was built to give Western Cape homeowners a clearer picture of home maintenance faults before the first provider call. Founded 2025 in Cape Town.',
+        alternates: {
+            canonical: `${base}/about`,
+        },
+        openGraph: {
+            title: 'About Scandio',
+            description:
+                'Built in Cape Town to reduce uncertainty in home maintenance. Learn about the problem Scandio was designed to solve.',
+            type: 'website',
+            url: `${base}/about`,
+            locale: 'en_ZA',
+        },
+    };
+}
 
 export default function AboutPage() {
+    const base = getSiteUrl();
+    const personJsonLd = {
+        '@context': 'https://schema.org',
+        '@type': 'Person',
+        name: 'Matthew Prowse',
+        jobTitle: 'Founder',
+        worksFor: {
+            '@type': 'Organization',
+            name: 'Scandio',
+            url: base,
+        },
+        address: {
+            '@type': 'PostalAddress',
+            addressLocality: 'Cape Town',
+            addressCountry: 'ZA',
+        },
+    };
+
     return (
         <div className="flex min-h-screen flex-col bg-background">
+            <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(personJsonLd) }} />
             <LandingHeader
                 navLinks={[
                     { href: '/', label: 'For Homeowners' },
-                    { href: '/pro/join', label: 'For Providers' },
+                    { href: '/contractors', label: 'For Providers' },
                     { href: '/contact', label: 'Contact' },
                 ]}
                 logoHref="/"
@@ -19,14 +60,17 @@ export default function AboutPage() {
                 <section className="mx-auto max-w-4xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
                     <div className="text-center">
                         <h1 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
-                            About Scandio
+                            Why Scandio Exists
                         </h1>
                         <p className="mx-auto mt-4 max-w-3xl text-base leading-relaxed text-muted-foreground">
-                            Scandio was founded by Matthew Prowse in late 2025 to solve a practical
-                            problem many homeowners experience: low clarity before the first provider
-                            call. The platform evolved from a provider-discovery concept into a
-                            diagnosis-first workflow designed to improve homeowner confidence and
-                            provider-side lead quality.
+                            Most homeowners hit the same wall: something breaks, they do not know what
+                            it is, they call a provider, and the conversation starts from zero.
+                            <br />
+                            <br />
+                            Scandio was built to change that. Matthew Prowse founded it in Cape Town in
+                            late 2025 after running into the same problem. The hardest part of home
+                            repair is not the repair. It is knowing what you are dealing with before it
+                            starts.
                         </p>
                     </div>
 
@@ -34,21 +78,23 @@ export default function AboutPage() {
                         <div className="rounded-xl border border-border/50 bg-card p-6">
                             <h2 className="text-lg font-semibold text-foreground">Founder Background</h2>
                             <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-                                Matthew&apos;s work is shaped by an Information Systems perspective and
-                                ongoing BCIS honours research. The central principle is simple:
-                                better context in leads to better decisions out. That principle drives
-                                the way Scandio handles diagnosis clarity, provider matching, and
-                                real-world usability.
+                                Matthew studied Information Systems and is completing his BCIS honours.
+                                His research looks at how people make decisions when information is
+                                incomplete — which is the exact problem Scandio was built to address.
+                                He lives and works in Cape Town.
                             </p>
                         </div>
 
                         <div className="rounded-xl border border-border/50 bg-card p-6">
                             <h2 className="text-lg font-semibold text-foreground">How The Idea Started</h2>
                             <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-                                The idea came from repeated frustrations in the local home maintenance
-                                workflow: unclear issues, inconsistent recommendations, and too much
-                                back-and-forth before useful work can even begin. Scandio focuses on
-                                reducing that friction for both sides of the market.
+                                The idea came from a simple frustration: calling a plumber without
+                                knowing what to say, getting three different answers, and still not
+                                understanding what was wrong.
+                                <br />
+                                <br />
+                                Scandio does not fix that. It gives you the starting point that makes
+                                the rest easier.
                             </p>
                         </div>
                     </div>
@@ -61,7 +107,10 @@ export default function AboutPage() {
                                 ['September 2025', 'Scandio founded with an initial provider-discovery concept.'],
                                 ['Late 2025', 'Product direction shifted toward diagnosis-first homeowner workflows.'],
                                 ['Early 2026', 'Matching quality and report clarity became core priorities.'],
-                                ['Current', 'Platform is being refined through product research and real usage feedback.'],
+                                [
+                                    '2026',
+                                    'Scandio is live across the Western Cape. Fault coverage and provider matching continue to expand based on real homeowner usage.',
+                                ],
                             ].map(([date, text]) => (
                                 <div key={date} className="relative">
                                     <div className="absolute -left-[22px] top-1.5 h-3 w-3 rounded-full border-2 border-background bg-foreground" />
@@ -74,7 +123,7 @@ export default function AboutPage() {
 
                     <div className="mt-10 text-center">
                         <Button asChild size="lg">
-                            <Link href="/welcome">Generate Free Scandio Report</Link>
+                            <Link href="/start">Generate Free Scandio Report</Link>
                         </Button>
                     </div>
                 </section>

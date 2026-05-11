@@ -30,3 +30,5 @@ Post an expanded version of the connector summary to Linear, keeping:
 - clear explanation of the logical changes and rationale;
 - concrete implementation details and observed impact on users/systems;
 - brief note of verification scope and follow-up actions.
+
+# When working with the AI…

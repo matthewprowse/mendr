@@ -879,7 +879,15 @@ export async function POST(req: NextRequest) {
         }
 
         // Pre-fetched providers rows — fired in parallel with provider_cache below to save a round-trip.
-        let prefetchedProvRows: { id: string; google_place_id: string; name?: string | null }[] | null = null;
+        let prefetchedProvRows:
+            | {
+                  id: string;
+                  google_place_id: string;
+                  name?: string | null;
+                  company_size?: string | null;
+                  years_in_business?: number | null;
+              }[]
+            | null = null;
         const dbReader = adminSupabase || supabase;
         if (dbReader && fastProviders.length > 0) {
             const placeIds = fastProviders
@@ -890,18 +898,25 @@ export async function POST(req: NextRequest) {
                 const [cacheResult, provResult] = await Promise.all([
                     dbReader
                         .from('provider_cache')
-                        .select('google_place_id, profile_completeness, specialisations')
+                        .select('google_place_id, profile_completeness, specialisations, has_work_photos, images')
                         .in('google_place_id', placeIds),
                     dbReader
                         .from('providers')
-                        .select('id, google_place_id, name')
+                        .select(
+                            'id, google_place_id, name, company_size, years_in_business'
+                        )
                         .eq('is_active', true)
                         .in('google_place_id', placeIds),
                 ]);
                 const cacheRows = cacheResult.data;
                 prefetchedProvRows =
-                    (provResult.data as { id: string; google_place_id: string; name?: string | null }[]) ??
-                    null;
+                    (provResult.data as Array<{
+                        id: string;
+                        google_place_id: string;
+                        name?: string | null;
+                        company_size?: string | null;
+                        years_in_business?: number | null;
+                    }>) ?? null;
                 const nameByGoogleId = new Map<string, string>(
                     (prefetchedProvRows || [])
                         .filter(
@@ -911,6 +926,20 @@ export async function POST(req: NextRequest) {
                                 r.name.trim().length > 0
                         )
                         .map((r) => [String(r.google_place_id), String(r.name).trim()])
+                );
+                const companySizeByGoogleId = new Map<string, string>(
+                    (prefetchedProvRows || [])
+                        .filter((r) => typeof r.company_size === 'string' && r.company_size)
+                        .map((r) => [String(r.google_place_id), String(r.company_size)])
+                );
+                const yearsInBusinessByGoogleId = new Map<string, number>(
+                    (prefetchedProvRows || [])
+                        .filter(
+                            (r) =>
+                                typeof r.years_in_business === 'number' &&
+                                Number.isFinite(r.years_in_business)
+                        )
+                        .map((r) => [String(r.google_place_id), Number(r.years_in_business)])
                 );
                 const completenessByGoogleId = new Map<string, number>(
                     (cacheRows || []).map((r: any) => [
@@ -924,6 +953,110 @@ export async function POST(req: NextRequest) {
                         .filter((r: any) => Array.isArray(r.specialisations) && r.specialisations.length > 0)
                         .map((r: any) => [String(r.google_place_id), r.specialisations as string[]])
                 );
+                const hasWorkPhotosByGoogleId = new Map<string, boolean>(
+                    (cacheRows || [])
+                        .filter((r: any) => typeof r.has_work_photos === 'boolean')
+                        .map((r: any) => [String(r.google_place_id), Boolean(r.has_work_photos)])
+                );
+                // Match-card image carousel: pick up to 5 work photos from the enrichment cache.
+                const imagesByGoogleId = new Map<string, Array<{ url: string; caption?: string }>>(
+                    (cacheRows || [])
+                        .filter((r: any) => Array.isArray(r.images) && r.images.length > 0)
+                        .map((r: any) => {
+                            const list = (r.images as any[])
+                                .map((img) => {
+                                    const url =
+                                        typeof img?.url === 'string'
+                                            ? img.url.trim()
+                                            : typeof img?.src === 'string'
+                                              ? img.src.trim()
+                                              : '';
+                                    if (!url) return null;
+                                    const caption =
+                                        typeof img?.caption === 'string' ? img.caption.trim() : undefined;
+                                    return caption ? { url, caption } : { url };
+                                })
+                                .filter(Boolean) as Array<{ url: string; caption?: string }>;
+                            return [String(r.google_place_id), list.slice(0, 5)];
+                        })
+                );
+
+                // Pull structured certifications for the candidate providers (optional join).
+                let certificationsByProviderId = new Map<
+                    string,
+                    Array<{ slug: string; label: string }>
+                >();
+                let providerGalleryByProviderId = new Map<string, Array<{ url: string; caption?: string }>>();
+                const candidateProviderIds = (prefetchedProvRows || [])
+                    .map((r) => r.id)
+                    .filter((id): id is string => typeof id === 'string' && id.length > 0);
+                if (candidateProviderIds.length > 0) {
+                    const supabasePublicBase = String(process.env.NEXT_PUBLIC_SUPABASE_URL || '').replace(
+                        /\/+$/,
+                        ''
+                    );
+                    const toPublicGalleryUrl = (bucketRaw: unknown, pathRaw: unknown): string => {
+                        const bucket = typeof bucketRaw === 'string' ? bucketRaw.trim() : '';
+                        const path = typeof pathRaw === 'string' ? pathRaw.trim().replace(/^\/+/, '') : '';
+                        if (!bucket || !path || !supabasePublicBase) return '';
+                        return `${supabasePublicBase}/storage/v1/object/public/${bucket}/${path}`;
+                    };
+                    const [certResult, galleryResult] = await Promise.all([
+                        dbReader
+                            .from('provider_certifications')
+                            .select('provider_id, slug, label')
+                            .in('provider_id', candidateProviderIds),
+                        dbReader
+                            .from('provider_images')
+                            .select('provider_id, bucket, path, caption, sort_order, status')
+                            .in('provider_id', candidateProviderIds)
+                            .order('sort_order', { ascending: true }),
+                    ]);
+                    const certRows = certResult.data;
+                    const galleryRows = galleryResult.data;
+                    if (Array.isArray(certRows)) {
+                        certificationsByProviderId = new Map();
+                        for (const row of certRows as Array<{
+                            provider_id: string;
+                            slug: string;
+                            label: string;
+                        }>) {
+                            if (!row?.provider_id || !row?.slug || !row?.label) continue;
+                            const existing = certificationsByProviderId.get(row.provider_id) ?? [];
+                            existing.push({ slug: row.slug, label: row.label });
+                            certificationsByProviderId.set(row.provider_id, existing);
+                        }
+                    }
+                    if (Array.isArray(galleryRows)) {
+                        providerGalleryByProviderId = new Map();
+                        for (const row of galleryRows as Array<{
+                            provider_id: string;
+                            bucket?: string | null;
+                            path?: string | null;
+                            caption?: string | null;
+                            status?: string | null;
+                        }>) {
+                            if (!row?.provider_id) continue;
+                            const url = toPublicGalleryUrl(row.bucket, row.path);
+                            if (!url) continue;
+                            const item =
+                                typeof row.caption === 'string' && row.caption.trim()
+                                    ? { url, caption: row.caption.trim() }
+                                    : { url };
+                            const existing = providerGalleryByProviderId.get(row.provider_id) ?? [];
+                            if (existing.length >= 5) continue;
+                            existing.push(item);
+                            providerGalleryByProviderId.set(row.provider_id, existing);
+                        }
+                    }
+                }
+                const providerIdByGoogleIdEarly = new Map<string, string>(
+                    (prefetchedProvRows || []).map((r) => [
+                        String(r.google_place_id),
+                        String(r.id),
+                    ])
+                );
+
                 fastProviders.forEach((p) => {
                     const gid = toGooglePlaceId(p.placeId);
                     const completeness = completenessByGoogleId.get(gid) ?? 0;
@@ -934,6 +1067,30 @@ export async function POST(req: NextRequest) {
                     // with Google/search-cache values on every diagnosis run.
                     const dbName = nameByGoogleId.get(gid);
                     if (dbName) (p as any).name = dbName;
+                    // Filter v2: structured fields that power the new filter sheet + cards.
+                    const cs = companySizeByGoogleId.get(gid);
+                    if (cs) (p as any).companySize = cs;
+                    const yib = yearsInBusinessByGoogleId.get(gid);
+                    if (typeof yib === 'number') (p as any).yearsInBusiness = yib;
+                    const hasPhotos = hasWorkPhotosByGoogleId.get(gid);
+                    if (typeof hasPhotos === 'boolean') (p as any).hasWorkPhotos = hasPhotos;
+                    const images = imagesByGoogleId.get(gid);
+                    if (Array.isArray(images) && images.length > 0) (p as any).images = images;
+                    const provId = providerIdByGoogleIdEarly.get(gid);
+                    if (provId) {
+                        (p as any).providerId = provId;
+                        if (!Array.isArray((p as any).images) || (p as any).images.length === 0) {
+                            const fallbackGallery = providerGalleryByProviderId.get(provId);
+                            if (Array.isArray(fallbackGallery) && fallbackGallery.length > 0) {
+                                (p as any).images = fallbackGallery;
+                                (p as any).hasWorkPhotos = true;
+                            }
+                        }
+                        const certs = certificationsByProviderId.get(provId);
+                        if (Array.isArray(certs) && certs.length > 0) {
+                            (p as any).certifications = certs;
+                        }
+                    }
                 });
                 logStage(
                     `prefetch cache/providers done (candidatePlaces=${placeIds.length})`,

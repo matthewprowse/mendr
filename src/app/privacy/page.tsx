@@ -1,12 +1,9 @@
-import type { Metadata } from 'next';
+import { META_PRIVACY } from '@/lib/site-metadata';
 import { FlowStepHeader } from '@/components/flow-header';
 import { getSiteLegalConfig } from '@/lib/site-legal';
 import { PrivacyPageContent } from './content';
 
-export const metadata: Metadata = {
-    title: 'Privacy Policy',
-    description: 'How Scandio handles personal information under POPIA.',
-};
+export const metadata = META_PRIVACY;
 
 export default function PrivacyPage() {
     const c = getSiteLegalConfig();

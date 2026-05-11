@@ -1,11 +1,7 @@
-import type { Metadata } from 'next';
+import { META_DIAGNOSIS_INDEX } from '@/lib/site-metadata';
 import DiagnosisPageClient from './client';
 
-export const metadata: Metadata = {
-    title: 'Your Diagnosis',
-    description:
-        'Review your home maintenance diagnosis on Scandio and continue to find a specialist.',
-};
+export const metadata = META_DIAGNOSIS_INDEX;
 
 export default function DiagnosisIndexPage() {
     return <DiagnosisPageClient />;

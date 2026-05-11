@@ -27,6 +27,13 @@ import {
     FAST_SUMMARY_MIN_REVIEWS,
     parseFastReviewSummaryModelJson,
 } from '@/lib/fast-review-summary';
+import {
+    CERTIFICATION_CATALOG,
+    extractCertificationsFromText,
+    getCertificationBySlug,
+    type CertificationEntry,
+} from '@/lib/certifications/catalog';
+import { validateLlmContentSafe } from '@/lib/llm-content-guard';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -344,6 +351,8 @@ async function runCombinedEnrichment(params: {
     address?: string | null;
     rating?: number | null;
     reviewCount?: number;
+    /** Appended to the prompt on retries when an earlier attempt leaked HTML/CSS. */
+    strictSuffix?: string;
 }): Promise<CombinedEnrichmentOutput | null> {
     const prompt = `You are Scandio's provider enrichment engine. Extract everything useful about this South African home services business. Be aggressive — specific beats vague, concrete beats generic. Do not invent facts.
 
@@ -379,7 +388,15 @@ Return ONLY valid JSON, no markdown:
 Rules (British English throughout):
 - specialisations: strict noun phrases only; Title Case output; remove near-duplicate wording and keep the clearest canonical phrase.
 - highlights: scan for emergency callouts, pricing, qualifications, equipment, guarantees, turnaround times. Never use hollow phrases.
-- review_summary: hard cap 140 chars; trim to a sentence boundary if needed.`.trim();
+- review_summary: hard cap 140 chars; trim to a sentence boundary if needed.
+
+HARD RULES — failure to follow these voids the response:
+- bio, about_business, past_work, customer_review_summary, review_summary MUST be PLAIN PROSE.
+- NEVER include HTML tags or attributes (no <div>, no <span>, no class=, href=, alt=).
+- NEVER include CSS (no font-family, no @media, no padding/margin/color declarations, no px/rem/em/vh/vw values, no { }, no #hex, no rgb()).
+- NEVER include code fences (\`\`\`), JSON-as-prose, escape sequences (\\n, \\t, \\u00xx), or markdown table syntax.
+- NEVER copy raw fragments from the website's HTML, navigation, or cookie banners.
+- If you don't know a field, return an empty string — do not pad with HTML/CSS or boilerplate.${params.strictSuffix ? `\n\n${params.strictSuffix}` : ''}`.trim();
 
     try {
         const model = getGeminiModel();
@@ -409,6 +426,392 @@ Rules (British English throughout):
         return JSON.parse(stripped.slice(start, end + 1)) as CombinedEnrichmentOutput;
     } catch {
         return null;
+    }
+}
+
+/** Fields the leak gate inspects on combined enrichment output. */
+const GUARDED_PROSE_FIELDS = [
+    'bio',
+    'about_business',
+    'past_work',
+    'customer_review_summary',
+    'review_summary',
+] as const satisfies ReadonlyArray<keyof CombinedEnrichmentOutput>;
+
+type GuardedField = (typeof GUARDED_PROSE_FIELDS)[number];
+
+export type EnrichmentLeakReport = {
+    /** Combined output with failing prose fields blanked out. */
+    safe: CombinedEnrichmentOutput | null;
+    /** Set of fields that failed the gate after retries. */
+    droppedFields: GuardedField[];
+    /** Free-form one-line summary suitable for `providers.enrichment_last_failure`. */
+    failureSummary: string | null;
+    /** Number of attempts made (1 + retries). */
+    attempts: number;
+};
+
+const MAX_LEAK_RETRIES = 2;
+
+/**
+ * Run `runCombinedEnrichment` and guard each prose field against HTML/CSS/structural
+ * leakage. On any leak, retry with progressively stricter prompt suffixes up to
+ * MAX_LEAK_RETRIES attempts. Fields that still fail are blanked out and reported.
+ */
+async function runCombinedEnrichmentGuarded(
+    params: Parameters<typeof runCombinedEnrichment>[0],
+    log: (entry: Record<string, unknown>) => void
+): Promise<EnrichmentLeakReport> {
+    let attempts = 0;
+    let lastOutput: CombinedEnrichmentOutput | null = null;
+    let lastFailures: { field: GuardedField; reason: string; sample: string }[] = [];
+
+    for (let attempt = 0; attempt <= MAX_LEAK_RETRIES; attempt++) {
+        attempts = attempt + 1;
+        const strictSuffix =
+            attempt === 0
+                ? undefined
+                : `Retry ${attempt}/${MAX_LEAK_RETRIES}: previous output contained ${lastFailures
+                      .map((f) => `${f.field} (${f.reason})`)
+                      .join(', ')}. Output PLAIN PROSE ONLY. No HTML, no CSS, no markdown fences, no selectors, no attribute lists. If you don't know, return an empty string.`;
+
+        const out = await runCombinedEnrichment({ ...params, strictSuffix }).catch(() => null);
+        lastOutput = out;
+        if (!out) {
+            lastFailures = [];
+            continue;
+        }
+
+        const failures: { field: GuardedField; reason: string; sample: string }[] = [];
+        for (const field of GUARDED_PROSE_FIELDS) {
+            const verdict = validateLlmContentSafe(out[field] as string | null | undefined);
+            if (!verdict.ok) {
+                failures.push({ field, reason: verdict.reason, sample: verdict.sample });
+            }
+        }
+
+        if (failures.length === 0) {
+            if (attempt > 0) {
+                log({ type: 'enrichment_leak_recovered', attempts, place: params.providerName });
+            }
+            return { safe: out, droppedFields: [], failureSummary: null, attempts };
+        }
+
+        lastFailures = failures;
+        log({
+            type: 'enrichment_leak_detected',
+            attempt,
+            provider_name: params.providerName,
+            failures: failures.map((f) => `${f.field}:${f.reason}`),
+            sample: failures[0]?.sample ?? null,
+        });
+    }
+
+    if (!lastOutput) {
+        return {
+            safe: null,
+            droppedFields: [],
+            failureSummary: 'combined_enrichment_null',
+            attempts,
+        };
+    }
+
+    const safe: CombinedEnrichmentOutput = { ...lastOutput };
+    const dropped: GuardedField[] = [];
+    for (const f of lastFailures) {
+        (safe as unknown as Record<string, string>)[f.field] = '';
+        dropped.push(f.field);
+    }
+    const failureSummary = lastFailures
+        .map((f) => `${f.field}:${f.reason}`)
+        .slice(0, 6)
+        .join(', ');
+    return { safe, droppedFields: dropped, failureSummary, attempts };
+}
+
+// ── Structured attributes (filter v2) ────────────────────────────────────────
+
+type CompanySize = 'solo' | 'small' | 'mid' | 'large';
+
+interface StructuredAttributes {
+    companySize: CompanySize | null;
+    companySizeConfidence: number;
+    yearsInBusiness: number | null;
+    yearsInBusinessConfidence: number;
+    certifications: CertificationEntry[];
+}
+
+/**
+ * Bucket Google review counts to a coarse company-size estimate. Used as a fallback when
+ * Gemini's confidence is low — small SA traders often have no website at all.
+ */
+function bucketCompanySizeFromRatingCount(ratingCount: number | null | undefined): CompanySize | null {
+    if (typeof ratingCount !== 'number' || !Number.isFinite(ratingCount) || ratingCount < 0) return null;
+    if (ratingCount <= 30) return 'solo';
+    if (ratingCount <= 150) return 'small';
+    if (ratingCount <= 500) return 'mid';
+    return 'large';
+}
+
+/**
+ * Heuristic team-count detector for "team of N" / "our N technicians" patterns.
+ * Returns the highest plausible number found, or null.
+ */
+function detectTeamCountFromText(text: string): number | null {
+    if (!text) return null;
+    const patterns = [
+        /\bteam of\s+(\d{1,3})\b/i,
+        /\b(\d{1,3})\s+(?:technicians|electricians|plumbers|installers|tradesmen|tradespeople|staff|employees|engineers)\b/i,
+        /\bemploys\s+(\d{1,3})\b/i,
+        /\bover\s+(\d{1,3})\s+(?:technicians|electricians|plumbers|staff|employees)\b/i,
+    ];
+    let best: number | null = null;
+    for (const re of patterns) {
+        const m = text.match(re);
+        if (!m) continue;
+        const n = parseInt(m[1], 10);
+        if (Number.isFinite(n) && n >= 1 && n <= 999) {
+            best = best == null ? n : Math.max(best, n);
+        }
+    }
+    return best;
+}
+
+function companySizeFromHeadcount(n: number | null): CompanySize | null {
+    if (n == null) return null;
+    if (n <= 1) return 'solo';
+    if (n <= 5) return 'small';
+    if (n <= 20) return 'mid';
+    return 'large';
+}
+
+/**
+ * One Gemini call extracting structured filter-v2 fields from a provider's website + reviews scrape.
+ * Designed to be cheap (low token cap, JSON schema, short timeout) so it can run alongside the
+ * existing combined enrichment without doubling latency.
+ */
+async function extractStructuredAttributes(params: {
+    providerName: string;
+    websiteText: string;
+    bio: string | null;
+    reviewsText: string;
+    ratingCount: number | null;
+}): Promise<StructuredAttributes> {
+    const fallback: StructuredAttributes = {
+        companySize: null,
+        companySizeConfidence: 0,
+        yearsInBusiness: null,
+        yearsInBusinessConfidence: 0,
+        certifications: [],
+    };
+
+    // Heuristic baseline that always runs (works even with no website).
+    const headcount = detectTeamCountFromText(`${params.websiteText}\n${params.bio ?? ''}`);
+    const heuristicSize =
+        companySizeFromHeadcount(headcount) ?? bucketCompanySizeFromRatingCount(params.ratingCount);
+    const heuristicCerts = extractCertificationsFromText(
+        `${params.websiteText}\n${params.bio ?? ''}`
+    );
+
+    fallback.companySize = heuristicSize ?? null;
+    fallback.companySizeConfidence = heuristicSize ? 0.4 : 0;
+    fallback.certifications = heuristicCerts;
+
+    const usefulText = (params.websiteText || '').trim();
+    if (usefulText.length < MIN_SCRAPE_CHARS) {
+        return fallback;
+    }
+
+    const catalogList = CERTIFICATION_CATALOG.map((c) => `${c.slug} (${c.label})`).join('; ');
+
+    const prompt = `You are Scandio's structured-attribute extractor. Read the South African home services business below and return ONLY valid JSON.
+
+Provider: ${params.providerName}
+Bio: ${params.bio ?? '(none)'}
+
+Website:
+${usefulText.slice(0, 8_000) || '(none)'}
+
+Reviews:
+${params.reviewsText.slice(0, 2_000) || '(none)'}
+
+Catalog of permitted certification slugs:
+${catalogList}
+
+Return JSON with exactly these keys:
+{
+  "company_size": "solo|small|mid|large|null",
+  "company_size_confidence": 0.0-1.0,
+  "years_in_business": integer or null (1-150),
+  "years_in_business_confidence": 0.0-1.0,
+  "certifications": [
+    { "slug": "<one of the catalog slugs>", "label": "<human label>", "issuer": "<issuer or empty>" }
+  ]
+}
+
+Rules:
+- company_size: "solo" = 1 person, "small" = 2-5, "mid" = 6-20, "large" = 20+. If unclear, set null and confidence 0.
+- years_in_business: only fill when "established 19xx" / "since 20xx" / "X+ years experience" appears explicitly. Otherwise null.
+- certifications: ONLY use slugs from the catalog above. Reject anything not in the catalog. Do not invent.
+- Do not hallucinate. Prefer null over a guess.`;
+
+    try {
+        const model = getGeminiModel();
+        const result = await withTimeout(
+            model.generateContent({
+                contents: [{ role: 'user', parts: [{ text: prompt }] }],
+                generationConfig: { temperature: 0, maxOutputTokens: 600 },
+            }),
+            AI_ENRICH_TIMEOUT
+        );
+        const raw = result.response.text().trim();
+        const stripped = raw
+            .replace(/^```(?:json)?\s*\n?/i, '')
+            .replace(/\n?```\s*$/, '')
+            .trim();
+        const start = stripped.indexOf('{');
+        const end = stripped.lastIndexOf('}');
+        if (start === -1 || end === -1) return fallback;
+        const json = JSON.parse(stripped.slice(start, end + 1)) as Record<string, unknown>;
+
+        const cs = typeof json.company_size === 'string' ? json.company_size.toLowerCase() : null;
+        const csConf = Number(json.company_size_confidence ?? 0);
+        const yib = typeof json.years_in_business === 'number' ? Math.floor(json.years_in_business) : null;
+        const yibConf = Number(json.years_in_business_confidence ?? 0);
+
+        const certsRaw = Array.isArray(json.certifications) ? json.certifications : [];
+        const certs: CertificationEntry[] = [];
+        const seen = new Set<string>();
+        for (const c of certsRaw) {
+            if (!c || typeof c !== 'object') continue;
+            const slug =
+                typeof (c as Record<string, unknown>).slug === 'string'
+                    ? ((c as Record<string, unknown>).slug as string).toLowerCase()
+                    : '';
+            if (!slug || seen.has(slug)) continue;
+            const entry = getCertificationBySlug(slug);
+            if (!entry) continue;
+            seen.add(slug);
+            certs.push(entry);
+        }
+        // Merge in heuristic certs that the model missed (catalog-bound by extractor).
+        for (const heuristic of heuristicCerts) {
+            if (!seen.has(heuristic.slug)) {
+                seen.add(heuristic.slug);
+                certs.push(heuristic);
+            }
+        }
+
+        const aiCompanySize: CompanySize | null =
+            cs === 'solo' || cs === 'small' || cs === 'mid' || cs === 'large' ? cs : null;
+        const aiCompanyConfidence = Number.isFinite(csConf) ? Math.max(0, Math.min(1, csConf)) : 0;
+
+        // Decide which company_size wins. Use AI when confident; else fall back to heuristic.
+        let finalCompanySize: CompanySize | null = null;
+        let finalCompanyConfidence = 0;
+        if (aiCompanySize && aiCompanyConfidence >= 0.5) {
+            finalCompanySize = aiCompanySize;
+            finalCompanyConfidence = aiCompanyConfidence;
+        } else if (heuristicSize) {
+            finalCompanySize = heuristicSize;
+            finalCompanyConfidence = headcount ? 0.65 : 0.4;
+        }
+
+        const finalYears: number | null =
+            yib !== null && yibConf >= 0.5 && yib >= 1 && yib <= 150 ? yib : null;
+
+        return {
+            companySize: finalCompanySize,
+            companySizeConfidence: finalCompanyConfidence,
+            yearsInBusiness: finalYears,
+            yearsInBusinessConfidence: finalYears != null ? Math.max(0, Math.min(1, yibConf)) : 0,
+            certifications: certs,
+        };
+    } catch {
+        return fallback;
+    }
+}
+
+/**
+ * Persist structured attributes to `providers` + `provider_certifications`,
+ * respecting admin-source stickiness. Admin overrides are never overwritten by enrichment.
+ */
+async function persistStructuredAttributes(params: {
+    admin: Awaited<ReturnType<typeof createSupabaseAdminClient>>;
+    providerId: string;
+    attrs: StructuredAttributes;
+}): Promise<void> {
+    const { admin, providerId, attrs } = params;
+    const now = new Date().toISOString();
+
+    // Read existing source columns so admin overrides win.
+    const { data: existing } = await admin
+        .from('providers')
+        .select('company_size, company_size_source, years_in_business, years_in_business_source')
+        .eq('id', providerId)
+        .maybeSingle();
+
+    const patch: Record<string, unknown> = {};
+    if (attrs.companySize) {
+        const csSource =
+            typeof (existing as { company_size_source?: string } | null)?.company_size_source ===
+            'string'
+                ? (existing as { company_size_source?: string }).company_size_source
+                : null;
+        if (csSource !== 'admin') {
+            patch.company_size = attrs.companySize;
+            patch.company_size_source = 'enrichment';
+        }
+    }
+    if (attrs.yearsInBusiness != null) {
+        const yibSource =
+            typeof (existing as { years_in_business_source?: string } | null)
+                ?.years_in_business_source === 'string'
+                ? (existing as { years_in_business_source?: string }).years_in_business_source
+                : null;
+        if (yibSource !== 'admin') {
+            patch.years_in_business = attrs.yearsInBusiness;
+            patch.years_in_business_source = 'enrichment';
+        }
+    }
+    if (Object.keys(patch).length > 0) {
+        patch.updated_at = now;
+        await admin.from('providers').update(patch).eq('id', providerId);
+    }
+
+    // Certifications: replace enrichment-sourced rows with the new set, leave admin rows untouched.
+    if (attrs.certifications.length > 0) {
+        // Delete only rows currently sourced from enrichment so admin overrides persist.
+        await admin
+            .from('provider_certifications')
+            .delete()
+            .eq('provider_id', providerId)
+            .eq('source', 'enrichment');
+
+        // Look up admin slugs so we don't try to upsert a duplicate that exists with admin source.
+        const { data: adminCerts } = await admin
+            .from('provider_certifications')
+            .select('slug')
+            .eq('provider_id', providerId)
+            .eq('source', 'admin');
+        const adminSlugs = new Set<string>(
+            (adminCerts as { slug: string }[] | null)?.map((c) => c.slug) ?? []
+        );
+
+        const rows = attrs.certifications
+            .filter((c) => !adminSlugs.has(c.slug))
+            .map((c) => ({
+                provider_id: providerId,
+                slug: c.slug,
+                label: c.label,
+                issuer: c.issuer || null,
+                source: 'enrichment' as const,
+            }));
+        if (rows.length > 0) {
+            await admin
+                .from('provider_certifications')
+                .upsert(rows, { onConflict: 'provider_id,slug' });
+        }
     }
 }
 
@@ -685,22 +1088,63 @@ export async function enrichProvider(
     // Previously: runAiEnrichment + summarizeReviews + generateProviderSummaries = 3 Gemini calls.
     // Now: one combined call returning all fields, reducing Gemini usage ~75% per provider.
     console.log(`${logPrefix} Stage 4: Running combined AI enrichment (websiteText=${websiteText.length} chars, reviews=${reviews.length})`);
-    const combined = await runCombinedEnrichment({
-        providerName: provider.name,
-        websiteText,
-        imageCategories,
-        reviewsText,
-        cacheVersion: targetCacheVersion,
-        trade: primaryTrade ?? undefined,
-        address: typeof provider.address === 'string' ? provider.address : null,
-        rating: typeof provider.rating === 'number' ? provider.rating : null,
-        reviewCount:
-            typeof provider.rating_count === 'number' ? provider.rating_count : reviews.length,
-    }).catch(() => null);
+    const guardLog = (entry: Record<string, unknown>) => {
+        try {
+            console.log(JSON.stringify({ ...entry, provider_id: providerId }));
+        } catch {
+            // ignore stringify failures
+        }
+    };
+    const guardedReport = await runCombinedEnrichmentGuarded(
+        {
+            providerName: provider.name,
+            websiteText,
+            imageCategories,
+            reviewsText,
+            cacheVersion: targetCacheVersion,
+            trade: primaryTrade ?? undefined,
+            address: typeof provider.address === 'string' ? provider.address : null,
+            rating: typeof provider.rating === 'number' ? provider.rating : null,
+            reviewCount:
+                typeof provider.rating_count === 'number' ? provider.rating_count : reviews.length,
+        },
+        guardLog
+    );
+    const combined = guardedReport.safe;
 
-    console.log(`${logPrefix} Stage 4: AI enrichment ${combined ? 'succeeded' : 'failed/null'}`);
+    console.log(
+        `${logPrefix} Stage 4: AI enrichment ${combined ? 'succeeded' : 'failed/null'} (attempts=${guardedReport.attempts}, dropped=${guardedReport.droppedFields.join(',') || 'none'})`
+    );
     if (combined) {
         console.log(`${logPrefix} Stage 4: bio="${combined.bio?.slice(0, 80) ?? ''}", specialisations=${JSON.stringify(combined.specialisations)}, highlights=${combined.highlights?.length ?? 0}`);
+    }
+    if (guardedReport.droppedFields.length > 0 || guardedReport.failureSummary) {
+        try {
+            await admin
+                .from('providers')
+                .update({
+                    enrichment_review_required: true,
+                    enrichment_last_failure: guardedReport.failureSummary,
+                    enrichment_last_failure_at: new Date().toISOString(),
+                })
+                .eq('id', providerId);
+        } catch (err) {
+            console.warn(`${logPrefix} Stage 4: failed to flag enrichment_review_required`, err);
+        }
+    } else {
+        // Clear stale flags once we have a clean run.
+        try {
+            await admin
+                .from('providers')
+                .update({
+                    enrichment_review_required: false,
+                    enrichment_last_failure: null,
+                    enrichment_last_failure_at: null,
+                })
+                .eq('id', providerId);
+        } catch {
+            // best-effort
+        }
     }
 
     // Map combined output back to the shapes previously returned by separate calls.
@@ -773,6 +1217,27 @@ export async function enrichProvider(
         },
         { onConflict: 'provider_id' }
     );
+
+    // ── Stage 5b: Filter v2 structured attributes (company_size, years, certifications) ──
+    // Runs whether or not the combined enrichment is high quality — heuristic fallbacks let us
+    // populate company_size from rating count even for providers without a website.
+    try {
+        const reviewsTextForAttrs =
+            (combined?.customer_review_summary || combined?.review_summary || '').trim();
+        const attrs = await extractStructuredAttributes({
+            providerName: provider.name ?? 'Provider',
+            websiteText,
+            bio: combined?.bio ?? null,
+            reviewsText: reviewsTextForAttrs,
+            ratingCount: provider.rating_count ?? 0,
+        });
+        await persistStructuredAttributes({ admin, providerId, attrs });
+        console.log(
+            `${logPrefix} Stage 5b: structured attrs persisted (size=${attrs.companySize ?? 'n/a'}, years=${attrs.yearsInBusiness ?? 'n/a'}, certs=${attrs.certifications.length})`
+        );
+    } catch (err) {
+        console.warn(`${logPrefix} Stage 5b: structured attrs failed`, err);
+    }
 
     // ── Stage 6: Update provider profile copy from combined output ─────────────
     console.log(`${logPrefix} Stage 6: Updating providers table`);

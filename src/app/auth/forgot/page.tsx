@@ -1,10 +1,7 @@
-import type { Metadata } from 'next';
+import { META_FORGOT_PASSWORD } from '@/lib/site-metadata';
 import AuthForgotClient from './client';
 
-export const metadata: Metadata = {
-    title: 'Forgot password',
-    description: 'Reset your Scandio account password.',
-};
+export const metadata = META_FORGOT_PASSWORD;
 
 export default function ForgotPasswordPage() {
     return <AuthForgotClient />;

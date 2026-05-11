@@ -12,7 +12,7 @@ type StartDiagnosisButtonProps = {
 export function StartDiagnosisButton({ children, className, size }: StartDiagnosisButtonProps) {
     return (
         <Button asChild className={className} size={size}>
-            <Link href="/welcome">{children}</Link>
+            <Link href="/start">{children}</Link>
         </Button>
     );
 }

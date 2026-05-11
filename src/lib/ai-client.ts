@@ -31,3 +31,14 @@ export function getGeminiModel(params?: Omit<GeminiModelParams, 'model'>): Gener
     });
 }
 
+/** Named model (e.g. Flash Lite for cheap pre-passes). Prefer updating the constant in callers if Google renames tiers. */
+export function getGeminiModelNamed(
+    model: string,
+    params?: Omit<GeminiModelParams, 'model'>,
+): GenerativeModel {
+    return getClientFromEnv().getGenerativeModel({
+        model,
+        ...(params ?? {}),
+    });
+}
+

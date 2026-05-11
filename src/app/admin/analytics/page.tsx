@@ -1,10 +1,7 @@
-import type { Metadata } from 'next';
+import { META_ADMIN_ANALYTICS } from '@/lib/site-metadata';
 import AdminAnalyticsClient from './client';
 
-export const metadata: Metadata = {
-    title: 'Analytics',
-    robots: { index: false, follow: false },
-};
+export const metadata = META_ADMIN_ANALYTICS;
 
 export default function AdminAnalyticsPage() {
     return <AdminAnalyticsClient />;

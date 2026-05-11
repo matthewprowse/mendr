@@ -18,6 +18,7 @@ import { DiagnosisLeaveDialog } from '@/components/diagnosis-leave-dialog';
 import { Separator } from '@/components/ui/separator';
 import { useAuth } from '@/context/auth-context';
 import { parseDiagnosisFromModelResponse } from '@/lib/parse-diagnosis-from-model-response';
+import { enrichDiagnosisWithPartPrices } from '@/lib/parts-prices/enrich-diagnosis';
 import { BetaCostEstimateCard } from '@/components/beta-cost-estimate-card';
 
 type DiagnosisPageClientProps = {
@@ -56,6 +57,8 @@ export function DiagnosisPageClient({ conversationId }: DiagnosisPageClientProps
     const [refineText, setRefineText] = useState('');
     const [refineMode, setRefineMode] = useState(false);
     const [refining, setRefining] = useState(false);
+    const [sendingChip, setSendingChip] = useState(false);
+    const [selectedChip, setSelectedChip] = useState<number | null>(null);
     const [confirming, setConfirming] = useState(false);
     const refineFileInputRef = useRef<HTMLInputElement | null>(null);
     const [leaveDialogOpen, setLeaveDialogOpen] = useState(false);
@@ -197,8 +200,9 @@ export function DiagnosisPageClient({ conversationId }: DiagnosisPageClientProps
                 if (!res.ok) return;
                 const newDiag = parseDiagnosisFromModelResponse(text);
                 if (newDiag) {
-                    setDiagnosis(newDiag);
-                    await saveConversationDiagnosis(newDiag, img, userWords);
+                    const enriched = await enrichDiagnosisWithPartPrices(newDiag);
+                    setDiagnosis(enriched);
+                    await saveConversationDiagnosis(enriched, img, userWords);
                 }
                 try {
                     sessionStorage.setItem(providerHydrateSessionKey(conversationId), '1');
@@ -267,10 +271,11 @@ export function DiagnosisPageClient({ conversationId }: DiagnosisPageClientProps
                     toast.error('Could not understand the diagnosis response.');
                     return null;
                 }
-                setDiagnosis(diag);
-                await saveConversationDiagnosis(diag, img, prompt);
-                void maybeHydrateWithProviders(diag, img, catalog, prompt.trim());
-                return diag;
+                const enriched = await enrichDiagnosisWithPartPrices(diag);
+                setDiagnosis(enriched);
+                await saveConversationDiagnosis(enriched, img, prompt);
+                void maybeHydrateWithProviders(enriched, img, catalog, prompt.trim());
+                return enriched;
             } catch (e) {
                 if (process.env.NODE_ENV === 'development') {
                     // eslint-disable-next-line no-console
@@ -311,6 +316,7 @@ export function DiagnosisPageClient({ conversationId }: DiagnosisPageClientProps
                     image: imageSrc,
                     textQuery: [initialPrompt, extraText].filter(Boolean).join('\n\n'),
                     serviceCatalog: catalog,
+                    diagnosisRejected: true,
                     previousDiagnosis: {
                         diagnosis: diagnosis.diagnosis,
                         trade: diagnosis.trade,
@@ -345,16 +351,17 @@ export function DiagnosisPageClient({ conversationId }: DiagnosisPageClientProps
                     toast.error('Could not understand the updated diagnosis.');
                     return;
                 }
-                setDiagnosis(diag);
+                const enriched = await enrichDiagnosisWithPartPrices(diag);
+                setDiagnosis(enriched);
                 setRefineText('');
-                await saveConversationDiagnosis(diag, imageSrc, initialPrompt);
+                await saveConversationDiagnosis(enriched, imageSrc, initialPrompt);
                 try {
                     sessionStorage.removeItem(providerHydrateSessionKey(conversationId));
                 } catch {
                     /* ignore */
                 }
                 void maybeHydrateWithProviders(
-                    diag,
+                    enriched,
                     imageSrc,
                     catalog,
                     [initialPrompt, extraText].filter(Boolean).join('\n\n').trim()
@@ -447,7 +454,7 @@ export function DiagnosisPageClient({ conversationId }: DiagnosisPageClientProps
                     );
                     if (!cancelled && !diag) {
                         // If diagnosis failed, send back to welcome so they can retry.
-                        router.replace('/welcome');
+                        router.replace('/start');
                         return;
                     }
                     return;
@@ -539,13 +546,26 @@ export function DiagnosisPageClient({ conversationId }: DiagnosisPageClientProps
         return diagnosis.thinking || cleanedMessage || '';
     })();
 
+    const hasClarificationChips =
+        diagnosis?.requires_clarification &&
+        Array.isArray(diagnosis?.clarification_questions) &&
+        (diagnosis.clarification_questions?.length ?? 0) > 0;
+
     const tallStickyFooter =
         diagnosis &&
         (diagnosis.requires_clarification || diagnosis.rejected || refineMode);
 
     return (
-        <main className="flex min-h-screen flex-col bg-background">
-            <FlowStepHeader step={2} onBack={() => setLeaveDialogOpen(true)} />
+        <div
+            className="flex h-dvh flex-col overflow-hidden overscroll-none"
+            style={{ background: '#FBFAF7' }}
+        >
+            <FlowStepHeader
+                layout="inline"
+                showScanProgress
+                step={2}
+                onBack={() => setLeaveDialogOpen(true)}
+            />
 
             <DiagnosisLeaveDialog
                 open={leaveDialogOpen}
@@ -553,23 +573,26 @@ export function DiagnosisPageClient({ conversationId }: DiagnosisPageClientProps
                 onLeave={() => router.back()}
             />
 
-            <div
-                className={cn(
-                    'mx-auto flex w-full max-w-xl flex-1 flex-col px-4 pt-24 sm:px-6',
-                    tallStickyFooter
-                        ? 'pb-[calc(15rem+env(safe-area-inset-bottom))]'
-                        : 'pb-[calc(7rem+env(safe-area-inset-bottom))]'
-                )}
-            >
-                <section className="flex flex-1 flex-col gap-6">
-                    <header className="flex flex-col gap-2">
-                        <h1 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
-                            Here&apos;s what we found.
-                        </h1>
-                        <p className="text-base text-muted-foreground">
-                            Confirm this looks right, or add more context and we&apos;ll refine it. Once you&apos;re happy we&apos;ll match you with nearby specialists.
-                        </p>
-                    </header>
+            <main className="mx-auto flex min-h-0 w-full max-w-xl flex-1 flex-col overflow-hidden">
+                <div
+                    className={cn(
+                        'min-h-0 flex-1 overflow-y-auto px-4 pt-2 pb-4 sm:px-6',
+                        tallStickyFooter ? 'pb-2' : ''
+                    )}
+                >
+                    <section className="flex flex-col gap-6">
+                        <header className="flex flex-col gap-2">
+                            <h1
+                                className="text-2xl font-semibold leading-snug sm:text-[1.75rem]"
+                                style={{ color: '#16120E' }}
+                            >
+                                Here&apos;s what we found.
+                            </h1>
+                            <p className="text-sm leading-relaxed text-muted-foreground">
+                                Confirm this looks right, or add more context and we&apos;ll refine it.
+                                Once you&apos;re happy we&apos;ll match you with nearby specialists.
+                            </p>
+                        </header>
 
                     {loading && !diagnosis && (
                         <div className="mt-4 flex flex-1 items-center justify-center">
@@ -589,10 +612,10 @@ export function DiagnosisPageClient({ conversationId }: DiagnosisPageClientProps
                                     We couldn&apos;t find this diagnosis.
                                 </p>
                                 <p className="text-xs text-muted-foreground">
-                                    Please start again from the welcome step.
+                                    Please start a new diagnosis.
                                 </p>
-                                <Button size="sm" onClick={() => router.push('/welcome')}>
-                                    Back to welcome
+                                <Button size="sm" onClick={() => router.push('/start')}>
+                                    Start new diagnosis
                                 </Button>
                             </div>
                         </div>
@@ -614,7 +637,7 @@ export function DiagnosisPageClient({ conversationId }: DiagnosisPageClientProps
                                 </p>
                             </div>
                             {imageSrc && (
-                                <div className="relative w-full overflow-hidden rounded-lg border border-input/50 bg-background">
+                                <div className="relative w-full overflow-hidden rounded-2xl border border-black/[0.08] bg-white/80 shadow-sm">
                                     <div className="aspect-[4/5] w-full">
                                         {/* eslint-disable-next-line @next/next/no-img-element */}
                                         <img
@@ -634,7 +657,10 @@ export function DiagnosisPageClient({ conversationId }: DiagnosisPageClientProps
                             )}
                             {diagnosis && (
                                 <div>
-                                    <h2 className="text-xl font-semibold">
+                                    <h2
+                                        className="text-xl font-semibold leading-snug"
+                                        style={{ color: '#16120E' }}
+                                    >
                                         {diagnosis.diagnosis || 'Estimated Diagnosis'}
                                     </h2>
                                     {diagnosis.action_required && (
@@ -655,11 +681,16 @@ export function DiagnosisPageClient({ conversationId }: DiagnosisPageClientProps
                     )}
 
                     {/* refine input is handled in the sticky footer when refine mode is active */}
-                </section>
-            </div>
+                    </section>
+                </div>
+            </main>
 
+            {/* ── Standard footer: confident diagnosis, no refine mode ── */}
             {diagnosis && !diagnosis.requires_clarification && !diagnosis.rejected && !refineMode && (
-                <footer className="fixed inset-x-0 bottom-0 z-40 bg-background/95 px-4 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur sm:px-6">
+                <footer
+                    className="shrink-0 border-t border-black/[0.06] px-4 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur sm:px-6"
+                    style={{ background: 'rgba(251,250,247,0.95)' }}
+                >
                     <div className="mx-auto flex w-full max-w-xl flex-col gap-2">
                         <div className="flex items-center gap-2">
                             <Button
@@ -684,8 +715,139 @@ export function DiagnosisPageClient({ conversationId }: DiagnosisPageClientProps
                 </footer>
             )}
 
-            {diagnosis && (diagnosis.requires_clarification || diagnosis.rejected || refineMode) && (
-                <footer className="fixed inset-x-0 bottom-0 z-40 bg-background/95 px-4 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur sm:px-6">
+            {/* ── Clarification footer: A / B / C / D option buttons ── */}
+            {diagnosis && diagnosis.requires_clarification && !diagnosis.rejected && (
+                <footer
+                    className="shrink-0 border-t border-black/[0.06] px-4 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-6"
+                    style={{ background: 'rgba(251,250,247,0.98)' }}
+                >
+                    <div className="mx-auto flex w-full max-w-xl flex-col gap-1.5">
+
+                        {/* Lettered option buttons */}
+                        {hasClarificationChips &&
+                            diagnosis.clarification_questions!.slice(0, 4).map((option, i) => {
+                                const letter = (['A', 'B', 'C', 'D'] as const)[i]!;
+                                const isSelected = selectedChip === i;
+                                const isLoading = isSelected && (refining || sendingChip);
+                                return (
+                                    <button
+                                        key={i}
+                                        type="button"
+                                        disabled={refining || sendingChip}
+                                        onClick={async () => {
+                                            setSelectedChip(i);
+                                            setSendingChip(true);
+                                            try {
+                                                await runRefinedDiagnosis(option);
+                                            } finally {
+                                                setSendingChip(false);
+                                                setSelectedChip(null);
+                                            }
+                                        }}
+                                        className={cn(
+                                            'flex w-full items-center gap-3 rounded-xl border px-4 py-2.5 text-left transition-all duration-150',
+                                            'disabled:pointer-events-none disabled:opacity-60',
+                                            isSelected
+                                                ? 'border-foreground/30 bg-foreground/5'
+                                                : 'border-border bg-background hover:border-foreground/20 hover:bg-accent/50 active:scale-[0.99]'
+                                        )}
+                                    >
+                                        {/* Letter badge */}
+                                        <span
+                                            className={cn(
+                                                'flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-[11px] font-bold transition-colors',
+                                                isSelected
+                                                    ? 'border-foreground bg-foreground text-background'
+                                                    : 'border-border bg-muted text-muted-foreground'
+                                            )}
+                                        >
+                                            {isLoading ? (
+                                                <span className="h-3 w-3 animate-spin rounded-full border-[1.5px] border-current border-t-transparent" />
+                                            ) : (
+                                                letter
+                                            )}
+                                        </span>
+                                        <span className="text-sm font-medium text-foreground">
+                                            {option}
+                                        </span>
+                                    </button>
+                                );
+                            })}
+
+                        {/* Freeform escape-hatch row */}
+                        <div className="flex items-center gap-2 pt-1">
+                            <input
+                                type="text"
+                                value={refineText}
+                                onChange={(e) => setRefineText(e.target.value)}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter' && refineText.trim()) {
+                                        e.preventDefault();
+                                        const text = refineText;
+                                        setRefineText('');
+                                        setSendingChip(true);
+                                        void runRefinedDiagnosis(text).finally(() =>
+                                            setSendingChip(false)
+                                        );
+                                    }
+                                }}
+                                placeholder="Or describe it yourself…"
+                                disabled={refining || sendingChip}
+                                className="flex-1 rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
+                            />
+                            {refineText.trim() ? (
+                                <Button
+                                    type="button"
+                                    size="sm"
+                                    disabled={refining || sendingChip}
+                                    onClick={() => {
+                                        const text = refineText;
+                                        setRefineText('');
+                                        setSendingChip(true);
+                                        void runRefinedDiagnosis(text).finally(() =>
+                                            setSendingChip(false)
+                                        );
+                                    }}
+                                >
+                                    {refining || sendingChip ? 'Sending…' : 'Send'}
+                                </Button>
+                            ) : (
+                                <button
+                                    type="button"
+                                    onClick={() => refineFileInputRef.current?.click()}
+                                    disabled={refining || sendingChip}
+                                    aria-label="Replace photo"
+                                    title="Replace photo"
+                                    className="shrink-0 rounded-lg border border-border bg-background p-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50"
+                                >
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 256 256">
+                                        <path d="M208,32H48A16,16,0,0,0,32,48V208a16,16,0,0,0,16,16H208a16,16,0,0,0,16-16V48A16,16,0,0,0,208,32ZM48,48H208v77.38l-26.69-26.69a16,16,0,0,0-22.62,0L113,145,89.38,121.38a16,16,0,0,0-22.62,0L48,139.71Zm0,160V163.31l32-32,24,24,0,0L145.37,208ZM208,208H171.31l-56-56,46.35-46.35L208,186.69Z"/>
+                                    </svg>
+                                </button>
+                            )}
+                        </div>
+
+                        <input
+                            ref={refineFileInputRef}
+                            type="file"
+                            accept="image/*,video/*"
+                            className="hidden"
+                            onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file) handleRefineUpload(file);
+                                e.target.value = '';
+                            }}
+                        />
+                    </div>
+                </footer>
+            )}
+
+            {/* ── Rejected / refine mode footer ── */}
+            {diagnosis && (diagnosis.rejected || (!diagnosis.requires_clarification && refineMode)) && (
+                <footer
+                    className="shrink-0 border-t border-black/[0.06] px-4 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur sm:px-6"
+                    style={{ background: 'rgba(251,250,247,0.95)' }}
+                >
                     <div className="mx-auto flex w-full max-w-xl flex-col gap-3">
                         <Label className="text-sm font-medium text-foreground">
                             Add more context
@@ -741,6 +903,6 @@ export function DiagnosisPageClient({ conversationId }: DiagnosisPageClientProps
                     </div>
                 </footer>
             )}
-        </main>
+        </div>
     );
 }

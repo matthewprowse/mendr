@@ -8,18 +8,31 @@ import { checkRateLimit, isRateLimitBypassed } from '@/lib/rate-limit-config';
 import { createSupabaseServerClient, createSupabaseAdminClient } from '@/lib/supabase-server';
 import { getServiceCatalogLabelsCached } from '@/lib/service-catalog-server';
 import { normalizeProvidersForPrompt } from '@/lib/diagnose-prompt-providers';
-import { buildSystemInstruction } from './prompts';
+import { buildSystemInstruction, buildProseBaseInstruction } from './prompts';
 import { buildProviderHydrationPromptBlock } from './prompts/provider-hydration';
 import {
     buildUnrelatedImageMessage,
     buildUnsupportedHomeServiceMessage,
 } from './prompts/special-cases';
+import {
+    buildQuickThoughtPrompt,
+    buildStreamingQuickThoughtPrompt,
+    buildTextOnlyFirstMessagePrompt,
+    buildImageFirstMessagePrompt,
+    buildImageFollowUpPrompt,
+    buildProviderHydrationImagePrompt,
+} from './prompts/user-turn';
+import { runClassification } from './agent-classify';
+import { runProseGeneration, normaliseProse } from './agent-prose';
+import { toHeadlineStyle, stripFillerSentenceStarts } from '@/lib/prompt-utils';
+import { inferTradeFromSignals, TAXONOMY_NONE_ID } from '@/lib/diagnosis-trade-taxonomy';
+import { tradeToServiceLabel, SERVICE_LABELS } from '@/lib/services';
 
 // Image URLs are fetched server-side — restrict to known-safe origins to prevent SSRF.
 const ALLOWED_IMAGE_ORIGINS = [
     process.env.NEXT_PUBLIC_SUPABASE_URL,
 ].filter((s): s is string => typeof s === 'string' && s.length > 0);
-const MAX_DIAGNOSE_IMAGE_BYTES = 2 * 1024 * 1024; // 2MB guardrail for model payload cost.
+const MAX_DIAGNOSE_IMAGE_BYTES = 4 * 1024 * 1024; // 4MB guardrail — Gemini Flash prices images at a flat token rate, not by byte size.
 /** Echoed on successful diagnosis responses for debugging; matches values embedded in <json>. */
 const DIAGNOSE_RESPONSE_META_HEADERS: Record<string, string> = {
     'X-Scandio-Prompt-Version': DIAGNOSE_PROMPT_VERSION,
@@ -61,262 +74,6 @@ function isAllowedImageUrl(url: string): boolean {
     }
 }
 
-function enforceMinThoughtLength(text: string, minChars = 125): string {
-    const match = text.match(/<thought>([\s\S]*?)<\/thought>/i);
-    if (!match) return text;
-
-    const original = (match[1] ?? '').trim();
-    if (original.length >= minChars) return text;
-
-    const filler =
-        ' Visible signs match this likely fault pattern, and the condition appears consistent across the observed area in this image.';
-    let expanded = original;
-    while (expanded.length < minChars) {
-        expanded = (expanded + filler).trim();
-    }
-    expanded = expanded.slice(0, Math.max(minChars, expanded.length)).trim();
-
-    return text.replace(match[0], `<thought>${expanded}</thought>`);
-}
-
-function ensureThoughtBlock(text: string): string {
-    if (/<(?:thought|thinking|thought_process)\s*>[\s\S]*?<\/(?:thought|thinking|thought_process)\s*>/i.test(text)) {
-        return text;
-    }
-
-    const jsonMatch = text.match(/<json>([\s\S]*?)<\/json>/i);
-    if (!jsonMatch?.[1]) return text;
-
-    try {
-        const parsed = JSON.parse(jsonMatch[1]) as Record<string, unknown>;
-        const imageDescriptions = Array.isArray(parsed?.image_descriptions)
-            ? (parsed.image_descriptions as unknown[])
-            : [];
-        const firstImageDescription =
-            typeof imageDescriptions[0] === 'string' ? imageDescriptions[0].trim() : '';
-        const diagnosis = typeof parsed?.diagnosis === 'string' ? parsed.diagnosis.trim() : '';
-
-        const seed =
-            firstImageDescription ||
-            diagnosis ||
-            'Visible signs suggest a likely maintenance issue that matches the observed condition.';
-        const thought = `<thought>${seed}</thought>\n`;
-        return `${thought}${text}`;
-    } catch {
-        return text;
-    }
-}
-
-function enforceThoughtSentenceCount(text: string, minSentences = 2, maxSentences = 3): string {
-    const match = text.match(/<thought>([\s\S]*?)<\/thought>/i);
-    if (!match) return text;
-
-    const original = (match[1] ?? '').trim();
-    if (!original) return text;
-
-    const normalizeSentence = (s: string): string => {
-        const trimmed = s.trim();
-        if (!trimmed) return '';
-        const withCapital = trimmed.charAt(0).toUpperCase() + trimmed.slice(1);
-        return /[.!?]$/.test(withCapital) ? withCapital : `${withCapital}.`;
-    };
-
-    const sentences = original
-        .split(/(?<=[.!?])\s+/)
-        .map((s) => normalizeSentence(s))
-        .filter(Boolean);
-
-    if (sentences.length >= minSentences && sentences.length <= maxSentences) return text;
-
-    const base = sentences[0] || 'Visible signs indicate a likely maintenance fault pattern.';
-    const additions = [
-        'Likely fault pattern matches the visible condition in the affected area.',
-        'Overall condition appears consistent with one specific home maintenance issue.',
-    ];
-
-    const next = [...sentences];
-    let addIndex = 0;
-    while (next.length < minSentences) {
-        next.push(additions[addIndex % additions.length]);
-        addIndex += 1;
-    }
-    const trimmedToMax = next.slice(0, maxSentences);
-    if (trimmedToMax.length === 1) {
-        trimmedToMax.push(additions[0]);
-    }
-    if (trimmedToMax.length === 0) {
-        trimmedToMax.push(base, additions[0]);
-    }
-
-    const rebuilt = trimmedToMax.join(' ').trim();
-    return text.replace(match[0], `<thought>${rebuilt}</thought>`);
-}
-
-function enforceTradeFromServiceCatalog(text: string, serviceLabels: string[]): string {
-    if (!Array.isArray(serviceLabels) || serviceLabels.length === 0) return text;
-    const jsonMatch = text.match(/<json>([\s\S]*?)<\/json>/i);
-    if (!jsonMatch?.[1]) return text;
-
-    try {
-        const parsed = JSON.parse(jsonMatch[1]);
-        if (!parsed || typeof parsed !== 'object') return text;
-
-        const allowedLower = new Set(serviceLabels.map((s) => s.trim().toLowerCase()));
-        const trade = typeof (parsed as any).trade === 'string' ? (parsed as any).trade.trim() : '';
-        const tradeLower = trade.toLowerCase();
-        const isAllowed = tradeLower === 'n/a' || allowedLower.has(tradeLower);
-        if (isAllowed) return text;
-
-        const next = {
-            ...(parsed as any),
-            trade: 'N/A',
-            trade_detail: '',
-            requires_clarification: true,
-            unsupported_reason:
-                typeof (parsed as any).unsupported_reason === 'string' &&
-                (parsed as any).unsupported_reason.trim()
-                    ? (parsed as any).unsupported_reason
-                    : 'Mapped trade was not in the current supported services list.',
-        };
-        const replaced = `<json>${JSON.stringify(next)}</json>`;
-        return text.replace(jsonMatch[0], replaced);
-    } catch {
-        return text;
-    }
-}
-
-function enforceUnrelatedImageResponse(text: string): string {
-    const jsonMatch = text.match(/<json>([\s\S]*?)<\/json>/i);
-    if (!jsonMatch?.[1]) return text;
-    try {
-        const parsed = JSON.parse(jsonMatch[1]) as Record<string, unknown>;
-        const rejected = Boolean(parsed.rejected);
-        const unserviced = Boolean(parsed.unserviced);
-        const isUnrelatedPhoto = rejected && !unserviced;
-        if (!isUnrelatedPhoto) return text;
-
-        const unrelatedMessage = buildUnrelatedImageMessage();
-
-        const next = {
-            ...parsed,
-            diagnosis: 'Photo Not Related to Home Maintenance',
-            estimated_diagnosis_sentence: 'Photo Not Related to Home Maintenance',
-            trade: 'N/A',
-            trade_detail: '',
-            message: unrelatedMessage,
-            action_required: unrelatedMessage,
-            requires_clarification: true,
-        };
-        return text.replace(jsonMatch[0], `<json>${JSON.stringify(next)}</json>`);
-    } catch {
-        return text;
-    }
-}
-
-function enforceUnsupportedHomeServiceResponse(text: string, serviceLabels: string[]): string {
-    const jsonMatch = text.match(/<json>([\s\S]*?)<\/json>/i);
-    if (!jsonMatch?.[1]) return text;
-    try {
-        const parsed = JSON.parse(jsonMatch[1]) as Record<string, unknown>;
-        const rejected = Boolean(parsed.rejected);
-        const unserviced = Boolean(parsed.unserviced);
-        const trade = typeof parsed.trade === 'string' ? parsed.trade.trim().toLowerCase() : '';
-        const isUnsupportedHomeService = unserviced || (!rejected && trade === 'n/a');
-        if (!isUnsupportedHomeService) return text;
-
-        const unsupportedMessage = buildUnsupportedHomeServiceMessage(serviceLabels);
-
-        const next = {
-            ...parsed,
-            diagnosis: 'Service Not Currently Supported',
-            estimated_diagnosis_sentence: 'Service Not Currently Supported',
-            trade: 'N/A',
-            trade_detail: '',
-            message: unsupportedMessage,
-            action_required: unsupportedMessage,
-            requires_clarification: true,
-        };
-        return text.replace(jsonMatch[0], `<json>${JSON.stringify(next)}</json>`);
-    } catch {
-        return text;
-    }
-}
-
-function toHeadlineStyle(input: string): string {
-    const minor = new Set(['and', 'or', 'of', 'the', 'in', 'on', 'at', 'to', 'for', 'etc.']);
-    const words = input
-        .trim()
-        .split(/\s+/)
-        .filter(Boolean);
-    if (words.length === 0) return '';
-    return words
-        .map((w, i) => {
-            const lower = w.toLowerCase();
-            if (i > 0 && i < words.length - 1 && minor.has(lower)) return lower;
-            return lower.charAt(0).toUpperCase() + lower.slice(1);
-        })
-        .join(' ');
-}
-
-function stripFillerSentenceStarts(input: string): string {
-    const fillers = /^[("'`\s-]*(a|an|the|this|it|there)\b[\s,:-]*/i;
-    const sentences = input
-        .split(/(?<=[.!?])\s+/)
-        .map((s) => s.trim())
-        .filter(Boolean);
-    const fixed = sentences.map((s) => {
-        let next = s.replace(fillers, '').trim();
-        if (!next) return s;
-        return next.charAt(0).toUpperCase() + next.slice(1);
-    });
-    return fixed.join(' ').trim();
-}
-
-function enforceLanguageStyleInJson(text: string): string {
-    const jsonMatch = text.match(/<json>([\s\S]*?)<\/json>/i);
-    if (!jsonMatch?.[1]) return text;
-    try {
-        const parsed = JSON.parse(jsonMatch[1]) as Record<string, unknown>;
-        if (typeof parsed.diagnosis === 'string') {
-            parsed.diagnosis = toHeadlineStyle(parsed.diagnosis);
-        }
-        if (typeof parsed.estimated_diagnosis_sentence === 'string') {
-            parsed.estimated_diagnosis_sentence = toHeadlineStyle(parsed.estimated_diagnosis_sentence);
-        } else if (typeof parsed.diagnosis === 'string') {
-            parsed.estimated_diagnosis_sentence = parsed.diagnosis;
-        }
-        if (typeof parsed.trade_detail === 'string' && parsed.trade_detail.trim()) {
-            parsed.trade_detail = toHeadlineStyle(parsed.trade_detail);
-        } else if (typeof parsed.trade === 'string' && parsed.trade.trim()) {
-            // Backward-compatible safety net: ensure trade_detail is always present.
-            parsed.trade_detail = toHeadlineStyle(parsed.trade);
-        }
-        if (typeof parsed.action_required === 'string' && parsed.action_required.trim()) {
-            parsed.action_required = stripFillerSentenceStarts(parsed.action_required);
-        }
-        const replaced = `<json>${JSON.stringify(parsed)}</json>`;
-        return text.replace(jsonMatch[0], replaced);
-    } catch {
-        return text;
-    }
-}
-
-function enforceUrgencyKey(text: string): string {
-    const jsonMatch = text.match(/<json>([\s\S]*?)<\/json>/i);
-    if (!jsonMatch?.[1]) return text;
-    try {
-        const parsed = JSON.parse(jsonMatch[1]) as Record<string, unknown>;
-        const allowed = new Set(['immediate', 'urgent', 'soon', 'planned']);
-        const current =
-            typeof parsed.urgency_key === 'string'
-                ? parsed.urgency_key.trim().toLowerCase()
-                : '';
-        parsed.urgency_key = allowed.has(current) ? current : 'soon';
-        return text.replace(jsonMatch[0], `<json>${JSON.stringify(parsed)}</json>`);
-    } catch {
-        return text;
-    }
-}
 
 function extractThoughtText(responseText: string): string {
     const tagged =
@@ -342,44 +99,6 @@ function extractPartialThoughtInner(accum: string): string | null {
     return rest;
 }
 
-function injectDiagnosisMetadata(text: string): string {
-    const jsonMatch = text.match(/<json>([\s\S]*?)<\/json>/i);
-    if (!jsonMatch?.[1]) return text;
-    try {
-        const parsed = JSON.parse(jsonMatch[1]) as Record<string, unknown>;
-        parsed.prompt_version = DIAGNOSE_PROMPT_VERSION;
-        parsed.ai_model = GEMINI_MODEL_NAME;
-        logIfDiagnosisJsonShapeUnexpected(parsed);
-        const replaced = `<json>${JSON.stringify(parsed)}</json>`;
-        return text.replace(jsonMatch[0], replaced);
-    } catch {
-        return text;
-    }
-}
-
-function applyDiagnosePostProcess(fullText: string, serviceList: string[]): string {
-    const withThought = enforceThoughtSentenceCount(
-        enforceMinThoughtLength(ensureThoughtBlock(fullText), 125),
-        2,
-        3
-    );
-    const withThoughtStyle = withThought.replace(
-        /<thought>([\s\S]*?)<\/thought>/i,
-        (_m, t) => `<thought>${stripFillerSentenceStarts(String(t || ''))}</thought>`
-    );
-    return injectDiagnosisMetadata(
-        enforceUrgencyKey(
-            enforceLanguageStyleInJson(
-                enforceUnsupportedHomeServiceResponse(
-                    enforceUnrelatedImageResponse(
-                        enforceTradeFromServiceCatalog(withThoughtStyle, serviceList)
-                    ),
-                    serviceList
-                )
-            )
-        )
-    );
-}
 
 export async function POST(req: NextRequest) {
     const timings: Record<string, number> = {};
@@ -411,7 +130,13 @@ export async function POST(req: NextRequest) {
     const disableDiagnosisQuota =
         process.env.DISABLE_DIAGNOSIS_DAILY_QUOTA === 'true' || isRateLimitBypassed(req);
 
-    if (isFirstMessage && !disableDiagnosisQuota) {
+    const skipQuotaIncrement =
+        parsedBodyForQuota?.analysisPhase === 'image_thought_only';
+
+    // Skip the full quota check (Supabase read + potential increment) for the
+    // lightweight image_thought_only warm-up call — it never blocks users and
+    // is fired fire-and-forget from the client orchestrator.
+    if (isFirstMessage && !disableDiagnosisQuota && !skipQuotaIncrement) {
         const quotaStageStartedAt = Date.now();
         let quotaUserId: string | null = null;
         let quotaAnonKey: string | null = null;
@@ -477,12 +202,14 @@ export async function POST(req: NextRequest) {
                 );
             }
 
-            // Increment — fire and forget; don't block the AI call
-            const upsertRow = quotaUserId
-                ? { user_id: quotaUserId, date: today, count: currentCount + 1 }
-                : { anonymous_key: quotaAnonKey, date: today, count: currentCount + 1 };
-            const onConflict = quotaUserId ? 'user_id,date' : 'anonymous_key,date';
-            void admin.from('diagnosis_usage').upsert(upsertRow, { onConflict });
+            // Increment — fire and forget; don't block the AI call (skip optional warm-up calls).
+            if (!skipQuotaIncrement) {
+                const upsertRow = quotaUserId
+                    ? { user_id: quotaUserId, date: today, count: currentCount + 1 }
+                    : { anonymous_key: quotaAnonKey, date: today, count: currentCount + 1 };
+                const onConflict = quotaUserId ? 'user_id,date' : 'anonymous_key,date';
+                void admin.from('diagnosis_usage').upsert(upsertRow, { onConflict });
+            }
         } catch (quotaErr) {
             // Non-fatal: if the usage table doesn't exist yet or query fails, allow through
             console.warn('Quota check skipped (error):', quotaErr);
@@ -548,9 +275,9 @@ export async function POST(req: NextRequest) {
                 { status: 400 },
             );
         }
-        if (Array.isArray(attachments) && attachments.length > 3) {
+        if (Array.isArray(attachments) && attachments.length > 9) {
             return new Response(
-                JSON.stringify({ error: 'Too many attachments. Maximum 3 images per request.' }),
+                JSON.stringify({ error: 'Too many attachments. Maximum 9 extra images (10 total with primary).' }),
                 { status: 400 },
             );
         }
@@ -570,7 +297,10 @@ export async function POST(req: NextRequest) {
         }
 
         const attachmentImages = Array.isArray(attachments)
-            ? attachments.filter((a: unknown) => typeof a === 'string' && a.startsWith('data:'))
+            ? attachments
+                  .filter((a: unknown) => typeof a === 'string')
+                  .map((a) => String(a).trim())
+                  .filter(Boolean)
             : [];
 
         // Basic request-shape logging only; detailed metrics are captured at the end.
@@ -651,8 +381,18 @@ export async function POST(req: NextRequest) {
                 const mimeType = img.split(';')[0].split(':')[1];
                 if (!base64Data || !mimeType) return null;
                 const approxBytes = Math.floor((base64Data.length * 3) / 4);
-                if (approxBytes > MAX_DIAGNOSE_IMAGE_BYTES) return null;
+                if (approxBytes > MAX_DIAGNOSE_IMAGE_BYTES) {
+                    console.warn(
+                        `[diagnose] image dropped — exceeds ${MAX_DIAGNOSE_IMAGE_BYTES / (1024 * 1024)}MB guardrail`,
+                        { approxBytes, mimeType },
+                    );
+                    return null;
+                }
                 return { inlineData: { data: base64Data, mimeType } };
+            }
+
+            if (img.startsWith('http') && !isAllowedImageUrl(img)) {
+                return null;
             }
 
             // Newer flow stores a public Supabase URL in `conversations.image_url`.
@@ -661,7 +401,13 @@ export async function POST(req: NextRequest) {
                 if (!res.ok) return null;
                 const mimeType = res.headers.get('content-type') || 'image/jpeg';
                 const bytes = await res.arrayBuffer();
-                if (bytes.byteLength > MAX_DIAGNOSE_IMAGE_BYTES) return null;
+                if (bytes.byteLength > MAX_DIAGNOSE_IMAGE_BYTES) {
+                    console.warn(
+                        `[diagnose] remote image dropped — exceeds ${MAX_DIAGNOSE_IMAGE_BYTES / (1024 * 1024)}MB guardrail`,
+                        { byteLength: bytes.byteLength, url: img.slice(0, 80) },
+                    );
+                    return null;
+                }
                 const base64Data = arrayBufferToBase64(bytes);
                 return { inlineData: { data: base64Data, mimeType } };
             } catch {
@@ -679,11 +425,8 @@ export async function POST(req: NextRequest) {
                 if (inline) imageParts.push(inline);
             }
             for (const att of attachmentImages) {
-                const base64Data = att.split(',')[1];
-                const mimeType = att.split(';')[0].split(':')[1];
-                if (base64Data && mimeType) {
-                    imageParts.push({ inlineData: { data: base64Data, mimeType } });
-                }
+                const inline = await imageStringToInlineData(att);
+                if (inline) imageParts.push(inline);
             }
             if (imageParts.length === 0) {
                 return new Response(
@@ -692,9 +435,7 @@ export async function POST(req: NextRequest) {
                 );
             }
 
-            const quickPrompt =
-                `Analyse ${imageParts.length > 1 ? 'these images' : 'this image'} and return only a short <thought> block (1-2 sentences) describing what is visibly wrong and likely issue pattern. ` +
-                `Do not include JSON or extra sections.`;
+            const quickPrompt = buildQuickThoughtPrompt(imageParts.length);
             const quickContents = [
                 {
                     role: 'user',
@@ -708,7 +449,7 @@ export async function POST(req: NextRequest) {
                 maxOutputTokens: 220,
             };
             const fallbackThought =
-                'Visible signs suggest a likely home maintenance issue pattern that needs a closer diagnosis.';
+                'Photo is not clear enough to give a confident diagnosis. Uploading a sharper or closer image of the problem area will help.';
 
             if (wantsStream) {
                 try {
@@ -742,8 +483,15 @@ export async function POST(req: NextRequest) {
                                         type: 'complete',
                                         full: `<thought>${thought || fallbackThought}</thought>`,
                                     });
-                                } catch (e) {
-                                    controller.error(e);
+                                } catch (streamErr) {
+                                    console.warn(
+                                        'image_thought_only stream failed; using fallback',
+                                        streamErr
+                                    );
+                                    emit({
+                                        type: 'complete',
+                                        full: `<thought>${fallbackThought}</thought>`,
+                                    });
                                 } finally {
                                     controller.close();
                                 }
@@ -763,21 +511,31 @@ export async function POST(req: NextRequest) {
                 }
             }
 
-            const quickResult = await model.generateContent({
-                contents: quickContents,
-                generationConfig: quickGenerationConfig,
-            });
-            const quickResp = (quickResult as any)?.response;
-            let quickText = quickResp && typeof quickResp.text === 'function' ? quickResp.text() : '';
-            if (!quickText) {
-                const parts = (quickResult as any)?.response?.candidates?.[0]?.content?.parts;
-                if (Array.isArray(parts)) {
-                    quickText = parts.map((p: any) => (typeof p?.text === 'string' ? p.text : '')).join('');
+            let thought = '';
+            try {
+                const quickResult = await model.generateContent({
+                    contents: quickContents,
+                    generationConfig: quickGenerationConfig,
+                });
+                const quickResp = (quickResult as any)?.response;
+                let quickText = quickResp && typeof quickResp.text === 'function' ? quickResp.text() : '';
+                if (!quickText) {
+                    const parts = (quickResult as any)?.response?.candidates?.[0]?.content?.parts;
+                    if (Array.isArray(parts)) {
+                        quickText = parts
+                            .map((p: any) => (typeof p?.text === 'string' ? p.text : ''))
+                            .join('');
+                    }
                 }
+                thought = stripFillerSentenceStarts(extractThoughtText(String(quickText || ''))).trim();
+            } catch (quickThoughtErr) {
+                // Optional warm-up call from the client; must not fail the overall diagnosis flow.
+                console.warn('image_thought_only: Gemini failed; returning fallback thought', quickThoughtErr);
             }
-            const thought = stripFillerSentenceStarts(extractThoughtText(String(quickText || ''))).trim();
+
+            const wrappedThought = thought || fallbackThought;
             if (wantsStream) {
-                const wrapped = `<thought>${thought || fallbackThought}</thought>`;
+                const wrapped = `<thought>${wrappedThought}</thought>`;
                 return new Response(
                     new ReadableStream({
                         start(controller) {
@@ -804,7 +562,7 @@ export async function POST(req: NextRequest) {
                     }
                 );
             }
-            return new Response(`<thought>${thought || fallbackThought}</thought>`, {
+            return new Response(`<thought>${wrappedThought}</thought>`, {
                 headers: {
                     'Content-Type': 'text/plain; charset=utf-8',
                     ...DIAGNOSE_RESPONSE_META_HEADERS,
@@ -822,15 +580,13 @@ export async function POST(req: NextRequest) {
             recordStage(timings, 'service_catalog_cache_or_db_ms', serviceCatalogStageStartedAt);
         }
         if (serviceList.length === 0) {
-            return new Response(
-                JSON.stringify({
-                    error: 'Service catalog is unavailable. Please retry shortly.',
-                }),
-                { status: 503 }
-            );
+            // Supabase unavailable — fall back to the static canonical list so users
+            // are never blocked from a diagnosis during a brief infrastructure hiccup.
+            console.warn('[diagnose] service catalog empty after cache/db fetch — using SERVICE_LABELS fallback');
+            serviceList = [...SERVICE_LABELS];
         }
         const serviceListText = serviceList.join(', ');
-        const systemInstruction = buildSystemInstruction({
+        const promptContext = {
             isFollowUp,
             hasUserContext: Boolean(hasUserContext),
             userSelectedTrade: hasUserContext
@@ -845,16 +601,28 @@ export async function POST(req: NextRequest) {
             providers: providersForPrompt,
             previousDiagnosis: prevDiagForHydration ?? previousDiagnosis,
             diagnosisRejected,
-        });
+        };
+        const systemInstruction = buildSystemInstruction(promptContext);
+        // Agent 2b uses responseSchema structured output — strip the tagged-output
+        // format rules that contradict it and waste ~600 tokens per call.
+        const proseBaseInstruction = buildProseBaseInstruction(promptContext);
 
         const userOriginalWordsHydration = (
             typeof textQuery === 'string' ? textQuery : ''
         ).trim();
         const hydrationAppendix =
-            isProviderHydration && prevDiagForHydration
-                ? `\n\n${buildProviderHydrationPromptBlock(userOriginalWordsHydration, prevDiagForHydration)}`
+            isProviderHydration
+                ? `\n\n${buildProviderHydrationPromptBlock(userOriginalWordsHydration)}`
                 : '';
         const instructionPrefix = `${systemInstruction.trim()}${hydrationAppendix}\n\n`;
+
+        const tieringLogMeta: Record<string, unknown> = {
+            imagesInRequest: 0,
+            imagesAfterTier: 0,
+            imageTierMs: null as number | null,
+            tierMultiIssue: false,
+            tierFallback: false,
+        };
 
         // Gemini v1 doesn't accept the SDK-level `systemInstruction` field.
         // Embed the same instructions directly into the first user prompt text instead.
@@ -884,6 +652,16 @@ export async function POST(req: NextRequest) {
             // Text-only or follow-up with optional new images.
             // If we have history, this is a follow-up: add history (text only, no image data) then textQuery + attachments as final user turn.
             if (history && history.length > 0) {
+                const followInlineGathered: ContentPart[] = [];
+                for (const att of attachmentImages) {
+                    const inline = await imageStringToInlineData(att);
+                    if (inline) {
+                        followInlineGathered.push(inline);
+                    }
+                }
+                tieringLogMeta.imagesInRequest = followInlineGathered.length;
+                tieringLogMeta.imagesAfterTier = followInlineGathered.length;
+
                 for (let i = 0; i < history.length; i++) {
                     const msg = history[i] as HistoryMessage;
                     const parts: ContentPart[] = [];
@@ -896,46 +674,27 @@ export async function POST(req: NextRequest) {
                         });
                     }
                 }
-                const formatReminder =
-                    "\n\nCRITICAL: You MUST respond with <thought> then <json>. The JSON must be valid (no trailing commas, escape quotes). Put your answer in the 'message' field.";
-                const finalParts: ContentPart[] = [];
-                for (const att of attachmentImages) {
-                    const base64Data = att.split(',')[1];
-                    const mimeType = att.split(';')[0].split(':')[1];
-                    if (base64Data && mimeType) {
-                        finalParts.push({ inlineData: { data: base64Data, mimeType } });
-                    }
-                }
+                const finalParts: ContentPart[] = [...followInlineGathered];
                 const textPart = ((textQuery as string) || '').trim();
                 if (textPart) {
-                    finalParts.push({ text: instructionPrefix + textPart + formatReminder });
+                    finalParts.push({ text: instructionPrefix + textPart });
                 } else if (finalParts.length > 0) {
                     finalParts.push({
                         text:
                             instructionPrefix +
-                            'The user uploaded new images for you to analyse. CRITICAL: Output <thought> FIRST (2–3 short sentences), then </thought>, then <json>.' +
-                            formatReminder,
+                            'The user uploaded new images for you to analyse. Output <thought> FIRST (2–3 short sentences), then </thought>, then <json>.',
                     });
                 }
                 if (finalParts.length > 0) {
                     contents.push({ role: 'user', parts: finalParts });
                 }
             } else {
-                const textPrompt = hasUserContext
-                    ? instructionPrefix +
-                      `The user selected "${userSelectedTrade.diagnosis}" (${userSelectedTrade.trade}) as their preferred service, but this is only a hint. If their description clearly indicates a different trade, set diagnosis, trade, and trade_detail to the more accurate trade.
-
-The user described their issue:
-
-"${(textQuery as string).trim()}"
-
-Analyse this description considering their stated interest. Output <thought> (2–3 short sentences) then <json>.`
-                    : instructionPrefix +
-                      `The user has described their home maintenance issue:
-
-"${(textQuery as string).trim()}"
-
-Analyse this description and provide a diagnosis. Output <thought> (2–3 short sentences) then <json>.`;
+                const textPrompt = buildTextOnlyFirstMessagePrompt({
+                    instructionPrefix,
+                    textQuery: (textQuery as string).trim(),
+                    hasUserContext: Boolean(hasUserContext),
+                    userSelectedTrade: hasUserContext ? userSelectedTrade : null,
+                });
                 contents.push({ role: 'user', parts: [{ text: textPrompt }] });
             }
         } else {
@@ -947,14 +706,12 @@ Analyse this description and provide a diagnosis. Output <thought> (2–3 short 
             }
 
             for (const att of attachmentImages) {
-                const base64Data = att.split(',')[1];
-                const mimeType = att.split(';')[0].split(':')[1];
-                if (base64Data && mimeType) {
-                    imageParts.push({
-                        inlineData: { data: base64Data, mimeType },
-                    });
-                }
+                const inline = await imageStringToInlineData(att);
+                if (inline) imageParts.push(inline);
             }
+
+            tieringLogMeta.imagesInRequest = imageParts.length;
+            tieringLogMeta.imagesAfterTier = imageParts.length;
 
             const hasImagesToAnalyse = imageParts.length > 0;
             const userTextQuery = (textQuery as string | undefined)?.trim() || '';
@@ -964,26 +721,24 @@ Analyse this description and provide a diagnosis. Output <thought> (2–3 short 
                     ? `USER'S OWN WORDS ABOUT THE ISSUE (read first; if these disagree with a visual guess, trust the user on equipment type and job context):\n${JSON.stringify(userTextQuery)}\n\n`
                     : '';
             const imagePrompt = isProviderHydration && !history?.length
-                ? instructionPrefix +
-                  userWordsPriority +
-                  `PROVIDER HYDRATION PASS: Re-read ${imageParts.length > 1 ? 'these images' : 'this image'} and output a full Scandio response. Follow PROVIDER HYDRATION TURN in your instructions; keep established diagnosis fields stable unless clearly wrong.
-
-CRITICAL: Output <thought> FIRST (2–3 short sentences), then </thought>, then <json>. Never skip the thought block.`
+                ? buildProviderHydrationImagePrompt({
+                        instructionPrefix,
+                        userWordsPriority,
+                        imageCount: imageParts.length,
+                    })
                 : !history?.length
-                  ? hasUserContext
-                      ? instructionPrefix +
-                        userWordsPriority +
-                        `The user selected "${userSelectedTrade.diagnosis}" (${userSelectedTrade.trade}) as a preferred service, but it is not authoritative. If their words or the image clearly indicate a different trade, set diagnosis, trade, trade_detail, and action_required to the more accurate trade. Analyse quickly.
-
-CRITICAL: Output <thought> FIRST (2–3 short sentences), then </thought>, then <json>. Never skip the thought block.`
-                      : instructionPrefix +
-                        userWordsPriority +
-                        `Analyse ${imageParts.length > 1 ? 'these images' : 'this image'}.
-
-CRITICAL: Output <thought> FIRST (2–3 short sentences about the likely problem only in plain language). Never skip the thought block; the user sees it in real time.`
+                  ? buildImageFirstMessagePrompt({
+                        instructionPrefix,
+                        userWordsPriority,
+                        imageCount: imageParts.length,
+                        hasUserContext: Boolean(hasUserContext),
+                        userSelectedTrade: hasUserContext ? userSelectedTrade : null,
+                    })
                   : hasImagesToAnalyse
-                  ? instructionPrefix +
-                      `The user has uploaded new images for you to analyse.${userTextQuery ? ` Their message: "${userTextQuery}"` : ''} Provide a FULL diagnosis: identify the equipment/issue, set diagnosis, action_required, estimated_cost, and trade. Do NOT ask for clarification when the equipment is recognisable (e.g. gate motor, geyser, DB board) — diagnose it and recommend providers. Output <thought> FIRST (2–3 sentences), then </thought>, then <json>.`
+                  ? buildImageFollowUpPrompt({
+                        instructionPrefix,
+                        userTextQuery,
+                    })
                   : null;
 
             contents.push({
@@ -992,18 +747,12 @@ CRITICAL: Output <thought> FIRST (2–3 short sentences about the likely problem
             });
         }
 
-        const formatReminder =
-            "\n\nCRITICAL: You MUST respond with <thought> then <json>. The JSON must be valid (no trailing commas, escape quotes). Put your answer in the 'message' field. Even for short questions like 'What?' or 'Are you sure?' — answer in message. If you cannot output valid JSON, use <message>Your answer</message> instead.";
-
         // Add history if present (image branch only; text-only builds full contents above). History is text-only — no image bytes.
         if (!isTextOnly && history && history.length > 0) {
             for (let i = 0; i < history.length; i++) {
                 const msg = history[i] as HistoryMessage;
                 const parts: ContentPart[] = [];
-                let content = buildTextForMessage(msg);
-                if (msg.role === 'user' && i === history.length - 1 && !isTextOnly) {
-                    content += formatReminder;
-                }
+                const content = buildTextForMessage(msg);
                 if (content) parts.push({ text: content });
                 if (parts.length > 0) {
                     contents.push({
@@ -1014,107 +763,642 @@ CRITICAL: Output <thought> FIRST (2–3 short sentences about the likely problem
             }
         }
 
-        const generationConfig = {
-            temperature: isProviderHydration ? 0.22 : 0.35,
-            topP: 0.8,
-            topK: 40,
-            maxOutputTokens: 2048,
+        // ── Multi-agent pipeline: Agent 2a (classify) + Agent 2b (prose) ──────────
+        //
+        // Architecture:
+        //   1. Optional client `image_thought_only` — separate lightweight request some
+        //      flows fire for early UX; it does not gate Agent 2a and is not awaited
+        //      by the server. The processing orchestrator may fire it without blocking.
+        //   2. Server quick-thought stream (when stream:true and images present) — extra
+        //      Gemini stream in Promise.all with Agent 2a for immediate NDJSON thought
+        //      chunks; superseded by Agent 2b’s thought in the final payload.
+        //   3. Agent 2a (classify) — schema-enforced JSON; must finish before 2b.
+        //   4. Agent 2b (prose) — receives Agent 2a classification as locked ground truth.
+        //
+        // The response format remains backwards-compatible: the NDJSON stream still
+        // emits { type:'thought', text } and { type:'complete', full } where `full`
+        // is the existing <thought>…</thought><json>…</json> string that the frontend
+        // already knows how to parse. This keeps all downstream UI code unchanged.
+
+        // eslint-disable-next-line no-console
+        console.log('Starting multi-agent diagnosis pipeline (2a → 2b)...');
+        const pipelineStartedAt = Date.now();
+
+        // ── Helper: stream a quick thought while Agent 2a runs ──────────────────
+        // When streaming is requested and an image is present, we fire a lightweight
+        // thought-only stream in parallel with classification so the user sees text
+        // immediately. The thought is later superseded by Agent 2b's authoritative
+        // thought field in the complete response.
+        const quickThoughtContents: ContentMessage[] = isTextOnly
+            ? []
+            : (() => {
+                  const imageParts2: ContentPart[] = [];
+                  // Re-use the already-resolved inline data via the existing `contents` array
+                  // (first user turn contains the image parts). We only need the image parts.
+                  const firstUserTurn = (contents as ContentMessage[]).find((c) => c.role === 'user');
+                  if (firstUserTurn) {
+                      for (const p of firstUserTurn.parts) {
+                          if ((p as ContentPart).inlineData) imageParts2.push(p as ContentPart);
+                      }
+                  }
+                  return imageParts2.length > 0
+                      ? [
+                            {
+                                role: 'user' as const,
+                                parts: [
+                                    ...imageParts2,
+                                    { text: buildStreamingQuickThoughtPrompt() },
+                                ],
+                            } as ContentMessage,
+                        ]
+                      : [];
+              })();
+
+        const hasQuickThought = quickThoughtContents.length > 0 && wantsStream;
+
+        const SPRING_SIGNAL_REGEX = /\b(spring|hinge|rod|connecting rod|tension)\b/i;
+        const hasSpringSignal = (value: unknown): boolean =>
+            typeof value === 'string' && SPRING_SIGNAL_REGEX.test(value);
+        const countSpringSignals = (values: unknown[]): number =>
+            values.reduce<number>((count, value) => count + (hasSpringSignal(value) ? 1 : 0), 0);
+        const inferTradeFromProseFallback = (value: unknown, allowed: string[]): string => {
+            const raw = typeof value === 'string' ? value : '';
+            if (!raw.trim()) return '';
+            const taxonomyHit = inferTradeFromSignals(raw);
+            if (taxonomyHit) {
+                const hit = allowed.find((l) => l.toLowerCase() === taxonomyHit.trade.toLowerCase());
+                if (hit) return hit;
+                return taxonomyHit.trade;
+            }
+            const t = raw.toLowerCase();
+            if (/\b(garage door|gate motor|garage motor|roller shutter|access control)\b/.test(t)) {
+                const hit = allowed.find((l) => l.toLowerCase() === 'security');
+                return hit ?? 'Security';
+            }
+            if (/\b(leak|pipe|geyser|toilet|tap|drain|plumbing)\b/.test(t)) {
+                const hit = allowed.find((l) => l.toLowerCase() === 'plumbing');
+                return hit ?? 'Plumbing';
+            }
+            if (/\b(trip|db board|socket|light|wiring|electrical)\b/.test(t)) {
+                const hit = allowed.find((l) => l.toLowerCase() === 'electrical');
+                return hit ?? 'Electrical';
+            }
+            const loose = tradeToServiceLabel(raw);
+            if (!loose) return '';
+            const hit = allowed.find((l) => l.toLowerCase() === loose.toLowerCase());
+            return hit ?? loose;
         };
 
-        try {
-            // eslint-disable-next-line no-console
-            console.log('Starting Gemini stream generation...');
-            const streamStageStartedAt = Date.now();
-            const result = await model.generateContentStream({
-                contents: contents as unknown as GeminiContent[],
-                generationConfig,
-            });
-            recordStage(timings, 'gemini_stream_start_ms', streamStageStartedAt);
+        /** Align trade/trade_detail with taxonomy keywords when prose contradicts classification. */
+        const reconcileTradeFromDiagnosisSignals = (
+            j: Record<string, unknown>,
+            cls: {
+                trade: string;
+                subcategory_id: string;
+            },
+            allowed: string[],
+        ): void => {
+            const rejected = Boolean(j.rejected);
+            const unserviced = Boolean(j.unserviced);
+            const tradeStr = typeof j.trade === 'string' ? j.trade.trim() : '';
+            if (rejected || unserviced || !tradeStr || tradeStr.toLowerCase() === 'n/a') return;
 
-            if (wantsStream) {
-                return new Response(
-                    new ReadableStream({
-                        async start(controller) {
-                            const encoder = new TextEncoder();
-                            const emit = (o: unknown) =>
-                                controller.enqueue(encoder.encode(`${JSON.stringify(o)}\n`));
-                            let accum = '';
-                            let lastThought = '';
-                            try {
-                                // eslint-disable-next-line no-console
-                                console.log('Awaiting first chunk from Gemini (NDJSON stream)...');
-                                for await (const chunk of result.stream) {
-                                    const text = chunk.text();
-                                    if (!text) continue;
-                                    accum += text;
-                                    const inner = extractPartialThoughtInner(accum);
-                                    if (inner !== null && inner !== lastThought) {
-                                        lastThought = inner;
-                                        emit({ type: 'thought', text: inner });
-                                    }
-                                }
-                                const adjusted = applyDiagnosePostProcess(accum, serviceList);
-                                emit({ type: 'complete', full: adjusted });
-                                // eslint-disable-next-line no-console
-                                console.log('Gemini NDJSON stream completed successfully');
-                            } catch (e) {
-                                console.error('Error during Gemini NDJSON stream iteration:', e);
-                                controller.error(e);
-                                return;
-                            }
-                            const durationMs = Date.now() - startedAt;
-                            recordStage(timings, 'total_request_ms', requestStartedAt);
-                            logAiEvent({
-                                endpoint: 'diagnose',
-                                status: 'ok',
-                                durationMs,
-                                meta: diagnoseAiLogMeta({
-                                    isTextOnly,
-                                    isFollowUp,
-                                    hasUserContext,
-                                    hasImage: Boolean(image),
-                                    attachmentsCount: attachmentImages.length,
-                                    historyLength: Array.isArray(history) ? history.length : 0,
-                                    usedGenerateContentFallback: false,
-                                    ndjsonStream: true,
-                                }),
-                            });
-                            logDiagnoseTimings('ok', timings);
-                            controller.close();
-                        },
-                    }),
+            const primary = [
+                j.diagnosis,
+                j.estimated_diagnosis_sentence,
+                j.trade_detail,
+                typeof j.message === 'string' ? (j.message as string).slice(0, 800) : '',
+            ]
+                .map((x) => (typeof x === 'string' ? x : ''))
+                .join(' | ');
+
+            const inferred = inferTradeFromSignals(primary);
+            if (!inferred) return;
+
+            const inferredAllowed = allowed.find((l) => l.toLowerCase() === inferred.trade.toLowerCase());
+            const curResolved =
+                allowed.find((l) => l.toLowerCase() === tradeStr.toLowerCase()) ?? tradeStr;
+            const inferredNorm = inferredAllowed ?? inferred.trade;
+            const curNorm = curResolved;
+
+            if (inferredNorm.toLowerCase() === curNorm.toLowerCase()) return;
+
+            const handyman = allowed.find((l) => l.toLowerCase() === 'general handyman') ?? 'General Handyman';
+
+            const shouldOverride =
+                handyman.toLowerCase() === curNorm.toLowerCase() ||
+                cls.subcategory_id === TAXONOMY_NONE_ID;
+
+            if (!shouldOverride) return;
+
+            const nextTrade = inferredAllowed ?? inferredNorm;
+            if (!allowed.some((l) => l.toLowerCase() === nextTrade.toLowerCase())) return;
+
+            const resolved = allowed.find((l) => l.toLowerCase() === nextTrade.toLowerCase()) ?? nextTrade;
+            j.trade = resolved;
+            j.trade_detail = inferred.label;
+            j.subcategory_id = inferred.subcategoryId;
+        };
+
+        /**
+         * Returns 3–4 short homeowner-perspective clarification chips appropriate
+         * for the given trade. Used as a fallback when Agent 2b returns
+         * requires_clarification but no clarification_questions.
+         */
+        function buildTradeFallbackClarificationChips(trade: string): string[] {
+            const t = (trade ?? '').toLowerCase().trim();
+            if (t.includes('electrical')) {
+                return [
+                    'There is no power to a circuit or outlet.',
+                    'A switch, fitting, or light is not working.',
+                    'There is tripping, sparking, or a burning smell.',
+                    'Something else is happening.',
+                ];
+            }
+            if (t.includes('plumbing')) {
+                return [
+                    'There is a visible leak or drip.',
+                    'A drain or pipe is blocked.',
+                    'The geyser or hot water is not working.',
+                    'Something else is happening.',
+                ];
+            }
+            if (t.includes('security') || t.includes('access')) {
+                return [
+                    'The gate opens but does not close.',
+                    'The gate does not respond to the remote.',
+                    'The intercom or access panel is faulty.',
+                    'Something else is happening.',
+                ];
+            }
+            if (t.includes('pool')) {
+                return [
+                    'The pump or filter is not running.',
+                    'The water is discoloured or has algae.',
+                    'There is a visible leak.',
+                    'Something else is happening.',
+                ];
+            }
+            if (t.includes('carpentry') || t.includes('woodwork')) {
+                return [
+                    'A door, window, or cabinet is not closing properly.',
+                    'There is visible damage or rot.',
+                    'A fitting or hinge needs replacing.',
+                    'Something else is happening.',
+                ];
+            }
+            if (t.includes('painting')) {
+                return [
+                    'There is peeling, cracking, or bubbling paint.',
+                    'There is damp staining on a wall.',
+                    'A surface needs repainting after repairs.',
+                    'Something else is happening.',
+                ];
+            }
+            if (t.includes('flooring') || t.includes('tiling')) {
+                return [
+                    'Tiles are cracked, loose, or lifting.',
+                    'Grout is damaged or discoloured.',
+                    'A floor surface needs replacing or repairing.',
+                    'Something else is happening.',
+                ];
+            }
+            if (t.includes('building') || t.includes('construction')) {
+                return [
+                    'There is a crack in a wall or ceiling.',
+                    'There is damp, water ingress, or a leak.',
+                    'Structural work or an extension is needed.',
+                    'Something else is happening.',
+                ];
+            }
+            if (t.includes('handyman')) {
+                return [
+                    'It is a small repair or odd job.',
+                    'Assembly or installation is needed.',
+                    'Multiple small tasks need doing.',
+                    'Something else is happening.',
+                ];
+            }
+            if (t.includes('locksmith')) {
+                return [
+                    'A lock is broken or not working.',
+                    'Keys are lost or a lock needs rekeying.',
+                    'A new lock or deadbolt needs fitting.',
+                    'Something else is happening.',
+                ];
+            }
+            if (t.includes('welding')) {
+                return [
+                    'A metal gate, fence, or fitting is broken.',
+                    'A structural metal component needs repair.',
+                    'Something else is happening.',
+                ];
+            }
+            // Generic fallback for unknown or N/A trade
+            return [
+                'The issue is with a fitting or fixture.',
+                'The issue is structural or with a surface.',
+                'The issue involves a mechanical or electrical component.',
+                'Something else is happening.',
+            ];
+        }
+
+        /**
+         * Build the final backwards-compatible response string.
+         * Wraps Agent 2b output + Agent 2a classification into the existing
+         * <thought>…</thought><json>…</json> format the frontend parses.
+         */
+        function buildCompatibleResponseText(
+            thoughtText: string,
+            classification: Awaited<ReturnType<typeof runClassification>>,
+            prose: Awaited<ReturnType<typeof runProseGeneration>>,
+        ): string {
+            const ensuredThought =
+                thoughtText.trim().length >= 50
+                    ? thoughtText.trim()
+                    : prose.thought?.trim() ||
+                      'Photo is not clear enough for a confident diagnosis. Uploading a sharper or closer image of the problem area will help.';
+
+            const jsonBody = {
+                // Prose fields (Agent 2b)
+                thought: ensuredThought,
+                thinking: ensuredThought,
+                diagnosis: prose.diagnosis,
+                estimated_diagnosis_sentence: prose.estimated_diagnosis_sentence,
+                message: prose.message,
+                action_required: prose.action_required,
+                estimated_cost: prose.estimated_cost,
+                repair_cost_range: '',
+                replacement_cost_range: '',
+                equipment_parts_range: '',
+                urgency_sentence: prose.urgency_sentence ?? '',
+                expected_parts: Array.isArray(prose.expected_parts) ? prose.expected_parts : [],
+                image_descriptions: prose.image_descriptions ?? [],
+                image_thought_breakdown: Array.isArray(prose.image_descriptions)
+                    ? prose.image_descriptions
+                          .filter((x) => typeof x === 'string')
+                          .map((x) => String(x).trim())
+                          .filter(Boolean)
+                    : [],
+                clarification_questions: Array.isArray(prose.clarification_questions)
+                    ? prose.clarification_questions.filter((q) => typeof q === 'string' && q.trim().length > 0)
+                    : [],
+                // Classification fields (Agent 2a — ground truth)
+                trade: classification.trade,
+                trade_detail: classification.trade_detail,
+                urgency_key: classification.urgency_key,
+                confidence: classification.confidence,
+                rejected: classification.rejected,
+                requires_clarification: classification.requires_clarification,
+                unserviced: classification.unserviced,
+                refetch_providers: classification.refetch_providers,
+                unsupported_reason: classification.unsupported_reason ?? '',
+                subcategory_id: classification.subcategory_id,
+                // Metadata
+                prompt_version: DIAGNOSE_PROMPT_VERSION,
+                ai_model: GEMINI_MODEL_NAME,
+                pipeline: 'v2-classify-prose',
+            };
+
+            logIfDiagnosisJsonShapeUnexpected(jsonBody);
+
+            // Apply post-processing to special cases still needed by the system:
+            // unrelated image and unsupported service overrides.
+            let finalJson = jsonBody as typeof jsonBody & Record<string, unknown>;
+            const isLikelyClassificationFallback =
+                !classification.requestFailed &&
+                classification.trade.trim().toLowerCase() === 'n/a' &&
+                Number(classification.confidence ?? 0) === 0 &&
+                !classification.unserviced &&
+                !classification.rejected &&
+                !String(classification.unsupported_reason ?? '').trim();
+            // Keep explicit "diagnosis rejected" follow-ups intact so users see
+            // the targeted clarification question generated by the model.
+            if (classification.rejected && !classification.unserviced && !diagnosisRejected) {
+                const msg = buildUnrelatedImageMessage();
+                finalJson = {
+                    ...finalJson,
+                    diagnosis: 'Photo Not Related to Home Maintenance',
+                    estimated_diagnosis_sentence: 'Photo Not Related to Home Maintenance',
+                    trade: 'N/A',
+                    trade_detail: '',
+                    subcategory_id: TAXONOMY_NONE_ID,
+                    message: msg,
+                    action_required: msg,
+                    requires_clarification: true,
+                };
+            } else if (
+                classification.unserviced ||
+                (classification.trade.toLowerCase() === 'n/a' && !isLikelyClassificationFallback)
+            ) {
+                const msg = buildUnsupportedHomeServiceMessage(serviceList);
+                finalJson = {
+                    ...finalJson,
+                    diagnosis: 'Service Not Currently Supported',
+                    estimated_diagnosis_sentence: 'Service Not Currently Supported',
+                    trade: 'N/A',
+                    trade_detail: '',
+                    subcategory_id: TAXONOMY_NONE_ID,
+                    message: msg,
+                    action_required: msg,
+                    requires_clarification: true,
+                };
+            }
+
+            if (diagnosisRejected) {
+                const clean = (v: unknown) =>
+                    typeof v === 'string' ? v.trim().toLowerCase() : '';
+                const prevDiag = clean((previousDiagnosis as { diagnosis?: unknown } | null)?.diagnosis);
+                const prevTrade = clean((previousDiagnosis as { trade?: unknown } | null)?.trade);
+                const nextDiag = clean(finalJson.diagnosis);
+                const nextTrade = clean(finalJson.trade);
+                const repeatedDiagnosis =
+                    Boolean(prevDiag) &&
+                    Boolean(prevTrade) &&
+                    prevDiag === nextDiag &&
+                    prevTrade === nextTrade;
+                const chips = Array.isArray(finalJson.clarification_questions)
+                    ? finalJson.clarification_questions
+                          .map((q) => (typeof q === 'string' ? q.trim() : ''))
+                          .filter((q) => q.length > 0)
+                          .slice(0, 3)
+                    : [];
+                const fallbackQuestion =
+                    'Which part is actually giving trouble — opening, closing, remote response, or something else?';
+                const targetedQuestion =
+                    chips.length >= 2
+                        ? `What best matches the issue: ${chips.join(', ')}?`
+                        : chips.length === 1
+                          ? `Does this best describe the issue: ${chips[0]}?`
+                          : fallbackQuestion;
+                const forcedMessage = `Sorry for getting that wrong. ${targetedQuestion}`;
+                const fallbackClarificationQuestions = chips.length > 0
+                    ? chips
+                    : buildTradeFallbackClarificationChips(classification.trade);
+                if (repeatedDiagnosis) {
+                    finalJson = {
+                        ...finalJson,
+                        // A repeated diagnosis after explicit rejection should force clarification.
+                        rejected: false,
+                        unserviced: false,
+                        requires_clarification: true,
+                        confidence: Math.min(
+                            75,
+                            Number.isFinite(Number(finalJson.confidence))
+                                ? Number(finalJson.confidence)
+                                : 75
+                        ),
+                        estimated_cost: '',
+                        diagnosis: 'Needs Clarification',
+                        estimated_diagnosis_sentence: 'Needs Clarification',
+                        clarification_questions: fallbackClarificationQuestions,
+                        message: forcedMessage,
+                        action_required: forcedMessage,
+                    };
+                }
+            }
+
+            if (
+                isLikelyClassificationFallback &&
+                !prose.requestFailed &&
+                !String(finalJson.diagnosis ?? '')
+                    .toLowerCase()
+                    .includes('service not currently supported')
+            ) {
+                const inferredTrade =
+                    inferTradeFromProseFallback(finalJson.diagnosis, serviceList) ||
+                    inferTradeFromProseFallback(finalJson.message, serviceList) ||
+                    serviceList.find((s) => s.toLowerCase() === 'general handyman') ||
+                    'General Handyman';
+                const taxFromDiag =
+                    inferTradeFromSignals(String(finalJson.diagnosis ?? '')) ||
+                    inferTradeFromSignals(String(finalJson.message ?? ''));
+                // Cap confidence below the 85 provider-surfacing threshold so the user
+                // sees the inferred trade but is still asked to confirm before providers
+                // appear. The old value of Math.max(85, ...) was presenting forced-inferred
+                // trades with full confidence, which is misleading.
+                const inferredConfidence = Math.max(72, Number(finalJson.confidence ?? 0));
+                finalJson = {
+                    ...finalJson,
+                    trade: inferredTrade,
+                    trade_detail: taxFromDiag ? taxFromDiag.label : '',
+                    subcategory_id: taxFromDiag ? taxFromDiag.subcategoryId : TAXONOMY_NONE_ID,
+                    confidence: inferredConfidence,
+                    requires_clarification: true,
+                    unsupported_reason: 'N/A',
+                };
+            }
+
+            if (!prose.requestFailed) {
+                reconcileTradeFromDiagnosisSignals(
+                    finalJson as Record<string, unknown>,
                     {
-                        headers: {
-                            'Content-Type': 'application/x-ndjson; charset=utf-8',
-                            'Cache-Control': 'no-store',
-                            ...DIAGNOSE_RESPONSE_META_HEADERS,
-                            ...quotaExtraHeaders,
-                        },
-                    }
+                        trade: classification.trade,
+                        subcategory_id: classification.subcategory_id,
+                    },
+                    serviceList,
                 );
             }
 
-            const stream = new ReadableStream({
-                async start(controller) {
-                    const encoder = new TextEncoder();
-                    try {
-                        // eslint-disable-next-line no-console
-                        console.log('Awaiting first chunk from Gemini...');
-                        for await (const chunk of result.stream) {
-                            const text = chunk.text();
-                            controller.enqueue(encoder.encode(text));
-                        }
-                        // eslint-disable-next-line no-console
-                        console.log('Gemini stream completed successfully');
-                    } catch (e) {
-                        console.error('Error during Gemini stream iteration:', e);
-                        controller.error(e);
-                    } finally {
-                        controller.close();
-                    }
-                },
-            });
+            if (classification.requestFailed || prose.requestFailed) {
+                finalJson = {
+                    ...finalJson,
+                    requires_clarification: true,
+                    rejected: Boolean(finalJson.rejected),
+                    unserviced: Boolean(finalJson.unserviced),
+                    estimated_cost: '',
+                    confidence: Math.min(
+                        65,
+                        Number.isFinite(Number(finalJson.confidence)) ? Number(finalJson.confidence) : 65
+                    ),
+                    unsupported_reason: '',
+                };
+                const explain =
+                    'We could not finish the automated analysis for these photos right now. ';
+                if (
+                    typeof finalJson.message === 'string' &&
+                    !finalJson.message.toLowerCase().includes('could not finish')
+                ) {
+                    finalJson.message = `${explain}${finalJson.message}`;
+                }
+            }
 
+            if (
+                finalJson.requires_clarification &&
+                (!Array.isArray(finalJson.clarification_questions) ||
+                    finalJson.clarification_questions.length === 0)
+            ) {
+                finalJson = {
+                    ...finalJson,
+                    clarification_questions: buildTradeFallbackClarificationChips(classification.trade),
+                };
+            }
+
+            return `<thought>${ensuredThought}</thought>\n<json>${JSON.stringify(finalJson)}</json>`;
+        }
+
+        if (wantsStream) {
+            return new Response(
+                new ReadableStream({
+                    async start(controller) {
+                        const encoder = new TextEncoder();
+                        const emit = (o: unknown) =>
+                            controller.enqueue(encoder.encode(`${JSON.stringify(o)}\n`));
+
+                        let streamedThought = '';
+
+                        try {
+                            if (hasQuickThought) {
+                                // ── Parallel: quick thought stream + Agent 2a classify ──────────
+                                const quickModel = getDiagnosisModel();
+                                const [, classification] = await Promise.all([
+                                    // Quick thought stream — emits chunks live to the UI
+                                    (async () => {
+                                        try {
+                                            const quickStream = await quickModel.generateContentStream({
+                                                contents: quickThoughtContents as unknown as GeminiContent[],
+                                                generationConfig: {
+                                                    temperature: 0.2,
+                                                    topP: 0.7,
+                                                    topK: 20,
+                                                    maxOutputTokens: 220,
+                                                },
+                                            });
+                                            let accum = '';
+                                            let lastInner = '';
+                                            for await (const chunk of quickStream.stream) {
+                                                const piece = chunk.text();
+                                                if (!piece) continue;
+                                                accum += piece;
+                                                const inner = extractPartialThoughtInner(accum);
+                                                if (inner !== null && inner !== lastInner) {
+                                                    lastInner = inner;
+                                                    emit({ type: 'thought', text: inner });
+                                                }
+                                            }
+                                            streamedThought = stripFillerSentenceStarts(
+                                                extractThoughtText(accum),
+                                            ).trim();
+                                        } catch {
+                                            // Non-fatal: prose agent's thought will be used in complete
+                                        }
+                                    })(),
+                                    // Agent 2a: classification (runs in parallel with thought stream)
+                                    runClassification(
+                                        contents as unknown as GeminiContent[],
+                                        serviceListText,
+                                        serviceList,
+                                    ),
+                                ]);
+                                recordStage(timings, 'agent2a_classify_ms', pipelineStartedAt);
+
+                                // ── Agent 2b: prose (runs after classification) ──────────────────
+                                const rawProse = await runProseGeneration({
+                                    contents: contents as unknown as GeminiContent[],
+                                    classification,
+                                    baseSystemInstruction: proseBaseInstruction,
+                                    isProviderHydration,
+                                });
+                                const prose = normaliseProse(rawProse);
+                                recordStage(timings, 'agent2b_prose_ms', pipelineStartedAt);
+
+                                const full = buildCompatibleResponseText(
+                                    streamedThought || prose.thought,
+                                    classification,
+                                    prose,
+                                );
+                                emit({ type: 'complete', full });
+                            } else {
+                                // ── Text-only or non-streaming thought: sequential 2a → 2b ────────
+                                const classification = await runClassification(
+                                    contents as unknown as GeminiContent[],
+                                    serviceListText,
+                                    serviceList,
+                                );
+                                recordStage(timings, 'agent2a_classify_ms', pipelineStartedAt);
+
+                                const rawProse = await runProseGeneration({
+                                    contents: contents as unknown as GeminiContent[],
+                                    classification,
+                                    baseSystemInstruction: proseBaseInstruction,
+                                    isProviderHydration,
+                                });
+                                const prose = normaliseProse(rawProse);
+                                recordStage(timings, 'agent2b_prose_ms', pipelineStartedAt);
+
+                                // Emit thought for UI, then complete
+                                if (prose.thought?.trim()) {
+                                    emit({ type: 'thought', text: prose.thought.trim() });
+                                }
+                                const full = buildCompatibleResponseText(
+                                    prose.thought,
+                                    classification,
+                                    prose,
+                                );
+                                emit({ type: 'complete', full });
+                            }
+
+                            // eslint-disable-next-line no-console
+                            console.log('Multi-agent pipeline completed successfully');
+                        } catch (e) {
+                            console.error('Multi-agent pipeline error:', e);
+                            controller.error(e);
+                            return;
+                        }
+
+                        const durationMs = Date.now() - startedAt;
+                        recordStage(timings, 'total_request_ms', requestStartedAt);
+                        logAiEvent({
+                            endpoint: 'diagnose',
+                            status: 'ok',
+                            durationMs,
+                            meta: diagnoseAiLogMeta({
+                                isTextOnly,
+                                isFollowUp,
+                                hasUserContext,
+                                hasImage: Boolean(image),
+                                attachmentsCount: attachmentImages.length,
+                                historyLength: Array.isArray(history) ? history.length : 0,
+                                usedGenerateContentFallback: false,
+                                ndjsonStream: true,
+                                pipeline: 'v2-classify-prose',
+                                ...tieringLogMeta,
+                            }),
+                        });
+                        logDiagnoseTimings('ok', timings);
+                        controller.close();
+                    },
+                }),
+                {
+                    headers: {
+                        'Content-Type': 'application/x-ndjson; charset=utf-8',
+                        'Cache-Control': 'no-store',
+                        ...DIAGNOSE_RESPONSE_META_HEADERS,
+                        ...quotaExtraHeaders,
+                    },
+                },
+            );
+        }
+
+        // ── Non-streaming path ──────────────────────────────────────────────────
+        {
+            const classification = await runClassification(
+                contents as unknown as GeminiContent[],
+                serviceListText,
+                serviceList,
+            );
+            recordStage(timings, 'agent2a_classify_ms', pipelineStartedAt);
+
+            const rawProse = await runProseGeneration({
+                contents: contents as unknown as GeminiContent[],
+                classification,
+                baseSystemInstruction: proseBaseInstruction,
+                isProviderHydration,
+            });
+            const prose = normaliseProse(rawProse);
+            recordStage(timings, 'agent2b_prose_ms', pipelineStartedAt);
+
+            const full = buildCompatibleResponseText(prose.thought, classification, prose);
             const durationMs = Date.now() - startedAt;
             recordStage(timings, 'total_request_ms', requestStartedAt);
             logAiEvent({
@@ -1129,146 +1413,13 @@ CRITICAL: Output <thought> FIRST (2–3 short sentences about the likely problem
                     attachmentsCount: attachmentImages.length,
                     historyLength: Array.isArray(history) ? history.length : 0,
                     usedGenerateContentFallback: false,
+                    pipeline: 'v2-classify-prose',
+                    ...tieringLogMeta,
                 }),
             });
             logDiagnoseTimings('ok', timings);
 
-            const adjustedStream = new ReadableStream({
-                async start(controller) {
-                    const reader = stream.getReader();
-                    const decoder = new TextDecoder();
-                    const encoder = new TextEncoder();
-                    let fullText = '';
-                    try {
-                        while (true) {
-                            const { done, value } = await reader.read();
-                            if (done) break;
-                            fullText += decoder.decode(value, { stream: true });
-                        }
-                        fullText += decoder.decode();
-                        const adjusted = applyDiagnosePostProcess(fullText, serviceList);
-                        controller.enqueue(encoder.encode(adjusted));
-                    } catch (e) {
-                        controller.error(e);
-                    } finally {
-                        reader.releaseLock();
-                        controller.close();
-                    }
-                },
-            });
-
-            return new Response(adjustedStream, {
-                headers: {
-                    'Content-Type': 'text/plain; charset=utf-8',
-                    'Transfer-Encoding': 'chunked',
-                    ...DIAGNOSE_RESPONSE_META_HEADERS,
-                    ...quotaExtraHeaders,
-                },
-            });
-        } catch (streamError: unknown) {
-            // Some Gemini configurations/modes return 404 for `generateContentStream`.
-            // Fallback to `generateContent()` so the UI still gets a full diagnosis response.
-            const streamErrorMessage =
-                streamError instanceof Error ? streamError.message : typeof streamError === 'string' ? streamError : '';
-
-            // eslint-disable-next-line no-console
-            console.warn('Gemini stream failed; falling back to generateContent:', streamErrorMessage);
-
-            // If we are rate-limited / quota-exceeded, attempting the non-stream fallback costs another request.
-            // Return immediately so clients can retry later (or show a useful message).
-            const isQuotaOrRateLimit =
-                /429\b/i.test(streamErrorMessage) ||
-                streamErrorMessage.toLowerCase().includes('quota exceeded') ||
-                streamErrorMessage.toLowerCase().includes('too many requests');
-            if (isQuotaOrRateLimit) {
-                return new Response(
-                    JSON.stringify({
-                        error:
-                            process.env.NODE_ENV === 'development'
-                                ? streamErrorMessage
-                                : 'AI rate limit reached. Please try again shortly.',
-                    }),
-                    { status: 429 }
-                );
-            }
-
-            const fallbackStageStartedAt = Date.now();
-            const result = await model.generateContent({
-                contents: contents as unknown as GeminiContent[],
-                generationConfig,
-            });
-            recordStage(timings, 'gemini_generate_content_fallback_ms', fallbackStageStartedAt);
-
-            const resp = (result as any)?.response;
-            const fullTextFromResp = resp && typeof resp.text === 'function' ? resp.text() : '';
-            const fullTextFromResult = (result as any) && typeof (result as any).text === 'function' ? (result as any).text() : '';
-
-            let fullText = String(fullTextFromResp || fullTextFromResult || '').trim();
-
-            if (!fullText) {
-                // Best-effort extraction for SDK shapes where `response.text()` isn't present.
-                const parts = (result as any)?.response?.candidates?.[0]?.content?.parts;
-                if (Array.isArray(parts)) {
-                    fullText = parts.map((p: any) => (typeof p?.text === 'string' ? p.text : '')).join('').trim();
-                }
-            }
-
-            if (!fullText) {
-                throw streamError;
-            }
-
-            const durationMs = Date.now() - startedAt;
-            recordStage(timings, 'total_request_ms', requestStartedAt);
-            logAiEvent({
-                endpoint: 'diagnose',
-                status: 'ok',
-                durationMs,
-                meta: diagnoseAiLogMeta({
-                    isTextOnly,
-                    isFollowUp,
-                    hasUserContext,
-                    hasImage: Boolean(image),
-                    attachmentsCount: attachmentImages.length,
-                    historyLength: Array.isArray(history) ? history.length : 0,
-                    usedGenerateContentFallback: true,
-                }),
-            });
-            logDiagnoseTimings('ok', timings);
-
-            const adjusted = applyDiagnosePostProcess(fullText, serviceList);
-
-            if (wantsStream) {
-                const thoughtInner =
-                    extractPartialThoughtInner(adjusted) ?? extractThoughtText(adjusted) ?? '';
-                return new Response(
-                    new ReadableStream({
-                        start(controller) {
-                            const encoder = new TextEncoder();
-                            if (thoughtInner.trim()) {
-                                controller.enqueue(
-                                    encoder.encode(
-                                        `${JSON.stringify({ type: 'thought', text: thoughtInner })}\n`
-                                    )
-                                );
-                            }
-                            controller.enqueue(
-                                encoder.encode(`${JSON.stringify({ type: 'complete', full: adjusted })}\n`)
-                            );
-                            controller.close();
-                        },
-                    }),
-                    {
-                        headers: {
-                            'Content-Type': 'application/x-ndjson; charset=utf-8',
-                            'Cache-Control': 'no-store',
-                            ...DIAGNOSE_RESPONSE_META_HEADERS,
-                            ...quotaExtraHeaders,
-                        },
-                    }
-                );
-            }
-
-            return new Response(adjusted, {
+            return new Response(full, {
                 headers: {
                     'Content-Type': 'text/plain; charset=utf-8',
                     ...DIAGNOSE_RESPONSE_META_HEADERS,
@@ -1276,6 +1427,7 @@ CRITICAL: Output <thought> FIRST (2–3 short sentences about the likely problem
                 },
             });
         }
+
     } catch (error: unknown) {
         const durationMs = Date.now() - startedAt;
         recordStage(timings, 'total_request_ms', requestStartedAt);

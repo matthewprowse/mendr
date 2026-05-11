@@ -1,29 +1,18 @@
 import type { Metadata } from 'next';
 import { HomeMarketingPage } from './page/components/marketing';
 import { getSiteUrl } from '@/lib/site-url';
+import { FAQS } from '@/app/page/components/content';
 
 export async function generateMetadata(): Promise<Metadata> {
     const base = getSiteUrl();
     const canonical = `${base}/`;
-    const title = 'Home Fault Diagnosis — Free Scandio Report | Western Cape';
+    const title = 'Home Fault Diagnosis Cape Town — Free Report | Scandio';
     const description =
-        'Scandio diagnoses home maintenance faults in under 60 seconds. Get a free professional report, cost estimates, and connect with local Western Cape contractors. No account needed.';
+        'Upload a photo of any home fault — plumbing, electrical, damp, roofing — and get a clear written report in under 60 seconds. Free for Western Cape homeowners. No account needed.';
 
     return {
         title,
         description,
-        keywords: [
-            'home maintenance',
-            'home repair',
-            'Western Cape',
-            'Cape Town',
-            'contractors',
-            'fault diagnosis',
-            'Scandio',
-            'plumbing',
-            'electrical',
-            'home maintenance app',
-        ],
         alternates: {
             canonical,
         },
@@ -45,7 +34,7 @@ export async function generateMetadata(): Promise<Metadata> {
         twitter: {
             card: 'summary_large_image',
             title,
-            description: 'Diagnose home maintenance faults in under 60 seconds. Free, no account needed.',
+            description: 'Upload a photo of any home fault and get a written diagnosis report in under 60 seconds. Free. No account needed.',
             images: ['/og-scandio.jpg'],
         },
     };
@@ -55,6 +44,8 @@ function buildJsonLd(base: string) {
     const orgId = `${base}/#organization`;
     const websiteId = `${base}/#website`;
     const softwareId = `${base}/#software`;
+    const localBusinessId = `${base}/#localbusiness`;
+    const faqPageId = `${base}/#faqpage`;
 
     return {
         '@context': 'https://schema.org',
@@ -79,7 +70,7 @@ function buildJsonLd(base: string) {
                 applicationCategory: 'HomeImprovement',
                 operatingSystem: 'Web',
                 description:
-                    'AI-powered home maintenance fault diagnosis. Upload a photo, receive a professional Scandio Report, and connect with local contractors in the Western Cape.',
+                    'Upload a photo of a home fault — plumbing, electrical, damp, roofing, or structural — and receive a written diagnosis report in under 60 seconds. Free for Western Cape homeowners.',
                 url: base,
                 offers: {
                     '@type': 'Offer',
@@ -94,6 +85,81 @@ function buildJsonLd(base: string) {
                 },
                 creator: { '@id': orgId },
                 isPartOf: { '@id': websiteId },
+            },
+            {
+                '@type': 'LocalBusiness',
+                '@id': localBusinessId,
+                name: 'Scandio',
+                description: 'AI-powered home fault diagnosis for Western Cape homeowners.',
+                url: base,
+                areaServed: [
+                    { '@type': 'City', name: 'Cape Town' },
+                    { '@type': 'City', name: 'Stellenbosch' },
+                    { '@type': 'City', name: 'Somerset West' },
+                    { '@type': 'City', name: 'Paarl' },
+                ],
+                serviceArea: {
+                    '@type': 'State',
+                    name: 'Western Cape',
+                    addressCountry: 'ZA',
+                },
+            },
+            {
+                '@type': 'FAQPage',
+                '@id': faqPageId,
+                mainEntity: FAQS.map((faq) => ({
+                    '@type': 'Question',
+                    name: faq.q,
+                    acceptedAnswer: {
+                        '@type': 'Answer',
+                        text: faq.a,
+                    },
+                })),
+            },
+            {
+                '@type': 'Service',
+                name: 'Plumbing Fault Diagnosis',
+                description:
+                    'Upload a photo of a plumbing issue - leaks, burst pipes, low pressure - and receive a structured diagnosis report.',
+                provider: { '@id': orgId },
+                areaServed: { '@type': 'State', name: 'Western Cape' },
+                offers: { '@type': 'Offer', price: '0', priceCurrency: 'ZAR' },
+            },
+            {
+                '@type': 'Service',
+                name: 'Electrical Fault Diagnosis',
+                description:
+                    'Upload a photo of an electrical issue and receive a structured diagnosis report before speaking to providers.',
+                provider: { '@id': orgId },
+                areaServed: { '@type': 'State', name: 'Western Cape' },
+                offers: { '@type': 'Offer', price: '0', priceCurrency: 'ZAR' },
+            },
+            {
+                '@type': 'Service',
+                name: 'Structural Fault Diagnosis',
+                description:
+                    'Upload a photo of a structural issue and receive a structured diagnosis report with practical next steps.',
+                provider: { '@id': orgId },
+                areaServed: { '@type': 'State', name: 'Western Cape' },
+                offers: { '@type': 'Offer', price: '0', priceCurrency: 'ZAR' },
+            },
+            {
+                '@type': 'Service',
+                name: 'Damp and Waterproofing Fault Diagnosis',
+                description:
+                    'Upload a photo of damp or waterproofing issues and receive a structured diagnosis report in under 60 seconds.',
+                provider: { '@id': orgId },
+                areaServed: { '@type': 'State', name: 'Western Cape' },
+                offers: { '@type': 'Offer', price: '0', priceCurrency: 'ZAR' },
+            },
+            {
+                '@type': 'Service',
+                name: 'Roofing Fault Diagnosis',
+                description:
+                    'Upload a photo of a roofing issue and receive a structured diagnosis report with likely causes and next actions.',
+                provider: { '@id': orgId },
+                areaServed: { '@type': 'State', name: 'Western Cape' },
+                offers: { '@type': 'Offer', price: '0', priceCurrency: 'ZAR' },
             },
         ],
     };

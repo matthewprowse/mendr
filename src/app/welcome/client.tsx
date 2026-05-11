@@ -303,7 +303,7 @@ export default function WelcomePageClient() {
                             const qp = new URLSearchParams();
                             if (trade) qp.set('trade', trade);
                             const suffix = qp.toString() ? `?${qp.toString()}` : '';
-                            router.push(`/diagnosis/${conversationId}${suffix}`);
+                            router.push(`/processing/${encodeURIComponent(conversationId)}${suffix}`);
                         }}
                     >
                         {isUploading ? 'Processing...' : canContinue ? 'Continue to Scandio Report' : 'Select Photo to Continue'}

@@ -10,7 +10,7 @@ export default function ContactPageClient() {
             <LandingHeader
                 navLinks={[
                     { href: '/', label: 'For Homeowners' },
-                    { href: '/pro/join', label: 'For Contractors' },
+                    { href: '/contractors', label: 'For Contractors' },
                 ]}
                 logoHref="/"
                 showTrades={false}
@@ -48,7 +48,7 @@ export default function ContactPageClient() {
                                 For Homeowners
                             </Link>
                             <Link
-                                href="/pro/join"
+                                href="/contractors"
                                 className="text-xs text-muted-foreground hover:text-foreground transition-colors"
                             >
                                 For Contractors

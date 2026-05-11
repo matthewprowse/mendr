@@ -81,6 +81,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
             priorityPlaceId?: unknown;
             cacheVersion?: unknown;
             mode?: unknown;
+            /**
+             * Free-form trace tag for why this re-enrichment was triggered (e.g. 'leak_detected').
+             * Logged but not used for scheduling; helps diagnose noisy queue traffic.
+             */
+            reason?: unknown;
         } | null;
 
         const parsedBody = body ?? {};
@@ -128,6 +133,14 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
             Number.isFinite(cacheVersionRaw) && cacheVersionRaw > 0
                 ? Math.floor(cacheVersionRaw)
                 : undefined;
+
+        const reason =
+            typeof parsedBody.reason === 'string' && parsedBody.reason.trim()
+                ? parsedBody.reason.trim().slice(0, 64)
+                : null;
+        if (reason) {
+            logStage(`reason="${reason}"`, 'reason_recorded');
+        }
 
         const modeRaw =
             typeof parsedBody.mode === 'string' ? parsedBody.mode.trim().toLowerCase() : '';

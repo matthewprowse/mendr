@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
 import { getSiteUrl } from "@/lib/site-url";
+import { BRAND_NAME } from "@/lib/brand-system";
 
-export const OG_IMAGE_DEFAULT = "/og-scandio.jpg";
-export const OG_IMAGE_PRO = "/og-scandio-pro.jpg";
+export const OG_IMAGE_DEFAULT = "/og-menda.jpg";
+export const OG_IMAGE_PRO = "/og-menda-pro.jpg";
 
 export const OG_IMAGE_DIM = { width: 1200, height: 630 } as const;
 
@@ -13,7 +14,7 @@ export function marketingOgImage(opts?: {
     const url = opts?.path ?? OG_IMAGE_DEFAULT;
     const alt =
         opts?.alt ??
-        "Scandio — home maintenance diagnosis and local provider matching in the Western Cape";
+        `${BRAND_NAME} — home maintenance diagnosis and local provider matching in the Western Cape`;
     return {
         url,
         ...OG_IMAGE_DIM,
@@ -49,7 +50,7 @@ export function buildMarketingPageMetadata(opts: {
             type: "website",
             url: canonical,
             locale: "en_ZA",
-            siteName: "Scandio",
+            siteName: BRAND_NAME,
             images: [image],
         },
         twitter: {

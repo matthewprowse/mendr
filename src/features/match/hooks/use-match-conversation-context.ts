@@ -135,7 +135,7 @@ export function useMatchConversationContext(conversationId: string) {
     }, []);
 
     const reverseGeocodeLatLng = useCallback(async (lat: number, lng: number): Promise<string> => {
-        const geo = await geocodeApi({ lat, lng });
+        const geo = await geocodeApi({ lat, lng, westernCapeOnly: true });
         return typeof geo?.address === 'string' ? geo.address : '';
     }, []);
 
@@ -160,6 +160,9 @@ export function useMatchConversationContext(conversationId: string) {
             const resolvedAddress = shouldResolveAddress
                 ? await reverseGeocodeLatLng(data.customer_lat, data.customer_lng)
                 : storedAddress;
+            if (!resolvedAddress.trim()) {
+                return null;
+            }
             const loc = {
                 lat: data.customer_lat as number,
                 lng: data.customer_lng as number,
@@ -210,6 +213,7 @@ export function useMatchConversationContext(conversationId: string) {
         const currentCoords = await getCurrentCoordinates();
         if (!currentCoords) return null;
         const resolvedAddress = await reverseGeocodeLatLng(currentCoords.lat, currentCoords.lng);
+        if (!resolvedAddress.trim()) return null;
         const loc = {
             lat: currentCoords.lat,
             lng: currentCoords.lng,

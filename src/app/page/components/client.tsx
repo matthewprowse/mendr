@@ -92,7 +92,7 @@ export function HomeMarketingPageClient() {
                         { href: '#value', label: 'Why Scandio' },
                         { href: '/contact', label: 'Contact' },
                         { href: '#faq', label: 'FAQ' },
-                        { href: '/pro/join', label: 'For Pros' },
+                        { href: '/contractors', label: 'For Pros' },
                     ]}
                     logoHref="/"
                     showTrades={false}
@@ -214,7 +214,7 @@ export function HomeMarketingPageClient() {
                             </p>
                             <div className="mt-6">
                                 <Button asChild size="lg" className="bg-white font-medium text-black hover:bg-white/90">
-                                    <Link href="/welcome">Generate Free Scandio Report</Link>
+                                    <Link href="/start">Generate Free Scandio Report</Link>
                                 </Button>
                             </div>
                         </div>
@@ -250,7 +250,7 @@ export function HomeMarketingPageClient() {
                             <div>
                                 <p className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Company</p>
                                 <nav className="mt-3 flex flex-col gap-2">
-                                    {([['Contact', '/contact'], ['For Providers', '/pro/join'], ['Privacy Policy', '/privacy'], ['Terms Of Service', '/terms']] as [string, string][]).map(([label, href]) => (
+                                    {([['Contact', '/contact'], ['For Providers', '/contractors'], ['Privacy Policy', '/privacy'], ['Terms Of Service', '/terms']] as [string, string][]).map(([label, href]) => (
                                         <Link key={`${label}-${href}`} href={href} className="text-sm text-muted-foreground transition-colors hover:text-foreground">
                                             {label}
                                         </Link>

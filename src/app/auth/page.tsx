@@ -1,10 +1,7 @@
-import type { Metadata } from 'next';
+import { META_SIGN_IN } from '@/lib/site-metadata';
 import AuthLoginClient from './client';
 
-export const metadata: Metadata = {
-    title: 'Sign in',
-    description: 'Sign in to your Scandio account.',
-};
+export const metadata = META_SIGN_IN;
 
 export default function AuthPage() {
     return <AuthLoginClient />;

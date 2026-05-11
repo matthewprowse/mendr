@@ -4,14 +4,22 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'rea
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { trackEvent } from '@/lib/analytics';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { formatBusinessName, toWhatsAppPhone } from '@/lib/utils';
+import { toWhatsAppPhone } from '@/lib/utils';
 import { setLastConversationIdForWhatsApp } from '@/lib/whatsapp-prefill';
-import { Car, MapTrifold, Star } from '@phosphor-icons/react';
-import { Loader2, LocateFixed } from 'lucide-react';
+import { INK } from '@/lib/design-tokens';
+import { CircleNotch, Crosshair, FunnelSimple } from '@phosphor-icons/react';
 import { toast } from 'sonner';
 import { MatchMapSheetLayout } from '@/app/match/components/match-map-sheet-layout';
+import { ProviderCard } from '@/app/match/components/provider-card';
+import { FilterSheet } from '@/app/match/components/filter-sheet';
+import {
+    applyFilters as applyMatchFilters,
+    compareForSort,
+    DEFAULT_FILTER_STATE,
+    useMatchFilters,
+    type MatchFilterState,
+} from '@/features/match/hooks/use-match-filters';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import type { MatchLocation, MatchProvider } from '@/features/match/contracts';
@@ -29,33 +37,8 @@ import { useMatchProviders } from '@/features/match/hooks/use-match-providers';
 import { useMatchMap } from '@/features/match/hooks/use-match-map';
 import { loadMatchPageCache, saveMatchPageCache } from '@/features/match/cache/match-page-cache';
 import { MatchNoProvidersEmpty } from '@/app/match/components/empty';
-function formatProviderAddress(raw: string | null | undefined): string {
-    const s = (raw ?? '').trim();
-    if (!s) return '';
-
-    const parts = s.split(',').map((p) => p.trim()).filter(Boolean);
-    if (parts.length === 0) return '';
-
-    // Strip trailing country + postcode (e.g. "..., 7700, South Africa" => "...").
-    const COUNTRY_RE = /(south africa)/i;
-    const POSTCODE_RE = /^\d{3,6}$/;
-
-    while (parts.length > 0) {
-        const last = parts[parts.length - 1] ?? '';
-        if (COUNTRY_RE.test(last) || POSTCODE_RE.test(last)) {
-            parts.pop();
-            continue;
-        }
-        break;
-    }
-
-    return parts.join(', ');
-}
-
-function formatDuration(text: string): string {
-    return text.replace(/\bmins?\b/gi, 'Minutes').replace(/\bhrs?\b/gi, 'Hours');
-}
-
+import { fetchConversationDiagnosis } from '@/lib/diagnoses-api';
+import { buildDiagnosisVersion } from '@/features/diagnosis/processing-orchestrator';
 function totalReviewCountForProvider(
     p: MatchProvider,
     scandioReviewCountByProviderId: Record<string, number>
@@ -257,7 +240,6 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
         resolveTradeContext,
         ensureLocation,
         getCurrentCoordinates,
-        reverseGeocodeLatLng,
         persistConversationLocation,
     } = useMatchConversationContext(conversationId);
     const {
@@ -276,24 +258,76 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
     const [contactOpen, setContactOpen] = useState(false);
     const [isUpdatingLocation, setIsUpdatingLocation] = useState(false);
     const [isLocatingUser, setIsLocatingUser] = useState(false);
+    const [isFilterSheetOpen, setIsFilterSheetOpen] = useState(false);
+
+    /**
+     * URL-synced filter state. We push updates back to the URL via `router.replace` so back/forward
+     * works as users tweak filters; we keep the existing `conversationId` query param when present.
+     */
+    const filterUrlBaseRef = useRef<string>('');
+    useEffect(() => {
+        filterUrlBaseRef.current = pathname || '';
+    }, [pathname]);
+    const handleFilterUrlChange = useCallback(
+        (params: URLSearchParams) => {
+            if (typeof window === 'undefined') return;
+            const conv = conversationId
+                ? `conversationId=${encodeURIComponent(conversationId)}`
+                : '';
+            const filterStr = params.toString();
+            const search = [conv, filterStr].filter(Boolean).join('&');
+            const target = `${filterUrlBaseRef.current}${search ? `?${search}` : ''}`;
+            try {
+                window.history.replaceState(null, '', target);
+            } catch {}
+        },
+        [conversationId]
+    );
+    const {
+        state: filterState,
+        setState: setFilterState,
+        reset: resetFilters,
+        activeFilterCount,
+    } = useMatchFilters({
+        conversationId,
+        searchParams,
+        onUrlChange: handleFilterUrlChange,
+    });
     // Deduplicate provider_contact analytics per provider per session.
     const providerContactFiredForProviderIdRef = useRef<string | null>(null);
     const providerCardRefs = useRef<Record<string, HTMLDivElement | null>>({});
     const [mapExpandRequestId, setMapExpandRequestId] = useState(0);
     const [searchRadiusMeters, setSearchRadiusMeters] = useState(DEFAULT_SEARCH_RADIUS_METERS);
+    const [cachedDiagnosisVersion, setCachedDiagnosisVersion] = useState<string | undefined>(undefined);
     const lastProviderFetchKeyRef = useRef('');
 
+    /**
+     * Sort the full provider list by the selected sort key first; the active filter set then
+     * narrows the visible list. Keep the sort/filter passes separated so the histogram can
+     * count against the *unfiltered* superset while the cards/markers reflect the filtered view.
+     */
     const sortedProviders = useMemo(() => {
-        return [...providers]
-            .sort((a, b) => {
-                const byScore = providerPriorityScore(b) - providerPriorityScore(a);
-                if (byScore !== 0) return byScore;
-                const byRating = (b.rating ?? 0) - (a.rating ?? 0);
-                if (byRating !== 0) return byRating;
-                return (b.ratingCount ?? 0) - (a.ratingCount ?? 0);
+        return [...providers].sort((a, b) =>
+            compareForSort(filterState.sort, a, b, providerPriorityScore)
+        );
+    }, [providers, filterState.sort]);
+    const filteredProviders = useMemo(
+        () => applyMatchFilters(sortedProviders, filterState),
+        [sortedProviders, filterState]
+    );
+    const sheetProviders = filteredProviders;
+
+    /** Specialisation chips for the filter sheet — deduped + alphabetical, drawn from loaded providers. */
+    const availableSpecialisations = useMemo(() => {
+        const set = new Set<string>();
+        sortedProviders.forEach((p) => {
+            (p.specialisations ?? []).forEach((s) => {
+                const t = String(s || '').trim();
+                if (t) set.add(t);
             });
-    }, [providers]);
-    const sheetProviders = sortedProviders;
+        });
+        return Array.from(set).sort((a, b) => a.localeCompare(b));
+    }, [sortedProviders]);
     const totalCompanies = Math.max(sheetProviders.length, 1);
     const selectedProvider = useMemo(() => {
         const idx = Math.min(Math.max(companyIndex - 1, 0), Math.max(sheetProviders.length - 1, 0));
@@ -363,31 +397,60 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
 
     useEffect(() => {
         if (!conversationId) return;
+        let cancelled = false;
         hydratedFromCacheRef.current = false;
         skipInitialProviderFetchRef.current = false;
-        const cached = loadMatchPageCache(conversationId);
-        if (!cached) return;
-
-        hydratedFromCacheRef.current = true;
-        skipInitialProviderFetchRef.current = cached.providers.length > 0;
-        setUserLocation(cached.userLocation);
-        setAddressInput(cached.addressInput);
-        setProviders(cached.providers);
-        setCompanyIndex((prev) => {
-            const maxIndex = Math.max(cached.providers.length, 1);
-            const requested = cached.companyIndex || prev || 1;
-            return Math.min(Math.max(requested, 1), maxIndex);
-        });
-        setEnrichmentCache(cached.enrichmentCache || {});
-        setScandioReviewCountByProviderId(cached.scandioReviewCountByProviderId || {});
-        if (
-            typeof cached.searchRadiusMeters === 'number' &&
-            Number.isFinite(cached.searchRadiusMeters) &&
-            cached.searchRadiusMeters > 0
-        ) {
-            setSearchRadiusMeters(cached.searchRadiusMeters);
-        }
-        setIsLoading(false);
+        void (async () => {
+            const cached = loadMatchPageCache(conversationId);
+            if (!cached) {
+                trackEvent('prefetch_cache_miss', {
+                    diagnosis_id: conversationId,
+                    reason: 'no_cache',
+                });
+                return;
+            }
+            if (cached.diagnosisVersion) {
+                const current = await fetchConversationDiagnosis(conversationId);
+                const diagnosis = current.ok ? ((current.data?.diagnosis as any) ?? null) : null;
+                const currentVersion =
+                    diagnosis && typeof diagnosis === 'object' ? buildDiagnosisVersion(diagnosis) : '';
+                if (currentVersion && currentVersion !== cached.diagnosisVersion) {
+                    trackEvent('prefetch_discarded', {
+                        diagnosis_id: conversationId,
+                        reason: 'diagnosis_version_mismatch',
+                    });
+                    return;
+                }
+            }
+            if (cancelled) return;
+            trackEvent('prefetch_cache_hit', {
+                diagnosis_id: conversationId,
+            });
+            hydratedFromCacheRef.current = true;
+            skipInitialProviderFetchRef.current = cached.providers.length > 0;
+            setCachedDiagnosisVersion(cached.diagnosisVersion);
+            setUserLocation(cached.userLocation);
+            setAddressInput(cached.addressInput);
+            setProviders(cached.providers);
+            setCompanyIndex((prev) => {
+                const maxIndex = Math.max(cached.providers.length, 1);
+                const requested = cached.companyIndex || prev || 1;
+                return Math.min(Math.max(requested, 1), maxIndex);
+            });
+            setEnrichmentCache(cached.enrichmentCache || {});
+            setScandioReviewCountByProviderId(cached.scandioReviewCountByProviderId || {});
+            if (
+                typeof cached.searchRadiusMeters === 'number' &&
+                Number.isFinite(cached.searchRadiusMeters) &&
+                cached.searchRadiusMeters > 0
+            ) {
+                setSearchRadiusMeters(cached.searchRadiusMeters);
+            }
+            setIsLoading(false);
+        })();
+        return () => {
+            cancelled = true;
+        };
     }, [conversationId, setAddressInput, setCompanyIndex, setProviders, setUserLocation]);
 
     useEffect(() => {
@@ -408,6 +471,7 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
         saveMatchPageCache(conversationId, {
             providers,
             companyIndex,
+            diagnosisVersion: cachedDiagnosisVersion,
             searchRadiusMeters,
             userLocation,
             addressInput,
@@ -419,6 +483,7 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
         addressInput,
         companyIndex,
         conversationId,
+        cachedDiagnosisVersion,
         enrichmentCache,
         providers,
         scandioReviewCountByProviderId,
@@ -615,18 +680,23 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
     const handleMapMarkerClick = useCallback(
         (placeId: string) => {
             const target = normalizePlaceKey(placeId);
-            const idx = sortedProviders.findIndex((p) => normalizePlaceKey(p.placeId) === target);
+            const idx = sheetProviders.findIndex((p) => normalizePlaceKey(p.placeId) === target);
             if (idx >= 0) {
                 setCompanyIndex(idx + 1);
                 setMapExpandRequestId((n) => n + 1);
+                trackEvent('match_marker_tap', {
+                    diagnosis_id: conversationId || undefined,
+                    provider_id: sheetProviders[idx]?.providerId || undefined,
+                    place_id: placeId,
+                });
             }
         },
-        [normalizePlaceKey, sortedProviders, setCompanyIndex]
+        [conversationId, normalizePlaceKey, setCompanyIndex, sheetProviders]
     );
 
     const { mapHostRef } = useMatchMap({
         userLocation,
-        providers,
+        providers: filteredProviders,
         onMarkerClick: handleMapMarkerClick,
         showSearchRadius: true,
         searchRadiusMeters,
@@ -659,8 +729,12 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
 
                 const geo = await geocodeApi(
                     isCoords
-                        ? { lat: Number(coordMatch?.[1]), lng: Number(coordMatch?.[2]) }
-                        : { address: trimmed }
+                        ? {
+                              lat: Number(coordMatch?.[1]),
+                              lng: Number(coordMatch?.[2]),
+                              westernCapeOnly: true,
+                          }
+                        : { address: trimmed, westernCapeOnly: true }
                 );
 
                 if (
@@ -673,7 +747,7 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
                 ) {
                     toast.error(
                         geo?.error ||
-                            'We could not find that address. Try street and suburb, for example "12 Main Road, Claremont".'
+                            'Please use an address in the Western Cape, South Africa.'
                     );
                     return;
                 }
@@ -707,11 +781,25 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
                 toast.error('Could not access your location. Please allow permission and try again.');
                 return;
             }
-            const resolvedAddress = await reverseGeocodeLatLng(coords.lat, coords.lng);
-            const formattedAddress = resolvedAddress || `${coords.lat.toFixed(6)}, ${coords.lng.toFixed(6)}`;
-            const loc = { lat: coords.lat, lng: coords.lng, address: formattedAddress };
+            const geo = await geocodeApi({
+                lat: coords.lat,
+                lng: coords.lng,
+                westernCapeOnly: true,
+            });
+            if (
+                !geo ||
+                typeof geo.address !== 'string' ||
+                !geo.address.trim()
+            ) {
+                toast.error(
+                    geo?.error ||
+                        'Your current location appears to be outside the Western Cape.'
+                );
+                return;
+            }
+            const loc = { lat: coords.lat, lng: coords.lng, address: geo.address.trim() };
             setUserLocation(loc);
-            setAddressInput(formattedAddress);
+            setAddressInput(loc.address);
             await persistConversationLocation(loc);
         } finally {
             setIsLocatingUser(false);
@@ -720,7 +808,6 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
     }, [
         getCurrentCoordinates,
         persistConversationLocation,
-        reverseGeocodeLatLng,
         setAddressInput,
         setUserLocation,
     ]);
@@ -817,13 +904,28 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
             }).catch(() => {});
         }
         const cid = conversationId ? `?conversationId=${encodeURIComponent(conversationId)}` : '';
-        router.push(`/pro/${encodeURIComponent(targetProvider.providerId)}${cid}`);
+        router.push(`/contractors/${encodeURIComponent(targetProvider.providerId)}${cid}`);
     }, [conversationId, enrichmentCache, resolveTradeContext, router]);
 
     return (
+        <>
         <MatchMapSheetLayout
-            onClose={() => router.back()}
+            onClose={() => {
+                if (!conversationId) {
+                    router.back();
+                    return;
+                }
+                router.push(`/diagnosis/${encodeURIComponent(conversationId)}`);
+            }}
             expandRequestId={mapExpandRequestId}
+            peekProviderCount={filteredProviders.length}
+            onSheetModeChange={(next, prev) => {
+                trackEvent('match_sheet_snap', {
+                    diagnosis_id: conversationId || undefined,
+                    from: prev,
+                    to: next,
+                });
+            }}
             scrollToKey={selectedProvider?.placeId ?? null}
             getScrollTarget={() =>
                 selectedProvider
@@ -832,32 +934,60 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
             }
             headerRight={
                 <div className="flex w-full min-w-0 items-center gap-2">
-                    <Input
-                        id="match-address-input"
-                        placeholder="Search address"
-                        className="h-10 min-w-0 flex-1 text-sm"
-                        value={addressInput}
-                        onChange={(e) => setAddressInput(e.target.value)}
-                        onKeyDown={(e) => {
-                            if (e.key !== 'Enter') return;
-                            void updateLocationFromAddress(addressInput);
-                        }}
-                        disabled={isUpdatingLocation || isLoading}
-                    />
+                    <div className="relative min-w-0 flex-1">
+                        <Input
+                            id="match-address-input"
+                            placeholder="Search address"
+                            className="h-10 w-full pr-10 text-sm"
+                            value={addressInput}
+                            onChange={(e) => setAddressInput(e.target.value)}
+                            onKeyDown={(e) => {
+                                if (e.key !== 'Enter') return;
+                                void updateLocationFromAddress(addressInput);
+                            }}
+                            disabled={isUpdatingLocation || isLoading}
+                        />
+                        <button
+                            type="button"
+                            aria-label="Use current location"
+                            className="absolute inset-y-0 right-0 inline-flex w-9 items-center justify-center rounded-r-md text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
+                            disabled={isUpdatingLocation || isLoading || isLocatingUser}
+                            onClick={() => {
+                                void handleUseCurrentLocation();
+                            }}
+                        >
+                            {isLocatingUser ? (
+                                <CircleNotch size={16} className="animate-spin" />
+                            ) : (
+                                <Crosshair size={16} />
+                            )}
+                        </button>
+                    </div>
                     <button
                         type="button"
-                        aria-label="Use current location"
-                        className="inline-flex size-10 shrink-0 items-center justify-center rounded-md border border-input bg-background text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground disabled:opacity-50"
-                        disabled={isUpdatingLocation || isLoading || isLocatingUser}
+                        aria-label={
+                            activeFilterCount > 0
+                                ? `Sort and filter (${activeFilterCount} active)`
+                                : 'Sort and filter'
+                        }
+                        className="relative inline-flex size-10 shrink-0 items-center justify-center rounded-md border border-input bg-background text-foreground transition-colors hover:bg-secondary disabled:opacity-50"
                         onClick={() => {
-                            void handleUseCurrentLocation();
+                            setIsFilterSheetOpen(true);
+                            trackEvent('match_filter_open', {
+                                diagnosis_id: conversationId || undefined,
+                                active_filter_count: activeFilterCount,
+                            });
                         }}
                     >
-                        {isLocatingUser ? (
-                            <Loader2 className="size-4 animate-spin" />
-                        ) : (
-                            <LocateFixed className="size-4" />
-                        )}
+                        <FunnelSimple size={18} weight="bold" />
+                        {activeFilterCount > 0 ? (
+                            <span
+                                className="absolute -right-1 -top-1 inline-flex min-w-[18px] items-center justify-center rounded-full bg-foreground px-1 py-0.5 text-[10px] font-semibold leading-none text-background"
+                                aria-hidden="true"
+                            >
+                                {activeFilterCount}
+                            </span>
+                        ) : null}
                     </button>
                 </div>
             }
@@ -893,12 +1023,12 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
 
                 {showBottomSkeleton ? (
                     <>
-                        <h3 className="text-xl font-bold text-foreground">Top Recommendations</h3>
+                        <h3 className="text-lg font-semibold leading-snug" style={{ color: INK }}>Top Recommendations</h3>
                         <div className="flex flex-col gap-4">
                             {Array.from({ length: 3 }).map((_, i) => (
                                 <div
                                     key={`sk-${i}`}
-                                    className="flex flex-col gap-4 rounded-lg border border-border bg-background p-6"
+                                    className="flex flex-col gap-4 rounded-3xl border border-black/[0.07] bg-white p-6 shadow-sm"
                                 >
                                     <div className="space-y-2">
                                         <Skeleton className="h-6 w-56" />
@@ -938,104 +1068,46 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
                                 !enrichmentResolved &&
                                 isEnrichmentLoading &&
                                 !summarySkeletonLongWait;
+                            const summaryText = displaySummary
+                                ? formatCustomerSummary(displaySummary, provider.name)
+                                : null;
 
                             return (
                                 <Fragment key={provider.placeId}>
                                     {idx === 0 ? (
-                                        <h3 className="text-xl font-bold text-foreground">Top Recommendations</h3>
+                                        <h3
+                                            className="text-lg font-semibold leading-snug"
+                                            style={{ color: INK }}
+                                        >
+                                            Top Recommendations
+                                        </h3>
                                     ) : null}
-                                    <div
-                                        ref={(el) => {
+                                    <ProviderCard
+                                        provider={provider}
+                                        isSelected={companyIndex - 1 === idx}
+                                        reviewCount={reviewCount}
+                                        summary={summaryText}
+                                        summaryLoading={showSummarySkeleton}
+                                        longWaitSummaryFallback={
+                                            isEnrichmentLoading && summarySkeletonLongWait
+                                        }
+                                        certifications={provider.certifications}
+                                        onSelect={() => setCompanyIndex(idx + 1)}
+                                        onOpenProfile={() => {
+                                            void openProviderDetails(provider);
+                                        }}
+                                        onImageSwipe={(toIndex) => {
+                                            trackEvent('match_card_image_swipe', {
+                                                diagnosis_id: conversationId || undefined,
+                                                provider_id: provider.providerId || undefined,
+                                                place_id: provider.placeId,
+                                                to_index: toIndex,
+                                            });
+                                        }}
+                                        cardRef={(el) => {
                                             providerCardRefs.current[provider.placeId] = el;
                                         }}
-                                        className="flex flex-col gap-4 rounded-lg border border-border bg-background p-6"
-                                    >
-                                        <div className="flex flex-col gap-2">
-                                            <h3 className="truncate text-lg font-bold text-foreground">
-                                                {formatBusinessName(provider.name)}
-                                            </h3>
-                                            <div className="flex flex-row flex-wrap items-center gap-2">
-                                                <Star
-                                                    className="size-5 shrink-0 text-yellow-500"
-                                                    weight="fill"
-                                                    aria-hidden="true"
-                                                />
-                                                <p className="text-sm font-bold text-foreground tabular-nums">
-                                                    {provider.rating != null ? provider.rating.toFixed(1) : 'N/A'}
-                                                </p>
-                                                <p className="text-xs text-muted-foreground">
-                                                    {reviewCount}{' '}
-                                                    {reviewCount === 1 ? 'Review' : 'Reviews'}
-                                                </p>
-                                                {typeof provider.isOpen === 'boolean' ? (
-                                                    <Badge variant="secondary">
-                                                        {provider.isOpen ? 'Open' : 'Closed'}
-                                                    </Badge>
-                                                ) : null}
-                                            </div>
-                                        </div>
-
-                                        <div className="flex flex-col gap-4">
-                                            {displaySummary ? (
-                                                <p className="text-sm text-muted-foreground">
-                                                    {formatCustomerSummary(displaySummary, provider.name)}
-                                                </p>
-                                            ) : showSummarySkeleton ? (
-                                                <div
-                                                    className="flex flex-col gap-2"
-                                                    aria-busy="true"
-                                                    aria-label="Loading Review Summary"
-                                                >
-                                                    <Skeleton className="h-3.5 w-full" />
-                                                    <Skeleton className="h-3.5 w-[94%]" />
-                                                    <Skeleton className="h-3.5 w-[78%]" />
-                                                </div>
-                                            ) : isEnrichmentLoading && summarySkeletonLongWait ? (
-                                                <p className="text-sm text-muted-foreground">
-                                                    Review summary is taking longer than usual — open the profile
-                                                    for full details.
-                                                </p>
-                                            ) : !isEnrichmentLoading ? (
-                                                <p className="text-sm text-muted-foreground">
-                                                    We're still generating this summary...
-
-                                                </p>
-                                            ) : null}
-                                            <div className="flex flex-col gap-2 text-xs text-muted-foreground">
-                                                <div className="flex items-start gap-2">
-                                                    <MapTrifold
-                                                        className="mt-0.5 size-3.5 shrink-0 text-muted-foreground"
-                                                        aria-hidden="true"
-                                                    />
-                                                    <span className="min-w-0 break-words">
-                                                        {formatProviderAddress(provider.address) ||
-                                                            'Address not available'}
-                                                    </span>
-                                                </div>
-                                                {provider.durationText ? (
-                                                    <div className="flex items-center gap-2">
-                                                        <Car
-                                                            className="size-3.5 shrink-0 text-muted-foreground"
-                                                            aria-hidden="true"
-                                                        />
-                                                        <span>{formatDuration(provider.durationText)}</span>
-                                                    </div>
-                                                ) : null}
-                                            </div>
-                                        </div>
-
-                                        <div className="flex flex-row justify-end gap-4">
-                                            <Button
-                                                type="button"
-                                                variant="ghost"
-                                                className="h-10 flex-1"
-                                                onClick={() => {
-                                                    void openProviderDetails(provider);
-                                                }}
-                                                disabled={!provider.providerId}
-                                            >
-                                                View More
-                                            </Button>
+                                        contactSlot={
                                             <Popover
                                                 open={contactOpen && companyIndex - 1 === idx}
                                                 onOpenChange={(open) => {
@@ -1045,8 +1117,13 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
                                                 }}
                                             >
                                                 <PopoverTrigger asChild>
-                                                    <Button type="button" className="h-10 flex-1">
-                                                        Contact Contractor
+                                                    <Button
+                                                        type="button"
+                                                        size="sm"
+                                                        className="h-9 w-full"
+                                                        onClick={(e) => e.stopPropagation()}
+                                                    >
+                                                        Contact
                                                     </Button>
                                                 </PopoverTrigger>
                                                 <PopoverContent
@@ -1054,13 +1131,16 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
                                                     align="start"
                                                     side="top"
                                                     sideOffset={4}
+                                                    onClick={(e) => e.stopPropagation()}
                                                 >
                                                     <div className="flex flex-col gap-3">
                                                         <Button
                                                             variant="secondary"
                                                             className="w-full"
                                                             onClick={() => {
-                                                                const phone = toWhatsAppPhone(provider.phone);
+                                                                const phone = toWhatsAppPhone(
+                                                                    provider.phone
+                                                                );
                                                                 if (phone) {
                                                                     trackContactIntent('whatsapp');
                                                                     window.open(
@@ -1076,7 +1156,8 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
                                                             WhatsApp
                                                         </Button>
                                                         <p className="text-center text-xs text-muted-foreground">
-                                                            Start on WhatsApp, call them, or send an email.
+                                                            Start on WhatsApp, call them, or send an
+                                                            email.
                                                         </p>
                                                         <div className="flex flex-row gap-2">
                                                             <Button
@@ -1111,41 +1192,72 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
                                                     </div>
                                                 </PopoverContent>
                                             </Popover>
-                                        </div>
-                                    </div>
+                                        }
+                                    />
                                 </Fragment>
                             );
                         })}
                     </div>
                 )}
 
-                {!showBottomSkeleton && !noProviders && userLocation ? (
-                    <div className="flex flex-col gap-2">
-                        {searchRadiusMeters < EXTENDED_SEARCH_RADIUS_METERS ? (
-                            <Button
-                                type="button"
-                                variant="secondary"
-                                size="sm"
-                                className="w-fit self-center"
-                                disabled={isProvidersLoading}
-                                onClick={() => {
-                                    setSearchRadiusMeters(EXTENDED_SEARCH_RADIUS_METERS);
-                                    trackEvent('match_extend_radius', {
-                                        diagnosis_id: conversationId || undefined,
-                                        radius_km: 50,
-                                    });
-                                }}
-                            >
-                                {isProvidersLoading ? 'Updating…' : 'Extend Search Radius'}
-                            </Button>
-                        ) : (
-                            <p className="text-center text-xs text-muted-foreground">
-                                You are searching within 50 km. Change your address above to narrow results.
-                            </p>
-                        )}
+                {!showBottomSkeleton && !noProviders && filteredProviders.length === 0 ? (
+                    <div className="flex flex-col items-center gap-2 rounded-2xl border border-dashed border-border bg-background/60 p-4 text-center">
+                        <p className="text-sm font-medium">No matches with these filters</p>
+                        <p className="text-xs text-muted-foreground">
+                            Try clearing some filters or expanding the distance range.
+                        </p>
+                        <Button
+                            type="button"
+                            size="sm"
+                            variant="secondary"
+                            onClick={() => {
+                                resetFilters();
+                                trackEvent('match_filter_clear', {
+                                    diagnosis_id: conversationId || undefined,
+                                });
+                            }}
+                        >
+                            Clear filters
+                        </Button>
                     </div>
                 ) : null}
         </MatchMapSheetLayout>
+
+        <FilterSheet
+            open={isFilterSheetOpen}
+            onOpenChange={(next) => {
+                setIsFilterSheetOpen(next);
+                if (!next) {
+                    trackEvent('match_filter_close', {
+                        diagnosis_id: conversationId || undefined,
+                        active_filter_count: activeFilterCount,
+                    });
+                }
+            }}
+            state={filterState}
+            onApply={(next: MatchFilterState) => {
+                setFilterState(next);
+                setIsFilterSheetOpen(false);
+                // If user widened distance past current search radius, expand to 50 km so the
+                // server can fetch the broader set on the next location refresh.
+                const requiredKm = Math.max(next.distanceMaxKm, DEFAULT_FILTER_STATE.distanceMaxKm);
+                if (
+                    requiredKm * 1000 > searchRadiusMeters &&
+                    requiredKm * 1000 <= EXTENDED_SEARCH_RADIUS_METERS
+                ) {
+                    setSearchRadiusMeters(EXTENDED_SEARCH_RADIUS_METERS);
+                }
+                trackEvent('match_filter_apply', {
+                    diagnosis_id: conversationId || undefined,
+                    active_filter_count: 0, // recomputed by hook after URL change
+                    sort: next.sort,
+                });
+            }}
+            providers={sortedProviders}
+            availableSpecialisations={availableSpecialisations}
+            maxDistanceKm={50}
+        />
+        </>
     );
 }
 

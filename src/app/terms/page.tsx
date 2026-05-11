@@ -1,12 +1,9 @@
-import type { Metadata } from 'next';
+import { META_TERMS } from '@/lib/site-metadata';
 import { FlowStepHeader } from '@/components/flow-header';
 import { getSiteLegalConfig } from '@/lib/site-legal';
 import { TermsPageContent } from './content';
 
-export const metadata: Metadata = {
-    title: 'Terms of Service',
-    description: 'Terms for using Scandio in South Africa.',
-};
+export const metadata = META_TERMS;
 
 export default function TermsPage() {
     const c = getSiteLegalConfig();

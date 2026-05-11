@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { toast } from 'sonner';
 import Link from 'next/link';
+import { Star } from '@phosphor-icons/react';
 import { Provider } from './types';
 import { toWhatsAppPhone, isWhatsAppCapablePhone, formatBusinessName } from '@/lib/utils';
 
@@ -285,9 +286,7 @@ export function ProviderCard({
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
                             <div className="flex items-center gap-1">
-                                <span className="text-base leading-none text-yellow-400" aria-hidden="true">
-                                    ★
-                                </span>
+                                <Star className="size-4 shrink-0 text-yellow-500" weight="fill" aria-hidden="true" />
                                 <span className="text-sm font-semibold">
                                     {provider.rating?.toFixed(1) || 'N/A'}
                                 </span>
@@ -467,7 +466,7 @@ export function ProviderCard({
                         className="flex-1 min-w-0 h-10 px-6 rounded-full text-base"
                         asChild
                     >
-                        <Link href={`/pro/${encodeURIComponent(providerDetailId)}`}>
+                        <Link href={`/contractors/${encodeURIComponent(providerDetailId)}`}>
                             View profile
                         </Link>
                     </Button>

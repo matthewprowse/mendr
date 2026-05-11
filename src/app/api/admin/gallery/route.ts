@@ -34,7 +34,7 @@ export async function PATCH(req: NextRequest) {
     const id = typeof body?.id === 'string' ? body.id.trim() : '';
     const status = typeof body?.status === 'string' ? body.status.trim() : '';
     if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 });
-    const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+    const patch: Record<string, unknown> = {};
     if (status) {
         if (!['pending', 'approved', 'rejected'].includes(status)) {
             return NextResponse.json({ error: 'Invalid status' }, { status: 400 });
@@ -44,7 +44,7 @@ export async function PATCH(req: NextRequest) {
     if (typeof body?.caption === 'string') patch.caption = body.caption;
     if (typeof body?.source === 'string') patch.source = body.source;
     if (typeof body?.sort_order === 'number') patch.sort_order = body.sort_order;
-    if (Object.keys(patch).length === 1) {
+    if (Object.keys(patch).length === 0) {
         return NextResponse.json({ error: 'Nothing to update' }, { status: 400 });
     }
 

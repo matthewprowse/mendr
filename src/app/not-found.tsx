@@ -8,7 +8,7 @@ export default function NotFound() {
             <LandingHeader
                 navLinks={[
                     { href: '/', label: 'For Homeowners' },
-                    { href: '/pro/join', label: 'For Providers' },
+                    { href: '/contractors', label: 'For Providers' },
                     { href: '/about', label: 'About' },
                     { href: '/contact', label: 'Contact' },
                 ]}
@@ -46,10 +46,10 @@ export default function NotFound() {
                                     <Link href="/">Go To Home</Link>
                                 </Button>
                                 <Button variant="secondary" asChild>
-                                    <Link href="/welcome">Generate Free Scandio Report</Link>
+                                    <Link href="/start">Generate Free Scandio Report</Link>
                                 </Button>
                                 <Button variant="ghost" asChild>
-                                    <Link href="/pro/join">For Providers</Link>
+                                    <Link href="/contractors">For Providers</Link>
                                 </Button>
                             </div>
                         </div>

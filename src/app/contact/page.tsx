@@ -1,11 +1,6 @@
-import type { Metadata } from 'next';
-import ContactPageClient from './client';
+import { redirect } from 'next/navigation';
 
-export const metadata: Metadata = {
-    title: 'Contact',
-    description: 'Get in touch with Scandio for homeowner, contractor, or partnership questions.',
-};
-
+/** /contact has been removed. Contact form now lives on /landing1#contact. */
 export default function ContactPage() {
-    return <ContactPageClient />;
+    redirect('/landing1#contact');
 }

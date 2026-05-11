@@ -11,7 +11,11 @@ export function cleanThoughtSentenceStarts(text: string): string {
         .map((s) => {
             const cleaned = s.replace(fillers, '').trim();
             if (!cleaned) return s;
-            return cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+            const normalizedVoice = cleaned
+                .replace(/\bthe user\b/gi, 'you')
+                .replace(/\buser\b/gi, 'you')
+                .replace(/\bhomeowner\b/gi, 'you');
+            return normalizedVoice.charAt(0).toUpperCase() + normalizedVoice.slice(1);
         })
         .join(' ')
         .trim();

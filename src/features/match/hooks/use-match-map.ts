@@ -4,22 +4,134 @@ import { ensureGoogleMapsLoaderOptions } from '@/lib/google-maps-js-loader';
 import { boundsToSearchDisk } from '../map-viewport';
 import type { MatchLocation, MatchProvider } from '../contracts';
 
-const PIN_PATH =
-    'M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z';
+/** Compact filled-star SVG used inside the rating pill marker. */
+const STAR_PATH =
+    'M12 2.5l2.952 5.98 6.598.96-4.775 4.654 1.127 6.572L12 17.66l-5.902 3.006 1.127-6.572L2.45 9.44l6.598-.96L12 2.5z';
 
-function makeMarkerContent(color: string, scale: number): Element {
+function appendStarSvg(parent: HTMLElement, fill: string, sizePx: number) {
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     svg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
     svg.setAttribute('viewBox', '0 0 24 24');
-    svg.setAttribute('width', `${24 * scale}`);
-    svg.setAttribute('height', `${24 * scale}`);
+    svg.setAttribute('width', `${sizePx}`);
+    svg.setAttribute('height', `${sizePx}`);
+    svg.setAttribute('aria-hidden', 'true');
     const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-    path.setAttribute('d', PIN_PATH);
-    path.setAttribute('fill', color);
-    path.setAttribute('stroke', '#ffffff');
-    path.setAttribute('stroke-width', scale >= 1.5 ? '0.8' : '0.5');
+    path.setAttribute('d', STAR_PATH);
+    path.setAttribute('fill', fill);
     svg.appendChild(path);
-    return svg;
+    parent.appendChild(svg);
+}
+
+/**
+ * Build an Airbnb-style rating pill marker (white pill with filled star + rating number).
+ * Selected = inverted dark pill with a small name tooltip beneath.
+ * Falls back to "New" when no rating is available.
+ */
+function makeRatingPillContent(params: {
+    rating: number | null | undefined;
+    name?: string | null;
+    selected: boolean;
+}): HTMLElement {
+    const { rating, name, selected } = params;
+    const wrapper = document.createElement('div');
+    wrapper.className = 'scandio-marker';
+    wrapper.style.display = 'flex';
+    wrapper.style.flexDirection = 'column';
+    wrapper.style.alignItems = 'center';
+    wrapper.style.gap = '4px';
+    wrapper.style.transform = selected ? 'translateY(-2px)' : 'translateY(0)';
+    wrapper.style.transition = 'transform 120ms ease-out';
+
+    const pill = document.createElement('div');
+    pill.style.display = 'inline-flex';
+    pill.style.alignItems = 'center';
+    pill.style.gap = '4px';
+    pill.style.padding = selected ? '6px 10px' : '4px 8px';
+    pill.style.borderRadius = '999px';
+    pill.style.fontFamily =
+        'ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+    pill.style.fontSize = selected ? '13px' : '12px';
+    pill.style.fontWeight = '600';
+    pill.style.lineHeight = '1';
+    pill.style.boxShadow = selected
+        ? '0 6px 18px rgba(15, 23, 42, 0.25), 0 1px 0 rgba(0,0,0,0.06)'
+        : '0 1px 2px rgba(15, 23, 42, 0.18), 0 0 0 1px rgba(15, 23, 42, 0.06)';
+    pill.style.cursor = 'pointer';
+    pill.style.userSelect = 'none';
+    pill.style.whiteSpace = 'nowrap';
+    pill.style.background = selected ? '#16120E' : '#ffffff';
+    pill.style.color = selected ? '#ffffff' : '#16120E';
+
+    appendStarSvg(pill, selected ? '#ffffff' : '#F59E0B', selected ? 13 : 12);
+
+    const label = document.createElement('span');
+    if (typeof rating === 'number' && Number.isFinite(rating)) {
+        label.textContent = rating.toFixed(1);
+    } else {
+        label.textContent = 'New';
+        label.style.fontWeight = '500';
+    }
+    pill.appendChild(label);
+    wrapper.appendChild(pill);
+
+    if (selected && name) {
+        const tooltip = document.createElement('div');
+        tooltip.textContent = name;
+        tooltip.style.maxWidth = '180px';
+        tooltip.style.padding = '4px 8px';
+        tooltip.style.borderRadius = '6px';
+        tooltip.style.background = '#16120E';
+        tooltip.style.color = '#ffffff';
+        tooltip.style.fontSize = '11px';
+        tooltip.style.fontWeight = '500';
+        tooltip.style.lineHeight = '1.2';
+        tooltip.style.whiteSpace = 'nowrap';
+        tooltip.style.overflow = 'hidden';
+        tooltip.style.textOverflow = 'ellipsis';
+        tooltip.style.boxShadow = '0 4px 12px rgba(15, 23, 42, 0.2)';
+        wrapper.appendChild(tooltip);
+    }
+
+    return wrapper;
+}
+
+/** "You are here" pin: blue dot with white ring + soft halo. */
+function makeUserPinContent(): HTMLElement {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'scandio-user-pin';
+    wrapper.style.position = 'relative';
+    wrapper.style.width = '22px';
+    wrapper.style.height = '22px';
+
+    const halo = document.createElement('div');
+    halo.style.position = 'absolute';
+    halo.style.inset = '-6px';
+    halo.style.borderRadius = '999px';
+    halo.style.background = 'rgba(59, 130, 246, 0.18)';
+
+    const dot = document.createElement('div');
+    dot.style.position = 'absolute';
+    dot.style.inset = '0';
+    dot.style.borderRadius = '999px';
+    dot.style.background = '#3b82f6';
+    dot.style.border = '3px solid #ffffff';
+    dot.style.boxShadow = '0 2px 6px rgba(15, 23, 42, 0.25)';
+
+    wrapper.appendChild(halo);
+    wrapper.appendChild(dot);
+    return wrapper;
+}
+
+/** Service-area pin (used when caller passes `userAreas`). Indigo dot to differentiate from user. */
+function makeAreaPinContent(): HTMLElement {
+    const wrapper = document.createElement('div');
+    wrapper.style.width = '14px';
+    wrapper.style.height = '14px';
+    wrapper.style.borderRadius = '999px';
+    wrapper.style.background = '#4f46e5';
+    wrapper.style.border = '3px solid #ffffff';
+    wrapper.style.boxShadow = '0 2px 6px rgba(15, 23, 42, 0.25)';
+    return wrapper;
 }
 
 function normalizePlaceKey(id: string): string {
@@ -170,7 +282,12 @@ export function useMatchMap(params: {
                 map,
                 position: pos,
                 title: provider.name,
-                content: makeMarkerContent(isSelected ? '#EA4335' : '#64748b', isSelected ? 1.8 : 1.2),
+                content: makeRatingPillContent({
+                    rating: provider.rating ?? null,
+                    name: provider.name,
+                    selected: isSelected,
+                }),
+                zIndex: isSelected ? 1000 : undefined,
             });
             if (onMarkerClick) {
                 marker.addEventListener('gmp-click', () => onMarkerClick(provider.placeId));
@@ -185,11 +302,12 @@ export function useMatchMap(params: {
                     map,
                     position: pos,
                     title: 'Your location',
-                    content: makeMarkerContent('#3b82f6', 1.25),
+                    content: makeUserPinContent(),
                 });
             } else {
                 userPinRef.current.map = map;
                 userPinRef.current.position = pos;
+                userPinRef.current.content = makeUserPinContent();
             }
         } else {
             if (userPinRef.current) userPinRef.current.map = null;
@@ -215,7 +333,7 @@ export function useMatchMap(params: {
                     map,
                     position: areaPos,
                     title: area.location.address || 'Service area',
-                    content: makeMarkerContent('#4f46e5', 1.2),
+                    content: makeAreaPinContent(),
                 });
                 areaPinsRef.current.push(pin);
             });

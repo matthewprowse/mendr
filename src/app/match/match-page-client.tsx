@@ -1,12 +1,2 @@
-'use client';
-
-import { MatchClient } from './_components/match-client';
-
-type MatchPageProps = {
-    conversationId?: string;
-};
-
-export default function MatchPage({ conversationId }: MatchPageProps) {
-    return <MatchClient conversationId={conversationId} />;
-}
-
+/** @deprecated dead file — no real consumers. Use match/client.tsx instead. */
+export {};

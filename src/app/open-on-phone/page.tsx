@@ -1,11 +1,7 @@
-import type { Metadata } from 'next';
+import { META_MOBILE } from '@/lib/site-metadata';
 import OpenOnPhonePageClient from './client';
 
-export const metadata: Metadata = {
-    title: 'Open on phone',
-    description: 'Scan a QR code to continue Scandio on your mobile device.',
-    robots: { index: false, follow: false },
-};
+export const metadata = META_MOBILE;
 
 export default function OpenOnPhonePage() {
     return <OpenOnPhonePageClient />;

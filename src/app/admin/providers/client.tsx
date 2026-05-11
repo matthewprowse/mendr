@@ -25,10 +25,22 @@ import {
 import { AdminPageHeader } from '../components/page-header';
 import { AdminDataTable } from '../components/data-table';
 import { TableCell, TableRow } from '@/components/ui/table';
+import { CERTIFICATION_CATALOG } from '@/lib/certifications/catalog';
+
+const COMPANY_SIZE_OPTIONS: { value: 'solo' | 'small' | 'mid' | 'large'; label: string }[] = [
+    { value: 'solo', label: 'Solo (1)' },
+    { value: 'small', label: 'Small (2-5)' },
+    { value: 'mid', label: 'Mid (6-20)' },
+    { value: 'large', label: 'Large (20+)' },
+];
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 type Status = 'new' | 'contacted' | 'approved' | 'rejected';
+
+type ConfirmEmailStatus = 'pending' | 'sent' | 'failed';
+type EnrichmentStatus  = 'pending' | 'queued' | 'running' | 'matched' | 'no_match' | 'failed' | 'complete';
+type InviteEmailStatus = 'pending' | 'sent' | 'failed' | null;
 
 type ProviderApplication = {
     id: string;
@@ -36,18 +48,44 @@ type ProviderApplication = {
     contact_name: string;
     business_name: string | null;
     trade: string;
+    trade_description: string | null;
     phone: string;
     email: string;
+    address: string | null;
     areas: string;
     founded_year: number | null;
+    website: string | null;
+    whatsapp_available: boolean | null;
+    registration_number: string | null;
+    certifications: string | null;
+    highlights: string | null;
+    referral: string | null;
+    team_size: number | null;
     status: Status;
     notes: string | null;
     sendgrid_sent_at: string | null;
     source: string | null;
+    // Pipeline fields
+    confirmation_email_status:  ConfirmEmailStatus | null;
+    confirmation_email_error:   string | null;
+    enrichment_status:          EnrichmentStatus | null;
+    enrichment_error:           string | null;
+    matched_provider_id:        string | null;
+    match_score:                number | null;
+    gemini_summary:             string | null;
+    applicant_summary:          string | null;
+    invitation_email_status:    InviteEmailStatus;
+    invitation_email_error:     string | null;
 };
 
 type RawProviderApplication = Omit<ProviderApplication, 'status'> & {
     status?: unknown;
+};
+
+type LiveProviderCertification = {
+    slug: string;
+    label: string;
+    source: string;
 };
 
 type LiveProviderRow = {
@@ -66,6 +104,14 @@ type LiveProviderRow = {
     specialisations: string[];
     highlights: string[];
     key_person: string;
+    company_size: 'solo' | 'small' | 'mid' | 'large' | null;
+    company_size_source: string | null;
+    years_in_business: number | null;
+    years_in_business_source: string | null;
+    certifications: LiveProviderCertification[];
+    enrichment_review_required: boolean;
+    enrichment_last_failure: string | null;
+    enrichment_last_failure_at: string | null;
     output_count: number;
     contact_count: number;
     profile_view_count: number;
@@ -153,7 +199,7 @@ const EMAIL_TEMPLATES = [
         label: 'Invitation to join',
         subject: 'Your Scandio network invitation is ready',
         body: (name: string) =>
-            `Hi ${name},\n\nGreat news — the Scandio contractor network is now open and your profile is ready to set up.\n\nAs a founding member you are locked in at the best available rate, and you will receive priority placement when paid tiers launch in late 2026.\n\nTo get started, complete your profile here: ${getAppOrigin()}/pro/onboard\n\nIf you have any questions, just reply to this email.\n\nKind regards,\nThe Scandio Team`,
+            `Hi ${name},\n\nGreat news — the Scandio contractor network is now open and your profile is ready to set up.\n\nAs a founding member you are locked in at the best available rate, and you will receive priority placement when paid tiers launch in late 2026.\n\nTo get started, complete your profile here: ${getAppOrigin()}/contractors/network\n\nIf you have any questions, just reply to this email.\n\nKind regards,\nThe Scandio Team`,
     },
     {
         id: 'followup',
@@ -235,6 +281,9 @@ export default function AdminProvidersPage() {
     const [selectedLiveProvider, setSelectedLiveProvider] = useState<LiveProviderRow | null>(null);
     const [editLiveProvider, setEditLiveProvider] = useState<LiveProviderRow | null>(null);
     const [refreshingGoogle, setRefreshingGoogle] = useState(false);
+    const [resendingConfirmation, setResendingConfirmation] = useState<string | null>(null);
+    const [sendingInvitation, setSendingInvitation] = useState<string | null>(null);
+    const [needsReviewOnly, setNeedsReviewOnly] = useState(false);
 
     const load = useCallback(async () => {
         const [applicationsRes, liveProvidersRes] = await Promise.all([
@@ -327,12 +376,14 @@ export default function AdminProvidersPage() {
         );
     });
     const liveFiltered = liveProviders.filter((p) => {
+        if (needsReviewOnly && !p.enrichment_review_required) return false;
         if (!q) return true;
         return (
             p.name.toLowerCase().includes(q) ||
             (p.address ?? '').toLowerCase().includes(q)
         );
     });
+    const needsReviewCount = liveProviders.filter((p) => p.enrichment_review_required).length;
     const applicationsTotalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
     const applicationsPageRows = filtered.slice(applicationsPage * pageSize, (applicationsPage + 1) * pageSize);
     const liveTotalPages = Math.max(1, Math.ceil(liveFiltered.length / pageSize));
@@ -343,16 +394,25 @@ export default function AdminProvidersPage() {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                id: editApplication.id,
-                contact_name: editApplication.contact_name,
-                business_name: editApplication.business_name,
-                trade: editApplication.trade,
-                phone: editApplication.phone,
-                email: editApplication.email,
-                areas: editApplication.areas,
-                founded_year: editApplication.founded_year,
-                status: editApplication.status,
-                notes: editApplication.notes,
+                id:                  editApplication.id,
+                contact_name:        editApplication.contact_name,
+                business_name:       editApplication.business_name,
+                trade:               editApplication.trade,
+                trade_description:   editApplication.trade_description,
+                phone:               editApplication.phone,
+                email:               editApplication.email,
+                address:             editApplication.address,
+                areas:               editApplication.areas,
+                founded_year:        editApplication.founded_year,
+                website:             editApplication.website,
+                whatsapp_available:  editApplication.whatsapp_available,
+                registration_number: editApplication.registration_number,
+                certifications:      editApplication.certifications,
+                highlights:          editApplication.highlights,
+                referral:            editApplication.referral,
+                team_size:           editApplication.team_size,
+                status:              editApplication.status,
+                notes:               editApplication.notes,
             }),
         });
         if (!res.ok) {
@@ -366,6 +426,7 @@ export default function AdminProvidersPage() {
     }
     async function saveLiveProviderEdit() {
         if (!editLiveProvider) return;
+        const certificationSlugs = (editLiveProvider.certifications ?? []).map((c) => c.slug);
         const res = await fetch('/api/admin/providers/live', {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
@@ -382,16 +443,77 @@ export default function AdminProvidersPage() {
                 key_person: editLiveProvider.key_person,
                 specialisations: editLiveProvider.specialisations,
                 highlights: editLiveProvider.highlights,
+                company_size: editLiveProvider.company_size,
+                years_in_business: editLiveProvider.years_in_business,
+                certifications: certificationSlugs,
             }),
         });
         if (!res.ok) {
             toast.error('Failed to save live provider');
             return;
         }
-        setLiveProviders((prev) => prev.map((r) => (r.id === editLiveProvider.id ? { ...r, ...editLiveProvider } : r)));
-        setSelectedLiveProvider((prev) => (prev?.id === editLiveProvider.id ? { ...prev, ...editLiveProvider } : prev));
+        // Sources are now 'admin' for whatever fields we set (sticky vs enrichment).
+        const patched: LiveProviderRow = {
+            ...editLiveProvider,
+            company_size_source: editLiveProvider.company_size != null ? 'admin' : null,
+            years_in_business_source:
+                editLiveProvider.years_in_business != null ? 'admin' : null,
+            certifications: (editLiveProvider.certifications ?? []).map((c) => ({
+                ...c,
+                source: 'admin',
+            })),
+        };
+        setLiveProviders((prev) => prev.map((r) => (r.id === patched.id ? patched : r)));
+        setSelectedLiveProvider((prev) => (prev?.id === patched.id ? patched : prev));
         setEditLiveProvider(null);
         toast.success('Live provider updated');
+    }
+
+    async function resendConfirmation(id: string) {
+        setResendingConfirmation(id);
+        try {
+            const res = await fetch('/api/admin/provider-applications/resend-confirmation', {
+                method:  'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body:    JSON.stringify({ id }),
+            });
+            const d = await res.json().catch(() => ({})) as { error?: string };
+            if (!res.ok) { toast.error(d.error || 'Failed to resend'); return; }
+            setEntries((prev) =>
+                prev.map((e) => e.id === id
+                    ? { ...e, confirmation_email_status: 'sent', confirmation_email_error: null, confirmation_email_sent_at: new Date().toISOString() } as any
+                    : e
+                )
+            );
+            toast.success('Confirmation email resent');
+        } finally {
+            setResendingConfirmation(null);
+        }
+    }
+
+    async function sendInvitation(id: string) {
+        setSendingInvitation(id);
+        try {
+            const res = await fetch('/api/admin/provider-applications/send-invitation', {
+                method:  'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body:    JSON.stringify({ id }),
+            });
+            const d = await res.json().catch(() => ({})) as { error?: string };
+            if (!res.ok) { toast.error(d.error || 'Failed to send invitation'); return; }
+            setEntries((prev) =>
+                prev.map((e) => e.id === id
+                    ? { ...e, invitation_email_status: 'sent', invitation_email_error: null } as any
+                    : e
+                )
+            );
+            if (selectedApplication?.id === id) {
+                setSelectedApplication((prev) => prev ? { ...prev, invitation_email_status: 'sent' } : prev);
+            }
+            toast.success('Invitation email sent');
+        } finally {
+            setSendingInvitation(null);
+        }
     }
 
     async function refreshRatingsFromGoogle() {
@@ -432,6 +554,33 @@ export default function AdminProvidersPage() {
             toast.success('Rating and review count updated from Google');
         } finally {
             setRefreshingGoogle(false);
+        }
+    }
+
+    async function requeueEnrichment(provider: LiveProviderRow) {
+        const placeId = provider.google_place_id;
+        if (!placeId) {
+            toast.error('No Google place id on this provider; cannot re-enrich');
+            return;
+        }
+        try {
+            const res = await fetch('/api/enrich/queue', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    priorityPlaceId: placeId,
+                    mode: 'full',
+                    reason: 'admin_review',
+                }),
+            });
+            if (!res.ok) {
+                const data = (await res.json().catch(() => ({}))) as { error?: string };
+                toast.error(data.error || 'Could not queue re-enrichment');
+                return;
+            }
+            toast.success('Re-enrichment queued');
+        } catch {
+            toast.error('Could not queue re-enrichment');
         }
     }
 
@@ -484,9 +633,33 @@ export default function AdminProvidersPage() {
             </div>
 
             <div className="mb-8 flex flex-col gap-3">
-                <h2 className="text-base font-semibold text-foreground">Live Providers (Shown To Users)</h2>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                    <h2 className="text-base font-semibold text-foreground">Live Providers (Shown To Users)</h2>
+                    <button
+                        type="button"
+                        onClick={() => {
+                            setNeedsReviewOnly((v) => !v);
+                            setLivePage(0);
+                        }}
+                        className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+                            needsReviewOnly
+                                ? 'border-amber-300 bg-amber-100 text-amber-800'
+                                : 'border-border text-muted-foreground hover:bg-muted'
+                        }`}
+                        title="Show only providers whose AI enrichment failed the leak gate after retries"
+                    >
+                        <span
+                            className={`inline-block h-1.5 w-1.5 rounded-full ${
+                                needsReviewCount > 0 ? 'bg-amber-500' : 'bg-muted-foreground/40'
+                            }`}
+                            aria-hidden
+                        />
+                        Needs review
+                        <span className="opacity-70">({needsReviewCount})</span>
+                    </button>
+                </div>
                 <AdminDataTable
-                    headers={['Provider', 'Address', 'Rating', 'Outputs', 'Contacts', 'Profile Views', 'Avg Position']}
+                    headers={['Provider', 'Address', 'Rating', 'Review', 'Outputs', 'Contacts', 'Profile Views', 'Avg Position']}
                     loading={liveLoading}
                     emptyText="No live providers found."
                 >
@@ -496,6 +669,18 @@ export default function AdminProvidersPage() {
                             <TableCell className="max-w-[260px] text-muted-foreground">{p.address ?? '—'}</TableCell>
                             <TableCell className="text-muted-foreground">
                                 {p.rating != null ? `${p.rating.toFixed(1)} (${p.rating_count})` : '—'}
+                            </TableCell>
+                            <TableCell>
+                                {p.enrichment_review_required ? (
+                                    <span
+                                        className="inline-flex items-center rounded-full border border-amber-300 bg-amber-100 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-amber-800"
+                                        title={p.enrichment_last_failure ?? 'Enrichment failed leak gate'}
+                                    >
+                                        Needs review
+                                    </span>
+                                ) : (
+                                    <span className="text-xs text-muted-foreground">—</span>
+                                )}
                             </TableCell>
                             <TableCell className="text-muted-foreground">{p.output_count}</TableCell>
                             <TableCell className="text-muted-foreground">{p.contact_count}</TableCell>
@@ -536,59 +721,91 @@ export default function AdminProvidersPage() {
             <div className="flex flex-col gap-3">
                 <h2 className="text-base font-semibold text-foreground">Provider Applications</h2>
                 <AdminDataTable
-                    headers={['Date', 'Contact', 'Business', 'Trade', 'Areas', 'Phone', 'Email', 'Founded', 'Status', 'Notes', 'Actions']}
+                    headers={['Date', 'Contact', 'Business', 'Trade', 'Status', 'Confirm', 'Enrichment', 'Invite', 'Notes', 'Actions']}
                     loading={loading}
                     emptyText="No entries found."
-                    colSpan={11}
+                    colSpan={10}
                 >
-                    {applicationsPageRows.map((e) => (
-                        <TableRow key={e.id} className="cursor-pointer" onClick={() => setSelectedApplication(e)}>
-                            <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
-                                {new Date(e.created_at).toLocaleDateString('en-ZA', {
-                                    day: 'numeric',
-                                    month: 'short',
-                                })}
-                            </TableCell>
-                            <TableCell className="font-medium text-foreground">{e.contact_name}</TableCell>
-                            <TableCell className="text-muted-foreground">{e.business_name ?? '—'}</TableCell>
-                            <TableCell className="text-muted-foreground">{e.trade}</TableCell>
-                            <TableCell className="max-w-[140px] text-muted-foreground">
-                                <span className="line-clamp-2 text-xs">{e.areas}</span>
-                            </TableCell>
-                            <TableCell className="whitespace-nowrap text-muted-foreground">{e.phone}</TableCell>
-                            <TableCell className="text-muted-foreground">
-                                <a href={`mailto:${e.email}`} className="hover:underline">
-                                    {e.email}
-                                </a>
-                            </TableCell>
-                            <TableCell className="text-center text-muted-foreground">{e.founded_year ?? '—'}</TableCell>
-                            <TableCell><StatusBadge status={e.status} onChange={(s) => void updateStatus(e.id, s)} /></TableCell>
-                            <TableCell className="min-w-[160px]">
-                                <NotesCell
-                                    id={e.id}
-                                    initial={e.notes}
-                                    onSaved={(v) =>
-                                        setEntries((prev) =>
-                                            prev.map((x) => (x.id === e.id ? { ...x, notes: v } : x))
-                                        )
-                                    }
-                                />
-                            </TableCell>
-                            <TableCell>
-                                <Button
-                                    size="sm"
-                                    variant="secondary"
-                                    className="h-7 text-xs"
-                                    onClick={() => {
-                                        setEmailTarget(e);
-                                        setEmailTemplate('waitlist');
-                                    }}
-                                >
-                                    Email
-                                </Button>
-                            </TableCell>
-                        </TableRow>
-                    ))}
+                    {applicationsPageRows.map((e) => {
+                        const confirmStatus = e.confirmation_email_status;
+                        const enrichStatus  = e.enrichment_status;
+                        const inviteStatus  = e.invitation_email_status;
+                        const hasMatch      = !!e.matched_provider_id;
+                        const hasSummary    = !!(e.applicant_summary || e.gemini_summary);
+                        return (
+                            <TableRow key={e.id} className="cursor-pointer" onClick={() => setSelectedApplication(e)}>
+                                <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
+                                    {new Date(e.created_at).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short' })}
+                                </TableCell>
+                                <TableCell className="font-medium text-foreground">{e.contact_name}</TableCell>
+                                <TableCell className="text-muted-foreground">{e.business_name ?? '—'}</TableCell>
+                                <TableCell className="text-muted-foreground">{e.trade}</TableCell>
+                                <TableCell>
+                                    <StatusBadge status={e.status} onChange={(s) => void updateStatus(e.id, s)} />
+                                </TableCell>
+                                {/* Confirmation email status */}
+                                <TableCell>
+                                    <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
+                                        confirmStatus === 'sent'   ? 'bg-green-100 text-green-700' :
+                                        confirmStatus === 'failed' ? 'bg-red-100 text-red-600' :
+                                        'bg-muted text-muted-foreground'
+                                    }`} title={e.confirmation_email_error ?? undefined}>
+                                        {confirmStatus ?? 'pending'}
+                                    </span>
+                                </TableCell>
+                                {/* Enrichment status */}
+                                <TableCell>
+                                    <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
+                                        enrichStatus === 'complete'  ? 'bg-green-100 text-green-700' :
+                                        enrichStatus === 'no_match'  ? 'bg-amber-100 text-amber-700' :
+                                        enrichStatus === 'failed'    ? 'bg-red-100 text-red-600' :
+                                        enrichStatus === 'running'   ? 'bg-blue-100 text-blue-700' :
+                                        enrichStatus === 'queued'    ? 'bg-sky-100 text-sky-700' :
+                                        'bg-muted text-muted-foreground'
+                                    }`} title={e.enrichment_error ?? (hasMatch ? `Score: ${e.match_score?.toFixed(2)}` : undefined)}>
+                                        {enrichStatus ?? 'pending'}
+                                        {hasMatch && enrichStatus === 'complete' ? ' ✓' : ''}
+                                    </span>
+                                </TableCell>
+                                {/* Invitation email status */}
+                                <TableCell>
+                                    <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
+                                        inviteStatus === 'sent'   ? 'bg-green-100 text-green-700' :
+                                        inviteStatus === 'failed' ? 'bg-red-100 text-red-600' :
+                                        hasSummary                ? 'bg-muted/50 text-muted-foreground' :
+                                        'bg-muted text-muted-foreground'
+                                    }`}>
+                                        {inviteStatus ?? (hasSummary ? 'ready' : 'waiting')}
+                                    </span>
+                                </TableCell>
+                                <TableCell className="min-w-[160px]">
+                                    <NotesCell
+                                        id={e.id}
+                                        initial={e.notes}
+                                        onSaved={(v) =>
+                                            setEntries((prev) =>
+                                                prev.map((x) => (x.id === e.id ? { ...x, notes: v } : x))
+                                            )
+                                        }
+                                    />
+                                </TableCell>
+                                <TableCell>
+                                    <Button
+                                        size="sm"
+                                        variant="secondary"
+                                        className="h-7 text-xs"
+                                        onClick={(ev) => {
+                                            ev.stopPropagation();
+                                            setEmailTarget(e);
+                                            setEmailTemplate('waitlist');
+                                        }}
+                                    >
+                                        Email
+                                    </Button>
+                                </TableCell>
+                            </TableRow>
+                        );
+                    })}
                 </AdminDataTable>
                 {applicationsTotalPages > 1 ? (
                     <div className="mt-3 flex items-center justify-end gap-2">
@@ -697,7 +914,7 @@ export default function AdminProvidersPage() {
                 </DialogContent>
             </Dialog>
             <Dialog open={!!selectedApplication} onOpenChange={(open) => !open && setSelectedApplication(null)}>
-                <DialogContent className="max-w-2xl">
+                <DialogContent className="max-w-2xl max-h-[92vh]">
                     <DialogHeader>
                         <DialogTitle>Provider Application</DialogTitle>
                         <DialogDescription>
@@ -705,7 +922,8 @@ export default function AdminProvidersPage() {
                         </DialogDescription>
                     </DialogHeader>
                     {selectedApplication ? (
-                        <div className="space-y-4">
+                        <div className="max-h-[80vh] overflow-y-auto space-y-4 pr-1">
+                            {/* Contact info */}
                             <div className="grid gap-3 rounded-md border bg-muted/20 p-3 sm:grid-cols-2">
                                 <div>
                                     <p className="text-xs text-muted-foreground">Contact</p>
@@ -753,12 +971,144 @@ export default function AdminProvidersPage() {
                                     <p className="text-xs text-muted-foreground">Areas</p>
                                     <p className="text-sm">{selectedApplication.areas || '—'}</p>
                                 </div>
-                                <div className="sm:col-span-2">
-                                    <p className="text-xs text-muted-foreground">Notes</p>
-                                    <p className="text-sm whitespace-pre-wrap">{selectedApplication.notes || 'No notes'}</p>
+                                {selectedApplication.notes ? (
+                                    <div className="sm:col-span-2">
+                                        <p className="text-xs text-muted-foreground">Notes</p>
+                                        <p className="text-sm whitespace-pre-wrap">{selectedApplication.notes}</p>
+                                    </div>
+                                ) : null}
+                            </div>
+
+                            {/* Pipeline panel */}
+                            <div className="rounded-md border border-border/60 divide-y divide-border/40">
+                                {/* Confirmation email row */}
+                                <div className="flex items-center justify-between gap-3 p-3">
+                                    <div className="min-w-0">
+                                        <p className="text-xs font-medium text-foreground">Confirmation email</p>
+                                        <p className="text-xs text-muted-foreground mt-0.5">
+                                            {selectedApplication.confirmation_email_status === 'sent'
+                                                ? 'Sent successfully'
+                                                : selectedApplication.confirmation_email_status === 'failed'
+                                                ? `Failed: ${selectedApplication.confirmation_email_error ?? 'unknown error'}`
+                                                : 'Not yet sent'}
+                                        </p>
+                                    </div>
+                                    <div className="flex items-center gap-2 shrink-0">
+                                        <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
+                                            selectedApplication.confirmation_email_status === 'sent'   ? 'bg-green-100 text-green-700' :
+                                            selectedApplication.confirmation_email_status === 'failed' ? 'bg-red-100 text-red-600' :
+                                            'bg-muted text-muted-foreground'
+                                        }`}>
+                                            {selectedApplication.confirmation_email_status ?? 'pending'}
+                                        </span>
+                                        <Button
+                                            size="sm"
+                                            variant="outline"
+                                            className="h-7 text-xs"
+                                            disabled={resendingConfirmation === selectedApplication.id}
+                                            onClick={() => void resendConfirmation(selectedApplication.id)}
+                                        >
+                                            {resendingConfirmation === selectedApplication.id ? 'Sending…' : 'Resend'}
+                                        </Button>
+                                    </div>
+                                </div>
+
+                                {/* Enrichment row */}
+                                <div className="p-3 space-y-2">
+                                    <div className="flex items-center justify-between gap-3">
+                                        <div className="min-w-0">
+                                            <p className="text-xs font-medium text-foreground">Enrichment</p>
+                                            <p className="text-xs text-muted-foreground mt-0.5">
+                                                {selectedApplication.enrichment_status === 'complete' && selectedApplication.matched_provider_id
+                                                    ? `Matched provider — score ${selectedApplication.match_score?.toFixed(2) ?? '?'}`
+                                                    : selectedApplication.enrichment_status === 'no_match'
+                                                    ? 'No provider match found — summary still generated'
+                                                    : selectedApplication.enrichment_status === 'failed'
+                                                    ? `Failed: ${selectedApplication.enrichment_error ?? 'unknown error'}`
+                                                    : selectedApplication.enrichment_status === 'running'
+                                                    ? 'Processing…'
+                                                    : selectedApplication.enrichment_status === 'queued'
+                                                    ? 'Queued — next cron run picks this up'
+                                                    : 'Pending — cron will queue on next run'}
+                                            </p>
+                                        </div>
+                                        <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium shrink-0 ${
+                                            selectedApplication.enrichment_status === 'complete' ? 'bg-green-100 text-green-700' :
+                                            selectedApplication.enrichment_status === 'no_match' ? 'bg-amber-100 text-amber-700' :
+                                            selectedApplication.enrichment_status === 'failed'   ? 'bg-red-100 text-red-600' :
+                                            selectedApplication.enrichment_status === 'running'  ? 'bg-blue-100 text-blue-700' :
+                                            selectedApplication.enrichment_status === 'queued'   ? 'bg-sky-100 text-sky-700' :
+                                            'bg-muted text-muted-foreground'
+                                        }`}>
+                                            {selectedApplication.enrichment_status ?? 'pending'}
+                                        </span>
+                                    </div>
+                                    {selectedApplication.matched_provider_id ? (
+                                        <p className="text-xs text-muted-foreground">
+                                            Provider ID:{' '}
+                                            <button
+                                                type="button"
+                                                className="font-mono text-primary underline-offset-2 hover:underline"
+                                                onClick={() => void copyToClipboard(selectedApplication.matched_provider_id!, 'Provider ID')}
+                                            >
+                                                {selectedApplication.matched_provider_id}
+                                            </button>
+                                        </p>
+                                    ) : null}
+                                    {(selectedApplication.applicant_summary ?? selectedApplication.gemini_summary) ? (
+                                        <div className="rounded border border-border/50 bg-muted/20 p-2">
+                                            <p className="text-[11px] uppercase tracking-wide text-muted-foreground mb-1">
+                                                {selectedApplication.applicant_summary ? 'Applicant-edited summary' : 'Gemini-generated summary'}
+                                            </p>
+                                            <p className="text-xs text-foreground leading-relaxed line-clamp-5">
+                                                {selectedApplication.applicant_summary ?? selectedApplication.gemini_summary}
+                                            </p>
+                                        </div>
+                                    ) : null}
+                                </div>
+
+                                {/* Invitation row */}
+                                <div className="flex items-start justify-between gap-3 p-3">
+                                    <div className="min-w-0">
+                                        <p className="text-xs font-medium text-foreground">Invitation email</p>
+                                        <p className="text-xs text-muted-foreground mt-0.5">
+                                            {selectedApplication.invitation_email_status === 'sent'
+                                                ? 'Sent — applicant has a profile edit link'
+                                                : selectedApplication.invitation_email_status === 'failed'
+                                                ? `Failed: ${selectedApplication.invitation_email_error ?? 'unknown error'}`
+                                                : !(selectedApplication.applicant_summary ?? selectedApplication.gemini_summary)
+                                                ? 'Waiting for enrichment summary before sending'
+                                                : 'Ready to send'}
+                                        </p>
+                                    </div>
+                                    <div className="flex items-center gap-2 shrink-0">
+                                        <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
+                                            selectedApplication.invitation_email_status === 'sent'   ? 'bg-green-100 text-green-700' :
+                                            selectedApplication.invitation_email_status === 'failed' ? 'bg-red-100 text-red-600' :
+                                            (selectedApplication.applicant_summary ?? selectedApplication.gemini_summary) ? 'bg-muted/50 text-muted-foreground' :
+                                            'bg-muted text-muted-foreground'
+                                        }`}>
+                                            {selectedApplication.invitation_email_status ?? ((selectedApplication.applicant_summary ?? selectedApplication.gemini_summary) ? 'ready' : 'waiting')}
+                                        </span>
+                                        <Button
+                                            size="sm"
+                                            variant="default"
+                                            className="h-7 text-xs"
+                                            disabled={
+                                                sendingInvitation === selectedApplication.id ||
+                                                !(selectedApplication.applicant_summary ?? selectedApplication.gemini_summary)
+                                            }
+                                            onClick={() => void sendInvitation(selectedApplication.id)}
+                                        >
+                                            {sendingInvitation === selectedApplication.id ? 'Sending…' :
+                                             selectedApplication.invitation_email_status === 'sent' ? 'Resend' : 'Send Invitation'}
+                                        </Button>
+                                    </div>
                                 </div>
                             </div>
-                            <div className="flex flex-wrap gap-2">
+
+                            {/* Action buttons */}
+                            <div className="flex flex-wrap gap-2 pt-1">
                                 <Button
                                     variant="secondary"
                                     onClick={() => {
@@ -766,14 +1116,14 @@ export default function AdminProvidersPage() {
                                         setEmailTemplate('waitlist');
                                     }}
                                 >
-                                    Send Email
+                                    Send Custom Email
                                 </Button>
-                                <Button variant="secondary" onClick={() => setEditApplication({ ...selectedApplication })}>Edit Full Details</Button>
+                                <Button variant="secondary" onClick={() => setEditApplication({ ...selectedApplication })}>Edit Details</Button>
                                 <Button
                                     variant="outline"
                                     onClick={() => window.open(`mailto:${selectedApplication.email}`, '_blank')}
                                 >
-                                    Open In Mail App
+                                    Open In Mail
                                 </Button>
                                 <Button variant="outline" onClick={() => setSelectedApplication(null)}>Close</Button>
                             </div>
@@ -782,53 +1132,124 @@ export default function AdminProvidersPage() {
                 </DialogContent>
             </Dialog>
             <Dialog open={!!editApplication} onOpenChange={(open) => !open && setEditApplication(null)}>
-                <DialogContent className="max-w-2xl">
+                <DialogContent className="max-w-2xl max-h-[92vh]">
                     <DialogHeader>
                         <DialogTitle>Edit Provider Application</DialogTitle>
                         <DialogDescription>
-                            Update contact info, service coverage, and internal notes in one place.
+                            Full application details — contact info, trade, service area, and notes.
                         </DialogDescription>
                     </DialogHeader>
                     {editApplication ? (
-                        <div className="space-y-3">
-                            <div className="grid gap-3 sm:grid-cols-2">
-                                <div>
-                                    <Label className="text-xs">Contact name</Label>
-                                    <Input className="mt-1" value={editApplication.contact_name} onChange={(e) => setEditApplication({ ...editApplication, contact_name: e.target.value })} placeholder="Contact name" />
-                                </div>
-                                <div>
-                                    <Label className="text-xs">Business name</Label>
-                                    <Input className="mt-1" value={editApplication.business_name ?? ''} onChange={(e) => setEditApplication({ ...editApplication, business_name: e.target.value })} placeholder="Business name" />
-                                </div>
-                                <div>
-                                    <Label className="text-xs">Trade</Label>
-                                    <Input className="mt-1" value={editApplication.trade} onChange={(e) => setEditApplication({ ...editApplication, trade: e.target.value })} placeholder="Trade" />
-                                </div>
-                                <div>
-                                    <Label className="text-xs">Status</Label>
-                                    <div className="mt-1">
-                                        <StatusBadge status={editApplication.status} onChange={(s) => setEditApplication({ ...editApplication, status: s })} />
+                        <div className="max-h-[72vh] overflow-y-auto space-y-4 pr-1">
+
+                            {/* Contact */}
+                            <div>
+                                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Contact</p>
+                                <div className="grid gap-3 sm:grid-cols-2">
+                                    <div>
+                                        <Label className="text-xs">Contact name</Label>
+                                        <Input className="mt-1" value={editApplication.contact_name} onChange={(e) => setEditApplication({ ...editApplication, contact_name: e.target.value })} placeholder="Contact name" />
+                                    </div>
+                                    <div>
+                                        <Label className="text-xs">Business name</Label>
+                                        <Input className="mt-1" value={editApplication.business_name ?? ''} onChange={(e) => setEditApplication({ ...editApplication, business_name: e.target.value })} placeholder="Business name" />
+                                    </div>
+                                    <div>
+                                        <Label className="text-xs">Phone</Label>
+                                        <Input className="mt-1" value={editApplication.phone} onChange={(e) => setEditApplication({ ...editApplication, phone: e.target.value })} placeholder="Phone" />
+                                    </div>
+                                    <div>
+                                        <Label className="text-xs">Email</Label>
+                                        <Input className="mt-1" value={editApplication.email} onChange={(e) => setEditApplication({ ...editApplication, email: e.target.value })} placeholder="Email" />
+                                    </div>
+                                    <div>
+                                        <Label className="text-xs">Website</Label>
+                                        <Input className="mt-1" value={editApplication.website ?? ''} onChange={(e) => setEditApplication({ ...editApplication, website: e.target.value || null })} placeholder="https://" />
+                                    </div>
+                                    <div className="flex items-center gap-2 pt-5">
+                                        <input
+                                            type="checkbox"
+                                            id="edit-whatsapp"
+                                            checked={editApplication.whatsapp_available ?? false}
+                                            onChange={(e) => setEditApplication({ ...editApplication, whatsapp_available: e.target.checked })}
+                                            className="h-4 w-4 rounded border-border"
+                                        />
+                                        <Label htmlFor="edit-whatsapp" className="text-xs cursor-pointer">WhatsApp available</Label>
                                     </div>
                                 </div>
-                                <div>
-                                    <Label className="text-xs">Phone</Label>
-                                    <Input className="mt-1" value={editApplication.phone} onChange={(e) => setEditApplication({ ...editApplication, phone: e.target.value })} placeholder="Phone" />
-                                </div>
-                                <div>
-                                    <Label className="text-xs">Email</Label>
-                                    <Input className="mt-1" value={editApplication.email} onChange={(e) => setEditApplication({ ...editApplication, email: e.target.value })} placeholder="Email" />
-                                </div>
                             </div>
+
+                            {/* Trade */}
                             <div>
-                                <Label className="text-xs">Areas</Label>
-                                <Textarea className="mt-1" rows={3} value={editApplication.areas} onChange={(e) => setEditApplication({ ...editApplication, areas: e.target.value })} />
+                                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Trade</p>
+                                <div className="grid gap-3 sm:grid-cols-2">
+                                    <div>
+                                        <Label className="text-xs">Trade</Label>
+                                        <Input className="mt-1" value={editApplication.trade} onChange={(e) => setEditApplication({ ...editApplication, trade: e.target.value })} placeholder="e.g. Plumbing" />
+                                    </div>
+                                    <div>
+                                        <Label className="text-xs">Founded year</Label>
+                                        <Input className="mt-1" type="number" value={editApplication.founded_year ?? ''} onChange={(e) => setEditApplication({ ...editApplication, founded_year: e.target.value ? Number(e.target.value) : null })} placeholder="e.g. 2015" />
+                                    </div>
+                                    <div>
+                                        <Label className="text-xs">Team size</Label>
+                                        <Input className="mt-1" type="number" value={editApplication.team_size ?? ''} onChange={(e) => setEditApplication({ ...editApplication, team_size: e.target.value ? Number(e.target.value) : null })} placeholder="e.g. 5" />
+                                    </div>
+                                    <div>
+                                        <Label className="text-xs">Registration number</Label>
+                                        <Input className="mt-1" value={editApplication.registration_number ?? ''} onChange={(e) => setEditApplication({ ...editApplication, registration_number: e.target.value || null })} placeholder="Reg / CIPC number" />
+                                    </div>
+                                </div>
+                                <div className="mt-3">
+                                    <Label className="text-xs">Specialisations / trade description</Label>
+                                    <Textarea className="mt-1" rows={3} value={editApplication.trade_description ?? ''} onChange={(e) => setEditApplication({ ...editApplication, trade_description: e.target.value || null })} placeholder="What they specialise in..." />
+                                </div>
+                                <div className="mt-3">
+                                    <Label className="text-xs">Certifications</Label>
+                                    <Textarea className="mt-1" rows={2} value={editApplication.certifications ?? ''} onChange={(e) => setEditApplication({ ...editApplication, certifications: e.target.value || null })} placeholder="Any relevant certifications..." />
+                                </div>
+                                <div className="mt-3">
+                                    <Label className="text-xs">Highlights</Label>
+                                    <Textarea className="mt-1" rows={2} value={editApplication.highlights ?? ''} onChange={(e) => setEditApplication({ ...editApplication, highlights: e.target.value || null })} placeholder="Key highlights..." />
+                                </div>
                             </div>
+
+                            {/* Location */}
                             <div>
-                                <Label className="text-xs">Internal notes</Label>
-                                <Textarea className="mt-1" rows={4} value={editApplication.notes ?? ''} onChange={(e) => setEditApplication({ ...editApplication, notes: e.target.value })} />
+                                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Location</p>
+                                <div>
+                                    <Label className="text-xs">Business address</Label>
+                                    <Input className="mt-1" value={editApplication.address ?? ''} onChange={(e) => setEditApplication({ ...editApplication, address: e.target.value || null })} placeholder="Street address" />
+                                </div>
+                                <div className="mt-3">
+                                    <Label className="text-xs">Service areas</Label>
+                                    <Textarea className="mt-1" rows={2} value={editApplication.areas} onChange={(e) => setEditApplication({ ...editApplication, areas: e.target.value })} />
+                                </div>
                             </div>
-                            <div className="flex gap-2 pt-1">
-                                <Button onClick={() => void saveApplicationEdit()}>Save</Button>
+
+                            {/* Admin */}
+                            <div>
+                                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Admin</p>
+                                <div className="grid gap-3 sm:grid-cols-2">
+                                    <div>
+                                        <Label className="text-xs">Status</Label>
+                                        <div className="mt-1">
+                                            <StatusBadge status={editApplication.status} onChange={(s) => setEditApplication({ ...editApplication, status: s })} />
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <Label className="text-xs">Referral source</Label>
+                                        <Input className="mt-1" value={editApplication.referral ?? ''} onChange={(e) => setEditApplication({ ...editApplication, referral: e.target.value || null })} placeholder="How they heard about us" />
+                                    </div>
+                                </div>
+                                <div className="mt-3">
+                                    <Label className="text-xs">Internal notes</Label>
+                                    <Textarea className="mt-1" rows={3} value={editApplication.notes ?? ''} onChange={(e) => setEditApplication({ ...editApplication, notes: e.target.value || null })} />
+                                </div>
+                            </div>
+
+                            <div className="flex gap-2 pt-1 sticky bottom-0 bg-background pb-1">
+                                <Button onClick={() => void saveApplicationEdit()}>Save changes</Button>
                                 <Button variant="outline" onClick={() => setEditApplication(null)}>Cancel</Button>
                             </div>
                         </div>
@@ -875,6 +1296,29 @@ export default function AdminProvidersPage() {
                                     <p className="text-xs break-all font-mono">{selectedLiveProvider.google_place_id}</p>
                                 </div>
                             ) : null}
+                            {selectedLiveProvider.enrichment_review_required ? (
+                                <div className="rounded-md border border-amber-300 bg-amber-50 p-3">
+                                    <p className="text-xs font-semibold uppercase tracking-wide text-amber-800">
+                                        Enrichment needs review
+                                    </p>
+                                    <p className="mt-1 text-xs text-amber-900">
+                                        The AI enrichment failed the leak gate after retries. Some fields were dropped before being
+                                        saved. Re-queue enrichment after improving the source data, or edit the fields manually.
+                                    </p>
+                                    {selectedLiveProvider.enrichment_last_failure ? (
+                                        <p className="mt-2 text-[11px] text-amber-900/80">
+                                            <span className="font-mono">Last failure:</span>{' '}
+                                            {selectedLiveProvider.enrichment_last_failure}
+                                        </p>
+                                    ) : null}
+                                    {selectedLiveProvider.enrichment_last_failure_at ? (
+                                        <p className="text-[11px] text-amber-900/80">
+                                            <span className="font-mono">When:</span>{' '}
+                                            {new Date(selectedLiveProvider.enrichment_last_failure_at).toLocaleString()}
+                                        </p>
+                                    ) : null}
+                                </div>
+                            ) : null}
                             <div className="flex flex-wrap gap-2">
                                 <Button
                                     type="button"
@@ -884,6 +1328,14 @@ export default function AdminProvidersPage() {
                                 >
                                     {refreshingGoogle ? 'Refreshing…' : 'Refresh rating & reviews from Google'}
                                 </Button>
+                                {selectedLiveProvider.google_place_id ? (
+                                    <Button
+                                        variant="outline"
+                                        onClick={() => void requeueEnrichment(selectedLiveProvider)}
+                                    >
+                                        Re-queue enrichment
+                                    </Button>
+                                ) : null}
                                 {selectedLiveProvider.google_place_id ? (
                                     <Button
                                         variant="outline"
@@ -1025,6 +1477,117 @@ export default function AdminProvidersPage() {
                                     }
                                 />
                             </div>
+
+                            <div className="rounded-md border bg-muted/10 p-3 space-y-3">
+                                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                    Filter v2 — admin overrides (sticky)
+                                </p>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div>
+                                        <Label className="text-xs">Company size</Label>
+                                        <Select
+                                            value={editLiveProvider.company_size ?? '__none__'}
+                                            onValueChange={(v) =>
+                                                setEditLiveProvider({
+                                                    ...editLiveProvider,
+                                                    company_size:
+                                                        v === '__none__'
+                                                            ? null
+                                                            : (v as 'solo' | 'small' | 'mid' | 'large'),
+                                                })
+                                            }
+                                        >
+                                            <SelectTrigger className="mt-1 h-9 text-sm">
+                                                <SelectValue placeholder="Unset" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="__none__">Unset</SelectItem>
+                                                {COMPANY_SIZE_OPTIONS.map((o) => (
+                                                    <SelectItem key={o.value} value={o.value}>
+                                                        {o.label}
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                        {editLiveProvider.company_size_source ? (
+                                            <p className="mt-1 text-[11px] text-muted-foreground">
+                                                Source: {editLiveProvider.company_size_source}
+                                            </p>
+                                        ) : null}
+                                    </div>
+                                    <div>
+                                        <Label className="text-xs">Years in business</Label>
+                                        <Input
+                                            className="mt-1"
+                                            type="number"
+                                            min={0}
+                                            max={200}
+                                            value={editLiveProvider.years_in_business ?? ''}
+                                            onChange={(e) =>
+                                                setEditLiveProvider({
+                                                    ...editLiveProvider,
+                                                    years_in_business:
+                                                        e.target.value === ''
+                                                            ? null
+                                                            : Number(e.target.value),
+                                                })
+                                            }
+                                            placeholder="e.g. 8"
+                                        />
+                                        {editLiveProvider.years_in_business_source ? (
+                                            <p className="mt-1 text-[11px] text-muted-foreground">
+                                                Source: {editLiveProvider.years_in_business_source}
+                                            </p>
+                                        ) : null}
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <Label className="text-xs">Certifications</Label>
+                                    <div className="mt-1.5 flex flex-wrap gap-1.5">
+                                        {CERTIFICATION_CATALOG.map((cert) => {
+                                            const active = (editLiveProvider.certifications ?? [])
+                                                .map((c) => c.slug)
+                                                .includes(cert.slug);
+                                            return (
+                                                <button
+                                                    key={cert.slug}
+                                                    type="button"
+                                                    onClick={() => {
+                                                        const current = editLiveProvider.certifications ?? [];
+                                                        const next = active
+                                                            ? current.filter((c) => c.slug !== cert.slug)
+                                                            : [
+                                                                  ...current,
+                                                                  {
+                                                                      slug: cert.slug,
+                                                                      label: cert.label,
+                                                                      source: 'admin',
+                                                                  },
+                                                              ];
+                                                        setEditLiveProvider({
+                                                            ...editLiveProvider,
+                                                            certifications: next,
+                                                        });
+                                                    }}
+                                                    className={`rounded-full border px-2.5 py-1 text-xs transition-colors ${
+                                                        active
+                                                            ? 'border-foreground bg-foreground text-background'
+                                                            : 'border-border text-muted-foreground hover:bg-muted'
+                                                    }`}
+                                                    title={`${cert.issuer} • slug: ${cert.slug}`}
+                                                >
+                                                    {cert.label}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                    <p className="mt-2 text-[11px] text-muted-foreground">
+                                        Toggling a cert here marks the row source = admin and is never overwritten by enrichment.
+                                    </p>
+                                </div>
+                            </div>
+
                             <div className="flex gap-2 pt-2">
                                 <Button onClick={() => void saveLiveProviderEdit()}>Save</Button>
                                 <Button variant="outline" onClick={() => setEditLiveProvider(null)}>Cancel</Button>

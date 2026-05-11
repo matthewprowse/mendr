@@ -25,8 +25,8 @@ export function HomeMarketingHeroClient() {
                             Something Broken At Home? Diagnose It Before Calling Anyone.
                         </h1>
                         <p className="max-w-2xl text-base text-muted-foreground sm:text-lg">
-                            Upload a photo, get a clearer understanding of what is likely happening, and make a better
-                            decision before speaking to providers.
+                            Upload a photo. Get a written report in under 60 seconds. Know what to say before you call
+                            anyone.
                         </p>
                         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
                             <StartDiagnosisButton size="lg">Generate Free Scandio Report</StartDiagnosisButton>

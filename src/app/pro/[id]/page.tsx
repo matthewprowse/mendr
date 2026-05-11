@@ -1,5 +1,11 @@
-import LegacyProClientPage from '../legacy-pro-client-page';
+import { redirect } from 'next/navigation';
 
-export default async function ProByIdPage() {
-    return <LegacyProClientPage />;
+/** Permanent redirect — route moved to /contractors/[id] */
+export default async function ProByIdPage({
+    params,
+}: {
+    params: Promise<{ id: string }>;
+}) {
+    const { id } = await params;
+    redirect(`/contractors/${encodeURIComponent(id)}`);
 }

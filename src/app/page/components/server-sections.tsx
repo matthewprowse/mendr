@@ -1,15 +1,7 @@
 import Link from 'next/link';
-import { Facebook, Instagram, Linkedin, Twitter } from 'lucide-react';
 import { Placeholder } from '@/components/placeholder';
 import { Button } from '@/components/ui/button';
 import { BENTO_POINTS } from '@/app/page/components/content';
-
-const SOCIAL_LINKS = [
-    { href: 'https://x.com/', label: 'X', icon: Twitter },
-    { href: 'https://www.linkedin.com/', label: 'LinkedIn', icon: Linkedin },
-    { href: 'https://www.instagram.com/', label: 'Instagram', icon: Instagram },
-    { href: 'https://www.facebook.com/', label: 'Facebook', icon: Facebook },
-] as const;
 
 export function HomeMarketingProblemSection() {
     return (
@@ -22,7 +14,7 @@ export function HomeMarketingProblemSection() {
                     That uncertainty leads to unclear quotes, repeated explanations, and wasted call-outs.
                 </p>
                 <p className="mt-3 text-base text-background sm:text-lg">
-                    Scandio gives you a clearer starting point before the first call.
+                    Scandio gives you a written diagnosis before the first call - so you know what you are dealing with.
                 </p>
             </div>
         </section>
@@ -36,8 +28,7 @@ export function HomeMarketingValueSection() {
                 <div className="mx-auto mb-10 max-w-3xl text-center sm:mb-12">
                     <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">Why Homeowners Use Scandio</h2>
                     <p className="mt-3 text-base text-muted-foreground">
-                        Scandio is built to empower homeowners to better understand maintenance issues before speaking to
-                        anyone, so each decision starts from stronger context.
+                        A written diagnosis before any call. No jargon, no account, no cost.
                     </p>
                 </div>
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-6">
@@ -71,7 +62,7 @@ export function HomeMarketingCtaSection() {
                 <p className="mt-3 text-base text-white/70">Free. Fast. Built For Homeowners.</p>
                 <div className="mt-6">
                     <Button asChild size="lg" className="bg-white font-medium text-black hover:bg-white/90">
-                        <Link href="/welcome">Generate Free Scandio Report</Link>
+                        <Link href="/start">Generate Free Scandio Report</Link>
                     </Button>
                 </div>
             </div>
@@ -90,20 +81,6 @@ export function HomeMarketingFooter() {
                             Home maintenance diagnosis and smarter provider matching, built to reduce uncertainty before
                             repair work begins.
                         </p>
-                        <div className="mt-4 flex items-center gap-2">
-                            {SOCIAL_LINKS.map(({ href, label, icon: Icon }) => (
-                                <a
-                                    key={label}
-                                    href={href}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    aria-label={label}
-                                    className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-border/60 text-muted-foreground transition-colors hover:text-foreground"
-                                >
-                                    <Icon className="h-4 w-4" />
-                                </a>
-                            ))}
-                        </div>
                     </div>
                     <div>
                         <p className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Explore</p>
@@ -131,7 +108,7 @@ export function HomeMarketingFooter() {
                             {(
                                 [
                                     ['Contact', '/contact'],
-                                    ['For Providers', '/pro/join'],
+                                    ['For Providers', '/contractors'],
                                     ['Privacy Policy', '/privacy'],
                                     ['Terms Of Service', '/terms'],
                                 ] as [string, string][]

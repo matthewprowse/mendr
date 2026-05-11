@@ -1,8 +1,9 @@
 const TRADE_QUERY_MAP: Record<string, string> = {
     electrical: 'Electrician',
     plumbing: 'Plumber',
-    // R10: Security & Access is split at the buildProviderQuery level by tradeDetail.
+    // R10: Security is split at the buildProviderQuery level by tradeDetail.
     // This entry is only used as a fallback when tradeDetail is absent.
+    security: 'Gate and garage door contractor',
     'security & access': 'Gate and garage door contractor',
     'building & construction': 'Builder',
     'carpentry & woodwork': 'Carpenter',
@@ -41,7 +42,8 @@ const TRADE_QUERY_MAP: Record<string, string> = {
 const TRADE_SERVICE_LABEL_MAP: Record<string, string> = {
     electrical: 'Electrical',
     plumbing: 'Plumbing',
-    'security & access': 'Security & Access',
+    security: 'Security',
+    'security & access': 'Security',
     'building & construction': 'Building & Construction',
     'carpentry & woodwork': 'Carpentry & Woodwork',
     'flooring & tiling': 'Flooring & Tiling',
@@ -80,11 +82,11 @@ export function buildProviderQuery(input: {
             tradeDetailNorm.includes('well') ||
             tradeDetailNorm.includes('drill'));
 
-    // R10: Security & Access — differentiate gate motor vs. garage door based on tradeDetail.
+    // R10: Security — differentiate gate motor vs. garage door based on tradeDetail.
     // A gate motor specialist (CENTURION system technician) is a different contractor from a
     // garage door installer. Using a single query for both wastes result slots.
     function resolveSecurityAccessQuery(): string {
-        if (!tradeNorm.includes('security') && tradeNorm !== 'security & access') return '';
+        if (!tradeNorm.includes('security')) return '';
         if (tradeDetailNorm.includes('gate') || tradeDetailNorm.includes('motor')) {
             return 'Gate motor repair contractor';
         }

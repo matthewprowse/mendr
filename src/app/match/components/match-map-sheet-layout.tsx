@@ -9,16 +9,24 @@ import {
     useSyncExternalStore,
     type ReactNode,
 } from 'react';
-import { ScanFlowShell } from '@/components/scan-flow-shell';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft } from '@phosphor-icons/react';
 
-const HEADER_STOP_TOP_PX = 80;
-const SHEET_MIN_HEIGHT_PX = 348;
+/** Height of the fixed FlowStepHeader (h-16 = 64px). */
+const HEADER_STOP_TOP_PX = 64;
+/** "Half" sheet covers ~50% of a typical mobile viewport — preserves map visibility. */
+const SHEET_HALF_HEIGHT_PX = 348;
+/** "Peek" sheet only exposes the drag handle, count chip, and the first card. */
+const SHEET_PEEK_HEIGHT_PX = 140;
 const SHEET_MAX_RADIUS_PX = 16;
 const SHEET_RADIUS_REDUCTION_DISTANCE_PX = 196;
+/** Threshold expressed as a fraction of viewport height (top from top). */
+const FULL_SNAP_THRESHOLD = 0.25;
+const HALF_SNAP_THRESHOLD = 0.7;
 
 const DESKTOP_SPLIT_MQ = '(min-width: 1024px)';
+
+export type SheetMode = 'peek' | 'half' | 'full';
 
 function subscribeDesktopSplit(onStoreChange: () => void) {
     if (typeof window === 'undefined') return () => {};
@@ -41,8 +49,17 @@ export type MatchMapSheetLayoutProps = {
     /** Scroll selected provider card into view when this key changes (e.g. placeId). */
     scrollToKey?: string | null;
     getScrollTarget?: () => HTMLElement | null;
-    /** Increment (e.g. on map pin tap) to expand the sheet and show the list. */
+    /** Increment (e.g. on map pin tap) to expand the sheet (defaults to `half` so map stays visible). */
     expandRequestId?: number;
+    /**
+     * Mode requested for the next `expandRequestId` increment. Defaults to `half`.
+     * Set to `full` if you want a marker tap to fully expand instead of half.
+     */
+    expandToMode?: SheetMode;
+    /** Optional count rendered as a chip on the drag handle when the sheet is in peek mode. */
+    peekProviderCount?: number;
+    /** Notified each time the sheet snaps to a different mode (peek/half/full). */
+    onSheetModeChange?: (next: SheetMode, prev: SheetMode) => void;
 };
 
 export const MatchMapSheetLayout = forwardRef<HTMLDivElement, MatchMapSheetLayoutProps>(
@@ -56,6 +73,9 @@ export const MatchMapSheetLayout = forwardRef<HTMLDivElement, MatchMapSheetLayou
             scrollToKey,
             getScrollTarget,
             expandRequestId = 0,
+            expandToMode = 'half',
+            peekProviderCount,
+            onSheetModeChange,
         },
         ref
     ) {
@@ -65,9 +85,21 @@ export const MatchMapSheetLayout = forwardRef<HTMLDivElement, MatchMapSheetLayou
             () => false
         );
 
-        const [sheetMode, setSheetMode] = useState<'half' | 'full'>('half');
+        const [sheetMode, setSheetMode] = useState<SheetMode>('peek');
         const [sheetTopPx, setSheetTopPx] = useState<number | null>(null);
         const [isDraggingSheet, setIsDraggingSheet] = useState(false);
+        const onSheetModeChangeRef = useRef(onSheetModeChange);
+        useEffect(() => {
+            onSheetModeChangeRef.current = onSheetModeChange;
+        }, [onSheetModeChange]);
+        const prevSheetModeRef = useRef<SheetMode>('peek');
+        useEffect(() => {
+            const prev = prevSheetModeRef.current;
+            if (prev !== sheetMode) {
+                onSheetModeChangeRef.current?.(sheetMode, prev);
+                prevSheetModeRef.current = sheetMode;
+            }
+        }, [sheetMode]);
 
         const listScrollRef = useRef<HTMLDivElement | null>(null);
         /** Last `scrollToKey` we handled — ignore duplicate runs when only `getScrollTarget` identity changes. */
@@ -89,19 +121,34 @@ export const MatchMapSheetLayout = forwardRef<HTMLDivElement, MatchMapSheetLayou
             [ref]
         );
 
-        const getCollapsedTop = useCallback(() => {
+        /**
+         * Y-position of the sheet's top edge for each mode. `peek` exposes ~140px above the safe-area inset,
+         * `half` exposes ~348px (preserves the map). `full` pins to the header stop.
+         */
+        const getTopForMode = useCallback((mode: SheetMode): number => {
             if (typeof window === 'undefined') return HEADER_STOP_TOP_PX;
-            return Math.max(HEADER_STOP_TOP_PX, window.innerHeight - SHEET_MIN_HEIGHT_PX);
+            const vh = window.innerHeight;
+            if (mode === 'full') return HEADER_STOP_TOP_PX;
+            if (mode === 'half') return Math.max(HEADER_STOP_TOP_PX, vh - SHEET_HALF_HEIGHT_PX);
+            return Math.max(HEADER_STOP_TOP_PX, vh - SHEET_PEEK_HEIGHT_PX);
         }, []);
+
+        const getCollapsedTop = useCallback(() => getTopForMode('peek'), [getTopForMode]);
+
+        const snapMode = useCallback(
+            (mode: SheetMode) => {
+                const next = getTopForMode(mode);
+                setSheetMode(mode);
+                setSheetTopPx(next);
+                sheetTopRef.current = next;
+            },
+            [getTopForMode]
+        );
 
         const setSheetTopFromScroll = useCallback(() => {
             if (typeof window === 'undefined') return;
-            if (sheetMode === 'full') {
-                setSheetTopPx(HEADER_STOP_TOP_PX);
-                return;
-            }
-            setSheetTopPx(getCollapsedTop());
-        }, [getCollapsedTop, sheetMode]);
+            setSheetTopPx(getTopForMode(sheetMode));
+        }, [getTopForMode, sheetMode]);
 
         useEffect(() => {
             sheetTopRef.current = sheetTopPx;
@@ -113,18 +160,14 @@ export const MatchMapSheetLayout = forwardRef<HTMLDivElement, MatchMapSheetLayou
                 setSheetTopFromScroll();
             });
             const onResize = () => {
-                if (sheetMode === 'full') {
-                    setSheetTopPx(HEADER_STOP_TOP_PX);
-                } else {
-                    setSheetTopPx(getCollapsedTop());
-                }
+                setSheetTopPx(getTopForMode(sheetMode));
             };
             window.addEventListener('resize', onResize);
             return () => {
                 cancelAnimationFrame(raf);
                 window.removeEventListener('resize', onResize);
             };
-        }, [getCollapsedTop, isDesktopLayout, setSheetTopFromScroll, sheetMode]);
+        }, [getTopForMode, isDesktopLayout, setSheetTopFromScroll, sheetMode]);
 
         useEffect(() => {
             if (!scrollToKey) {
@@ -149,19 +192,28 @@ export const MatchMapSheetLayout = forwardRef<HTMLDivElement, MatchMapSheetLayou
             }, 150);
         }, [scrollToKey, getScrollTarget]);
 
-        const expandSheet = useCallback(() => {
-            setSheetMode('full');
-            setSheetTopPx(HEADER_STOP_TOP_PX);
-            sheetTopRef.current = HEADER_STOP_TOP_PX;
-        }, []);
+        /**
+         * Cycle the sheet on drag-handle tap. Tapping in peek goes to half (map still visible),
+         * tapping in half goes to full, tapping in full collapses back to peek.
+         */
+        const cycleSheet = useCallback(() => {
+            setSheetMode((current) => {
+                const next: SheetMode =
+                    current === 'peek' ? 'half' : current === 'half' ? 'full' : 'peek';
+                const nextTop = getTopForMode(next);
+                setSheetTopPx(nextTop);
+                sheetTopRef.current = nextTop;
+                return next;
+            });
+        }, [getTopForMode]);
 
         useEffect(() => {
             if (isDesktopLayout || !expandRequestId) return;
             const raf = requestAnimationFrame(() => {
-                expandSheet();
+                snapMode(expandToMode);
             });
             return () => cancelAnimationFrame(raf);
-        }, [expandRequestId, expandSheet, isDesktopLayout]);
+        }, [expandRequestId, expandToMode, isDesktopLayout, snapMode]);
 
         const handleSheetDragStart = useCallback(
             (clientY: number) => {
@@ -188,18 +240,19 @@ export const MatchMapSheetLayout = forwardRef<HTMLDivElement, MatchMapSheetLayou
         const handleSheetDragEnd = useCallback(() => {
             if (!isDraggingSheet) return;
             setIsDraggingSheet(false);
+            if (typeof window === 'undefined') return;
             const currentTop = sheetTopPx ?? getCollapsedTop();
-            const midpoint = (HEADER_STOP_TOP_PX + getCollapsedTop()) / 2;
-            if (currentTop <= midpoint) {
-                setSheetMode('full');
-                setSheetTopPx(HEADER_STOP_TOP_PX);
-                sheetTopRef.current = HEADER_STOP_TOP_PX;
+            const vh = window.innerHeight;
+            // Snap thresholds expressed as fractions of viewport height (top from top of screen).
+            // top < 25% vh → snap to full. 25-70% vh → snap to half. else → peek.
+            if (currentTop <= vh * FULL_SNAP_THRESHOLD) {
+                snapMode('full');
+            } else if (currentTop <= vh * HALF_SNAP_THRESHOLD) {
+                snapMode('half');
             } else {
-                setSheetMode('half');
-                setSheetTopPx(getCollapsedTop());
-                sheetTopRef.current = getCollapsedTop();
+                snapMode('peek');
             }
-        }, [getCollapsedTop, isDraggingSheet, sheetTopPx]);
+        }, [getCollapsedTop, isDraggingSheet, sheetTopPx, snapMode]);
 
         useEffect(() => {
             if (isDesktopLayout) return;
@@ -222,8 +275,9 @@ export const MatchMapSheetLayout = forwardRef<HTMLDivElement, MatchMapSheetLayou
 
                 const dy = touch.clientY - prevY;
                 const currentTop = sheetTopRef.current ?? getCollapsedTop();
-                const collapsedTop = getCollapsedTop();
+                const peekTop = getTopForMode('peek');
 
+                // Drag up — climb from peek/half toward full while clamped to header stop.
                 if (dy < 0 && currentTop > HEADER_STOP_TOP_PX) {
                     const consume = Math.min(-dy, currentTop - HEADER_STOP_TOP_PX);
                     const nextTop = currentTop - consume;
@@ -234,14 +288,15 @@ export const MatchMapSheetLayout = forwardRef<HTMLDivElement, MatchMapSheetLayou
                     return;
                 }
 
-                if (dy > 0 && el.scrollTop <= 0 && currentTop < collapsedTop) {
-                    const nextTop = Math.min(collapsedTop, currentTop + dy);
+                // Drag down at the top of the list — collapse from full/half down to peek.
+                if (dy > 0 && el.scrollTop <= 0 && currentTop < peekTop) {
+                    const nextTop = Math.min(peekTop, currentTop + dy);
                     sheetTopRef.current = nextTop;
                     setSheetTopPx(nextTop);
-                    if (nextTop >= collapsedTop - 0.5) {
-                        setSheetMode('half');
-                        setSheetTopPx(collapsedTop);
-                        sheetTopRef.current = collapsedTop;
+                    if (nextTop >= peekTop - 0.5) {
+                        setSheetMode('peek');
+                        setSheetTopPx(peekTop);
+                        sheetTopRef.current = peekTop;
                     }
                     event.preventDefault();
                 }
@@ -253,7 +308,7 @@ export const MatchMapSheetLayout = forwardRef<HTMLDivElement, MatchMapSheetLayou
                 el.removeEventListener('touchstart', onTouchStart);
                 el.removeEventListener('touchmove', onTouchMove);
             };
-        }, [getCollapsedTop, isDesktopLayout, isDraggingSheet]);
+        }, [getCollapsedTop, getTopForMode, isDesktopLayout, isDraggingSheet]);
 
         const collapsedTop = getCollapsedTop();
         const baseTop = sheetTopPx ?? collapsedTop;
@@ -286,7 +341,7 @@ export const MatchMapSheetLayout = forwardRef<HTMLDivElement, MatchMapSheetLayou
                 if (!scrollEl) return;
 
                 const currentTop = sheetTopRef.current ?? getCollapsedTop();
-                const collapsedTopLocal = getCollapsedTop();
+                const peekTop = getTopForMode('peek');
                 const deltaY = event.deltaY;
 
                 if (deltaY > 0 && currentTop > HEADER_STOP_TOP_PX) {
@@ -299,15 +354,15 @@ export const MatchMapSheetLayout = forwardRef<HTMLDivElement, MatchMapSheetLayou
                     return;
                 }
 
-                if (deltaY < 0 && scrollEl.scrollTop <= 0 && currentTop < collapsedTopLocal) {
-                    const consume = Math.min(-deltaY, collapsedTopLocal - currentTop);
+                if (deltaY < 0 && scrollEl.scrollTop <= 0 && currentTop < peekTop) {
+                    const consume = Math.min(-deltaY, peekTop - currentTop);
                     const nextTop = currentTop + consume;
                     sheetTopRef.current = nextTop;
                     setSheetTopPx(nextTop);
-                    if (nextTop >= collapsedTopLocal - 0.5) {
-                        setSheetMode('half');
-                        setSheetTopPx(collapsedTopLocal);
-                        sheetTopRef.current = collapsedTopLocal;
+                    if (nextTop >= peekTop - 0.5) {
+                        setSheetMode('peek');
+                        setSheetTopPx(peekTop);
+                        sheetTopRef.current = peekTop;
                     }
                     event.preventDefault();
                 }
@@ -315,7 +370,7 @@ export const MatchMapSheetLayout = forwardRef<HTMLDivElement, MatchMapSheetLayou
 
             el.addEventListener('wheel', onWheel, { passive: false });
             return () => el.removeEventListener('wheel', onWheel);
-        }, [getCollapsedTop, isDesktopLayout, isDraggingSheet]);
+        }, [getCollapsedTop, getTopForMode, isDesktopLayout, isDraggingSheet]);
 
         useEffect(() => {
             if (typeof window === 'undefined' || !isDraggingSheet || isDesktopLayout) return;
@@ -341,88 +396,110 @@ export const MatchMapSheetLayout = forwardRef<HTMLDivElement, MatchMapSheetLayou
         }, [handleSheetDragEnd, handleSheetDragMove, isDesktopLayout, isDraggingSheet]);
 
         return (
-            <ScanFlowShell
-                onClose={onClose}
-                constrainContentWidth
-                logoClassName="hidden"
-                headerClassName="bg-background shadow-md"
-                headerInnerClassName="max-w-3xl lg:max-w-7xl"
-                contentWrapperClassName="p-0 gap-0 min-h-screen pt-20 lg:flex lg:min-h-0 lg:flex-1 lg:flex-col lg:p-4 lg:pt-20"
-                contentClassName="relative mx-auto flex w-full max-w-3xl flex-col gap-0 p-0 pb-[52dvh] lg:max-w-7xl lg:min-h-0 lg:flex-1 lg:flex-row lg:gap-3 lg:overflow-hidden lg:bg-transparent lg:p-0 lg:pb-0"
-                headerLeft={
-                    <Button variant="outline" className="size-10" type="button" onClick={onClose}>
-                        <ArrowLeft size={24} weight="bold" className="text-foreground" />
-                    </Button>
-                }
-                headerRight={headerRight}
-            >
-                <div
-                    className={
-                        isDesktopLayout
-                            ? 'relative z-20 flex min-h-0 w-full flex-1 flex-col overflow-hidden bg-background p-3 lg:h-[min(920px,calc(100dvh-9rem))] lg:w-1/2'
-                            : 'fixed inset-x-0 bottom-0 z-20 flex flex-col overflow-hidden bg-background px-3 pt-2'
-                    }
-                    style={
-                        isDesktopLayout
-                            ? undefined
-                            : {
-                                  top: `${HEADER_STOP_TOP_PX}px`,
-                                  bottom: `calc(100dvh - ${baseTop}px + 16px)`,
-                              }
-                    }
-                >
-                    <div
-                        className={
-                            isDesktopLayout
-                                ? 'relative min-h-0 flex-1 overflow-hidden rounded-xl border border-border bg-background shadow-sm'
-                                : 'relative min-h-0 flex-1 overflow-hidden rounded-t-xl border border-border bg-background shadow-sm'
-                        }
+            <div className="h-dvh overflow-hidden overscroll-none flex flex-col bg-background">
+                {/* Fixed header — same spec as FlowStepHeader (h-16, z-[200], bg-background) */}
+                <div className="fixed inset-x-0 top-0 z-[200] flex h-16 items-center gap-3 bg-background px-4 shadow-sm">
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        className="size-9 shrink-0"
+                        type="button"
+                        onClick={onClose}
+                        aria-label="Back"
                     >
-                        {mapSlot}
-                        {mapLoadingOverlay}
+                        <ArrowLeft size={18} weight="bold" className="text-foreground" />
+                    </Button>
+                    <div className="min-w-0 flex-1">
+                        {headerRight}
                     </div>
                 </div>
 
-                <div
-                    className={
-                        isDesktopLayout
-                            ? 'relative z-30 flex min-h-0 w-full flex-1 touch-pan-y flex-col gap-4 overflow-y-auto border-border bg-background px-4 pb-4 pt-4 shadow-lg lg:h-[min(920px,calc(100dvh-9rem))] lg:w-1/2 lg:border-l lg:border-t-0 lg:px-5 lg:py-5 lg:shadow-none'
-                            : 'fixed inset-x-0 z-30 mx-auto flex w-full max-w-3xl touch-pan-y flex-col gap-4 border-t border-border bg-background px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 shadow-lg'
-                    }
-                    ref={setListRef}
-                    style={
-                        isDesktopLayout
-                            ? undefined
-                            : {
-                                  top: `${baseTop}px`,
-                                  height: `calc(100dvh - ${baseTop}px)`,
-                                  minHeight: `${SHEET_MIN_HEIGHT_PX}px`,
-                                  borderTopLeftRadius: dynamicTopRadius,
-                                  borderTopRightRadius: dynamicTopRadius,
-                                  willChange: 'top, border-top-left-radius, border-top-right-radius',
-                                  overflowY: isSheetContentScrollable ? 'auto' : 'hidden',
-                              }
-                    }
-                >
-                    {!isDesktopLayout ? (
-                        <button
-                            type="button"
-                            onClick={expandSheet}
-                            onMouseDown={(event) => handleSheetDragStart(event.clientY)}
-                            onTouchStart={(event) => {
-                                const touch = event.touches[0];
-                                if (!touch) return;
-                                handleSheetDragStart(touch.clientY);
-                            }}
-                            className="mx-auto flex h-5 w-20 items-center justify-center"
-                            aria-label="Expand provider list"
+                {/* Body — map fills the background; sheet overlays it */}
+                <div className="relative min-h-0 flex-1 pt-16 lg:flex lg:flex-row lg:gap-3 lg:p-4 lg:pt-20">
+                    {/* Map panel */}
+                    <div
+                        className={
+                            isDesktopLayout
+                                ? 'relative z-20 flex min-h-0 w-full flex-1 flex-col overflow-hidden bg-background p-3 lg:h-[min(920px,calc(100dvh-9rem))] lg:w-1/2'
+                                : 'fixed inset-x-0 bottom-0 z-20 flex flex-col overflow-hidden bg-background px-3 pt-2'
+                        }
+                        style={
+                            isDesktopLayout
+                                ? undefined
+                                : {
+                                      top: `${HEADER_STOP_TOP_PX}px`,
+                                      bottom: `calc(100dvh - ${baseTop}px + 16px)`,
+                                  }
+                        }
+                    >
+                        <div
+                            className={
+                                isDesktopLayout
+                                    ? 'relative min-h-0 flex-1 overflow-hidden rounded-xl border border-border bg-background shadow-sm'
+                                    : 'relative min-h-0 flex-1 overflow-hidden rounded-t-xl border border-border bg-background shadow-sm'
+                            }
                         >
-                            <span className="h-1.5 w-10 rounded-full bg-muted" />
-                        </button>
-                    ) : null}
-                    {children}
+                            {mapSlot}
+                            {mapLoadingOverlay}
+                        </div>
+                    </div>
+
+                    {/* Sheet panel */}
+                    <div
+                        className={
+                            isDesktopLayout
+                                ? 'relative z-30 flex min-h-0 w-full flex-1 touch-pan-y flex-col gap-4 overflow-y-auto border-border bg-background px-4 pb-4 pt-4 shadow-lg lg:h-[min(920px,calc(100dvh-9rem))] lg:w-1/2 lg:border-l lg:border-t-0 lg:px-5 lg:py-5 lg:shadow-none'
+                                : 'fixed inset-x-0 z-30 mx-auto flex w-full max-w-3xl touch-pan-y flex-col gap-4 border-t border-border bg-background px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 shadow-lg'
+                        }
+                        ref={setListRef}
+                        style={
+                            isDesktopLayout
+                                ? undefined
+                                : {
+                                      top: `${baseTop}px`,
+                                      height: `calc(100dvh - ${baseTop}px)`,
+                                      minHeight: `${SHEET_PEEK_HEIGHT_PX}px`,
+                                      borderTopLeftRadius: dynamicTopRadius,
+                                      borderTopRightRadius: dynamicTopRadius,
+                                      willChange: 'top, border-top-left-radius, border-top-right-radius',
+                                      overflowY: isSheetContentScrollable ? 'auto' : 'hidden',
+                                  }
+                        }
+                    >
+                        {!isDesktopLayout ? (
+                            <div className="relative mx-auto flex h-6 w-full items-center justify-center">
+                                <button
+                                    type="button"
+                                    onClick={cycleSheet}
+                                    onMouseDown={(event) => handleSheetDragStart(event.clientY)}
+                                    onTouchStart={(event) => {
+                                        const touch = event.touches[0];
+                                        if (!touch) return;
+                                        handleSheetDragStart(touch.clientY);
+                                    }}
+                                    className="flex h-6 w-24 items-center justify-center"
+                                    aria-label={
+                                        sheetMode === 'full'
+                                            ? 'Collapse provider list'
+                                            : 'Expand provider list'
+                                    }
+                                >
+                                    <span className="h-1.5 w-10 rounded-full bg-muted" />
+                                </button>
+                                {sheetMode === 'peek' && typeof peekProviderCount === 'number' && peekProviderCount > 0 ? (
+                                    <span
+                                        className="absolute right-2 top-1 rounded-full bg-foreground px-2 py-0.5 text-[11px] font-medium leading-none text-background"
+                                        aria-label={`${peekProviderCount} providers found`}
+                                    >
+                                        {peekProviderCount} match{peekProviderCount === 1 ? '' : 'es'}
+                                    </span>
+                                ) : null}
+                            </div>
+                        ) : null}
+                        {children}
+                    </div>
                 </div>
-            </ScanFlowShell>
+            </div>
         );
     }
 );

@@ -4,6 +4,20 @@ export type MatchLocation = {
     address: string;
 };
 
+export type MatchProviderCompanySize = 'solo' | 'small' | 'mid' | 'large';
+
+export type MatchProviderCertification = {
+    slug: string;
+    label: string;
+    /** Short label suitable for compact card chips (e.g. "ECB"). */
+    short?: string;
+};
+
+export type MatchProviderImage = {
+    url: string;
+    caption?: string;
+};
+
 export type MatchProvider = {
     placeId: string;
     place_id?: string;
@@ -31,6 +45,11 @@ export type MatchProvider = {
     enrichmentReviewSummary?: string | null;
     responseProfile?: string | null;
     profileCompleteness?: number;
+    // Filter v2 fields (populated from providers + provider_certifications + provider_images)
+    companySize?: MatchProviderCompanySize | null;
+    yearsInBusiness?: number | null;
+    certifications?: MatchProviderCertification[];
+    images?: MatchProviderImage[];
 };
 
 export type ProvidersRequest = {
@@ -75,3 +94,24 @@ export type GeocodeResponse = {
     address?: string;
     error?: string;
 };
+
+/**
+ * Full contractor profile for the `/contractors/[id]` page.
+ *
+ * Superset of `MatchProvider` plus long-form copy and contractor-only fields
+ * (gallery, key person, weekday descriptions, etc.). Returned by GET
+ * `/api/providers/[id]` and consumed by `useContractor`.
+ */
+export type ContractorProfile = MatchProvider & {
+    googlePlaceId: string | null;
+    bio: string | null;
+    about: string | null;
+    pastWork: string | null;
+    summaryLong: string | null;
+    keyPerson: string | null;
+    highlights: string[];
+    serviceAreas: string[];
+    /** "HH:mm" in the provider's local time when closed; null when open or unknown. */
+    nextOpensAt: string | null;
+};
+

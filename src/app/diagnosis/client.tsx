@@ -7,15 +7,14 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import heic2any from 'heic2any';
 import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
 import { getSupabase } from '@/lib/supabase';
 import { Badge } from '@/components/ui/badge';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import { Skeleton } from '@/components/ui/skeleton';
 import type { DiagnosisData, Provider } from '@/app/chat/components/types';
 import { DiagnosisLeaveDialog } from '@/components/diagnosis-leave-dialog';
-import { ScanFlowShell } from '@/components/scan-flow-shell';
 import { BetaCostEstimateCard } from '@/components/beta-cost-estimate-card';
 import { cleanThoughtSentenceStarts, splitDetailAndHazard } from '@/lib/diagnosis-display';
 import { parseDiagnosisFromModelResponse } from '@/lib/parse-diagnosis-from-model-response';
@@ -33,10 +32,18 @@ import {
     patchConversation,
     type ConversationDiagnosisRow,
 } from '@/lib/diagnoses-api';
+import { enrichDiagnosisWithPartPrices } from '@/lib/parts-prices/enrich-diagnosis';
+import {
+    isDiagnosisAccurateForPrefetch,
+    prefetchProvidersIntoMatchCache,
+    shouldSkipDiagnosisPipeline,
+} from '@/features/diagnosis/processing-orchestrator';
 import { mergeMarketRatesResponseIntoDiagnosis } from '@/lib/market-rates/merge-client';
+import { getPendingDiagnosisImages } from '@/lib/pending-diagnosis-images-cache';
 import { useAuth } from '@/context/auth-context';
-import { ArrowLeft, DownloadSimple, Share } from '@phosphor-icons/react';
-import { Separator } from '@/components/ui/separator';
+import { ShareNetwork, ArrowLeft } from '@phosphor-icons/react';
+import { trackEvent } from '@/lib/analytics';
+import { StepHeading } from '@/components/match/flow-shell';
 
 const URGENCY_LABELS: Record<string, string> = {
     immediate: 'Immediate',
@@ -46,22 +53,82 @@ const URGENCY_LABELS: Record<string, string> = {
 };
 
 const DIAGNOSIS_MAX_RETRIES = 3;
-const HEADER_STICKY_OFFSET_PX = 72;
+/** Inline header region (~pt-5 + h-11 + pb-2) for sticky title swap. */
+const HEADER_HEIGHT_PX = 72;
+const MIN_DESCRIPTION_CHARS = 25;
 
 function sleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 const DEFAULT_MATCH_RADIUS_METERS = 10_000;
-
 function providerHydrateSessionKey(id: string): string {
     return `scandio_provider_hydrate_done:${id}`;
 }
 
 /** Single UX for unsupported trade and unrelated / non-maintenance photos (see `isServiceBlocked`). */
-const DIAGNOSIS_REJECT_HEADLINE = 'We Can’t Match This Job on Scandio Yet';
+const DIAGNOSIS_REJECT_HEADLINE = "We Can't Match This Job on Scandio Yet";
 const DIAGNOSIS_REJECT_DETAIL =
-    'Either this does not look like a home repair or maintenance issue we can assess from your photo, or it is not a service on Scandio’s list yet. Add a clearer photo or a few words about the job below, then tap Re-Scan Report. If we still cannot match you, you will need to reach a specialist outside Scandio.';
+    "Either this does not look like a home repair or maintenance issue we can assess from your photo, or it is not a service on Scandio's list yet. Add a clearer photo or a few words about the job below, then tap Re-Scan Report. If we still cannot match you, you will need to reach a specialist outside Scandio.";
+const SHOW_COST_ESTIMATE_UI = false;
+
+function isLikelyRenderableImageSource(value: string | null | undefined): boolean {
+    const src = (value ?? '').trim();
+    if (!src) return false;
+    if (src.startsWith('data:image/')) return true;
+    if (src.startsWith('blob:')) return true;
+    if (/^https?:\/\//i.test(src)) {
+        // Signed/public image URLs often include extension or image-transform path segments.
+        return !/\/(start|processing|diagnosis|match|chat|report)(\/|$)/i.test(src);
+    }
+    return false;
+}
+
+function isHeicLikeDataUrl(value: string): boolean {
+    return /^data:image\/hei[cf];/i.test(value.trim());
+}
+
+async function readBlobAsDataUrl(blob: Blob): Promise<string> {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+            if (typeof reader.result === 'string') {
+                resolve(reader.result);
+                return;
+            }
+            reject(new Error('Could not read converted image.'));
+        };
+        reader.onerror = () => reject(reader.error ?? new Error('Could not read converted image.'));
+        reader.readAsDataURL(blob);
+    });
+}
+
+async function convertHeicBlobToJpegDataUrl(blob: Blob): Promise<string> {
+    const converted = await heic2any({
+        blob,
+        toType: 'image/jpeg',
+        quality: 0.9,
+    });
+    const convertedBlob = Array.isArray(converted) ? converted[0] : converted;
+    if (!(convertedBlob instanceof Blob)) {
+        throw new Error('Could not convert HEIC image.');
+    }
+    return readBlobAsDataUrl(convertedBlob);
+}
+
+async function ensureRenderableImageSource(value: string | null): Promise<string | null> {
+    const src = (value ?? '').trim();
+    if (!src) return null;
+    if (src.startsWith('blob:')) return src;
+    if (!isHeicLikeDataUrl(src)) return src;
+    try {
+        const response = await fetch(src);
+        const blob = await response.blob();
+        return await convertHeicBlobToJpegDataUrl(blob);
+    } catch {
+        return src;
+    }
+}
 
 export default function DiagnosisPageClient({
     conversationId,
@@ -79,12 +146,15 @@ export default function DiagnosisPageClient({
     const supabase = getSupabase();
 
     const [infoText, setInfoText] = useState('');
-    const [isMoreInfoExpanded, setIsMoreInfoExpanded] = useState(false);
-    const infoTextareaRef = useRef<HTMLTextAreaElement>(null);
+    const [showAddInfoScreen, setShowAddInfoScreen] = useState(false);
     // Avoid showing placeholder "Estimated Diagnosis" once we reach the /diagnosis/[id] route.
     const [diagnosisTitle, setDiagnosisTitle] = useState('Diagnosing…');
     const [customerInfoItems, setCustomerInfoItems] = useState<string[]>([]);
     const [thoughtText, setThoughtText] = useState('');
+    const [imageThoughtBreakdown, setImageThoughtBreakdown] = useState<string[]>([]);
+    const [showDetailedThinking, setShowDetailedThinking] = useState(false);
+    const [fullscreenImageIndex, setFullscreenImageIndex] = useState<number | null>(null);
+    const fullscreenTouchStartXRef = useRef<number | null>(null);
     const [diagnosisDetailText, setDiagnosisDetailText] = useState('');
     const [hazardText, setHazardText] = useState('');
     const [tradeLabel, setTradeLabel] = useState('');
@@ -104,16 +174,46 @@ export default function DiagnosisPageClient({
     const didRunDiagnosisRef = useRef<string | null>(null);
     const thoughtStreamGenRef = useRef(0);
     const [imageSrc, setImageSrc] = useState<string | null>(null);
+    const [uploadedImageSources, setUploadedImageSources] = useState<string[]>([]);
+    const uploadedImageSourcesRef = useRef<string[]>([]);
     const [customerAddress, setCustomerAddress] = useState<string>('');
     const [selectedTradeHint, setSelectedTradeHint] = useState<string>('');
     const [leaveDialogOpen, setLeaveDialogOpen] = useState(false);
     const footerRef = useRef<HTMLDivElement | null>(null);
-    const [footerHeight, setFooterHeight] = useState(0);
+    const scrollContainerRef = useRef<HTMLDivElement | null>(null);
     const headerTitleAnchorRef = useRef<HTMLHeadingElement | null>(null);
     const [useStickyHeaderName, setUseStickyHeaderName] = useState(false);
     const [diagnosisForCostUi, setDiagnosisForCostUi] = useState<DiagnosisData | null>(null);
+    const diagnosisForCostUiRef = useRef<DiagnosisData | null>(null);
     const savedCustomerCoordsRef = useRef<{ lat: number; lng: number } | null>(null);
     const providersForDiagnoseRef = useRef<Provider[]>([]);
+    const customerInfoItemsRef = useRef<string[]>([]);
+    const [clarificationSubmitLoading, setClarificationSubmitLoading] = useState(false);
+    const [clarificationCustomText, setClarificationCustomText] = useState('');
+    const marketResearchInFlightRef = useRef<Set<string>>(new Set());
+    const marketResearchDoneRef = useRef<Set<string>>(new Set());
+
+    const getPersistedCustomerInfoItems = useCallback(
+        (data: ConversationDiagnosisRow | null, fallbackPrompt: string): string[] => {
+            const raw =
+                data &&
+                typeof (data as any)?.diagnosis === 'object' &&
+                (data as any)?.diagnosis !== null &&
+                Array.isArray(((data as any).diagnosis as any).customer_info_items)
+                    ? (((data as any).diagnosis as any).customer_info_items as unknown[])
+                    : null;
+            const fromDiagnosis = raw
+                ? raw
+                      .map((x) => (typeof x === 'string' ? x.trim() : ''))
+                      .filter((x) => x.length > 0)
+                : [];
+            if (fromDiagnosis.length > 0) return fromDiagnosis;
+
+            const fallback = fallbackPrompt.trim();
+            return fallback ? [fallback] : [];
+        },
+        []
+    );
 
     const prewarmProvidersForConversation = useCallback(
         (conversation: ConversationDiagnosisRow | null | undefined, diagnosisData: DiagnosisData) => {
@@ -168,7 +268,7 @@ export default function DiagnosisPageClient({
         const loc = customerAddress.trim() || locationFromQuery.trim();
         const base = prompt.trim();
         if (loc) {
-            parts.push(`Location context from user: ${loc}`);
+            parts.push(`Location context: ${loc}`);
         }
         if (base) {
             parts.push(base);
@@ -200,6 +300,16 @@ export default function DiagnosisPageClient({
                   },
               }
             : {};
+
+    const buildCustomerInfoItemsForPersistence = useCallback((prompt: string): string[] => {
+        const trimmedPrompt = prompt.trim();
+        const items = customerInfoItemsRef.current
+            .map((x) => x.trim())
+            .filter((x) => x.length > 0);
+        if (!trimmedPrompt) return items;
+        if (items.some((x) => x === trimmedPrompt)) return items;
+        return [trimmedPrompt, ...items];
+    }, []);
 
     const maybeHydrateWithProviders = useCallback(
         async (diag: DiagnosisData, img: string, catalogIn: string[], userWords: string) => {
@@ -267,12 +377,16 @@ export default function DiagnosisPageClient({
                 if (list.length === 0) return;
 
                 providersForDiagnoseRef.current = list;
+                const hydrationAttachments = uploadedImageSourcesRef.current
+                    .filter((src) => src !== img)
+                    .slice(0, 4);
 
                 const res = await fetch('/api/diagnose', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         image: img,
+                        ...(hydrationAttachments.length > 0 ? { attachments: hydrationAttachments } : {}),
                         serviceCatalog: catalog,
                         providerHydration: true,
                         providers: list,
@@ -302,22 +416,23 @@ export default function DiagnosisPageClient({
                     (parsed.thinking ?? '').trim() ||
                     thoughtFromJson;
                 const diagWithThought: DiagnosisData = { ...parsed, thinking: thought };
+                const toSave = await enrichDiagnosisWithPartPrices(diagWithThought);
                 const detail =
-                    (diagWithThought.action_required ?? '').trim() ||
-                    (diagWithThought.message ?? '').trim() ||
+                    (toSave.action_required ?? '').trim() ||
+                    (toSave.message ?? '').trim() ||
                     '';
                 const split = splitDetailAndHazard(detail);
                 setDiagnosisDetailText(split.detail);
                 setHazardText(split.hazard);
-                setTradeLabel((diagWithThought.trade ?? '').trim());
-                setTradeDetailLabel((diagWithThought.trade_detail ?? '').trim());
-                setUrgencyKey((diagWithThought.urgency_key as any) ?? 'soon');
-                setRequiresClarification(Boolean(diagWithThought.requires_clarification));
-                setIsRejectedDiagnosis(Boolean((diagWithThought as any).rejected));
-                setIsUnservicedDiagnosis(Boolean((diagWithThought as any).unserviced));
-                setActionRequiredRaw((diagWithThought.action_required ?? '').trim());
-                setDiagnosisTitle(diagWithThought.diagnosis);
-                setDiagnosisForCostUi(diagWithThought);
+                setTradeLabel((toSave.trade ?? '').trim());
+                setTradeDetailLabel((toSave.trade_detail ?? '').trim());
+                setUrgencyKey((toSave.urgency_key as any) ?? 'soon');
+                setRequiresClarification(Boolean(toSave.requires_clarification));
+                setIsRejectedDiagnosis(Boolean((toSave as any).rejected));
+                setIsUnservicedDiagnosis(Boolean((toSave as any).unserviced));
+                setActionRequiredRaw((toSave.action_required ?? '').trim());
+                setDiagnosisTitle(toSave.diagnosis);
+                setDiagnosisForCostUi(toSave);
                 const finalThoughtRaw = (thought || '').trim();
                 setThoughtText(
                     finalThoughtRaw ? cleanThoughtSentenceStarts(finalThoughtRaw) : ''
@@ -328,10 +443,10 @@ export default function DiagnosisPageClient({
                         ? 'mobile'
                         : 'desktop';
                 const saveResult = await patchConversation(cid, {
-                    title: diagWithThought.diagnosis || 'New Diagnosis',
+                    title: toSave.diagnosis || 'New Diagnosis',
                     image_url: img,
-                    diagnosis: diagWithThought as unknown,
-                    urgency_key: diagWithThought.urgency_key ?? null,
+                    diagnosis: toSave as unknown,
+                    urgency_key: toSave.urgency_key ?? null,
                     device: deviceType,
                     user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : '',
                     user_id: user?.id ?? null,
@@ -357,7 +472,12 @@ export default function DiagnosisPageClient({
     }, []);
 
     const runInitialDiagnosis = useCallback(
-        async (img: string, prompt: string, selectedService: string | null) => {
+        async (
+            img: string,
+            prompt: string,
+            selectedService: string | null,
+            imageSourcesOverride?: string[]
+        ) => {
             const cid = conversationId ?? null;
             // Prevent duplicate in-flight calls (Next dev Strict Mode can double-invoke effects).
             if (!cid) return null;
@@ -365,6 +485,8 @@ export default function DiagnosisPageClient({
             didRunDiagnosisRef.current = cid;
             thoughtStreamGenRef.current += 1;
             setThoughtText('');
+            setImageThoughtBreakdown([]);
+            setShowDetailedThinking(false);
             setIsDiagnosing(true);
             setIsImageAnalysing(true);
             setIsDiagnosingRetrying(false);
@@ -427,7 +549,6 @@ export default function DiagnosisPageClient({
                 };
 
                 for (let attempt = 1; attempt <= DIAGNOSIS_MAX_RETRIES; attempt += 1) {
-                    let imageThoughtRaw = '';
                     setIsDiagnosingRetrying(attempt > 1);
                     const catalog = await parseServiceCatalogOrFail();
                     if (!catalog) {
@@ -438,74 +559,67 @@ export default function DiagnosisPageClient({
                         return null;
                     }
 
-                    thoughtStreamGenRef.current += 1;
-                    const genImg = thoughtStreamGenRef.current;
-                    let imageAnalysisText: string;
-                    try {
-                        imageAnalysisText = await fetchDiagnoseScan(
-                            {
-                                image: img,
-                                analysisPhase: 'image_thought_only',
-                                serviceCatalog: catalog,
-                                textQuery:
-                                    'Analyse only the photo first. Output <thought> only about what is visibly happening and likely issue pattern. Keep it concise and practical.',
-                                ...buildSelectedTradePayload(selectedService),
-                            },
-                            (t) => setThoughtText(t),
-                            genImg
-                        );
-                    } catch (e) {
-                        if (e instanceof DiagnoseStreamHttpError) {
-                            if (e.status === 429) {
-                                applyRateLimitOrQuotaMessage(e.bodyText);
-                                return null;
-                            }
-                            if (attempt < DIAGNOSIS_MAX_RETRIES) {
-                                await sleep(700 * attempt);
-                                continue;
-                            }
-                            setDiagnosisFailureMessage(
-                                'We could not finish your Scandio Report automatically. Please retry now.'
-                            );
-                            return null;
-                        }
-                        throw e;
-                    }
-
-                    imageThoughtRaw = parseThoughtFromResponse(imageAnalysisText).trim();
-                    const imageThought = imageThoughtRaw
-                        ? cleanThoughtSentenceStarts(imageThoughtRaw)
-                        : '';
-                    if (imageThought) {
-                        setThoughtText(imageThought);
-                        if (cid) {
-                            await patchConversation(cid, {
-                                image_url: img,
-                                initial_image_description: (prompt ?? '').trim() || null,
-                                diagnosis: { thinking: imageThought } as unknown,
-                            });
-                        }
-                    }
-                    setIsImageAnalysing(false);
-
+                    const analysisSources = Array.from(
+                        new Set(
+                            [
+                                ...(Array.isArray(imageSourcesOverride) ? imageSourcesOverride : []),
+                                img,
+                            ].filter((src) => isLikelyRenderableImageSource(src))
+                        )
+                    );
+                    if (analysisSources.length === 0) analysisSources.push(img);
+                    const primaryImageSrc = analysisSources[0]!;
+                    const additionalAttachments = analysisSources.slice(1, 5);
                     thoughtStreamGenRef.current += 1;
                     const genFull = thoughtStreamGenRef.current;
                     let text: string;
+                    let gotStreamThought = false;
                     try {
+                        const latestDiagnosisForCostUi = diagnosisForCostUiRef.current;
+                        const ar = (latestDiagnosisForCostUi?.action_required ?? '').trim();
+                        const hasRejectablePrior =
+                            Boolean(latestDiagnosisForCostUi?.diagnosis?.trim()) &&
+                            ar.length > 0 &&
+                            !/^n\/a$/i.test(ar);
+                        const previousDiagnosisPayload = hasRejectablePrior
+                            ? {
+                                  diagnosis: latestDiagnosisForCostUi!.diagnosis,
+                                  trade: latestDiagnosisForCostUi!.trade,
+                                  trade_detail: latestDiagnosisForCostUi!.trade_detail ?? '',
+                                  message: latestDiagnosisForCostUi!.message ?? '',
+                                  action_required: latestDiagnosisForCostUi!.action_required ?? '',
+                                  estimated_cost: latestDiagnosisForCostUi!.estimated_cost ?? '',
+                              }
+                            : null;
                         text = await fetchDiagnoseScan(
                             {
-                                image: img,
+                                image: primaryImageSrc,
+                                ...(additionalAttachments.length > 0
+                                    ? { attachments: additionalAttachments }
+                                    : {}),
                                 serviceCatalog: catalog,
                                 ...(buildPromptWithContext(prompt).trim()
                                     ? { textQuery: buildPromptWithContext(prompt).trim() }
                                     : {}),
                                 ...buildSelectedTradePayload(selectedService),
-                                ...(imageThought ? { initial_image_description: imageThought } : {}),
+                                ...(previousDiagnosisPayload
+                                    ? {
+                                          diagnosisRejected: true,
+                                          previousDiagnosis: previousDiagnosisPayload,
+                                      }
+                                    : {}),
                                 ...(providersForDiagnoseRef.current.length > 0
                                     ? { providers: providersForDiagnoseRef.current }
                                     : {}),
                             },
-                            (t) => setThoughtText(t),
+                            (t) => {
+                                if (thoughtStreamGenRef.current !== genFull) return;
+                                if (!gotStreamThought) {
+                                    gotStreamThought = true;
+                                    setIsImageAnalysing(false);
+                                }
+                                setThoughtText(t);
+                            },
                             genFull
                         );
                     } catch (e) {
@@ -524,6 +638,10 @@ export default function DiagnosisPageClient({
                             return null;
                         }
                         throw e;
+                    }
+
+                    if (!gotStreamThought) {
+                        setIsImageAnalysing(false);
                     }
 
                     const diag = parseDiagnosisFromModelResponse(text);
@@ -547,39 +665,58 @@ export default function DiagnosisPageClient({
                         parseThoughtFromResponse(text) ||
                         (diag.thinking ?? '').trim() ||
                         thoughtFromJson;
-                    const finalThoughtRaw = (thought || imageThoughtRaw).trim();
-                    const diagWithThought: DiagnosisData = { ...diag, thinking: thought };
+                    const breakdownFromDiag =
+                        Array.isArray((diag as any)?.image_thought_breakdown) &&
+                        (diag as any).image_thought_breakdown.every((x: unknown) => typeof x === 'string')
+                            ? ((diag as any).image_thought_breakdown as string[])
+                            : Array.isArray((diag as any)?.image_descriptions)
+                              ? ((diag as any).image_descriptions as unknown[])
+                                    .filter((x): x is string => typeof x === 'string' && x.trim().length > 0)
+                              : []
+                            ;
+                    const finalThoughtRaw = thought.trim();
+                    const diagWithThought: DiagnosisData = {
+                        ...diag,
+                        thinking: thought,
+                        ...(breakdownFromDiag.length > 0
+                            ? { image_thought_breakdown: breakdownFromDiag }
+                            : {}),
+                        // Persist user clarification history so page refresh restores message chips/list.
+                        customer_info_items: buildCustomerInfoItemsForPersistence(prompt),
+                    } as DiagnosisData;
+                    const toSave = await enrichDiagnosisWithPartPrices(diagWithThought);
                     const detail =
-                        (diagWithThought.action_required ?? '').trim() ||
-                        (diagWithThought.message ?? '').trim() ||
+                        (toSave.action_required ?? '').trim() ||
+                        (toSave.message ?? '').trim() ||
                         '';
                     const split = splitDetailAndHazard(detail);
                     setDiagnosisDetailText(split.detail);
                     setHazardText(split.hazard);
-                    setTradeLabel((diagWithThought.trade ?? '').trim());
-                    setTradeDetailLabel((diagWithThought.trade_detail ?? '').trim());
-                    setUrgencyKey((diagWithThought.urgency_key as any) ?? 'soon');
-                    setRequiresClarification(Boolean((diagWithThought as DiagnosisData).requires_clarification));
-                    setIsRejectedDiagnosis(Boolean((diagWithThought as any).rejected));
-                    setIsUnservicedDiagnosis(Boolean((diagWithThought as any).unserviced));
-                    setActionRequiredRaw((diagWithThought.action_required ?? '').trim());
-                    setDiagnosisTitle(diagWithThought.diagnosis);
+                    setTradeLabel((toSave.trade ?? '').trim());
+                    setTradeDetailLabel((toSave.trade_detail ?? '').trim());
+                    setUrgencyKey((toSave.urgency_key as any) ?? 'soon');
+                    setRequiresClarification(Boolean((toSave as DiagnosisData).requires_clarification));
+                    setIsRejectedDiagnosis(Boolean((toSave as any).rejected));
+                    setIsUnservicedDiagnosis(Boolean((toSave as any).unserviced));
+                    setActionRequiredRaw((toSave.action_required ?? '').trim());
+                    setDiagnosisTitle(toSave.diagnosis);
                     setDiagnosisFailureMessage(null);
-                    setDiagnosisForCostUi(diagWithThought);
+                    setDiagnosisForCostUi(toSave);
                     setIsDetailStageReady(true);
                     setThoughtText(
                         finalThoughtRaw ? cleanThoughtSentenceStarts(finalThoughtRaw) : ''
                     );
+                    setImageThoughtBreakdown(breakdownFromDiag);
 
                     const deviceType =
                         typeof navigator !== 'undefined' && /Mobi|Android/i.test(navigator.userAgent)
                             ? 'mobile'
                             : 'desktop';
                     const saveResult = await patchConversation(cid, {
-                        title: diagWithThought.diagnosis || 'New Diagnosis',
+                        title: toSave.diagnosis || 'New Diagnosis',
                         image_url: img,
-                        diagnosis: diagWithThought as unknown,
-                        urgency_key: diagWithThought.urgency_key ?? null,
+                        diagnosis: toSave as unknown,
+                        urgency_key: toSave.urgency_key ?? null,
                         initial_image_description: (prompt ?? '').trim() || null,
                         device: deviceType,
                         user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : '',
@@ -595,11 +732,30 @@ export default function DiagnosisPageClient({
 
                     const latestConv = await fetchConversationDiagnosis(cid);
                     if (latestConv.ok) {
-                        prewarmProvidersForConversation(latestConv.data, diagWithThought);
+                        prewarmProvidersForConversation(latestConv.data, toSave);
+                        const eligible = isDiagnosisAccurateForPrefetch(toSave);
+                        if (eligible.eligible) {
+                            trackEvent('prefetch_attempted', { diagnosis_id: cid });
+                            void prefetchProvidersIntoMatchCache(cid, latestConv.data, toSave)
+                                .then(() => {
+                                    trackEvent('prefetch_succeeded', { diagnosis_id: cid });
+                                })
+                                .catch(() => {
+                                    trackEvent('prefetch_skipped', {
+                                        diagnosis_id: cid,
+                                        reason: 'prefetch_error',
+                                    });
+                                });
+                        } else {
+                            trackEvent('prefetch_skipped', {
+                                diagnosis_id: cid,
+                                reason: eligible.reason || 'not_eligible',
+                            });
+                        }
                     }
 
                     void maybeHydrateWithProviders(
-                        diagWithThought,
+                        toSave,
                         img,
                         catalog,
                         buildPromptWithContext(prompt).trim()
@@ -613,11 +769,11 @@ export default function DiagnosisPageClient({
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({
-                                    trade: diagWithThought.trade,
-                                    tradeDetail: diagWithThought.trade_detail,
+                                    trade: toSave.trade,
+                                    tradeDetail: toSave.trade_detail,
                                     customerAddress: addr,
                                     conversationId: cid,
-                                    baselineDiagnosis: diagWithThought,
+                                    baselineDiagnosis: toSave,
                                 }),
                             });
                             const json = (await res.json()) as Record<string, unknown>;
@@ -631,7 +787,7 @@ export default function DiagnosisPageClient({
                         }
                     })();
 
-                    return diagWithThought;
+                    return toSave;
                 }
                 setDiagnosisFailureMessage(
                     'We could not complete your Scandio Report right now. Please retry now.'
@@ -645,6 +801,7 @@ export default function DiagnosisPageClient({
         },
         [
             buildPromptWithContext,
+            buildCustomerInfoItemsForPersistence,
             conversationId,
             customerAddress,
             maybeHydrateWithProviders,
@@ -653,6 +810,18 @@ export default function DiagnosisPageClient({
             user?.id,
         ]
     );
+
+    useEffect(() => {
+        customerInfoItemsRef.current = customerInfoItems;
+    }, [customerInfoItems]);
+
+    useEffect(() => {
+        diagnosisForCostUiRef.current = diagnosisForCostUi;
+    }, [diagnosisForCostUi]);
+
+    useEffect(() => {
+        uploadedImageSourcesRef.current = uploadedImageSources;
+    }, [uploadedImageSources]);
 
     useEffect(() => {
         let cancelled = false;
@@ -676,12 +845,27 @@ export default function DiagnosisPageClient({
             // URL saved on /welcome after a successful upload — used if the client cannot read
             // the conversation row yet (slow network) or RLS hides rows created via the admin API.
             let pendingImageUrl: string | null = null;
+            let pendingImageUrls: string[] = [];
             let pendingPromptFromWelcome: string | null = null;
             let pendingTradeFromWelcome: string | null = null;
             try {
                 pendingImageUrl = sessionStorage.getItem(
                     `pending_diagnosis_image_url:${conversationId}`
                 );
+                const pendingImageUrlsRaw = sessionStorage.getItem(
+                    `pending_diagnosis_image_urls:${conversationId}`
+                );
+                if (pendingImageUrlsRaw) {
+                    const parsed = JSON.parse(pendingImageUrlsRaw) as unknown;
+                    if (Array.isArray(parsed)) {
+                        pendingImageUrls = parsed
+                            .map((value) => (typeof value === 'string' ? value.trim() : ''))
+                            .filter((value) => value.length > 0);
+                    }
+                }
+                if (pendingImageUrls.length === 0) {
+                    pendingImageUrls = getPendingDiagnosisImages(conversationId);
+                }
                 if (pendingImageUrl) setImageSrc(pendingImageUrl);
                 pendingPromptFromWelcome = sessionStorage.getItem(
                     `pending_diagnosis_prompt:${conversationId}`
@@ -714,12 +898,26 @@ export default function DiagnosisPageClient({
             }
 
             const img = (data as any)?.image_url as string | null;
-            const imageUrlForDiagnosis = (img && String(img).trim()) || pendingImageUrl || null;
+            const candidateImageUrl = (img && String(img).trim()) || pendingImageUrl || null;
+            const normalizedImageUrl = await ensureRenderableImageSource(candidateImageUrl);
+            const imageUrlForDiagnosis = isLikelyRenderableImageSource(normalizedImageUrl)
+                ? normalizedImageUrl
+                : null;
             setImageSrc(imageUrlForDiagnosis);
+            const normalizedPendingImageUrls = (
+                await Promise.all(pendingImageUrls.map((src) => ensureRenderableImageSource(src)))
+            ).filter((src): src is string => isLikelyRenderableImageSource(src));
+            const imageSourcesForDisplay = [
+                ...normalizedPendingImageUrls,
+                ...(imageUrlForDiagnosis && !normalizedPendingImageUrls.includes(imageUrlForDiagnosis)
+                    ? [imageUrlForDiagnosis]
+                    : []),
+            ];
+            setUploadedImageSources(imageSourcesForDisplay);
             const promptFromDb = ((data as any)?.initial_image_description as string | null) ?? '';
             const prompt = promptFromDb.trim() || (pendingPromptFromWelcome ?? '').trim();
-            const customerInfo = prompt.trim();
-            setCustomerInfoItems(customerInfo ? [customerInfo] : []);
+            const persistedCustomerInfoItems = getPersistedCustomerInfoItems(data, prompt);
+            setCustomerInfoItems(persistedCustomerInfoItems);
             setCustomerAddress(String((data as any)?.customer_address ?? '').trim());
             const persistedTradeHint =
                 data &&
@@ -733,7 +931,7 @@ export default function DiagnosisPageClient({
             );
             const existingDiagnosis = (data as any)?.diagnosis as DiagnosisData | null;
 
-            if (existingDiagnosis?.diagnosis) {
+            if (existingDiagnosis && shouldSkipDiagnosisPipeline(existingDiagnosis)) {
                 setDiagnosisTitle(existingDiagnosis.diagnosis);
                 setIsDetailStageReady(true);
                 setRequiresClarification(Boolean(existingDiagnosis.requires_clarification));
@@ -746,9 +944,18 @@ export default function DiagnosisPageClient({
                     typeof (existingDiagnosis as any).image_descriptions[0] === 'string'
                         ? String((existingDiagnosis as any).image_descriptions[0]).trim()
                         : '';
+                const persistedImageThoughtBreakdown = Array.isArray(
+                    (existingDiagnosis as any)?.image_thought_breakdown
+                )
+                    ? ((existingDiagnosis as any).image_thought_breakdown as unknown[])
+                          .filter((value): value is string => typeof value === 'string')
+                          .map((value) => value.trim())
+                          .filter(Boolean)
+                    : [];
                 setThoughtText(
                     cleanThoughtSentenceStarts(persistedThinking || persistedImageDescriptions)
                 );
+                setImageThoughtBreakdown(persistedImageThoughtBreakdown);
                 const persistedSplit = splitDetailAndHazard(
                     (existingDiagnosis.action_required ?? '').trim() ||
                         (existingDiagnosis.message ?? '').trim() ||
@@ -786,7 +993,12 @@ export default function DiagnosisPageClient({
                 (pendingTradeFromWelcome ?? '').trim() ||
                 tradeFromQuery.trim()
             ) || null;
-            await runInitialDiagnosis(imageUrlForDiagnosis, prompt, selectedService);
+            await runInitialDiagnosis(
+                imageUrlForDiagnosis,
+                prompt,
+                selectedService,
+                imageSourcesForDisplay
+            );
         };
 
         void bootstrap().finally(() => {
@@ -797,6 +1009,7 @@ export default function DiagnosisPageClient({
         };
     }, [
         conversationId,
+        getPersistedCustomerInfoItems,
         maybeHydrateWithProviders,
         runInitialDiagnosis,
         supabase,
@@ -811,6 +1024,16 @@ export default function DiagnosisPageClient({
         if (d.requires_clarification || d.rejected || d.unserviced) return;
         const src = d.market_rates?.sources;
         if (Array.isArray(src) && src.length > 0) return;
+        const researchKey = [
+            conversationId,
+            d.diagnosis?.trim() ?? '',
+            d.trade?.trim() ?? '',
+            d.trade_detail?.trim() ?? '',
+            customerAddress.trim(),
+        ].join('|');
+        if (marketResearchDoneRef.current.has(researchKey)) return;
+        if (marketResearchInFlightRef.current.has(researchKey)) return;
+        marketResearchInFlightRef.current.add(researchKey);
 
         let cancelled = false;
         void (async () => {
@@ -829,11 +1052,14 @@ export default function DiagnosisPageClient({
                 const json = (await res.json()) as Record<string, unknown>;
                 if (cancelled || !json?.ok) return;
                 invalidateConversationDiagnosisCache(conversationId);
+                marketResearchDoneRef.current.add(researchKey);
                 setDiagnosisForCostUi((prev) =>
                     mergeMarketRatesResponseIntoDiagnosis(prev, json)
                 );
             } catch {
                 /* ignore */
+            } finally {
+                marketResearchInFlightRef.current.delete(researchKey);
             }
         })();
         return () => {
@@ -851,33 +1077,6 @@ export default function DiagnosisPageClient({
         diagnosisForCostUi?.market_rates?.sources?.length,
     ]);
 
-    useEffect(() => {
-        const footerEl = footerRef.current;
-        if (!footerEl) {
-            setFooterHeight(0);
-            return;
-        }
-
-        const updateFooterHeight = () => {
-            setFooterHeight(footerEl.offsetHeight);
-        };
-
-        updateFooterHeight();
-
-        let resizeObserver: ResizeObserver | null = null;
-        if (typeof ResizeObserver !== 'undefined') {
-            resizeObserver = new ResizeObserver(updateFooterHeight);
-            resizeObserver.observe(footerEl);
-        }
-        window.addEventListener('resize', updateFooterHeight);
-
-        return () => {
-            resizeObserver?.disconnect();
-            window.removeEventListener('resize', updateFooterHeight);
-        };
-    }, []);
-
-    const showImageSkeleton = isPageLoading && !imageSrc;
     const showThoughtSkeleton = (isPageLoading || isImageAnalysing) && !thoughtText.trim();
     const showSkeleton = isPageLoading || isImageAnalysing || (isDiagnosing && !isDetailStageReady);
     const hasDiagnosisFailure = !showSkeleton && Boolean(diagnosisFailureMessage);
@@ -916,45 +1115,84 @@ export default function DiagnosisPageClient({
         !isMatchBlocked &&
         diagnosisTitle.trim().length > 0 &&
         !diagnosisTitle.toLowerCase().includes('diagnosing');
+    const toSentence = (text: string): string => {
+        const trimmed = text.trim();
+        if (!trimmed) return '';
+        const capped = trimmed.charAt(0).toUpperCase() + trimmed.slice(1);
+        return /[.!?]$/.test(capped) ? capped : `${capped}.`;
+    };
+    const clarificationQuestions =
+        Array.isArray(diagnosisForCostUi?.clarification_questions)
+            ? diagnosisForCostUi.clarification_questions
+                  .map((q) => (typeof q === 'string' ? q.trim() : ''))
+                  .map((q) => toSentence(q))
+                  .filter((q) => q.length > 0)
+            : [];
+    const hasClarificationQuestions = clarificationQuestions.length > 0;
     const resolvedDetailText = isServiceBlocked
         ? DIAGNOSIS_REJECT_DETAIL
+        : requiresClarification
+          ? 'Please pick one of the quick options below or type a short note so we can refine your diagnosis.'
         : diagnosisDetailText;
 
-    const diagnosisHeadline = isServiceBlocked ? DIAGNOSIS_REJECT_HEADLINE : diagnosisTitle;
+    const diagnosisHeadline = isServiceBlocked
+        ? DIAGNOSIS_REJECT_HEADLINE
+        : requiresClarification
+          ? 'Need More Information'
+          : diagnosisTitle;
 
-    const pageTitle = 'Your Diagnosis';
+    const pageTitle = 'Your Scandio Report';
     const pageSubtitle =
-        'This summary reflects what we could see in your photo and anything you added in chat. If something looks off, add a bit more detail below—then continue when you are ready to find contractors.';
+        'Here is what your photos suggest and sensible next steps for booking a contractor.';
     const stickyHeaderTitle =
         showSkeleton || !isDetailStageReady
             ? diagnosisTitle.trim() || 'Diagnosing…'
             : diagnosisHeadline;
-
-    const contentBottomPadding = 72;
+    const displayThoughtText = (thoughtText || diagnosisForCostUi?.thinking || '').trim();
+    const activeFullscreenImageSrc =
+        fullscreenImageIndex != null && fullscreenImageIndex >= 0
+            ? uploadedImageSources[fullscreenImageIndex] ?? null
+            : null;
+    const activeFullscreenThought =
+        fullscreenImageIndex != null && fullscreenImageIndex >= 0
+            ? (imageThoughtBreakdown[fullscreenImageIndex] ?? '').trim()
+            : '';
+    const goToPrevFullscreenImage = useCallback(() => {
+        if (!uploadedImageSources.length || fullscreenImageIndex == null) return;
+        setFullscreenImageIndex((prev) => {
+            if (prev == null) return prev;
+            return prev <= 0 ? uploadedImageSources.length - 1 : prev - 1;
+        });
+    }, [fullscreenImageIndex, uploadedImageSources.length]);
+    const goToNextFullscreenImage = useCallback(() => {
+        if (!uploadedImageSources.length || fullscreenImageIndex == null) return;
+        setFullscreenImageIndex((prev) => {
+            if (prev == null) return prev;
+            return prev >= uploadedImageSources.length - 1 ? 0 : prev + 1;
+        });
+    }, [fullscreenImageIndex, uploadedImageSources.length]);
 
     useEffect(() => {
         if (shouldAutoExpandMoreInfo) {
-            setIsMoreInfoExpanded(true);
+            setShowAddInfoScreen(true);
         }
     }, [shouldAutoExpandMoreInfo]);
 
     useEffect(() => {
-        if (typeof window === 'undefined') return;
         const updateStickyHeaderTitle = () => {
             const anchor = headerTitleAnchorRef.current;
             if (!anchor) return;
-            const anchorTop = anchor.offsetTop;
-            const anchorBottom = anchorTop + anchor.offsetHeight;
-            const scrollY = window.scrollY;
-            // Switch once the main heading itself has scrolled past the header boundary.
-            setUseStickyHeaderName(scrollY + HEADER_STICKY_OFFSET_PX >= anchorBottom);
+            // getBoundingClientRect gives viewport-relative position regardless of scroll container.
+            setUseStickyHeaderName(anchor.getBoundingClientRect().bottom <= HEADER_HEIGHT_PX);
         };
 
+        const scrollEl = scrollContainerRef.current;
+        if (!scrollEl) return;
         updateStickyHeaderTitle();
-        window.addEventListener('scroll', updateStickyHeaderTitle, { passive: true });
+        scrollEl.addEventListener('scroll', updateStickyHeaderTitle, { passive: true });
         window.addEventListener('resize', updateStickyHeaderTitle);
         return () => {
-            window.removeEventListener('scroll', updateStickyHeaderTitle);
+            scrollEl.removeEventListener('scroll', updateStickyHeaderTitle);
             window.removeEventListener('resize', updateStickyHeaderTitle);
         };
     }, []);
@@ -962,7 +1200,7 @@ export default function DiagnosisPageClient({
     const handleRescanReport = async () => {
         const trimmed = infoText.trim();
         if (!trimmed || !imageSrc) return;
-        setIsMoreInfoExpanded(false);
+        setShowAddInfoScreen(false);
 
         const nextItems = [...customerInfoItems, trimmed];
         const joinedInfo = nextItems.join('\n\n').trim();
@@ -989,8 +1227,54 @@ export default function DiagnosisPageClient({
 
         didRunDiagnosisRef.current = null;
         setDiagnosisTitle('Diagnosing…');
-        await runInitialDiagnosis(imageSrc, joinedInfo, selectedTradeHint.trim() || null);
-        setIsMoreInfoExpanded(false);
+        setCustomerInfoItems(nextItems);
+        await runInitialDiagnosis(
+            imageSrc,
+            joinedInfo,
+            selectedTradeHint.trim() || null,
+            uploadedImageSources
+        );
+    };
+
+    const handleClarificationChoice = async (choice: string) => {
+        const trimmed = choice.trim();
+        if (!trimmed || !imageSrc || isDiagnosing || showSkeleton) return;
+        setClarificationSubmitLoading(true);
+        const nextItems = [...customerInfoItems, trimmed];
+        const joinedInfo = nextItems.join('\n\n').trim();
+        setCustomerInfoItems(nextItems);
+        setInfoText('');
+        setShowAddInfoScreen(false);
+        didRunDiagnosisRef.current = null;
+        setDiagnosisTitle('Diagnosing…');
+        if (conversationId) {
+            try {
+                sessionStorage.removeItem(providerHydrateSessionKey(conversationId));
+            } catch {
+                /* ignore */
+            }
+            providersForDiagnoseRef.current = [];
+            const noteSave = await patchConversation(conversationId, {
+                initial_image_description: joinedInfo || null,
+            });
+            if (!noteSave.ok) {
+                setDiagnosisFailureMessage(
+                    noteSave.error || 'We could not save your notes. Please try again.'
+                );
+                return;
+            }
+        }
+        try {
+            await runInitialDiagnosis(
+                imageSrc,
+                joinedInfo,
+                selectedTradeHint.trim() || null,
+                uploadedImageSources
+            );
+        } finally {
+            setClarificationSubmitLoading(false);
+            setClarificationCustomText('');
+        }
     };
 
     const handleShareReport = async () => {
@@ -1021,37 +1305,98 @@ export default function DiagnosisPageClient({
         }
     };
 
-    const diagnosisFooter = (
-        <div className="flex flex-row gap-4 justify-end">
-            <Button
-                type="button"
-                variant="ghost"
-                className="h-10 flex-1"
-                disabled={!infoText.trim() || isDiagnosing || showSkeleton}
-                onClick={() => void handleRescanReport()}
-            >
-                {isDiagnosing ? 'Re-Scanning…' : 'Re-Scan Report'}
-            </Button>
-            <Button
-                type="button"
-                className="h-10 flex-1"
-                disabled={!canContinueToMatch || isDiagnosing || shouldAutoExpandMoreInfo}
-                onClick={() => {
-                    if (!conversationId) return;
-                    const key = `pending_diagnosis_image_url:${conversationId}`;
-                    try { sessionStorage.removeItem(key); } catch {}
-                    try { localStorage.removeItem(key); } catch {}
-                    writeMatchTradeContextStorage(
-                        conversationId,
-                        tradeLabel || selectedTradeHint,
-                        tradeDetailLabel || tradeLabel || selectedTradeHint
-                    );
-                    router.push(`/match/${encodeURIComponent(conversationId)}`);
-                }}
-            >
-                Find Contractors
-            </Button>
+    const fallbackClarificationQuestions = [
+        'It is not turning on.',
+        'It is turning on, but not working correctly.',
+        'There is visible damage, leakage, or unusual noise.',
+    ];
+    const clarificationOptions = (
+        hasClarificationQuestions ? clarificationQuestions : fallbackClarificationQuestions
+    ).slice(0, 3);
+    const tradeForClarificationPrompt = (tradeLabel || selectedTradeHint || '').trim();
+    const clarificationTradeIsPlaceholder = !tradeForClarificationPrompt || /^n\/a$/i.test(tradeForClarificationPrompt);
+    const clarificationPrompt = clarificationTradeIsPlaceholder
+        ? 'Which option best describes the issue?'
+        : `Which option best describes the ${tradeForClarificationPrompt.toLowerCase()} issue?`;
+
+    // Rejected / unsupported responses still set requires_clarification on the API so users can add
+    // context, but the gate-style defaults do not apply — use "Did We Miss Something?" instead.
+    const showClarificationFooter =
+        requiresClarification && !isServiceBlocked && !(clarificationSubmitLoading && isDiagnosing);
+
+    const diagnosisFooter = showClarificationFooter ? (
+        <div className="flex flex-col gap-2">
+            <p className="text-sm font-medium text-foreground">{clarificationPrompt}</p>
+            {clarificationOptions.map((question, idx) => {
+                const letter = String.fromCharCode(65 + idx);
+                return (
+                    <div key={`${idx}-${question}`} className="flex flex-row gap-4 items-center">
+                        <Badge
+                            variant="secondary"
+                            className="size-7"
+                        >
+                            {letter}
+                        </Badge>
+                        <Button
+                            type="button"
+                            variant="outline"
+                            className="flex flex-1 h-12 justify-start rounded-xl border-black/[0.10] bg-white hover:bg-black/[0.03]"
+                            disabled={isDiagnosing || showSkeleton}
+                            onClick={() => void handleClarificationChoice(question)}
+                        >
+                            <span className="text-sm text-foreground font-normal truncate">{question}</span>
+                        </Button>
+                    </div>
+                );
+            })}
+            <div className="flex flex-row gap-4 items-start">
+                <Badge variant="secondary" className="size-7 mt-2">
+                    D
+                </Badge>
+                <div className="flex flex-1 flex-col gap-2">
+                    <input
+                        type="text"
+                        value={clarificationCustomText}
+                        onChange={(e) => setClarificationCustomText(e.target.value)}
+                        placeholder="Other: type your answer"
+                        className="h-12 w-full rounded-xl border border-black/[0.10] bg-white px-3 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-black/15"
+                        disabled={isDiagnosing || showSkeleton}
+                    />
+                    <Button
+                        type="button"
+                        variant="outline"
+                        className="h-10 w-full rounded-xl border-black/[0.10] bg-white hover:bg-black/[0.03]"
+                        disabled={
+                            isDiagnosing || showSkeleton || clarificationCustomText.trim().length === 0
+                        }
+                        onClick={() => void handleClarificationChoice(clarificationCustomText)}
+                    >
+                        Submit Answer
+                    </Button>
+                </div>
+            </div>
         </div>
+    ) : (
+        <Button
+            className="h-10 w-full"
+            disabled={!canContinueToMatch || isDiagnosing || shouldAutoExpandMoreInfo}
+            onClick={() => {
+                if (!conversationId) return;
+                const key = `pending_diagnosis_image_url:${conversationId}`;
+                const listKey = `pending_diagnosis_image_urls:${conversationId}`;
+                try { sessionStorage.removeItem(key); } catch {}
+                try { sessionStorage.removeItem(listKey); } catch {}
+                try { localStorage.removeItem(key); } catch {}
+                writeMatchTradeContextStorage(
+                    conversationId,
+                    tradeLabel || selectedTradeHint,
+                    tradeDetailLabel || tradeLabel || selectedTradeHint
+                );
+                router.push(`/match/${encodeURIComponent(conversationId)}`);
+            }}
+        >
+            Find Contractors
+        </Button>
     );
 
     return (
@@ -1062,187 +1407,329 @@ export default function DiagnosisPageClient({
                 onLeave={() => router.back()}
             />
 
-            <ScanFlowShell
-                onClose={() => setLeaveDialogOpen(true)}
-                footerRef={footerRef}
-                contentBottomPadding={contentBottomPadding}
-                contentWrapperClassName="p-0 py-18"
-                contentClassName="px-4"
-                constrainContentWidth
-                footer={diagnosisFooter}
-                headerLeft={
-                    <ArrowLeft size={24} weight="bold" className="text-foreground" />
-                }
-                headerCenter={
-                    <h3
-                        className="block min-w-0 w-full max-w-full truncate text-center text-xl font-semibold text-foreground"
-                        title={useStickyHeaderName ? stickyHeaderTitle : undefined}
+            <div className="h-dvh overflow-hidden overscroll-none flex flex-col bg-background">
+                <div className="sticky top-0 z-20 shrink-0 bg-background px-6 py-3">
+                    <Button
+                        variant="secondary"
+                        size="icon"
+                        className="size-10"
+                        onClick={() => setLeaveDialogOpen(true)}
+                        aria-label="Go Back"
                     >
-                        {useStickyHeaderName ? stickyHeaderTitle : 'Scandio'}
-                    </h3>
-                }
-                headerRight={
-                    <div className="flex flex-row gap-2">
-                        <Button
-                            variant="outline"
-                            className="size-10"
-                            onClick={() => void handleShareReport()}
-                        >
-                            <Share size={24} weight="bold" className="text-foreground" />
-                        </Button>
-                        <Button variant="outline" className="size-10">
-                            <DownloadSimple size={24} weight="bold" className="text-foreground" />
-                        </Button>
-                    </div>
-                }
-            >
-                <div className="flex flex-col gap-1">
-                    <h1 ref={headerTitleAnchorRef} className="text-3xl font-semibold tracking-tight text-foreground">
-                        {pageTitle}
-                    </h1>
-                    {isPageLoading ? (
-                        <div className="flex max-w-xl flex-col gap-2" aria-hidden>
-                            <Skeleton className="h-4 w-full max-w-md" />
-                            <Skeleton className="h-4 w-[92%] max-w-lg" />
+                        <ArrowLeft weight="bold" />
+                    </Button>
+                </div>
+
+                {/* Scrollable content */}
+                <div ref={scrollContainerRef} className="min-h-0 flex-1 overflow-y-auto">
+                    <div className="flex flex-col w-full max-w-3xl mx-auto gap-6 p-6">
+
+                {/* Diagnosis title + badge */}
+                <div className="flex w-full flex-col gap-3">
+                    {showSkeleton || !isDetailStageReady ? (
+                        <div className="flex min-w-0 flex-1 flex-col gap-2">
+                            <Skeleton className="h-8 w-[88%] max-w-md" />
+                            <Skeleton className="h-6 w-[62%] max-w-sm md:hidden" />
                         </div>
                     ) : (
-                        <p className="max-w-xl text-sm leading-relaxed text-muted-foreground">
-                            {pageSubtitle}
-                        </p>
+                        <h2 className="w-full min-w-0 text-2xl font-bold break-words">
+                            {diagnosisHeadline}
+                        </h2>
+                    )}
+                    {showSkeleton || !isDetailStageReady ? (
+                        <Skeleton className="h-6 w-24 shrink-0 rounded-full" />
+                    ) : (
+                        <Badge variant="secondary" className="w-fit">
+                            {isServiceBlocked
+                                ? "Can't match"
+                                : requiresClarification
+                                  ? ''
+                                  : tradeLabel || selectedTradeHint || 'Not Specified'}
+                        </Badge>
                     )}
                 </div>
 
-                {customerInfoItems.length > 0 ? (
-                    <div className="flex flex-col items-start gap-2">
-                        {customerInfoItems.map((item, idx) => (
-                            <div
-                                key={`${idx}-${item.slice(0, 20)}`}
-                                className="w-fit rounded-md bg-background px-3 py-2 text-xs text-foreground"
-                            >
-                                {item}
+                <div className="flex flex-col gap-3">
+                    {uploadedImageSources.length > 0 ? (
+                        <div className="overflow-x-auto">
+                            <div className="flex min-w-full gap-2 px-1">
+                                {uploadedImageSources.map((src, idx) => (
+                                    <button
+                                        key={`${src}-${idx}`}
+                                        type="button"
+                                        className="h-40 w-40 shrink-0 overflow-hidden rounded-lg border border-border/60 bg-background text-left sm:h-44 sm:w-44"
+                                        onClick={() => setFullscreenImageIndex(idx)}
+                                        aria-label={`Open uploaded issue photo ${idx + 1}`}
+                                    >
+                                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                                        <img
+                                            src={src}
+                                            alt={`Uploaded issue photo ${idx + 1}`}
+                                            className="h-full w-full object-cover"
+                                        />
+                                    </button>
+                                ))}
                             </div>
-                        ))}
+                        </div>
+                    ) : showSkeleton ? (
+                        <Skeleton className="h-52 w-full rounded-2xl" />
+                    ) : null}
+
+                    {/* Thought text */}
+                    {showThoughtSkeleton ? (
+                        <div className="flex flex-col gap-3" aria-busy="true" aria-label="Loading analysis">
+                            <Skeleton className="h-3.5 w-full" />
+                            <Skeleton className="h-3.5 w-[94%]" />
+                            <Skeleton className="h-3.5 w-[88%]" />
+                            <Skeleton className="h-3.5 w-[72%]" />
+                            {isDiagnosingRetrying ? (
+                                <p className="mt-1 text-xs text-muted-foreground">
+                                    We&apos;re Retrying Automatically
+                                </p>
+                            ) : null}
+                        </div>
+                    ) : displayThoughtText ? (
+                        <div className="flex flex-col gap-3">
+                            <p className="text-xs text-muted-foreground">{displayThoughtText}</p>
+                            {imageThoughtBreakdown.length > 0 ? (
+                                <button
+                                    type="button"
+                                    className="w-fit text-xs font-medium text-muted-foreground underline underline-offset-2"
+                                    onClick={() => setShowDetailedThinking((prev) => !prev)}
+                                >
+                                    {showDetailedThinking ? 'Hide thinking' : 'Show thinking'}
+                                </button>
+                            ) : null}
+                            {showDetailedThinking && imageThoughtBreakdown.length > 0 ? (
+                                <div className="flex flex-col gap-2 rounded-lg border border-border/60 bg-background p-3">
+                                    {imageThoughtBreakdown.map((perImageThought, idx) => (
+                                        <p key={`${idx}-${perImageThought}`} className="text-xs text-muted-foreground">
+                                            <span className="font-medium text-foreground">{`Image ${idx + 1}: `}</span>
+                                            {perImageThought}
+                                        </p>
+                                    ))}
+                                </div>
+                            ) : null}
+                        </div>
+                    ) : null}
+                </div>
+
+                {/* Detail */}
+                <>
+                    {showSkeleton || !isDetailStageReady ? (
+                        <div className="flex flex-col gap-4" aria-busy="true" aria-label="Loading diagnosis details">
+                            <div className="flex flex-col gap-2.5">
+                                <Skeleton className="h-4 w-full" />
+                                <Skeleton className="h-4 w-[96%]" />
+                                <Skeleton className="h-4 w-full" />
+                                <Skeleton className="h-4 w-[80%]" />
+                            </div>
+                            <div className="flex flex-col gap-2.5">
+                                <Skeleton className="h-3 w-32" />
+                                <Skeleton className="h-3 w-full" />
+                                <Skeleton className="h-3 w-[90%]" />
+                                <Skeleton className="h-9 w-full rounded-xl" />
+                            </div>
+                        </div>
+                    ) : hasDiagnosisFailure ? (
+                        <p className="text-sm text-foreground">{diagnosisFailureMessage}</p>
+                    ) : (
+                        <>
+                            <p className="text-sm text-foreground">{resolvedDetailText}</p>
+                            {hazardText && !isServiceBlocked ? (
+                                <p className="text-sm text-foreground">{hazardText}</p>
+                            ) : null}
+                            {SHOW_COST_ESTIMATE_UI && diagnosisForCostUi && !isServiceBlocked && !requiresClarification ? (
+                                <BetaCostEstimateCard diagnosis={diagnosisForCostUi} />
+                            ) : null}
+                            {!isServiceBlocked && !requiresClarification && conversationId ? (
+                                <div className="flex flex-col gap-2">
+                                    <h3 className="text-base font-semibold text-foreground">Estimated Cost</h3>
+                                    {diagnosisForCostUi ? (
+                                        <BetaCostEstimateCard diagnosis={diagnosisForCostUi} />
+                                    ) : (
+                                        <p className="text-sm text-muted-foreground">
+                                            Cost details are not available for this diagnosis yet.
+                                        </p>
+                                    )}
+                                </div>
+                            ) : null}
+                        </>
+                    )}
+                    {isServiceBlocked && serviceCatalog.length > 0 ? (
+                        <p className="text-sm text-muted-foreground">
+                            Trades Scandio can match today: {serviceCatalog.join(', ')}.
+                        </p>
+                    ) : null}
+                </>
+
+                {/* Did we miss something */}
+                {!showSkeleton ? (
+                    <div className="flex flex-col gap-3 text-center">
+                        <Button
+                            variant="secondary"
+                            className="h-10 w-full"
+                            onClick={() => setShowAddInfoScreen(true)}
+                        >
+                            Refine Diagnosis
+                        </Button>
+                        <p className="text-xs text-muted-foreground">
+                            Add a short note or an extra photo so the next pass can focus on the right fault.
+                        </p>
                     </div>
                 ) : null}
 
-                <div className="flex flex-col gap-6 rounded-lg border border-border bg-background p-6 text-left">
-                    <div className="flex flex-col gap-5">
-                        <div className="flex flex-row items-start justify-between gap-3">
-                            {showSkeleton || !isDetailStageReady ? (
-                                <div className="flex min-w-0 flex-1 flex-col gap-2">
-                                    <Skeleton className="h-7 w-[88%] max-w-md" />
-                                    <Skeleton className="h-7 w-[62%] max-w-sm md:hidden" />
-                                </div>
-                            ) : (
-                                <h2 className="min-w-0 flex-1 text-lg font-bold text-foreground">
-                                    {diagnosisHeadline}
-                                </h2>
-                            )}
-                            {showSkeleton || !isDetailStageReady ? (
-                                <Skeleton className="h-7 w-24 shrink-0 rounded-full" />
-                            ) : (
-                                <Badge variant="secondary" className="shrink-0">
-                                    {isServiceBlocked ? 'Can’t match' : tradeLabel || selectedTradeHint || 'Not Specified'}
-                                </Badge>
-                            )}
-                        </div>
-                        <div className="flex flex-col gap-4">
-                            {showImageSkeleton ? (
-                                <Skeleton className="aspect-[4/3] w-full rounded-lg md:h-48 md:aspect-auto" />
-                            ) : (
-                                <div className="h-48 w-full rounded-lg border border-border bg-secondary object-cover">
-                                    {imageSrc ? (
-                                        // eslint-disable-next-line @next/next/no-img-element
-                                        <img
-                                            src={imageSrc}
-                                            alt="Diagnosis photo"
-                                            className="h-48 w-full rounded-lg object-cover"
-                                            loading="eager"
-                                            fetchPriority="high"
-                                        />
-                                    ) : null}
-                                </div>
-                            )}
-                            {showThoughtSkeleton ? (
-                                <div className="flex flex-col gap-2.5" aria-busy="true" aria-label="Loading analysis">
-                                    <Skeleton className="h-3.5 w-full" />
-                                    <Skeleton className="h-3.5 w-[94%]" />
-                                    <Skeleton className="h-3.5 w-[88%]" />
-                                    <Skeleton className="h-3.5 w-[76%]" />
-                                    {isDiagnosingRetrying ? (
-                                        <p className="text-xs text-muted-foreground">
-                                            We&apos;re Retrying Automatically
-                                        </p>
-                                    ) : null}
-                                </div>
-                            ) : (
-                                <p className="text-xs text-muted-foreground">{thoughtText || ''}</p>
-                            )}
-                        </div>
-                    </div>
+                    </div>{/* /max-w-3xl */}
+                </div>{/* /scrollable */}
 
-                    <Separator />
-
-                    <div className="flex flex-col gap-4">
-                        {showSkeleton || !isDetailStageReady ? (
-                            <div className="flex flex-col gap-4" aria-busy="true" aria-label="Loading diagnosis details">
-                                <div className="flex flex-col gap-2.5">
-                                    <Skeleton className="h-4 w-full" />
-                                    <Skeleton className="h-4 w-[96%]" />
-                                    <Skeleton className="h-4 w-full" />
-                                    <Skeleton className="h-4 w-[82%]" />
-                                </div>
-                                <div className="rounded-lg border border-border/60 bg-secondary/40 p-4">
-                                    <Skeleton className="mb-3 h-3 w-32" />
-                                    <Skeleton className="h-3 w-full" />
-                                    <Skeleton className="mt-2 h-3 w-[90%]" />
-                                    <Skeleton className="mt-4 h-9 w-full rounded-md" />
-                                </div>
-                            </div>
-                        ) : hasDiagnosisFailure ? (
-                            <p className="text-sm text-foreground">{diagnosisFailureMessage}</p>
-                        ) : (
-                            <>
-                                <p className="text-sm text-foreground">{resolvedDetailText}</p>
-                                {hazardText && !isServiceBlocked ? (
-                                    <p className="text-sm text-foreground">{hazardText}</p>
-                                ) : null}
-                                {diagnosisForCostUi && !isServiceBlocked && !requiresClarification ? (
-                                    <BetaCostEstimateCard diagnosis={diagnosisForCostUi} />
-                                ) : null}
-                            </>
-                        )}
-                        {isServiceBlocked && serviceCatalog.length > 0 ? (
-                            <p className="text-sm text-muted-foreground">
-                                Trades Scandio can match today: {serviceCatalog.join(', ')}.
-                            </p>
-                        ) : null}
+                {/* Fixed footer */}
+                <div
+                    ref={footerRef}
+                    className="sticky bottom-0 shrink-0 bg-background px-6 py-3"
+                >
+                    <div className="w-full max-w-sm mx-auto">
+                        {diagnosisFooter}
                     </div>
                 </div>
-
-                {isMoreInfoExpanded ? (
-                    <div className="flex flex-col gap-3 rounded-lg border border-border bg-background p-6 text-left">
-                        <Label htmlFor="diagnosis-info-text">Add More Information</Label>
-                        <Textarea
-                            id="diagnosis-info-text"
-                            ref={infoTextareaRef}
-                            className="min-h-18"
-                            value={infoText}
-                            onChange={(e) => setInfoText(e.target.value)}
-                        />
-                        <p className="text-xs text-muted-foreground">Optional. Not a substitute for a site visit.</p>
+                {/* Add info — full-screen overlay, start-page style */}
+                {showAddInfoScreen && (
+                    <div className="absolute inset-0 z-[300] flex flex-col overflow-hidden bg-background">
+                        <div className="sticky top-0 z-20 shrink-0 bg-background px-6 py-3">
+                            <div className="flex w-full items-center gap-3">
+                                <Button
+                                    type="button"
+                                    variant="secondary"
+                                    size="icon"
+                                    className="size-10"
+                                    onClick={() => setShowAddInfoScreen(false)}
+                                    aria-label="Go back"
+                                >
+                                    <ArrowLeft weight="bold" aria-hidden />
+                                </Button>
+                            </div>
+                        </div>
+                        <div className="flex-1 flex flex-col items-center justify-center p-6 min-h-0">
+                            <div className="flex flex-col gap-6 w-full max-w-sm mx-auto">
+                                <StepHeading
+                                    title="What Else Should We Know?"
+                                    sub="Anything you add here is sent with your photos on the next diagnosis run."
+                                />
+                                <div className="flex flex-col gap-3">
+                                    <Textarea
+                                        autoFocus
+                                        className="h-24 w-full"
+                                        value={infoText}
+                                        onChange={(e) => setInfoText(e.target.value)}
+                                    />
+                                    <div className="text-xs text-muted-foreground text-center">
+                                        {infoText.trim().length >= MIN_DESCRIPTION_CHARS ? (
+                                            <span>
+                                                You have entered {infoText.trim().length} characters, you can continue.
+                                            </span>
+                                        ) : (
+                                            <span>
+                                                We require at least {MIN_DESCRIPTION_CHARS - infoText.trim().length} more
+                                                characters to continue.
+                                            </span>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="sticky bottom-0 shrink-0 bg-background p-6">
+                            <div className="w-full max-w-sm mx-auto">
+                                <Button
+                                    type="button"
+                                    className="h-10 w-full"
+                                    disabled={
+                                        infoText.trim().length < MIN_DESCRIPTION_CHARS ||
+                                        isDiagnosing ||
+                                        showSkeleton
+                                    }
+                                    onClick={() => void handleRescanReport()}
+                                >
+                                    {isDiagnosing ? 'Re-Scanning\u2026' : 'Re-Scan Report'}
+                                </Button>
+                            </div>
+                        </div>
                     </div>
-                ) : (
-                    <button
-                        type="button"
-                        onClick={() => setIsMoreInfoExpanded(true)}
-                        className="flex flex-row items-center justify-between rounded-lg border border-border/50 bg-background px-6 py-3.5 text-left"
-                    >
-                        <p className="text-sm text-muted-foreground">Did We Miss Something?</p>
-                        <p className="text-sm font-medium text-foreground">Add Information</p>
-                    </button>
                 )}
-            </ScanFlowShell>
+
+                {activeFullscreenImageSrc ? (
+                    <div className="absolute inset-0 z-[320] flex flex-col overflow-hidden bg-background">
+                        <div className="sticky top-0 z-20 shrink-0 bg-background px-6 py-3">
+                            <div className="flex w-full items-center justify-between gap-3">
+                                <Button
+                                    type="button"
+                                    variant="secondary"
+                                    size="icon"
+                                    className="size-10"
+                                    onClick={() => setFullscreenImageIndex(null)}
+                                    aria-label="Close full screen image"
+                                >
+                                    <ArrowLeft weight="bold" aria-hidden />
+                                </Button>
+                                <p className="text-xs text-muted-foreground">
+                                    {`Image ${(fullscreenImageIndex ?? 0) + 1} of ${uploadedImageSources.length}`}
+                                </p>
+                            </div>
+                        </div>
+                        <div
+                            className="flex min-h-0 flex-1 items-center justify-center p-6"
+                            onTouchStart={(event) => {
+                                fullscreenTouchStartXRef.current = event.changedTouches[0]?.clientX ?? null;
+                            }}
+                            onTouchEnd={(event) => {
+                                const startX = fullscreenTouchStartXRef.current;
+                                const endX = event.changedTouches[0]?.clientX ?? null;
+                                fullscreenTouchStartXRef.current = null;
+                                if (startX == null || endX == null) return;
+                                const deltaX = endX - startX;
+                                const threshold = 40;
+                                if (Math.abs(deltaX) < threshold) return;
+                                if (deltaX > 0) {
+                                    goToPrevFullscreenImage();
+                                } else {
+                                    goToNextFullscreenImage();
+                                }
+                            }}
+                        >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                                src={activeFullscreenImageSrc}
+                                alt={`Full-screen uploaded issue photo ${(fullscreenImageIndex ?? 0) + 1}`}
+                                className="max-h-full max-w-full rounded-lg object-contain"
+                            />
+                        </div>
+                        <div className="sticky bottom-0 shrink-0 bg-background/95 p-6">
+                            <div className="flex flex-col items-center gap-3 text-center">
+                                {uploadedImageSources.length > 1 ? (
+                                    <div className="flex items-center justify-center gap-1.5">
+                                        {uploadedImageSources.map((_, idx) => {
+                                            const isActive = idx === fullscreenImageIndex;
+                                            return (
+                                                <span
+                                                    key={`fullscreen-dot-${idx}`}
+                                                    className={
+                                                        isActive
+                                                            ? 'h-2 w-2 rounded-full bg-foreground'
+                                                            : 'h-2 w-2 rounded-full bg-secondary'
+                                                    }
+                                                />
+                                            );
+                                        })}
+                                    </div>
+                                ) : null}
+                                <p className="text-xs text-muted-foreground">
+                                    {activeFullscreenThought ||
+                                        `No unique image thought is available yet for image ${(fullscreenImageIndex ?? 0) + 1}.`}
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                ) : null}
+
+            </div>{/* /h-dvh */}
         </>
     );
 }

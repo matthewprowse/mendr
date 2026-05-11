@@ -41,10 +41,19 @@ export async function PATCH(req: NextRequest) {
         'contact_name',
         'business_name',
         'trade',
+        'trade_description',
         'phone',
         'email',
+        'address',
         'areas',
         'founded_year',
+        'website',
+        'whatsapp_available',
+        'registration_number',
+        'certifications',
+        'highlights',
+        'referral',
+        'team_size',
     ] as const;
     const patch: Record<string, unknown> = {};
     for (const key of allowed) {

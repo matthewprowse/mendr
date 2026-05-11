@@ -20,6 +20,8 @@ type LandingHeaderProps = {
     showTrades?: boolean;
     rightSlot?: React.ReactNode;
     logoBadge?: React.ReactNode;
+    mobileCtaHref?: string;
+    mobileCtaLabel?: string;
 };
 
 export function LandingHeader({
@@ -28,6 +30,8 @@ export function LandingHeader({
     showTrades = false,
     rightSlot,
     logoBadge,
+    mobileCtaHref = '/start',
+    mobileCtaLabel = 'Generate Free Scandio Report',
 }: LandingHeaderProps) {
     const pathname = usePathname();
     const { user, isLoading: authLoading } = useAuth();
@@ -43,6 +47,15 @@ export function LandingHeader({
         setMobileOpen(false);
     }, [pathname]);
 
+    useEffect(() => {
+        if (!mobileOpen) return;
+        const prev = document.body.style.overflow;
+        document.body.style.overflow = 'hidden';
+        return () => {
+            document.body.style.overflow = prev;
+        };
+    }, [mobileOpen]);
+
     const allLinks = [
         ...navLinks,
         ...(showTrades ? [{ href: '#all-services', label: 'Trades' }] : []),
@@ -53,7 +66,7 @@ export function LandingHeader({
         <>
             <header
                 className={cn(
-                    'sticky top-0 z-[100] bg-background',
+                    'sticky top-0 z-[110] bg-background',
                     mobileOpen ? 'border-border/50' : 'border-border/50'
                 )}
             >
@@ -117,46 +130,53 @@ export function LandingHeader({
                 </div>
             </header>
 
-            {/* Mobile nav panel */}
+            {/* Mobile nav — full viewport overlay (header stays on top via z-index) */}
             {mobileOpen && (
-                <div className="fixed inset-x-0 top-16 z-[90] border-b border-border/50 bg-background/95 backdrop-blur md:hidden">
-                    <nav className="flex flex-col gap-1 p-4">
-                        {allLinks.map((link) => {
-                            const key = `${link.href}-${link.label}`;
-                            const className =
-                                'rounded-md px-3 py-2 text-base font-medium text-foreground hover:bg-muted/60';
-                            if (link.href.startsWith('#')) {
+                <div
+                    className="fixed inset-0 z-[100] flex flex-col overflow-y-auto bg-background md:hidden"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-label="Site menu"
+                >
+                    <div className="flex min-h-[100dvh] flex-col pt-16">
+                        <nav className="flex flex-col gap-1 px-4">
+                            {allLinks.map((link) => {
+                                const key = `${link.href}-${link.label}`;
+                                const className =
+                                    'rounded-md px-3 py-3 text-lg font-medium text-foreground hover:bg-muted/60';
+                                if (link.href.startsWith('#')) {
+                                    return (
+                                        <a
+                                            key={key}
+                                            href={link.href}
+                                            onClick={() => setMobileOpen(false)}
+                                            className={className}
+                                        >
+                                            {link.label}
+                                        </a>
+                                    );
+                                }
+
                                 return (
-                                    <a
+                                    <Link
                                         key={key}
                                         href={link.href}
                                         onClick={() => setMobileOpen(false)}
                                         className={className}
                                     >
                                         {link.label}
-                                    </a>
+                                    </Link>
                                 );
-                            }
+                            })}
+                        </nav>
 
-                            return (
-                                <Link
-                                    key={key}
-                                    href={link.href}
-                                    onClick={() => setMobileOpen(false)}
-                                    className={className}
-                                >
-                                    {link.label}
+                        <div className="mt-auto flex p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+                            <Button asChild variant="default" className="h-10 w-full text-sm">
+                                <Link href={mobileCtaHref} onClick={() => setMobileOpen(false)}>
+                                    {mobileCtaLabel}
                                 </Link>
-                            );
-                        })}
-                    </nav>
-
-                    <div className="flex p-4 pt-0">
-                        <Button asChild variant="default" className="h-10 w-full">
-                            <Link href="/welcome" onClick={() => setMobileOpen(false)}>
-                                Generate Free Scandio Report
-                            </Link>
-                        </Button>
+                            </Button>
+                        </div>
                     </div>
                 </div>
             )}

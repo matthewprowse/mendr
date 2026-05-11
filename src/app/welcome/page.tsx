@@ -1,11 +1,5 @@
-import type { Metadata } from 'next';
-import WelcomePageClient from './welcome-client';
-
-export const metadata: Metadata = {
-    title: 'New Scan',
-    description: 'Upload a photo to begin your free Scandio home maintenance diagnosis.',
-};
+import { redirect } from 'next/navigation';
 
 export default function WelcomePage() {
-    return <WelcomePageClient />;
+    redirect('/start');
 }

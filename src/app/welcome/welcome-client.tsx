@@ -20,9 +20,15 @@ import { Button } from "@/components/ui/button";
 import { importLibrary } from "@googlemaps/js-api-loader";
 import { ensureGoogleMapsLoaderOptions } from "@/lib/google-maps-js-loader";
 import { MapPin } from "lucide-react";
+import { Images } from "@phosphor-icons/react";
 import { ScanFlowShell } from "@/components/scan-flow-shell";
 import { patchConversation } from "@/lib/diagnoses-api";
+import { bootstrapDiagnosisFromServiceHint } from "@/lib/diagnosis-persist-shape";
 import { X } from "@phosphor-icons/react";
+import { toast } from "sonner";
+
+const WESTERN_CAPE_LOCATION_ERROR =
+    "Please use a location in the Western Cape, South Africa.";
 
 export default function WelcomePageClient() {
     const router = useRouter();
@@ -44,43 +50,43 @@ export default function WelcomePageClient() {
     const suggestedDestinations = [
         {
             id: "nearby",
-            title: "Nearby",
-            subtitle: "Find what's around you",
+            title: "Use Current Location",
+            subtitle: "",
             value: "",
             useCurrentLocation: true,
         },
         {
-            id: "sea-point",
+            id: "stellenbosch",
             title: "Stellenbosch",
-            subtitle: "Atlantic Seaboard",
+            subtitle: "",
             value: "Stellenbosch, Western Cape",
             useCurrentLocation: false,
         },
         {
-            id: "gardens",
+            id: "paarl",
             title: "Paarl",
-            subtitle: "City Bowl area",
+            subtitle: "",
             value: "Paarl, Western Cape",
             useCurrentLocation: false,
         },
         {
-            id: "claremont",
+            id: "franschhoek",
             title: "Franschhoek",
-            subtitle: "Southern Suburbs",
+            subtitle: "",
             value: "Franschhoek, Western Cape",
             useCurrentLocation: false,
         },
         {
-            id: "bloubergstrand",
+            id: "hermanus",
             title: "Hermanus",
-            subtitle: "West Coast side",
+            subtitle: "",
             value: "Hermanus, Western Cape",
             useCurrentLocation: false,
         },
         {
             id: "george",
             title: "George",
-            subtitle: "Garden Route",
+            subtitle: "",
             value: "George, Western Cape",
             useCurrentLocation: false,
         },
@@ -102,13 +108,13 @@ export default function WelcomePageClient() {
             title: "What's Happening?",
             collapsedCta: selectedService ?? "Add Information",
             description:
-                "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore.",
+                "Take a photo of the fault and select the service type. Add a short description if the photo alone doesn't tell the full story.",
         },
         where: {
             title: "Where's This?",
             collapsedCta: "Search Locations",
             description:
-                "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore.",
+                "Your location is used to find nearby providers. We only show providers in the Western Cape.",
         },
     } as const;
 
@@ -192,73 +198,122 @@ export default function WelcomePageClient() {
         };
     }, []);
 
-    const geocodeAddress = async (address: string): Promise<string> => {
-        const geocoder = geocoderRef.current;
-        if (!geocoder || !(window as any).google?.maps) return address;
-
-        return new Promise((resolve) => {
-            geocoder.geocode({ address, region: "za" }, (results: any, status: string) => {
-                if (status === "OK" && results?.[0]?.formatted_address) {
-                    resolve(results[0].formatted_address);
-                    return;
-                }
-                resolve(address);
+    const geocodeInWesternCape = async (
+        payload: { address?: string; lat?: number; lng?: number }
+    ): Promise<{ address: string | null; error: string | null }> => {
+        try {
+            const res = await fetch("/api/geocode", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ ...payload, westernCapeOnly: true }),
             });
-        });
-    };
-
-    const reverseGeocode = async (latitude: number, longitude: number): Promise<string> => {
-        const geocoder = geocoderRef.current;
-        if (!geocoder || !(window as any).google?.maps) {
-            return `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`;
+            const data = (await res.json().catch(() => null)) as
+                | { address?: string; error?: string }
+                | null;
+            if (!res.ok) {
+                return {
+                    address: null,
+                    error: data?.error || WESTERN_CAPE_LOCATION_ERROR,
+                };
+            }
+            return {
+                address:
+                    typeof data?.address === "string" && data.address.trim()
+                        ? data.address.trim()
+                        : null,
+                error: null,
+            };
+        } catch {
+            return { address: null, error: "Could not validate this location. Please try again." };
         }
+    };
 
-        return new Promise((resolve) => {
-            geocoder.geocode(
-                { location: { lat: latitude, lng: longitude } },
-                (results: any, status: string) => {
-                    if (status === "OK" && results?.[0]?.formatted_address) {
-                        resolve(results[0].formatted_address);
-                        return;
-                    }
-                    resolve(`${latitude.toFixed(6)}, ${longitude.toFixed(6)}`);
-                }
-            );
+    const geocodeAddress = async (address: string): Promise<string | null> => {
+        const result = await geocodeInWesternCape({ address: address.trim() });
+        return result.address;
+    };
+
+    const reverseGeocode = async (
+        latitude: number,
+        longitude: number
+    ): Promise<string | null> => {
+        const result = await geocodeInWesternCape({ lat: latitude, lng: longitude });
+        return result.address;
+    };
+
+    const getCurrentPositionAsync = (
+        options: PositionOptions
+    ): Promise<GeolocationPosition> => {
+        return new Promise((resolve, reject) => {
+            navigator.geolocation.getCurrentPosition(resolve, reject, options);
         });
     };
 
-    const handleGetCurrentLocation = () => {
+    const handleGetCurrentLocation = async () => {
         if (typeof navigator === "undefined" || !navigator.geolocation) {
-            setLocationValue("Location Not Supported");
+            toast.error("Location is not supported on this device.");
             return;
         }
 
         setIsGettingLocation(true);
-        navigator.geolocation.getCurrentPosition(
-            async (position) => {
-                const { latitude, longitude } = position.coords;
-                const formattedAddress = await reverseGeocode(latitude, longitude);
-                setLocationValue(formattedAddress);
-                setIsGettingLocation(false);
-            },
-            () => {
-                setLocationValue("Cannot Retrieve Location");
-                setIsGettingLocation(false);
-            },
-            {
-                enableHighAccuracy: true,
-                timeout: 10000,
-                maximumAge: 60000,
+        try {
+            // On some mobile devices high-accuracy GPS can timeout or fail.
+            // Retry once with a lower-accuracy, cached-friendly request.
+            let position: GeolocationPosition;
+            try {
+                position = await getCurrentPositionAsync({
+                    enableHighAccuracy: true,
+                    timeout: 10000,
+                    maximumAge: 60000,
+                });
+            } catch {
+                position = await getCurrentPositionAsync({
+                    enableHighAccuracy: false,
+                    timeout: 20000,
+                    maximumAge: 300000,
+                });
             }
-        );
+
+            const { latitude, longitude } = position.coords;
+            const formattedAddress = await reverseGeocode(latitude, longitude);
+            if (!formattedAddress) {
+                setLocationValue("");
+                toast.error(WESTERN_CAPE_LOCATION_ERROR);
+                return;
+            }
+            setLocationValue(formattedAddress);
+        } catch (error) {
+            setLocationValue("");
+            const code =
+                typeof error === "object" &&
+                error !== null &&
+                "code" in error &&
+                typeof (error as { code?: unknown }).code === "number"
+                    ? (error as { code: number }).code
+                    : null;
+
+            if (code === 1) {
+                toast.error("We cannot access your location. You must allow location access in your browser settings.");
+            } else if (code === 3) {
+                toast.error("Location request timed out. Move to better signal and try again.");
+            } else {
+                toast.error("Could not retrieve your current location. Please try again.");
+            }
+        } finally {
+            setIsGettingLocation(false);
+        }
     };
 
     const handleDestinationSelect = async (destination: (typeof suggestedDestinations)[number]) => {
         if (destination.useCurrentLocation) {
-            handleGetCurrentLocation();
+            await handleGetCurrentLocation();
             return;
         }
         const formattedAddress = await geocodeAddress(destination.value);
+        if (!formattedAddress) {
+            toast.error(WESTERN_CAPE_LOCATION_ERROR);
+            return;
+        }
         setLocationValue(formattedAddress);
     };
 
@@ -302,23 +357,34 @@ export default function WelcomePageClient() {
             }
 
             const location = locationValue.trim();
+            const validatedLocation = await geocodeAddress(location);
+            if (!validatedLocation) {
+                toast.error(WESTERN_CAPE_LOCATION_ERROR);
+                return;
+            }
+            setLocationValue(validatedLocation);
             const trade = (selectedService ?? "").trim();
 
             // Save welcome context to Supabase early so diagnosis does not depend on URL params.
             await patchConversation(conversationId, {
                 image_url: finalDataUrl,
                 initial_image_description: welcomeInfoText.trim() || null,
-                customer_address: location || null,
-                diagnosis: trade ? { selected_trade_hint: trade } : null,
+                customer_address: validatedLocation || null,
+                diagnosis: trade ? bootstrapDiagnosisFromServiceHint(trade) : null,
             });
 
-            router.push(`/diagnosis/${encodeURIComponent(conversationId)}`);
+            const qp = new URLSearchParams();
+            if (trade) qp.set('trade', trade);
+            if (validatedLocation) qp.set('location', validatedLocation);
+            const suffix = qp.toString() ? `?${qp.toString()}` : '';
+            router.push(`/processing/${encodeURIComponent(conversationId)}${suffix}`);
         } finally {
             setIsStartingDiagnosis(false);
         }
     };
 
     return (
+        <div>
         <ScanFlowShell
             contentBottomPadding={72}
             contentWrapperClassName="p-0 py-18"
@@ -391,7 +457,7 @@ export default function WelcomePageClient() {
                                                 </SelectContent>
                                             </Select>
                                             <p className="text-xs text-muted-foreground">
-                                                Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore.
+                                                Not sure which category fits? Select the closest one, and we will confirm during diagnosis.
                                             </p>
                                             {!isLoadingServices && services.length === 0 ? (
                                                 <p className="text-xs text-muted-foreground">
@@ -417,26 +483,17 @@ export default function WelcomePageClient() {
                                             }}
                                         />
                                         {!photoPreviewUrl ? (
-                                            <div className="flex flex-col px-4 py-6 items-center justify-center rounded-lg border border-dashed border-border">
-                                                <p
-                                                    className="text-sm text-foreground font-medium"
-                                                >
-                                                    Header Name
-                                                </p>
-                                                <p
-                                                    className="text-xs text-muted-foreground mt-1"
-                                                >
-                                                    Lorem ipsum dolor sit amet, consectetur adipiscing elit.
-                                                </p>
+                                            <div className="flex flex-col gap-3">
                                                 <Button
-                                                    type="button"
                                                     variant="secondary"
-                                                    size="sm"
-                                                    className="w-fit self-center mt-4"
+                                                    className="h-10 w-full"
                                                     onClick={() => photoInputRef.current?.click()}
                                                 >
-                                                    Browse Photos
+                                                    Choose Photo
                                                 </Button>
+                                                <p className="text-xs text-muted-foreground mt-1">
+                                                    Take a clear photo showing the fault. The better the photo, the more accurate the diagnosis.
+                                                </p>
                                             </div>
                                         ) : (
                                             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -478,11 +535,12 @@ export default function WelcomePageClient() {
                                             <Label>Add More Information</Label>
                                             <Textarea
                                                 className="min-h-18"
+                                                placeholder="Describe what you see. When did it start? Has it gotten worse?"
                                                 value={welcomeInfoText}
                                                 onChange={(e) => setWelcomeInfoText(e.target.value)}
                                             />
                                             <p className="text-xs text-muted-foreground">
-                                                Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore.
+                                                Optional, but more context improves diagnosis accuracy.
                                             </p>
                                         </div>
                                     </>
@@ -498,7 +556,7 @@ export default function WelcomePageClient() {
                                                 onChange={(event) => setLocationValue(event.target.value)}
                                             />
                                             <p className="text-xs text-muted-foreground">
-                                                Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore.
+                                                Start typing your street address, suburb, or town. Provider results are within 25km of this location.
                                             </p>
                                         </div>
 
@@ -552,5 +610,6 @@ export default function WelcomePageClient() {
                     );
                 })}
         </ScanFlowShell>
+        </div>
     );
 }

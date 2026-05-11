@@ -7,11 +7,16 @@ import type { DiagnosisData, Provider } from '@/app/chat/components/types';
 import { ProviderCard } from '@/app/chat/components/provider-card';
 import { ProvidersMap } from '@/app/chat/components/providers-map';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, ArrowRight } from '@/lib/icons';
-import { AppHeader } from '@/components/app-header';
+import { ArrowLeft as ArrowLeftGeist, ArrowRight } from '@/lib/icons';
+import { ArrowLeft } from '@phosphor-icons/react';
 import { toast } from 'sonner';
-import { Separator } from '@/components/ui/separator';
-import { Label } from '@/components/ui/label';
+import { Skeleton } from '@/components/ui/skeleton';
+
+const PAGE_BG = '#FBFAF7';
+const INK = '#16120E';
+
+const backArrowHitClass =
+    'inline-flex size-8 shrink-0 items-center justify-center rounded-md touch-manipulation text-[#16120E] transition-opacity hover:opacity-70 active:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-black/15 focus-visible:ring-offset-2 focus-visible:ring-offset-[#FBFAF7]';
 
 type MatchPageClientProps = {
     conversationId: string;
@@ -245,7 +250,7 @@ export function MatchPageClient({ conversationId }: MatchPageClientProps) {
                 if (cancelled) return;
 
                 if (!conv) {
-                    router.replace('/welcome');
+                    router.replace('/start');
                     return;
                 }
 
@@ -384,47 +389,15 @@ export function MatchPageClient({ conversationId }: MatchPageClientProps) {
         nearbyOnlyProviders.length,
     ]);
 
-    if (loading && !conversation) {
-        return (
-            <main className="flex min-h-screen items-center justify-center bg-background">
-                <div className="flex flex-col items-center gap-3">
-                    <div className="h-8 w-8 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent" />
-                    <p className="text-sm text-muted-foreground">Loading your matches…</p>
-                </div>
-            </main>
-        );
-    }
-
-    if (!conversation) {
-        return (
-            <main className="flex min-h-screen items-center justify-center bg-background">
-                <div className="space-y-3 text-center">
-                    <p className="text-sm font-medium text-foreground">
-                        We couldn&apos;t find this match.
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                        Please start again from the welcome step.
-                    </p>
-                    <Button size="sm" onClick={() => router.push('/welcome')}>
-                        Back to welcome
-                    </Button>
-                </div>
-            </main>
-        );
-    }
-
     const userLocation =
-        typeof conversation.customer_lat === 'number' &&
-        typeof conversation.customer_lng === 'number' &&
+        typeof conversation?.customer_lat === 'number' &&
+        typeof conversation?.customer_lng === 'number' &&
         !Number.isNaN(conversation.customer_lat) &&
         !Number.isNaN(conversation.customer_lng)
-            ? {
-                  lat: conversation.customer_lat,
-                  lng: conversation.customer_lng,
-              }
+            ? { lat: conversation.customer_lat, lng: conversation.customer_lng }
             : null;
 
-    const primaryDiagnosis = conversation.diagnosis;
+    const primaryDiagnosis = conversation?.diagnosis ?? null;
 
     const allProviders = [
         ...providers,
@@ -439,195 +412,242 @@ export function MatchPageClient({ conversationId }: MatchPageClientProps) {
 
     const mapsApiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '';
 
+    // ── Loading / not-found shells ─────────────────────────────────────────────
+
+    if (loading && !conversation) {
+        return (
+            <div className="h-dvh overflow-hidden flex flex-col" style={{ background: PAGE_BG }}>
+                <div className="shrink-0 flex items-center justify-between px-6 pt-6 pb-2">
+                    <button
+                        type="button"
+                        onClick={() => router.back()}
+                        aria-label="Go back"
+                        className={backArrowHitClass}
+                    >
+                        <ArrowLeft size={20} weight="bold" aria-hidden />
+                    </button>
+                    <span className="text-sm font-semibold" style={{ color: INK }}>Scandio</span>
+                    <span className="size-8 shrink-0" aria-hidden />
+                </div>
+                <div className="flex-1 flex flex-col items-center justify-center gap-3 px-6">
+                    <div className="h-7 w-7 animate-spin rounded-full border-2 border-black/20 border-t-black/60" />
+                    <p className="text-sm text-muted-foreground">Finding your matches\u2026</p>
+                </div>
+            </div>
+        );
+    }
+
+    if (!conversation) {
+        return (
+            <div className="h-dvh overflow-hidden flex flex-col" style={{ background: PAGE_BG }}>
+                <div className="shrink-0 flex items-center justify-between px-6 pt-6 pb-2">
+                    <button
+                        type="button"
+                        onClick={() => router.back()}
+                        aria-label="Go back"
+                        className={backArrowHitClass}
+                    >
+                        <ArrowLeft size={20} weight="bold" aria-hidden />
+                    </button>
+                    <span className="text-sm font-semibold" style={{ color: INK }}>Scandio</span>
+                    <span className="size-8 shrink-0" aria-hidden />
+                </div>
+                <div className="flex-1 flex flex-col items-center justify-center gap-4 px-6 text-center">
+                    <p className="text-sm font-medium" style={{ color: INK }}>
+                        We couldn&apos;t find this match.
+                    </p>
+                    <Button size="sm" className="h-10" onClick={() => router.push('/start')}>
+                        Start New Diagnosis
+                    </Button>
+                </div>
+            </div>
+        );
+    }
+
+    // ── Main page ──────────────────────────────────────────────────────────────
+
     return (
-        <main className="flex min-h-screen flex-col bg-background">
-            <AppHeader
-                showBack
-                showNewScan
-                onNewScanClick={() => router.push('/welcome')}
-            />
-            <div className="mx-auto flex w-full max-w-md flex-1 flex-col gap-8 px-4 pb-24 pt-6 sm:max-w-lg">
-                <header className="flex flex-col gap-2">
-                    <h1 className="text-2xl text-foreground font-bold tracking-tight">
-                        Provider Matches
-                    </h1>
-                    {primaryDiagnosis?.diagnosis && (
-                        <p className="text-sm text-muted-foreground">
-                            Based on your diagnosis of{' '}
-                            <span className="font-medium text-foreground">
-                                {primaryDiagnosis.diagnosis}
-                            </span>
-                            , here are nearby providers that look like a good fit.
-                        </p>
-                    )}
-                </header>
+        <div className="h-dvh overflow-hidden flex flex-col" style={{ background: PAGE_BG }}>
+            {/* Header */}
+            <div className="shrink-0 flex items-center justify-between px-6 pt-6 pb-2">
+                <button
+                    type="button"
+                    onClick={() => router.back()}
+                    aria-label="Go back"
+                    className={backArrowHitClass}
+                >
+                    <ArrowLeft size={20} weight="bold" aria-hidden />
+                </button>
+                <span
+                    className="min-w-0 flex-1 truncate px-2 text-center text-sm font-semibold"
+                    style={{ color: INK }}
+                >
+                    Scandio
+                </span>
+                <span className="size-8 shrink-0" aria-hidden />
+            </div>
 
-                <Separator />
+            {/* Scrollable content */}
+            <div className="min-h-0 flex-1 overflow-y-auto">
+                <div className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-4 pt-4 pb-8">
 
-                {allProviders.length === 0 ? (
-                    <section className="rounded-lg border border-dashed border-border bg-muted/40 p-4 space-y-3">
-                        <p className="text-sm text-muted-foreground">
-                            We haven&apos;t loaded providers for this diagnosis yet.
-                        </p>
-                        <div className="flex flex-wrap items-center gap-3">
-                            <Button
-                                type="button"
-                                size="sm"
-                                onClick={handleFindProviders}
-                                disabled={loadingProviders}
-                            >
-                                {loadingProviders ? 'Finding providers…' : 'Find providers near me'}
-                            </Button>
-                            {!userLocation && (
-                                <p className="text-xs text-muted-foreground">
-                                    We&apos;ll ask for your location to search for trusted providers
-                                    in your area.
-                                </p>
-                            )}
-                        </div>
-                    </section>
-                ) : (
-                    <>
-                        <section className="space-y-6">
-                            <div className="space-y-2">
-                                <Label className="text-base text-foreground font-medium">
-                                    Recommended providers
-                                </Label>
-                                <p className="text-sm text-muted-foreground">
-                                    Use the arrows below to compare providers. Tap a card to view
-                                    contact options or send a WhatsApp summary.
-                                </p>
-                            </div>
-                            {currentProvider && (
-                                <div className="space-y-4">
-                                    <ProviderCard
-                                        provider={currentProvider}
-                                        index={activeIndex}
-                                        diagnosis={primaryDiagnosis}
-                                        conversationId={conversationId}
-                                        openPopoverId={openPopoverId}
-                                        setOpenPopoverId={setOpenPopoverId}
-                                        trade={primaryDiagnosis?.trade}
-                                        userLocation={userLocation}
-                                    />
-                                    {allProviders.length > 1 && (
-                                        <div className="flex items-center justify-between gap-3">
-                                            <div className="flex gap-2">
-                                                <Button
-                                                    type="button"
-                                                    size="icon"
-                                                    variant="outline"
-                                                    aria-label="Previous provider"
-                                                    className="h-10 w-10"
-                                                    onClick={() =>
-                                                        setActiveIndex(
-                                                            (activeIndex - 1 + allProviders.length) %
-                                                                allProviders.length
-                                                        )
-                                                    }
-                                                >
-                                                    <ArrowLeft className="size-4" />
-                                                </Button>
-                                                <Button
-                                                    type="button"
-                                                    size="icon"
-                                                    variant="outline"
-                                                    aria-label="Next provider"
-                                                    className="h-10 w-10"
-                                                    onClick={() =>
-                                                        setActiveIndex(
-                                                            (activeIndex + 1) % allProviders.length
-                                                        )
-                                                    }
-                                                >
-                                                    <ArrowRight className="size-4" />
-                                                </Button>
-                                            </div>
-                                            <div className="flex items-center gap-1.5">
-                                                {allProviders.map((_, i) => (
-                                                    <button
-                                                        key={i}
-                                                        type="button"
-                                                        onClick={() => setActiveIndex(i)}
-                                                        aria-label={`Go to provider ${i + 1}`}
-                                                        className={`size-1.5 rounded-full transition-colors ${
-                                                            i === activeIndex
-                                                                ? 'bg-foreground'
-                                                                : 'bg-muted-foreground/40 hover:bg-muted-foreground/60'
-                                                        }`}
-                                                    />
-                                                ))}
-                                            </div>
-                                        </div>
-                                    )}
+                    {/* Page heading */}
+                    <div className="flex flex-col gap-1">
+                        <h1 className="text-2xl font-semibold leading-snug" style={{ color: INK }}>
+                            Provider Matches
+                        </h1>
+                        {primaryDiagnosis?.diagnosis && (
+                            <p className="text-sm leading-relaxed text-muted-foreground">
+                                Based on:{' '}
+                                <span className="font-medium" style={{ color: INK }}>
+                                    {primaryDiagnosis.diagnosis}
+                                </span>
+                            </p>
+                        )}
+                    </div>
+
+                    {/* Empty / loading state */}
+                    {allProviders.length === 0 ? (
+                        <div className="flex flex-col gap-4">
+                            {loadingProviders ? (
+                                <div className="flex flex-col gap-3">
+                                    <Skeleton className="h-36 w-full rounded-3xl" />
+                                    <Skeleton className="h-36 w-full rounded-3xl" />
+                                </div>
+                            ) : (
+                                <div className="flex flex-col gap-4 rounded-3xl border border-black/[0.07] bg-white p-6 shadow-sm">
+                                    <p className="text-sm text-muted-foreground">
+                                        We haven&apos;t loaded providers for this diagnosis yet.
+                                    </p>
+                                    <Button
+                                        type="button"
+                                        className="h-10 w-full"
+                                        onClick={() => void handleFindProviders()}
+                                        disabled={loadingProviders}
+                                    >
+                                        Find Providers Near Me
+                                    </Button>
                                 </div>
                             )}
-                        </section>
-
-                        {allProviders.length > 0 && mapsApiKey && currentProvider && (
-                            <section className="space-y-3">
-                                <Label className="text-base text-foreground font-medium">
-                                    Map
-                                </Label>
-                                <div className="w-full max-w-full overflow-hidden rounded-lg border border-input/50 bg-background">
-                                    <ProvidersMap
-                                        apiKey={mapsApiKey}
-                                        providers={allProviders}
-                                        emergingProviders={[]}
-                                        nearbyOnlyProviders={[]}
-                                        userLocation={userLocation}
-                                        conversationId={conversation.id}
-                                        hideFloatingCard
-                                        mode="rank"
-                                        activeIndex={activeIndex}
-                                        onActiveIndexChange={setActiveIndex}
-                                        className="w-full overflow-hidden"
-                                    />
-                                    <div className="border-t border-border px-4 py-3 text-sm flex flex-col gap-2">
-                                        <div className="text-sm font-semibold text-foreground">
-                                            {currentProvider.name}
-                                        </div>
-                                        {currentProvider.address && (
-                                            <div className="text-xs text-muted-foreground">
-                                                {currentProvider.address}
+                        </div>
+                    ) : (
+                        <>
+                            {/* Provider card + pagination */}
+                            <div className="flex flex-col gap-4">
+                                <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                                    Recommended providers
+                                </span>
+                                {currentProvider && (
+                                    <div className="flex flex-col gap-3">
+                                        <ProviderCard
+                                            provider={currentProvider}
+                                            index={activeIndex}
+                                            diagnosis={primaryDiagnosis}
+                                            conversationId={conversationId}
+                                            openPopoverId={openPopoverId}
+                                            setOpenPopoverId={setOpenPopoverId}
+                                            trade={primaryDiagnosis?.trade}
+                                            userLocation={userLocation}
+                                        />
+                                        {allProviders.length > 1 && (
+                                            <div className="flex items-center justify-between gap-3">
+                                                <div className="flex gap-2">
+                                                    <button
+                                                        type="button"
+                                                        aria-label="Previous provider"
+                                                        className="flex h-10 w-10 items-center justify-center rounded-full bg-black/[0.06] active:bg-black/10 disabled:opacity-40"
+                                                        onClick={() =>
+                                                            setActiveIndex(
+                                                                (activeIndex - 1 + allProviders.length) %
+                                                                    allProviders.length
+                                                            )
+                                                        }
+                                                    >
+                                                        <ArrowLeftGeist className="size-4" style={{ color: INK }} />
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        aria-label="Next provider"
+                                                        className="flex h-10 w-10 items-center justify-center rounded-full bg-black/[0.06] active:bg-black/10 disabled:opacity-40"
+                                                        onClick={() =>
+                                                            setActiveIndex(
+                                                                (activeIndex + 1) % allProviders.length
+                                                            )
+                                                        }
+                                                    >
+                                                        <ArrowRight className="size-4" style={{ color: INK }} />
+                                                    </button>
+                                                </div>
+                                                <div className="flex items-center gap-1.5">
+                                                    {allProviders.map((_, i) => (
+                                                        <button
+                                                            key={i}
+                                                            type="button"
+                                                            onClick={() => setActiveIndex(i)}
+                                                            aria-label={`Go to provider ${i + 1}`}
+                                                            className={`h-1.5 rounded-full transition-all duration-300 ${
+                                                                i === activeIndex
+                                                                    ? 'w-5 bg-foreground'
+                                                                    : 'w-1.5 bg-foreground/20'
+                                                            }`}
+                                                        />
+                                                    ))}
+                                                </div>
                                             </div>
                                         )}
-                                        <div className="pt-1">
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Map */}
+                            {mapsApiKey && currentProvider && (
+                                <div className="flex flex-col gap-3">
+                                    <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                                        Map
+                                    </span>
+                                    <div className="w-full overflow-hidden rounded-3xl border border-black/[0.07] bg-white shadow-sm">
+                                        <ProvidersMap
+                                            apiKey={mapsApiKey}
+                                            providers={allProviders}
+                                            emergingProviders={[]}
+                                            nearbyOnlyProviders={[]}
+                                            userLocation={userLocation}
+                                            conversationId={conversation.id}
+                                            hideFloatingCard
+                                            mode="rank"
+                                            activeIndex={activeIndex}
+                                            onActiveIndexChange={setActiveIndex}
+                                            className="w-full overflow-hidden"
+                                        />
+                                        <div className="border-t border-black/[0.06] px-5 py-4 flex flex-col gap-2">
+                                            <p className="text-sm font-semibold" style={{ color: INK }}>
+                                                {currentProvider.name}
+                                            </p>
+                                            {currentProvider.address && (
+                                                <p className="text-xs text-muted-foreground">
+                                                    {currentProvider.address}
+                                                </p>
+                                            )}
                                             <Button
                                                 asChild
                                                 type="button"
-                                                className="w-full"
+                                                className="mt-1 h-10 w-full"
                                             >
                                                 <a
-                                                    href={
-                                                        (() => {
-                                                            const origin = userLocation
-                                                                ? `${userLocation.lat},${userLocation.lng}`
-                                                                : encodeURIComponent(
-                                                                      conversation.customer_address ||
-                                                                          ''
-                                                                  );
-                                                            const hasCoords =
-                                                                typeof currentProvider.latitude ===
-                                                                    'number' &&
-                                                                typeof currentProvider.longitude ===
-                                                                    'number';
-                                                            const destination = hasCoords
-                                                                ? `${currentProvider.latitude},${currentProvider.longitude}`
-                                                                : encodeURIComponent(
-                                                                      currentProvider.address || ''
-                                                                  );
-                                                            const params = new URLSearchParams({
-                                                                api: '1',
-                                                                destination,
-                                                                travelmode: 'driving',
-                                                            });
-                                                            if (origin) {
-                                                                params.set('origin', origin);
-                                                            }
-                                                            return `https://www.google.com/maps/dir/?${params.toString()}`;
-                                                        })()
-                                                    }
+                                                    href={(() => {
+                                                        const origin = userLocation
+                                                            ? `${userLocation.lat},${userLocation.lng}`
+                                                            : encodeURIComponent(conversation.customer_address || '');
+                                                        const hasCoords =
+                                                            typeof currentProvider.latitude === 'number' &&
+                                                            typeof currentProvider.longitude === 'number';
+                                                        const destination = hasCoords
+                                                            ? `${currentProvider.latitude},${currentProvider.longitude}`
+                                                            : encodeURIComponent(currentProvider.address || '');
+                                                        const params = new URLSearchParams({ api: '1', destination, travelmode: 'driving' });
+                                                        if (origin) params.set('origin', origin);
+                                                        return `https://www.google.com/maps/dir/?${params.toString()}`;
+                                                    })()}
                                                     target="_blank"
                                                     rel="noopener noreferrer"
                                                 >
@@ -637,12 +657,13 @@ export function MatchPageClient({ conversationId }: MatchPageClientProps) {
                                         </div>
                                     </div>
                                 </div>
-                            </section>
-                        )}
-                    </>
-                )}
+                            )}
+                        </>
+                    )}
+
+                </div>
             </div>
-        </main>
+        </div>
     );
 }
 

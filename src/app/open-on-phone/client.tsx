@@ -21,7 +21,7 @@ function canShareUrl(): boolean {
 
 export default function OpenOnPhonePageClient() {
     const searchParams = useSearchParams();
-    const to = searchParams.get('to') || '/welcome';
+    const to = searchParams.get('to') || '/start';
     const [url, setUrl] = useState<string>(to);
     const [qrDataUrl, setQrDataUrl] = useState<string>('');
     const [copyLabel, setCopyLabel] = useState<'Copy link' | 'Copied'>('Copy link');

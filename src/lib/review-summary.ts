@@ -129,7 +129,7 @@ export async function summarizeReviews(params: {
     const prompt = `
 You are Scandio's review summariser. Write a short summary of a provider based only on what customers have said.
 
-Critical output rule: The summary text inside {"summary":"..."} must never exceed 100 characters total. Count carefully. If you are approaching 100 characters, end the sentence early with a full stop and close the JSON immediately.
+Critical output rule: The summary text inside {"summary":"..."} must never exceed 130 characters total. Count carefully. If you are approaching 130 characters, end the sentence early with a full stop and close the JSON immediately.
 
 Output format: {"summary":"your text here"}
 

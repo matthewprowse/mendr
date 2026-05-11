@@ -1,0 +1,434 @@
+'use client';
+
+/**
+ * Match provider card (post-redesign):
+ *  - Airbnb-style top banner image carousel (paginated dots, swipe-friendly).
+ *  - Header row: name + "verified on Scandio" shield when `provider.providerId` is set.
+ *  - Stats row: rating (filled star + N reviews), distance, drive time, open/closed pill.
+ *  - Chip row: certifications + specialisations (truncated to 4 visible + "+N").
+ *  - Clamped summary (3 lines) — defers to skeleton/long-wait copy supplied by parent.
+ *  - Address row.
+ *  - Bottom CTAs: "View Profile" (passes through to existing handler) + "Contact Contractor"
+ *    popover (passed in as a slot so existing WhatsApp/phone/email tracking is preserved).
+ *
+ * Tapping the card body (anywhere outside the CTAs) navigates to `/contractors/[id]` —
+ * matches Airbnb's "tap-card-to-open" pattern. CTAs `event.stopPropagation()` to keep
+ * the existing inline actions snappy.
+ */
+
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import {
+    CaretLeft,
+    CaretRight,
+    Car,
+    Image as ImageIcon,
+    MapPinLine,
+    Star,
+} from '@phosphor-icons/react';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
+import { cn, formatBusinessName } from '@/lib/utils';
+import { INK } from '@/lib/design-tokens';
+import type { MatchProvider } from '@/features/match/contracts';
+
+const VISIBLE_CHIP_LIMIT = 4;
+const SUPABASE_PUBLIC_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+
+function normalizeCardImageUrl(raw: string): string {
+    const value = raw.trim();
+    if (!value) return '';
+    if (/^https?:\/\//i.test(value) || value.startsWith('data:image/') || value.startsWith('blob:')) {
+        return value;
+    }
+    if (value.startsWith('/')) return value;
+    if (SUPABASE_PUBLIC_URL) {
+        const base = SUPABASE_PUBLIC_URL.replace(/\/+$/, '');
+        return `${base}/storage/v1/object/public/gallery/${value.replace(/^\/+/, '')}`;
+    }
+    return value;
+}
+
+function formatProviderAddress(raw: string | null | undefined): string {
+    const s = (raw ?? '').trim();
+    if (!s) return '';
+    const parts = s.split(',').map((p) => p.trim()).filter(Boolean);
+    if (parts.length === 0) return '';
+    const COUNTRY_RE = /(south africa)/i;
+    const POSTCODE_RE = /^\d{3,6}$/;
+    while (parts.length > 0) {
+        const last = parts[parts.length - 1] ?? '';
+        if (COUNTRY_RE.test(last) || POSTCODE_RE.test(last)) {
+            parts.pop();
+            continue;
+        }
+        break;
+    }
+    return parts.join(', ');
+}
+
+function formatDuration(text: string): string {
+    return text.replace(/\bmins?\b/gi, 'Minutes').replace(/\bhrs?\b/gi, 'Hours');
+}
+
+function formatDistanceKm(km: number | null | undefined): string | null {
+    if (typeof km !== 'number' || !Number.isFinite(km)) return null;
+    if (km < 1) return `${Math.round(km * 10) / 10} km`;
+    if (km < 10) return `${km.toFixed(1)} km`;
+    return `${Math.round(km)} km`;
+}
+
+type ProviderCardCarouselProps = {
+    images: NonNullable<MatchProvider['images']>;
+    providerName: string;
+    onImageSwipe?: (toIndex: number) => void;
+};
+
+export function ProviderCardCarousel({ images, providerName, onImageSwipe }: ProviderCardCarouselProps) {
+    const [activeIdx, setActiveIdx] = useState(0);
+    const trackRef = useRef<HTMLDivElement | null>(null);
+    const lastReportedIdxRef = useRef(0);
+
+    const total = images.length;
+    const goTo = useCallback(
+        (next: number) => {
+            const clamped = Math.max(0, Math.min(total - 1, next));
+            setActiveIdx(clamped);
+            const track = trackRef.current;
+            if (!track) return;
+            const slide = track.children[clamped] as HTMLElement | undefined;
+            slide?.scrollIntoView({ behavior: 'smooth', inline: 'start', block: 'nearest' });
+        },
+        [total]
+    );
+
+    useEffect(() => {
+        const track = trackRef.current;
+        if (!track) return;
+        let frame = 0;
+        const onScroll = () => {
+            cancelAnimationFrame(frame);
+            frame = requestAnimationFrame(() => {
+                const slideWidth = track.clientWidth || 1;
+                const next = Math.round(track.scrollLeft / slideWidth);
+                if (next !== activeIdx) setActiveIdx(next);
+                if (next !== lastReportedIdxRef.current) {
+                    lastReportedIdxRef.current = next;
+                    onImageSwipe?.(next);
+                }
+            });
+        };
+        track.addEventListener('scroll', onScroll, { passive: true });
+        return () => {
+            cancelAnimationFrame(frame);
+            track.removeEventListener('scroll', onScroll);
+        };
+    }, [activeIdx, onImageSwipe]);
+
+    return (
+        <div className="relative aspect-[16/10] w-full overflow-hidden rounded-2xl bg-muted">
+            <div
+                ref={trackRef}
+                className="flex h-full w-full snap-x snap-mandatory overflow-x-auto scroll-smooth [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            >
+                {images.map((img, idx) => (
+                    <div
+                        key={`${img.url}-${idx}`}
+                        className="relative h-full w-full shrink-0 snap-start"
+                    >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                            src={img.url}
+                            alt={img.caption ?? `${providerName} photo ${idx + 1}`}
+                            className="h-full w-full object-cover"
+                            loading={idx === 0 ? 'eager' : 'lazy'}
+                            draggable={false}
+                        />
+                    </div>
+                ))}
+            </div>
+
+            {total > 1 ? (
+                <Fragment>
+                    <button
+                        type="button"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            goTo(activeIdx - 1);
+                        }}
+                        aria-label="Previous photo"
+                        className={cn(
+                            'absolute left-2 top-1/2 -translate-y-1/2 size-8 inline-flex items-center justify-center rounded-full bg-background/90 text-foreground shadow-sm backdrop-blur transition-opacity',
+                            activeIdx === 0 ? 'opacity-0 pointer-events-none' : 'opacity-100'
+                        )}
+                    >
+                        <CaretLeft size={16} weight="bold" />
+                    </button>
+                    <button
+                        type="button"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            goTo(activeIdx + 1);
+                        }}
+                        aria-label="Next photo"
+                        className={cn(
+                            'absolute right-2 top-1/2 -translate-y-1/2 size-8 inline-flex items-center justify-center rounded-full bg-background/90 text-foreground shadow-sm backdrop-blur transition-opacity',
+                            activeIdx >= total - 1 ? 'opacity-0 pointer-events-none' : 'opacity-100'
+                        )}
+                    >
+                        <CaretRight size={16} weight="bold" />
+                    </button>
+
+                    <div
+                        className="pointer-events-none absolute bottom-2 left-0 right-0 flex justify-center gap-1.5"
+                        aria-hidden="true"
+                    >
+                        {images.map((_, idx) => (
+                            <span
+                                key={idx}
+                                className={cn(
+                                    'h-1.5 rounded-full bg-white/90 transition-all',
+                                    idx === activeIdx ? 'w-4 opacity-100' : 'w-1.5 opacity-70'
+                                )}
+                            />
+                        ))}
+                    </div>
+                </Fragment>
+            ) : null}
+        </div>
+    );
+}
+
+function ImagePlaceholder({ providerName }: { providerName: string }) {
+    return (
+        <div className="flex aspect-[16/10] w-full items-center justify-center rounded-2xl bg-gradient-to-br from-muted to-secondary text-muted-foreground">
+            <div className="flex flex-col items-center gap-1">
+                <ImageIcon size={28} weight="duotone" aria-hidden="true" />
+                <p className="text-[11px] font-medium uppercase tracking-wide">No photos yet</p>
+                <p className="sr-only">{providerName}</p>
+            </div>
+        </div>
+    );
+}
+
+export type ProviderCardProps = {
+    provider: MatchProvider;
+    isSelected: boolean;
+    reviewCount: number;
+    summary: string | null;
+    summaryLoading: boolean;
+    longWaitSummaryFallback: boolean;
+    /** Renders the provider's certification chips returned from the contracts layer. */
+    certifications?: NonNullable<MatchProvider['certifications']>;
+    onSelect: () => void;
+    onOpenProfile: () => void;
+    onImageSwipe?: (toIndex: number) => void;
+    /** Slot for the existing Contact popover (kept as a prop so we don't rewrite WhatsApp tracking). */
+    contactSlot: ReactNode;
+    cardRef?: (node: HTMLDivElement | null) => void;
+};
+
+export function ProviderCard({
+    provider,
+    isSelected,
+    reviewCount,
+    summary,
+    summaryLoading,
+    longWaitSummaryFallback,
+    certifications,
+    onSelect,
+    onOpenProfile,
+    onImageSwipe,
+    contactSlot,
+    cardRef,
+}: ProviderCardProps) {
+    const distanceLabel = formatDistanceKm(provider.distanceKm);
+    const driveLabel = provider.durationText ? formatDuration(provider.durationText) : null;
+    const hasOpenStatus = typeof provider.isOpen === 'boolean';
+    const carouselImages = useMemo(() => {
+        const raw = Array.isArray(provider.images) ? provider.images : [];
+        return raw
+            .map((img) => {
+                const url =
+                    typeof (img as any)?.url === 'string'
+                        ? normalizeCardImageUrl((img as any).url)
+                        : typeof img === 'string'
+                          ? normalizeCardImageUrl(img)
+                          : '';
+                if (!url) return null;
+                const caption = typeof (img as any)?.caption === 'string' ? (img as any).caption.trim() : undefined;
+                return caption ? { url, caption } : { url };
+            })
+            .filter((img): img is { url: string; caption?: string } => Boolean(img));
+    }, [provider.images]);
+    const address = formatProviderAddress(provider.address);
+    const directionsHref = useMemo(() => {
+        if (typeof provider.latitude === 'number' && typeof provider.longitude === 'number') {
+            return `https://www.google.com/maps/dir/?api=1&destination=${provider.latitude},${provider.longitude}`;
+        }
+        const fallback = formatProviderAddress(provider.address);
+        if (!fallback) return null;
+        return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(fallback)}`;
+    }, [provider.address, provider.latitude, provider.longitude]);
+
+    /** Combine certification short labels + first specialisations, truncated. */
+    const chips = useMemo(() => {
+        const certs = (certifications ?? [])
+            .slice(0, VISIBLE_CHIP_LIMIT)
+            .map((c) => ({ key: `cert:${c.slug}`, label: c.short || c.label, kind: 'cert' as const }));
+        const specs = (provider.specialisations ?? [])
+            .filter(Boolean)
+            .map((s) => ({ key: `spec:${s}`, label: s, kind: 'spec' as const }));
+        const merged = [...certs, ...specs];
+        const visible = merged.slice(0, VISIBLE_CHIP_LIMIT);
+        const overflow = Math.max(0, merged.length - visible.length);
+        return { visible, overflow };
+    }, [certifications, provider.specialisations]);
+
+    return (
+        <div
+            ref={cardRef}
+            role="button"
+            tabIndex={0}
+            onClick={() => {
+                onSelect();
+                onOpenProfile();
+            }}
+            onKeyDown={(event) => {
+                if (event.key !== 'Enter' && event.key !== ' ') return;
+                event.preventDefault();
+                onSelect();
+                onOpenProfile();
+            }}
+            className={cn(
+                'group flex w-full cursor-pointer flex-col gap-3 rounded-3xl bg-white p-3 text-left shadow-sm transition-shadow',
+                'border border-black/[0.06] hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/40',
+                isSelected && 'ring-2 ring-foreground/70'
+            )}
+        >
+            {carouselImages.length > 0 ? (
+                <ProviderCardCarousel
+                    images={carouselImages}
+                    providerName={provider.name}
+                    onImageSwipe={onImageSwipe}
+                />
+            ) : (
+                <ImagePlaceholder providerName={provider.name} />
+            )}
+
+            <div className="flex flex-col gap-3 px-2 pb-2 pt-1">
+                <div className="flex items-start justify-between gap-3">
+                    <h3
+                        className="line-clamp-2 text-base font-semibold leading-tight"
+                        style={{ color: INK }}
+                    >
+                        {formatBusinessName(provider.name)}
+                    </h3>
+                    {hasOpenStatus ? (
+                        <Badge variant="secondary" className="h-5 rounded-full px-2 text-[11px] font-medium">
+                            {provider.isOpen ? 'open' : 'closed'}
+                        </Badge>
+                    ) : null}
+                </div>
+
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+                    <span className="inline-flex items-center gap-1 font-semibold tabular-nums" style={{ color: INK }}>
+                        <Star size={16} weight="fill" className="text-yellow-500" aria-hidden="true" />
+                        {provider.rating != null ? provider.rating.toFixed(1) : 'New'}
+                        {reviewCount > 0 ? (
+                            <span className="font-normal text-muted-foreground">
+                                ({reviewCount} reviews)
+                            </span>
+                        ) : null}
+                    </span>
+                </div>
+
+                {chips.visible.length > 0 ? (
+                    <div className="flex flex-wrap gap-1.5">
+                        {chips.visible.map((chip) => (
+                            <span
+                                key={chip.key}
+                                className={cn(
+                                    'inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium',
+                                    chip.kind === 'cert'
+                                        ? 'border-border bg-foreground/[0.04] text-foreground'
+                                        : 'border-border bg-background text-muted-foreground'
+                                )}
+                            >
+                                {chip.label}
+                            </span>
+                        ))}
+                        {chips.overflow > 0 ? (
+                            <span className="inline-flex items-center rounded-full border border-border bg-background px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+                                +{chips.overflow}
+                            </span>
+                        ) : null}
+                    </div>
+                ) : null}
+
+                {summary ? (
+                    <p className="line-clamp-3 text-sm text-muted-foreground">{summary}</p>
+                ) : summaryLoading ? (
+                    <div
+                        className="flex flex-col gap-2"
+                        aria-busy="true"
+                        aria-label="Loading review summary"
+                    >
+                        <Skeleton className="h-3.5 w-full" />
+                        <Skeleton className="h-3.5 w-[92%]" />
+                        <Skeleton className="h-3.5 w-[72%]" />
+                    </div>
+                ) : longWaitSummaryFallback ? (
+                    <p className="text-sm text-muted-foreground">
+                        Review summary is taking longer than usual — open the profile for full details.
+                    </p>
+                ) : null}
+
+                {driveLabel ? (
+                    <div className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                        <Car size={14} weight="regular" aria-hidden="true" />
+                        {driveLabel}
+                    </div>
+                ) : null}
+
+                <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+                    <span className="inline-flex min-w-0 items-center gap-1">
+                        <MapPinLine size={14} className="shrink-0" aria-hidden="true" />
+                        <span className="truncate">
+                            {[address, distanceLabel].filter(Boolean).join(' • ') || 'Distance unavailable'}
+                        </span>
+                    </span>
+                    {directionsHref ? (
+                        <a
+                            href={directionsHref}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 rounded-full px-2 py-1 font-medium text-foreground underline underline-offset-2"
+                            onClick={(event) => event.stopPropagation()}
+                        >
+                            <MapPinLine size={14} aria-hidden="true" />
+                            Get Directions
+                        </a>
+                    ) : null}
+                </div>
+
+                <div className="mt-1 flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                    <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-9 flex-1"
+                        onClick={(event) => {
+                            event.stopPropagation();
+                            onOpenProfile();
+                        }}
+                        disabled={!provider.providerId}
+                    >
+                        View Profile
+                    </Button>
+                    <div className="flex-1">{contactSlot}</div>
+                </div>
+            </div>
+        </div>
+    );
+}

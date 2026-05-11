@@ -8,6 +8,7 @@ import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { ReportDetailContent } from './components/report-detail-content';
 import { fetchReportDetailOnServer } from '@/lib/fetch-report-detail-server';
+import { buildReportMeta } from '@/lib/site-metadata';
 
 type PageProps = {
     params: Promise<{ id: string }>;
@@ -15,21 +16,14 @@ type PageProps = {
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
     const { id } = await params;
-    const base: Metadata = {
-        title: 'Scandio: Job Report',
-        description: 'View your Scandio home maintenance diagnosis report.',
-    };
     const result = await fetchReportDetailOnServer(id);
     if (result.status === 'ok' && result.data.diagnosis) {
         const d = result.data.diagnosis as Record<string, unknown>;
         if (typeof d.diagnosis === 'string' && d.diagnosis && d.diagnosis !== 'N/A') {
-            return {
-                ...base,
-                title: `${d.diagnosis.slice(0, 60)} | Scandio Report`,
-            };
+            return buildReportMeta(d.diagnosis);
         }
     }
-    return base;
+    return buildReportMeta(null);
 }
 
 export default async function ReportDetailPage({ params }: PageProps) {

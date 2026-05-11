@@ -1,11 +1,7 @@
-import type { Metadata } from 'next';
+import { META_ADMIN } from '@/lib/site-metadata';
 import AdminDashboardClient from './client';
 
-export const metadata: Metadata = {
-    title: 'Admin',
-    description: 'Scandio admin dashboard.',
-    robots: { index: false, follow: false },
-};
+export const metadata = META_ADMIN;
 
 export default function AdminPage() {
     return <AdminDashboardClient />;

@@ -1,10 +1,7 @@
-import type { Metadata } from 'next';
+import { META_ADMIN_CONTACT } from '@/lib/site-metadata';
 import AdminContactClient from './client';
 
-export const metadata: Metadata = {
-    title: 'Contact messages',
-    robots: { index: false, follow: false },
-};
+export const metadata = META_ADMIN_CONTACT;
 
 export default function AdminContactPage() {
     return <AdminContactClient />;

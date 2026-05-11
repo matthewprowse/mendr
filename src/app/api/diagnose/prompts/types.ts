@@ -19,6 +19,10 @@ export interface PromptPreviousDiagnosis {
     message?: string;
     action_required?: string;
     estimated_cost?: string;
+    /** Consumer-friendly one-sentence translation of urgency_key for the homeowner */
+    urgency_sentence?: string;
+    /** Predicted invoice line-item names, e.g. ["Call-out fee", "Capacitor replacement"] */
+    expected_parts?: string[];
 }
 
 export interface PromptUserSelectedTrade {

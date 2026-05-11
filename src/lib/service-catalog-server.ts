@@ -8,6 +8,10 @@ const TTL_MS = TTL_SEC * 1000;
 let memoryCache: { labels: string[]; expiresAt: number } | null = null;
 let inFlight: Promise<string[]> | null = null;
 
+/**
+ * Returns labels exactly as stored in Supabase — no mapping or expansion.
+ * Supabase is the single source of truth for service label names.
+ */
 function normalizeLabels(rows: unknown): string[] {
     if (!Array.isArray(rows)) return [];
     return rows

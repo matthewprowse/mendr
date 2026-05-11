@@ -20,7 +20,71 @@ import { useAuth } from '@/context/auth-context';
 import { fetchConversationDiagnosis, patchConversation } from '@/lib/diagnoses-api';
 import { writeMatchTradeContextStorage } from '@/lib/match-trade-context';
 import { parseDiagnosisFromModelResponse } from '@/lib/parse-diagnosis-from-model-response';
+import { enrichDiagnosisWithPartPrices } from '@/lib/parts-prices/enrich-diagnosis';
 import { BetaCostEstimateCard } from '@/components/beta-cost-estimate-card';
+import { getPendingDiagnosisImages } from '@/lib/pending-diagnosis-images-cache';
+import { CircleNotch } from '@phosphor-icons/react';
+import { Badge } from '@/components/ui/badge';
+
+// ── Additional-photo helpers (mirrors /start Step 2 logic) ──────────────────
+
+type AdditionalPhotoStatus = 'pending' | 'ready' | 'error';
+type AdditionalPhoto = {
+    id: string;
+    file: File;
+    status: AdditionalPhotoStatus;
+    previewSrc: string | null;
+    diagnosisSrc: string | null;
+    errorMessage?: string;
+};
+
+function createPhotoId(): string {
+    return `ph_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+}
+
+function isHeicLike(file: File): boolean {
+    return (
+        file.type === 'image/heic' ||
+        file.type === 'image/heif' ||
+        /\.(heic|heif)$/i.test(file.name)
+    );
+}
+
+function readFileAsDataUrl(file: File): Promise<string> {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = () => reject(reader.error ?? new Error('Could not read file.'));
+        reader.readAsDataURL(file);
+    });
+}
+
+async function normalizeAdditionalPhoto(file: File): Promise<AdditionalPhoto> {
+    let raw = await readFileAsDataUrl(file);
+    if (isHeicLike(file)) {
+        const res = await fetch('/api/convert-heic', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ dataUrl: raw }),
+        });
+        const json = await res.json().catch(() => ({}));
+        if (res.ok && typeof json.dataUrl === 'string' && json.dataUrl.startsWith('data:image/')) {
+            raw = json.dataUrl;
+        } else {
+            throw new Error('Could not convert HEIC image.');
+        }
+    }
+    const compressed = await compressImage(raw);
+    return {
+        id: createPhotoId(),
+        file,
+        status: 'ready',
+        previewSrc: compressed,
+        diagnosisSrc: compressed,
+    };
+}
+
+// ────────────────────────────────────────────────────────────────────────────
 
 type DiagnosisPageClientProps = {
     conversationId: string;
@@ -56,6 +120,9 @@ export function DiagnosisPageClient({ conversationId }: DiagnosisPageClientProps
     const [refining, setRefining] = useState(false);
     const [confirming, setConfirming] = useState(false);
     const refineFileInputRef = useRef<HTMLInputElement | null>(null);
+    const [additionalPhotos, setAdditionalPhotos] = useState<AdditionalPhoto[]>([]);
+    const additionalPhotosInputRef = useRef<HTMLInputElement | null>(null);
+    const MAX_ADDITIONAL_PHOTOS = 10;
     const [leaveDialogOpen, setLeaveDialogOpen] = useState(false);
 
     const loadConversation = useCallback(
@@ -105,6 +172,28 @@ export function DiagnosisPageClient({ conversationId }: DiagnosisPageClientProps
         [conversationId, user?.id]
     );
 
+    const getPendingImageAttachments = useCallback(
+        (primaryImage: string): string[] => {
+            const cached = getPendingDiagnosisImages(conversationId)
+                .filter((x): x is string => typeof x === 'string' && x.trim().length > 0)
+                .filter((x) => x !== primaryImage)
+                .slice(0, 3);
+            try {
+                const raw = sessionStorage.getItem(`pending_diagnosis_image_urls:${conversationId}`) ?? '[]';
+                const parsed = JSON.parse(raw) as unknown;
+                if (!Array.isArray(parsed)) return cached;
+                const fromSession = parsed
+                    .filter((x): x is string => typeof x === 'string' && x.trim().length > 0)
+                    .filter((x) => x !== primaryImage)
+                    .slice(0, 3);
+                return fromSession.length > 0 ? fromSession : cached;
+            } catch {
+                return cached;
+            }
+        },
+        [conversationId]
+    );
+
     const runInitialDiagnosis = useCallback(
         async (img: string, prompt: string, selectedService: string | null) => {
             try {
@@ -131,6 +220,8 @@ export function DiagnosisPageClient({ conversationId }: DiagnosisPageClientProps
                     image: img,
                     serviceCatalog: catalog,
                 };
+                const initialAttachments = getPendingImageAttachments(img);
+                if (initialAttachments.length > 0) body.attachments = initialAttachments;
                 if (prompt.trim()) body.textQuery = prompt.trim();
                 if (selectedService) {
                     body.userSelectedTrade = {
@@ -160,10 +251,11 @@ export function DiagnosisPageClient({ conversationId }: DiagnosisPageClientProps
                     toast.error('Could not understand the diagnosis response.');
                     return null;
                 }
-                setDiagnosis(diag);
-                const saved = await saveConversationDiagnosis(diag, img, prompt);
+                const enriched = await enrichDiagnosisWithPartPrices(diag);
+                setDiagnosis(enriched);
+                const saved = await saveConversationDiagnosis(enriched, img, prompt);
                 if (!saved) return null;
-                return diag;
+                return enriched;
             } catch (e) {
                 if (process.env.NODE_ENV === 'development') {
                     // eslint-disable-next-line no-console
@@ -173,7 +265,7 @@ export function DiagnosisPageClient({ conversationId }: DiagnosisPageClientProps
                 return null;
             }
         },
-        [saveConversationDiagnosis, serviceCatalog, supabase]
+        [getPendingImageAttachments, saveConversationDiagnosis, serviceCatalog, supabase]
     );
 
     const runRefinedDiagnosis = useCallback(
@@ -204,6 +296,7 @@ export function DiagnosisPageClient({ conversationId }: DiagnosisPageClientProps
                     image: imageSrc,
                     textQuery: [initialPrompt, extraText].filter(Boolean).join('\n\n'),
                     serviceCatalog: catalog,
+                    diagnosisRejected: true,
                     previousDiagnosis: {
                         diagnosis: diagnosis.diagnosis,
                         trade: diagnosis.trade,
@@ -212,6 +305,12 @@ export function DiagnosisPageClient({ conversationId }: DiagnosisPageClientProps
                         estimated_cost: diagnosis.estimated_cost,
                     },
                 };
+                const cachedAttachments = getPendingImageAttachments(imageSrc);
+                const userAddedAttachments = additionalPhotos
+                    .filter((p) => p.status === 'ready' && p.diagnosisSrc)
+                    .map((p) => p.diagnosisSrc as string);
+                const allAttachments = [...cachedAttachments, ...userAddedAttachments];
+                if (allAttachments.length > 0) body.attachments = allAttachments;
                 const res = await fetch('/api/diagnose', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -234,9 +333,12 @@ export function DiagnosisPageClient({ conversationId }: DiagnosisPageClientProps
                     toast.error('Could not understand the updated diagnosis.');
                     return;
                 }
-                setDiagnosis(diag);
+                const enriched = await enrichDiagnosisWithPartPrices(diag);
+                setDiagnosis(enriched);
                 setRefineText('');
-                const saved = await saveConversationDiagnosis(diag, imageSrc, initialPrompt);
+                setAdditionalPhotos([]);
+                setRefineMode(false);
+                const saved = await saveConversationDiagnosis(enriched, imageSrc, initialPrompt);
                 if (!saved) return;
             } catch (e) {
                 if (process.env.NODE_ENV === 'development') {
@@ -248,7 +350,7 @@ export function DiagnosisPageClient({ conversationId }: DiagnosisPageClientProps
                 setRefining(false);
             }
         },
-        [diagnosis, imageSrc, initialPrompt, saveConversationDiagnosis, serviceCatalog, supabase]
+        [diagnosis, getPendingImageAttachments, imageSrc, initialPrompt, saveConversationDiagnosis, serviceCatalog, supabase]
     );
 
     useEffect(() => {
@@ -294,6 +396,60 @@ export function DiagnosisPageClient({ conversationId }: DiagnosisPageClientProps
         []
     );
 
+    const handleAdditionalPhotosSelected = useCallback(
+        async (incoming: FileList | null) => {
+            if (!incoming || incoming.length === 0) return;
+            const files = Array.from(incoming).filter(
+                (f) => f.type.startsWith('image/') || isHeicLike(f),
+            );
+            if (files.length === 0) return;
+            const toQueue = files.slice(0, Math.max(0, MAX_ADDITIONAL_PHOTOS - additionalPhotos.length));
+            if (toQueue.length === 0) return;
+
+            const placeholders: AdditionalPhoto[] = toQueue.map((f) => ({
+                id: createPhotoId(),
+                file: f,
+                status: 'pending' as const,
+                previewSrc: null,
+                diagnosisSrc: null,
+            }));
+            const idByFile = new Map(placeholders.map((p) => [p.file, p.id]));
+            setAdditionalPhotos((prev) => [...prev, ...placeholders]);
+
+            for (const f of toQueue) {
+                const id = idByFile.get(f);
+                if (!id) continue;
+                try {
+                    const normalized = await normalizeAdditionalPhoto(f);
+                    setAdditionalPhotos((prev) =>
+                        prev.map((p) => (p.id === id ? { ...normalized, id } : p)),
+                    );
+                } catch {
+                    setAdditionalPhotos((prev) =>
+                        prev.map((p) =>
+                            p.id === id
+                                ? {
+                                      ...p,
+                                      status: 'error' as const,
+                                      previewSrc: null,
+                                      diagnosisSrc: null,
+                                      errorMessage: isHeicLike(f)
+                                          ? 'Could not convert this HEIC image.'
+                                          : 'Could not process this image.',
+                                  }
+                                : p,
+                        ),
+                    );
+                }
+            }
+        },
+        [additionalPhotos.length, MAX_ADDITIONAL_PHOTOS],
+    );
+
+    const handleRemoveAdditionalPhoto = useCallback((photoId: string) => {
+        setAdditionalPhotos((prev) => prev.filter((p) => p.id !== photoId));
+    }, []);
+
     useEffect(() => {
         let cancelled = false;
         const bootstrap = async () => {
@@ -317,7 +473,7 @@ export function DiagnosisPageClient({ conversationId }: DiagnosisPageClientProps
                     );
                     if (!cancelled && !diag) {
                         // If diagnosis failed, send back to welcome so they can retry.
-                        router.replace('/welcome');
+                        router.replace('/start');
                         return;
                     }
                     return;
@@ -398,8 +554,16 @@ export function DiagnosisPageClient({ conversationId }: DiagnosisPageClientProps
         (diagnosis.requires_clarification || diagnosis.rejected || refineMode);
 
     return (
-        <main className="flex min-h-screen flex-col bg-background">
-            <FlowStepHeader step={2} onBack={() => setLeaveDialogOpen(true)} />
+        <div
+            className="flex h-dvh flex-col overflow-hidden overscroll-none"
+            style={{ background: '#FBFAF7' }}
+        >
+            <FlowStepHeader
+                layout="inline"
+                showScanProgress
+                step={2}
+                onBack={() => setLeaveDialogOpen(true)}
+            />
 
             <DiagnosisLeaveDialog
                 open={leaveDialogOpen}
@@ -407,23 +571,26 @@ export function DiagnosisPageClient({ conversationId }: DiagnosisPageClientProps
                 onLeave={() => router.back()}
             />
 
-            <div
-                className={cn(
-                    'mx-auto flex w-full max-w-xl flex-1 flex-col px-4 pt-24 sm:px-6',
-                    tallStickyFooter
-                        ? 'pb-[calc(15rem+env(safe-area-inset-bottom))]'
-                        : 'pb-[calc(7rem+env(safe-area-inset-bottom))]'
-                )}
-            >
-                <section className="flex flex-1 flex-col gap-6">
-                    <header className="flex flex-col gap-2">
-                        <h1 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
-                            Here&apos;s what we found.
-                        </h1>
-                        <p className="text-base text-muted-foreground">
-                            Confirm this looks right, or add more context and we&apos;ll refine it. Once you&apos;re happy we&apos;ll match you with nearby specialists.
-                        </p>
-                    </header>
+            <main className="mx-auto flex min-h-0 w-full max-w-xl flex-1 flex-col overflow-hidden">
+                <div
+                    className={cn(
+                        'min-h-0 flex-1 overflow-y-auto px-4 pt-2 pb-4 sm:px-6',
+                        tallStickyFooter ? 'pb-2' : ''
+                    )}
+                >
+                    <section className="flex flex-col gap-6">
+                        <header className="flex flex-col gap-2">
+                            <h1
+                                className="text-2xl font-semibold leading-snug sm:text-[1.75rem]"
+                                style={{ color: '#16120E' }}
+                            >
+                                Here&apos;s what we found.
+                            </h1>
+                            <p className="text-sm leading-relaxed text-muted-foreground">
+                                Confirm this looks right, or add more context and we&apos;ll refine it.
+                                Once you&apos;re happy we&apos;ll match you with nearby specialists.
+                            </p>
+                        </header>
 
                     {loading && !diagnosis && (
                         <div className="mt-4 flex flex-1 items-center justify-center">
@@ -443,10 +610,10 @@ export function DiagnosisPageClient({ conversationId }: DiagnosisPageClientProps
                                     We couldn&apos;t find this diagnosis.
                                 </p>
                                 <p className="text-xs text-muted-foreground">
-                                    Please start again from the welcome step.
+                                    Please start a new diagnosis.
                                 </p>
-                                <Button size="sm" onClick={() => router.push('/welcome')}>
-                                    Back to welcome
+                                <Button size="sm" onClick={() => router.push('/start')}>
+                                    Start new diagnosis
                                 </Button>
                             </div>
                         </div>
@@ -468,7 +635,7 @@ export function DiagnosisPageClient({ conversationId }: DiagnosisPageClientProps
                                 </p>
                             </div>
                             {imageSrc && (
-                                <div className="relative w-full overflow-hidden rounded-lg border border-input/50 bg-background">
+                                <div className="relative w-full overflow-hidden rounded-2xl border border-black/[0.08] bg-white/80 shadow-sm">
                                     <div className="aspect-[4/5] w-full">
                                         {/* eslint-disable-next-line @next/next/no-img-element */}
                                         <img
@@ -488,7 +655,10 @@ export function DiagnosisPageClient({ conversationId }: DiagnosisPageClientProps
                             )}
                             {diagnosis && (
                                 <div>
-                                    <h2 className="text-xl font-semibold">
+                                    <h2
+                                        className="text-xl font-semibold leading-snug"
+                                        style={{ color: '#16120E' }}
+                                    >
                                         {diagnosis.diagnosis || 'Estimated Diagnosis'}
                                     </h2>
                                     {diagnosis.action_required && (
@@ -509,11 +679,15 @@ export function DiagnosisPageClient({ conversationId }: DiagnosisPageClientProps
                     )}
 
                     {/* refine input is handled in the sticky footer when refine mode is active */}
-                </section>
-            </div>
+                    </section>
+                </div>
+            </main>
 
             {diagnosis && !diagnosis.requires_clarification && !diagnosis.rejected && !refineMode && (
-                <footer className="fixed inset-x-0 bottom-0 z-40 bg-background/95 px-4 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur sm:px-6">
+                <footer
+                    className="shrink-0 border-t border-black/[0.06] px-4 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur sm:px-6"
+                    style={{ background: 'rgba(251,250,247,0.95)' }}
+                >
                     <div className="mx-auto flex w-full max-w-xl flex-col gap-2">
                         <div className="flex items-center gap-2">
                             <Button
@@ -539,17 +713,99 @@ export function DiagnosisPageClient({ conversationId }: DiagnosisPageClientProps
             )}
 
             {diagnosis && (diagnosis.requires_clarification || diagnosis.rejected || refineMode) && (
-                <footer className="fixed inset-x-0 bottom-0 z-40 bg-background/95 px-4 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur sm:px-6">
+                <footer
+                    className="shrink-0 border-t border-black/[0.06] px-4 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur sm:px-6"
+                    style={{ background: 'rgba(251,250,247,0.95)' }}
+                >
                     <div className="mx-auto flex w-full max-w-xl flex-col gap-3">
-                        <Label className="text-sm font-medium text-foreground">
-                            Add more context
-                        </Label>
-                        <Textarea
-                            value={refineText}
-                            onChange={(e) => setRefineText(e.target.value)}
-                            className="min-h-[80px] resize-none text-sm"
-                            placeholder="Describe what else you're seeing or where it's located…"
-                        />
+
+                        {/* ── Additional photos strip ── */}
+                        <div className="flex flex-col gap-2">
+                            <div className="flex items-center justify-between">
+                                <Label className="text-sm font-medium text-foreground">
+                                    Add photos
+                                </Label>
+                                {additionalPhotos.length > 0 && (
+                                    <span className="text-xs text-muted-foreground">
+                                        {additionalPhotos.length}/{MAX_ADDITIONAL_PHOTOS}
+                                    </span>
+                                )}
+                            </div>
+
+                            {additionalPhotos.length > 0 && (
+                                <div className="-mx-4 sm:-mx-6">
+                                    <div className="flex gap-2 overflow-x-auto px-4 pb-1 sm:px-6">
+                                        {additionalPhotos.map((photo) => (
+                                            <div
+                                                key={photo.id}
+                                                className="relative w-20 shrink-0 overflow-hidden rounded-lg border border-border bg-background"
+                                            >
+                                                {photo.status === 'ready' && photo.previewSrc ? (
+                                                    <>
+                                                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                                                        <img
+                                                            src={photo.previewSrc}
+                                                            alt={photo.file.name}
+                                                            className="h-20 w-full object-cover"
+                                                        />
+                                                        <Badge
+                                                            onClick={() => handleRemoveAdditionalPhoto(photo.id)}
+                                                            className="absolute top-1 right-1 cursor-pointer bg-background px-1.5 py-0.5 text-[10px] text-foreground"
+                                                        >
+                                                            ✕
+                                                        </Badge>
+                                                    </>
+                                                ) : photo.status === 'pending' ? (
+                                                    <div className="flex h-20 w-full flex-col items-center justify-center bg-secondary">
+                                                        <CircleNotch className="size-4 animate-spin text-muted-foreground" />
+                                                    </div>
+                                                ) : (
+                                                    <div className="flex h-20 w-full flex-col items-center justify-center gap-1 bg-secondary px-2 text-center">
+                                                        <p className="line-clamp-2 text-[10px] text-muted-foreground">
+                                                            {photo.errorMessage ?? 'Failed'}
+                                                        </p>
+                                                        <Button
+                                                            type="button"
+                                                            variant="ghost"
+                                                            size="sm"
+                                                            className="h-6 px-2 text-[10px]"
+                                                            onClick={() => handleRemoveAdditionalPhoto(photo.id)}
+                                                        >
+                                                            Remove
+                                                        </Button>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            <Button
+                                type="button"
+                                variant="secondary"
+                                className="h-9 w-full text-sm"
+                                onClick={() => additionalPhotosInputRef.current?.click()}
+                                disabled={refining || additionalPhotos.length >= MAX_ADDITIONAL_PHOTOS}
+                            >
+                                {additionalPhotos.length === 0 ? 'Upload photos' : 'Add more photos'}
+                            </Button>
+                        </div>
+
+                        {/* ── Text context ── */}
+                        <div className="flex flex-col gap-2">
+                            <Label className="text-sm font-medium text-foreground">
+                                Add context <span className="font-normal text-muted-foreground">(optional)</span>
+                            </Label>
+                            <Textarea
+                                value={refineText}
+                                onChange={(e) => setRefineText(e.target.value)}
+                                className="min-h-[72px] resize-none text-sm"
+                                placeholder="Describe what else you're seeing or where it's located…"
+                            />
+                        </div>
+
+                        {/* ── Actions ── */}
                         <div className="flex items-center gap-2">
                             <Button
                                 type="button"
@@ -558,6 +814,7 @@ export function DiagnosisPageClient({ conversationId }: DiagnosisPageClientProps
                                 onClick={() => {
                                     setRefineMode(false);
                                     setRefineText('');
+                                    setAdditionalPhotos([]);
                                 }}
                                 disabled={refining}
                             >
@@ -565,22 +822,30 @@ export function DiagnosisPageClient({ conversationId }: DiagnosisPageClientProps
                             </Button>
                             <Button
                                 type="button"
-                                variant="ghost"
-                                onClick={() => refineFileInputRef.current?.click()}
-                                disabled={refining}
-                            >
-                                Replace photo
-                            </Button>
-                            <Button
-                                type="button"
                                 size="lg"
                                 className="flex-1"
                                 onClick={() => runRefinedDiagnosis(refineText)}
-                                disabled={refining || !refineText.trim()}
+                                disabled={
+                                    refining ||
+                                    (!refineText.trim() && additionalPhotos.filter((p) => p.status === 'ready').length === 0)
+                                }
                             >
                                 {refining ? 'Refining…' : 'Refine'}
                             </Button>
                         </div>
+
+                        {/* Hidden inputs */}
+                        <input
+                            ref={additionalPhotosInputRef}
+                            type="file"
+                            accept="image/*,.heic,.heif"
+                            multiple
+                            className="hidden"
+                            onChange={(e) => {
+                                void handleAdditionalPhotosSelected(e.target.files);
+                                e.currentTarget.value = '';
+                            }}
+                        />
                         <input
                             ref={refineFileInputRef}
                             type="file"
@@ -595,6 +860,6 @@ export function DiagnosisPageClient({ conversationId }: DiagnosisPageClientProps
                     </div>
                 </footer>
             )}
-        </main>
+        </div>
     );
 }

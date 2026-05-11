@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { AdminPageHeader } from '../components/page-header';
 import { AdminDataTable } from '../components/data-table';
 import { TableCell, TableRow } from '@/components/ui/table';
@@ -188,7 +188,10 @@ export default function AdminReviewsPage() {
             ) : null}
             <Dialog open={!!selected} onOpenChange={(open) => !open && setSelected(null)}>
                 <DialogContent className="max-w-2xl">
-                    <DialogHeader><DialogTitle>Review</DialogTitle></DialogHeader>
+                    <DialogHeader>
+                        <DialogTitle>Review</DialogTitle>
+                        <DialogDescription>Moderation details for this provider review.</DialogDescription>
+                    </DialogHeader>
                     {selected ? (
                         <div className="space-y-3">
                             <p className="text-sm text-muted-foreground">{selected.providers?.name ?? '—'}</p>
@@ -203,7 +206,10 @@ export default function AdminReviewsPage() {
             </Dialog>
             <Dialog open={!!editDraft} onOpenChange={(open) => !open && setEditDraft(null)}>
                 <DialogContent className="max-w-2xl">
-                    <DialogHeader><DialogTitle>Edit Review</DialogTitle></DialogHeader>
+                    <DialogHeader>
+                        <DialogTitle>Edit Review</DialogTitle>
+                        <DialogDescription>Update review text, rating, and moderation status.</DialogDescription>
+                    </DialogHeader>
                     {editDraft ? (
                         <div className="space-y-3">
                             <div className="space-y-1"><Label>Reviewer</Label><Input value={editDraft.reviewer_name ?? ''} onChange={(e) => setEditDraft({ ...editDraft, reviewer_name: e.target.value })} /></div>

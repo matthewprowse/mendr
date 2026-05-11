@@ -99,9 +99,18 @@ function buildDiagnosisData(parsed: Record<string, unknown>): DiagnosisData | nu
               : '';
     const urgency_key = urgencyRaw.trim().toLowerCase();
 
+    // `thought` is the structured-output field name from Agent 2b.
+    // `thinking` is the legacy field name. Accept either, prefer `thought`.
+    const thoughtRaw =
+        typeof parsed.thought === 'string'
+            ? parsed.thought
+            : typeof parsed.thinking === 'string'
+              ? parsed.thinking
+              : '';
+
     return {
         ...(parsed as unknown as DiagnosisData),
-        thinking: typeof parsed.thinking === 'string' ? parsed.thinking : '',
+        thinking: thoughtRaw,
         diagnosis,
         trade,
         action_required,

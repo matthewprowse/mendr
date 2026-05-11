@@ -1,4 +1,4 @@
-export { buildSystemInstruction } from './composer';
+export { buildSystemInstruction, buildProseBaseInstruction } from './composer';
 export type {
     PromptContext,
     PromptPreviousDiagnosis,

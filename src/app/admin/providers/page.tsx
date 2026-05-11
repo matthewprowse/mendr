@@ -1,10 +1,7 @@
-import type { Metadata } from 'next';
+import { META_ADMIN_PROVIDERS } from '@/lib/site-metadata';
 import AdminProvidersClient from './client';
 
-export const metadata: Metadata = {
-    title: 'Providers',
-    robots: { index: false, follow: false },
-};
+export const metadata = META_ADMIN_PROVIDERS;
 
 export default function AdminProvidersPage() {
     return <AdminProvidersClient />;

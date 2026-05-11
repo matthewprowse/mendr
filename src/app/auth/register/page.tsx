@@ -1,10 +1,7 @@
-import type { Metadata } from 'next';
+import { META_REGISTER } from '@/lib/site-metadata';
 import AuthRegisterClient from './client';
 
-export const metadata: Metadata = {
-    title: 'Create account',
-    description: 'Create your free Scandio account.',
-};
+export const metadata = META_REGISTER;
 
 export default function RegisterPage() {
     return <AuthRegisterClient />;
