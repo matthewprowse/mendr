@@ -96,7 +96,7 @@ export function ChartTooltipContent(props: TooltipProps<any, any>) {
                             />
                             {entry.name ?? entry.dataKey}
                         </span>
-                        <span className="font-mono text-foreground">
+                        <span className="font-sans tabular-nums text-foreground">
                             {entry.value}
                         </span>
                     </div>

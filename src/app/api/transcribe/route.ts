@@ -140,7 +140,7 @@ function recognitionModelForLanguage(languageCode: string): string {
 }
 
 export async function POST(req: NextRequest) {
-    const limited = checkRateLimit(req, 'transcribe');
+    const limited = await checkRateLimit(req, 'transcribe');
     if (limited) return limited;
 
     const credentialsError = getSpeechCredentialsSetupError();

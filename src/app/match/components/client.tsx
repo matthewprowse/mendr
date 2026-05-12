@@ -12,7 +12,13 @@ import { CircleNotch, Crosshair, FunnelSimple } from '@phosphor-icons/react';
 import { toast } from 'sonner';
 import { MatchMapSheetLayout } from '@/app/match/components/match-map-sheet-layout';
 import { ProviderCard } from '@/app/match/components/provider-card';
-import { FilterSheet } from '@/app/match/components/filter-sheet';
+import dynamic from 'next/dynamic';
+
+// FilterSheet contains shadcn Sheet + heavy filter logic — load it on first open, not on page load.
+const FilterSheet = dynamic(
+    () => import('@/app/match/components/filter-sheet').then((m) => ({ default: m.FilterSheet })),
+    { ssr: false },
+);
 import {
     applyFilters as applyMatchFilters,
     compareForSort,
@@ -494,7 +500,7 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
     /**
      * Card-level AI summaries (fast enrich + GET cache):
      * - List from **viewport cache** (same area/trade in sessionStorage): show each provider’s Google
-     *   `summary` only; **no** match-page queue/poll — full review-summary work stays on `/pro/[id]`.
+     *   `summary` only; **no** match-page queue/poll — full review-summary work stays on `/contractors/[id]`.
      * - List from **fresh `/api/providers`**: queue fast summaries and poll GET until resolved.
      * - **Match session cache** (`loadMatchPageCache`): restores `enrichmentCache` with the list; this
      *   effect runs only for rows still missing cache entries.

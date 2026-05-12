@@ -53,7 +53,7 @@ function mergeRefinedIntoBaseline(
 }
 
 export async function POST(req: NextRequest) {
-    const limited = checkRateLimit(req, 'marketRatesResearch');
+    const limited = await checkRateLimit(req, 'marketRatesResearch');
     if (limited) return limited;
 
     let body: Record<string, unknown>;

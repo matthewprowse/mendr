@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import type { DiagnosisData } from '@/app/chat/components/types';
+import type { DiagnosisData } from '@/features/diagnosis/types';
 import { getBetaCostEstimateRows, hasRenderableBetaCostEstimate } from '@/lib/diagnosis-display';
 import { sanitizeAiContent } from '@/lib/utils';
 import { coerceWholeRand } from '@/lib/parts-prices/coerce-rand';

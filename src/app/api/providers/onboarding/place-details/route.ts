@@ -33,7 +33,7 @@ export type OnboardingPlaceDetailsPayload = {
 type Body = { placeId?: string };
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
-    const limited = checkRateLimit(req, 'onboardingPlaceDetails');
+    const limited = await checkRateLimit(req, 'onboardingPlaceDetails');
     if (limited) return limited;
 
     let body: Body;

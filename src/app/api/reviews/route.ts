@@ -32,7 +32,7 @@ function isValidHalfStar(n: unknown): n is number {
  * category_ratings (jsonb), optional title (text), published_at, updated_at.
  */
 export async function POST(req: NextRequest) {
-    const limited = checkRateLimit(req, 'reviews');
+    const limited = await checkRateLimit(req, 'reviews');
     if (limited) return limited;
 
     try {

@@ -5,34 +5,34 @@ import { Slot } from "@radix-ui/react-slot"
 import { cn } from "@/lib/utils"
 
 const buttonVariants = cva(
-  "inline-flex shrink-0 items-center justify-center gap-2 rounded-md font-medium whitespace-nowrap transition-colors outline-none focus-visible:ring-2 focus-visible:ring-[#DCF763] focus-visible:ring-offset-1 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0",
+  "inline-flex shrink-0 items-center justify-center gap-2 rounded-md font-medium whitespace-nowrap transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0",
   {
     variants: {
       variant: {
         /** Lime — primary action */
         default:
-          "border border-[#DCF763] bg-[#DCF763] text-[#131312] hover:bg-[#CCEA50] hover:border-[#CCEA50]",
+          "border border-primary bg-primary text-primary-foreground hover:bg-[var(--primary-hover)] hover:border-[var(--primary-hover)]",
         /** White with border — secondary / neutral action */
         outline:
-          "border border-[#EBEBEB] bg-white text-[#131312] hover:bg-[#F2F2F0]",
+          "border border-border bg-background text-foreground hover:bg-muted",
         /** Same as outline — alias for shadcn compat */
         secondary:
-          "border border-[#EBEBEB] bg-white text-[#131312] hover:bg-[#F2F2F0]",
+          "border border-border bg-background text-foreground hover:bg-muted",
         /** Borderless — tertiary / low-emphasis action */
         ghost:
-          "bg-transparent text-[#131312] hover:bg-[#F2F2F0]",
+          "bg-transparent text-foreground hover:bg-muted",
         /** Red tint — destructive / danger action */
         destructive:
           "border border-red-200 bg-red-50 text-red-700 hover:bg-red-100",
         /** Text-only — inline link */
-        link: "bg-transparent text-[#5C7A00] underline-offset-4 hover:underline",
+        link: "bg-transparent text-[color:var(--menda-link)] underline-offset-4 hover:underline",
       },
       size: {
         xs:      "h-7 px-2.5 text-xs",
-        sm:      "h-8 gap-1.5 px-3 text-[13px]",
-        default: "h-9 px-4 text-[14px]",
-        lg:      "h-10 px-5 text-[14px]",
-        xl:      "h-11 px-6 text-[15px]",
+        sm:      "h-8 gap-1.5 px-3 text-sm",
+        default: "h-9 px-4 text-sm",
+        lg:      "h-10 px-5 text-sm",
+        xl:      "h-11 px-6 text-base",
         icon:       "size-9",
         "icon-xs":  "size-7",
         "icon-sm":  "size-8",

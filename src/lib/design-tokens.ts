@@ -16,7 +16,13 @@ export const mendaTokens = {
         dangerSoft: '#FEE2E2',
     },
     typography: {
+        /** UI and app flows — Söhne via `font-sans` (`Soehne*.otf`, weights 300–900). */
         fontFamily: 'Sohne',
+        /**
+         * Signifier — reserved for **marketing surfaces only** (e.g. `/`, `/landing1`) until product sign-off.
+         * Product UI (diagnosis, match, forms) stays `font-sans` only.
+         */
+        fontFamilySerif: 'Signifier',
         weights: {
             light: 300,
             regular: 400,
@@ -24,17 +30,7 @@ export const mendaTokens = {
             semibold: 600,
             bold: 700,
         } as const,
-        scale: {
-            display: { size: '2.25rem', weight: 600, lineHeight: '1.15' },
-            h1: { size: '1.5rem', weight: 600, lineHeight: '1.25' },
-            h2: { size: '1.25rem', weight: 600, lineHeight: '1.3' },
-            h3: { size: '1rem', weight: 600, lineHeight: '1.4' },
-            bodyLg: { size: '1rem', weight: 400, lineHeight: '1.75' },
-            body: { size: '0.875rem', weight: 400, lineHeight: '1.6' },
-            label: { size: '0.875rem', weight: 500, lineHeight: '1.4' },
-            micro: { size: '0.75rem', weight: 500, lineHeight: '1.4' },
-        } as const,
-        /** Tailwind utility classes for use in JSX className props */
+        /** Canonical type ramp — Tailwind utilities only (no arbitrary `text-[13px]`). */
         classes: {
             display: 'text-4xl font-semibold',
             h1: 'text-2xl font-semibold',
@@ -58,7 +54,7 @@ export const mendaTokens = {
     },
     shadow: {
         card: 'shadow-[0_1px_3px_rgba(0,0,0,0.06),0_1px_2px_rgba(0,0,0,0.03)]',
-        focus: 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#DCF763]',
+        focus: 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
     },
 } as const;
 

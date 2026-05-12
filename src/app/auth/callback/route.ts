@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient, createSupabaseAdminClient } from '@/lib/supabase-server';
+import { safeRedirectPath } from '@/lib/safe-redirect';
 
 export async function GET(request: NextRequest) {
     const { searchParams, origin } = new URL(request.url);
     const code = searchParams.get('code');
-    const next = searchParams.get('next') ?? '/';
+    const nextParam = searchParams.get('next');
 
     if (!code) {
         return NextResponse.redirect(`${origin}/?error=auth_missing_code`);
@@ -42,9 +43,11 @@ export async function GET(request: NextRequest) {
             }
         }
 
-        // Redirect to the originally-requested page (or home)
-        const redirectUrl = next.startsWith('/') ? `${origin}${next}` : origin;
-        return NextResponse.redirect(redirectUrl);
+        // Redirect to the originally-requested page (or home).
+        // safeRedirectPath rejects protocol-relative, scheme-bearing, and
+        // backslash-prefixed `next` values, falling back to `/`.
+        const safePath = safeRedirectPath(nextParam, '/');
+        return NextResponse.redirect(`${origin}${safePath}`);
     } catch (err) {
         console.error('Auth callback error:', err);
         return NextResponse.redirect(`${origin}/?error=auth_server_error`);

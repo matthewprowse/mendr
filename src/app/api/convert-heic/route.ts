@@ -1,4 +1,6 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { checkRateLimit } from '@/lib/rate-limit-config';
+
 import convert from 'heic-convert';
 
 export const runtime = 'nodejs';
@@ -10,7 +12,10 @@ function looksLikeHeic(name: string, type: string): boolean {
     return t.includes('heic') || t.includes('heif') || /\.(heic|heif)$/i.test(n);
 }
 
-export async function POST(req: Request): Promise<NextResponse> {
+export async function POST(req: NextRequest): Promise<NextResponse> {
+    const limited = await checkRateLimit(req, 'heicConvert');
+    if (limited) return limited;
+
     try {
         const form = await req.formData();
         const file = form.get('file');

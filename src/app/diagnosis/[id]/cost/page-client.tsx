@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { ArrowLeft } from '@phosphor-icons/react';
 import { Button } from '@/components/ui/button';
 import { BetaCostEstimateCard } from '@/components/beta-cost-estimate-card';
-import type { DiagnosisData } from '@/app/chat/components/types';
+import type { DiagnosisData } from '@/features/diagnosis/types';
 import { fetchConversationDiagnosis } from '@/lib/diagnoses-api';
 
 export default function CostPageClient({ conversationId }: { conversationId: string }) {

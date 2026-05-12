@@ -89,7 +89,7 @@ async function fetchPlacesSearchText(apiKey: string, bodyObj: Record<string, unk
 
 export async function POST(req: NextRequest) {
     // ── Rate limit ─────────────────────────────────────────────────────────────
-    const limited = checkRateLimit(req, 'providers');
+    const limited = await checkRateLimit(req, 'providers');
     if (limited) return limited;
 
     try {
@@ -1127,7 +1127,7 @@ export async function POST(req: NextRequest) {
         const limitedProviders = rankedProviders.map((p) => ({ ...p }));
         logStage(`providers ranked (count=${limitedProviders.length})`, 'providers_ranked');
 
-        // Attach internal provider IDs as early as possible so the UI can route to /pro/[id]
+        // Attach internal provider IDs as early as possible so the UI can route to /contractors/[id]
         // even when quick mode skips slower DB augment steps.
         if (prefetchedProvRows && prefetchedProvRows.length > 0) {
             const providerIdByGoogle = new Map<string, string>(
@@ -1162,7 +1162,7 @@ export async function POST(req: NextRequest) {
                         (provRows || []).map((r: any) => [String(r.google_place_id), String(r.id)])
                     );
 
-                    // Attach internal `providerId` (providers.id) so the frontend can route to `/pro/[id]`
+                    // Attach internal `providerId` (providers.id) so the frontend can route to `/contractors/[id]`
                     // using the database id, not the Google place id.
                     limitedProviders.forEach((p: any) => {
                         const rawPid = p?.placeId || p?.place_id;
@@ -1434,7 +1434,7 @@ export async function POST(req: NextRequest) {
                     );
 
                     // Ensure the API response includes internal `providerId` so the frontend can
-                    // route to `/pro/[id]` using providers.id rather than the Google place id.
+                    // route to `/contractors/[id]` using providers.id rather than the Google place id.
                     limitedProviders.forEach((p: any) => {
                         const rawPid = p?.placeId || p?.place_id;
                         if (typeof rawPid !== 'string') return;

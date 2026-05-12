@@ -97,7 +97,7 @@ export const card = {
 // ── Interactive ────────────────────────────────────────────────────────────────
 
 export const interactive = {
-    /** Circular icon button used in headers (back, share, close). */
+    /** Round icon button used in headers (back, share, close). */
     iconButton: 'flex h-10 w-10 items-center justify-center rounded-full bg-black/[0.06] active:bg-black/10',
 
     /** Invisible placeholder matching icon button size, for header symmetry. */

@@ -26,7 +26,7 @@ function directionsCacheKey(origin: string, destination: string): string {
 }
 
 export async function GET(req: NextRequest) {
-    const limited = checkRateLimit(req, 'directions');
+    const limited = await checkRateLimit(req, 'directions');
     if (limited) return limited;
 
     const apiKey = process.env.GOOGLE_PLACES_API_KEY;

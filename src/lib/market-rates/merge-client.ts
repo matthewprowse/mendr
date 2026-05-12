@@ -1,4 +1,4 @@
-import type { DiagnosisData } from '@/app/chat/components/types';
+import type { DiagnosisData } from '@/features/diagnosis/types';
 import type { MarketRateSource } from '@/lib/market-rates/types';
 
 type MarketRatesResearchJson = {

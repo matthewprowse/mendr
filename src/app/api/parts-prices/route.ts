@@ -11,7 +11,9 @@
  *   { results: PartPrice[] }
  */
 
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { checkRateLimit } from '@/lib/rate-limit-config';
+
 import { lookupPartPrices } from '@/lib/parts-prices/lookup';
 import type { PartsPricesRequest, PartsPricesResponse } from '@/lib/parts-prices/types';
 
@@ -21,7 +23,10 @@ export const maxDuration = 30;
 const DEFAULT_REGION = 'cape_town';
 const MAX_PARTS = 8;
 
-export async function POST(req: Request): Promise<NextResponse> {
+export async function POST(req: NextRequest): Promise<NextResponse> {
+    const limited = await checkRateLimit(req, 'partsPrices');
+    if (limited) return limited;
+
     let body: Partial<PartsPricesRequest>;
     try {
         body = (await req.json()) as Partial<PartsPricesRequest>;

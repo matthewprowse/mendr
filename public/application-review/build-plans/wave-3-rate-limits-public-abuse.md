@@ -1,19 +1,15 @@
-# Wave 3 Build Plan: Rate Limits And Public Abuse Surfaces
+# Wave 3a — Rate Limits And Public Abuse Surfaces
+
+## Progress
+**Status:** ✅ Complete  
+**Tasks:** 6 / 6 complete
+
+---
 
 ## Goal
-
-Move high-risk public routes behind appropriate rate limits and prepare production-safe rate limiting without changing route behavior broadly.
-
-## Source Reports
-
-- `../core-api-runtime/rate-limit-abuse-caching-audit.md`
-- `../core-api-runtime/api-contract-correctness-audit.md`
+Add missing rate-limit buckets for unprotected public routes, split misused buckets, and wire them up.
 
 ## Scope
-
-Files this agent may edit:
-
-- `app/src/lib/rate-limit.ts`
 - `app/src/lib/rate-limit-config.ts`
 - `app/src/app/api/events/route.ts`
 - `app/src/app/api/providers/apply/route.ts`
@@ -21,48 +17,25 @@ Files this agent may edit:
 - `app/src/app/api/convert-heic/route.ts`
 - `app/src/app/api/contact/route.ts`
 - `app/src/app/api/waitlist/route.ts`
-- Provider application upload routes if in scope:
-  - `app/src/app/api/providers/application-document/route.ts`
-  - `app/src/app/api/providers/application-images/route.ts`
-  - `app/src/app/api/providers/application-registration-cert/route.ts`
 
-Files this agent must not edit:
-
-- Admin auth files
-- Diagnosis AI route except through `parts-prices`
-- Provider search handler internals
+**Do NOT edit:** admin auth, diagnosis AI route internals, provider search handler.
 
 ## Tasks
-
-- [ ] Add route buckets for `analyticsEvents`, `providerApply`, `partsPrices`, `heicConvert`, `contactForm`, and `contractorWaitlist`.
-- [ ] Apply buckets to the corresponding public routes.
-- [ ] Split `contact` and `waitlist` away from the `reviews` bucket.
-- [ ] Decide whether this wave only adds missing buckets or also introduces Redis-backed production counters.
-- [ ] If adding Redis counters, keep the existing in-memory implementation as local/dev fallback.
-- [ ] Add production guardrails around `DISABLE_RATE_LIMIT` and bypass IPs.
+- [x] Add buckets: `analyticsEvents` (60/min), `providerApply` (3/hr), `partsPrices` (5/hr), `heicConvert` (20/hr), `contactForm` (5/hr), `contractorWaitlist` (5/hr) — in `rate-limit-config.ts`
+- [x] Apply `analyticsEvents` bucket to `POST /api/events`
+- [x] Apply `providerApply` bucket to `POST /api/providers/apply`
+- [x] Apply `partsPrices` bucket to `POST /api/parts-prices` — also upgraded `req: Request` → `NextRequest`
+- [x] Apply `heicConvert` bucket to `POST /api/convert-heic` — also upgraded `req: Request` → `NextRequest`
+- [x] Split `contact` and `waitlist` away from the shared `reviews` bucket → `contactForm` and `contractorWaitlist`
 
 ## Safety Constraints
+- Limits must be conservative enough not to block ordinary use
+- Existing local-dev in-memory fallback must keep working
+- Do not change route response shapes except adding 429
 
-- Do not break existing route response shapes unless required for 429 handling.
-- Keep limits conservative enough not to block ordinary use.
-- If Redis env vars are missing, local development should still work.
-- Do not add CAPTCHA or auth gating in the same PR unless explicitly scoped.
-
-## Validation
-
-Run from `app`:
-
-- `npm run lint`
-- `npm run build`
-
-Targeted checks:
-
-- Each updated route returns normal response before limit.
-- Each updated route returns 429 after bucket exhaustion.
-- `contact` and `waitlist` no longer use `reviews`.
-- `events` route cannot be spammed indefinitely.
-- If Redis is added, missing Redis envs fall back safely in development.
-
-## Suggested Agent Prompt
-
-Implement missing public route rate limits and bucket cleanup only. If Redis-backed limiting is too large for one PR, produce the missing buckets first and leave Redis as a separate follow-up. Do not change unrelated route behavior.
+## Verification Checklist
+- [ ] `rg "reviews.*contact\|reviews.*waitlist"` → zero (buckets split)
+- [ ] Events route returns 429 after bucket exhausted in test
+- [ ] Contact and waitlist use their own buckets
+- [ ] `npm run lint` passes
+- [ ] `npm run build` passes

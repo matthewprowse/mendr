@@ -3,7 +3,7 @@ import { assessStartDescription } from '@/lib/start-description-quality';
 import { checkRateLimit } from '@/lib/rate-limit-config';
 
 export async function POST(req: NextRequest) {
-    const limited = checkRateLimit(req, 'validateStartDescription');
+    const limited = await checkRateLimit(req, 'validateStartDescription');
     if (limited) return limited;
 
     try {

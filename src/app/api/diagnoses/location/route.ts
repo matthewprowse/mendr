@@ -5,7 +5,7 @@ import { checkRateLimit } from '@/lib/rate-limit-config';
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export async function POST(req: NextRequest) {
-    const limited = checkRateLimit(req, 'conversationLocation');
+    const limited = await checkRateLimit(req, 'conversationLocation');
     if (limited) return limited;
 
     try {

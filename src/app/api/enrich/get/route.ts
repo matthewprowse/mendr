@@ -54,7 +54,7 @@ function cacheKeyForPlaceIds(placeIds: string[]): string {
 }
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
-    const limited = checkRateLimit(req, 'enrichGet');
+    const limited = await checkRateLimit(req, 'enrichGet');
     if (limited) return limited;
 
     try {

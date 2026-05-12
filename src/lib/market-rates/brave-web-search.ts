@@ -32,13 +32,24 @@ export async function runBraveWebSearch(
     url.searchParams.set('q', q);
     url.searchParams.set('count', '10');
 
-    const res = await fetch(url.toString(), {
-        headers: {
-            Accept: 'application/json',
-            'X-Subscription-Token': key,
-        },
-        next: { revalidate: 0 },
-    });
+    let res: Response;
+    try {
+        res = await fetch(url.toString(), {
+            headers: {
+                Accept: 'application/json',
+                'X-Subscription-Token': key,
+            },
+            next: { revalidate: 0 },
+            signal: AbortSignal.timeout(8_000),
+        });
+    } catch (err) {
+        const isTimeout = err instanceof Error && err.name === 'TimeoutError';
+        return {
+            sources: [],
+            httpStatus: 0,
+            errorMessage: isTimeout ? 'brave_search_timeout' : 'brave_search_fetch_error',
+        };
+    }
 
     if (!res.ok) {
         let errorMessage = `HTTP ${res.status}`;

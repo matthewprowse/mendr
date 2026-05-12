@@ -76,7 +76,7 @@ function buildGeocodeCacheKey(input: {
 }
 
 export async function POST(req: NextRequest) {
-    const limited = checkRateLimit(req, 'geocode');
+    const limited = await checkRateLimit(req, 'geocode');
     if (limited) return limited;
 
     const apiKey = getMapsApiKey();

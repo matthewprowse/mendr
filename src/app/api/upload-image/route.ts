@@ -25,7 +25,7 @@ function safeFileName(name: string): string {
 }
 
 export async function POST(req: NextRequest) {
-    const limited = checkRateLimit(req, 'uploadImage');
+    const limited = await checkRateLimit(req, 'uploadImage');
     if (limited) return limited;
 
     const formData = await req.formData();

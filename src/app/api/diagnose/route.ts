@@ -1,3 +1,5 @@
+export const maxDuration = 60;
+
 import { NextRequest } from 'next/server';
 import type { Content as GeminiContent } from '@google/generative-ai';
 import { GEMINI_MODEL_NAME, getDiagnosisModel } from '@/lib/ai-diagnosis-backend';
@@ -105,7 +107,7 @@ export async function POST(req: NextRequest) {
     const requestStartedAt = Date.now();
     // ── Rate limit ─────────────────────────────────────────────────────────────
     const rateLimitStageStartedAt = Date.now();
-    const limited = checkRateLimit(req, 'diagnose');
+    const limited = await checkRateLimit(req, 'diagnose');
     recordStage(timings, 'rate_limit_check_ms', rateLimitStageStartedAt);
     if (limited) return limited;
 
@@ -169,46 +171,35 @@ export async function POST(req: NextRequest) {
         try {
             const admin = await createSupabaseAdminClient();
 
-            let currentCount = 0;
-            if (quotaUserId) {
-                const { data } = await admin
-                    .from('diagnosis_usage')
-                    .select('count')
-                    .eq('user_id', quotaUserId)
-                    .eq('date', today)
-                    .maybeSingle();
-                currentCount = (data as { count: number } | null)?.count ?? 0;
+            // Atomic increment via RPC — eliminates the read-then-write race condition.
+            // Two simultaneous requests can no longer both pass by reading the same stale count.
+            const { data: rpcData, error: rpcError } = await admin.rpc(
+                'increment_diagnosis_quota',
+                {
+                    p_user_id: quotaUserId ?? null,
+                    p_anon_key: quotaAnonKey ?? null,
+                    p_date: today,
+                },
+            );
+
+            if (rpcError) {
+                // Non-fatal: if the RPC doesn't exist yet or fails, allow through
+                console.warn('Quota RPC failed, allowing through:', rpcError.message);
             } else {
-                const { data } = await admin
-                    .from('diagnosis_usage')
-                    .select('count')
-                    .eq('anonymous_key', quotaAnonKey)
-                    .eq('date', today)
-                    .maybeSingle();
-                currentCount = (data as { count: number } | null)?.count ?? 0;
-            }
-
-            if (currentCount >= limit) {
-                return new Response(
-                    JSON.stringify({
-                        error: 'quota_exceeded',
-                        limit,
-                        used: currentCount,
-                        message: quotaUserId
-                            ? `You have used all ${limit} diagnoses for today. Your quota resets at midnight.`
-                            : `You have used all ${limit} free diagnoses for today. Sign in for more.`,
-                    }),
-                    { status: 429, headers: { 'Content-Type': 'application/json', ...quotaExtraHeaders } }
-                );
-            }
-
-            // Increment — fire and forget; don't block the AI call (skip optional warm-up calls).
-            if (!skipQuotaIncrement) {
-                const upsertRow = quotaUserId
-                    ? { user_id: quotaUserId, date: today, count: currentCount + 1 }
-                    : { anonymous_key: quotaAnonKey, date: today, count: currentCount + 1 };
-                const onConflict = quotaUserId ? 'user_id,date' : 'anonymous_key,date';
-                void admin.from('diagnosis_usage').upsert(upsertRow, { onConflict });
+                const newCount = rpcData as number;
+                if (newCount > limit) {
+                    return new Response(
+                        JSON.stringify({
+                            error: 'quota_exceeded',
+                            limit,
+                            used: newCount,
+                            message: quotaUserId
+                                ? `You have used all ${limit} diagnoses for today. Your quota resets at midnight.`
+                                : `You have used all ${limit} free diagnoses for today. Sign in for more.`,
+                        }),
+                        { status: 429, headers: { 'Content-Type': 'application/json', ...quotaExtraHeaders } }
+                    );
+                }
             }
         } catch (quotaErr) {
             // Non-fatal: if the usage table doesn't exist yet or query fails, allow through

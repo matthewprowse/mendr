@@ -114,6 +114,49 @@ export const RATE_LIMITS = {
         max: 5,
     },
 
+    // ── Public abuse surfaces (previously unprotected) ─────────────────────────
+    // Analytics event writes — cheap DB insert but publicly callable.
+    // 60 per minute gives generous headroom for real sessions.
+    analyticsEvents: {
+        windowMs: 60 * 1000, // 1 minute
+        max: 60,
+    },
+
+    // Provider application submit — triggers onboarding pipeline.
+    // 3 per hour: a legitimate applicant needs one, possibly a retry.
+    providerApply: {
+        windowMs: 60 * 60 * 1000, // 1 hour
+        max: 3,
+    },
+
+    // Parts-prices lookup — chains up to 8 Brave + Gemini calls per request.
+    // Very tight: 5 per hour is more than enough for real homeowners.
+    partsPrices: {
+        windowMs: 60 * 60 * 1000, // 1 hour
+        max: 5,
+    },
+
+    // HEIC image conversion — CPU + storage work per request.
+    // 20 per hour covers a normal multi-photo diagnosis session.
+    heicConvert: {
+        windowMs: 60 * 60 * 1000, // 1 hour
+        max: 20,
+    },
+
+    // Contact form submissions — email trigger, spam risk.
+    // Dedicated bucket replaces the misused 'reviews' bucket.
+    contactForm: {
+        windowMs: 60 * 60 * 1000, // 1 hour
+        max: 5,
+    },
+
+    // Contractor waitlist sign-ups — email trigger, spam risk.
+    // Dedicated bucket replaces the misused 'reviews' bucket.
+    contractorWaitlist: {
+        windowMs: 60 * 60 * 1000, // 1 hour
+        max: 5,
+    },
+
     // Review count read. Two count queries — very low cost.
     reviewsCount: {
         windowMs: 60 * 1000, // 1 minute
@@ -207,14 +250,14 @@ export function getCallerIp(req: NextRequest): string | null {
 //   if (limited) return limited;
 // ─────────────────────────────────────────────────────────────────────────────
 
-export function checkRateLimit(
+export async function checkRateLimit(
     req: NextRequest,
     bucket: RateLimitBucket,
-): NextResponse | null {
+): Promise<NextResponse | null> {
     if (isRateLimitBypassed(req)) return null;
 
     const config = RATE_LIMITS[bucket];
-    const result = applyRateLimit({ ip: getCallerIp(req), bucket, config });
+    const result = await applyRateLimit({ ip: getCallerIp(req), bucket, config });
 
     if (!result.ok) {
         const retryAfterSecs = Math.ceil((result.resetAt - Date.now()) / 1000);

@@ -7,7 +7,9 @@
 
 import { SchemaType } from '@google/generative-ai';
 import type { Content as GeminiContent } from '@google/generative-ai';
-import { getDiagnosisModel } from '@/lib/ai-diagnosis-backend';
+import { getDiagnosisModel, GEMINI_MODEL_NAME } from '@/lib/ai-diagnosis-backend';
+import { logGeminiUsage } from '@/lib/ai-cost-logger';
+import { logPipelineStep } from '@/lib/ai-logging';
 import {
     CLASSIFICATION_SUBCATEGORY_ENUM,
     formatTaxonomyForClassificationPrompt,
@@ -247,7 +249,9 @@ export async function runClassification(
     contents: GeminiContent[],
     serviceListText: string,
     allowedTradeLabels: string[],
+    ctx?: { userId?: string | null; conversationId?: string | null },
 ): Promise<ClassificationResult> {
+    const stepStart = Date.now();
     try {
         const model = getDiagnosisModel();
         const systemBlock = buildClassificationSystemPrompt(serviceListText);
@@ -282,10 +286,26 @@ export async function runClassification(
             },
         });
 
+        const usage = result.response.usageMetadata;
+
+        // Fire-and-forget cost log — never blocks the response
+        void logGeminiUsage(usage, {
+            endpoint: 'diagnose/classify',
+            modelName: GEMINI_MODEL_NAME,
+            userId: ctx?.userId,
+            conversationId: ctx?.conversationId,
+        });
+
         const raw = result.response.text().trim();
         if (!raw) {
             console.error('[agent-classify] empty model text', {
                 cand: result.response.candidates?.length ?? 0,
+            });
+            logPipelineStep({
+                stepName: 'agent-classify', status: 'error', durationMs: Date.now() - stepStart,
+                conversationId: ctx?.conversationId, userId: ctx?.userId,
+                modelName: GEMINI_MODEL_NAME, errorMessage: 'empty model text',
+                promptTokens: usage?.promptTokenCount, completionTokens: usage?.candidatesTokenCount,
             });
             return { ...FALLBACK_CLASSIFICATION, requestFailed: true };
         }
@@ -295,15 +315,33 @@ export async function runClassification(
             parsed = JSON.parse(raw) as ClassificationResult;
         } catch {
             console.error('[agent-classify] JSON.parse failed', raw.slice(0, 400));
+            logPipelineStep({
+                stepName: 'agent-classify', status: 'error', durationMs: Date.now() - stepStart,
+                conversationId: ctx?.conversationId, userId: ctx?.userId,
+                modelName: GEMINI_MODEL_NAME, errorMessage: 'JSON parse failed',
+                promptTokens: usage?.promptTokenCount, completionTokens: usage?.candidatesTokenCount,
+            });
             return { ...FALLBACK_CLASSIFICATION, requestFailed: true };
         }
 
         parsed.confidence = Math.max(0, Math.min(100, Math.round(parsed.confidence ?? 0)));
 
         const out = finalizeClassificationAgainstCatalogAndTaxonomy(parsed, allowedTradeLabels);
+        logPipelineStep({
+            stepName: 'agent-classify', status: 'ok', durationMs: Date.now() - stepStart,
+            conversationId: ctx?.conversationId, userId: ctx?.userId,
+            modelName: GEMINI_MODEL_NAME,
+            promptTokens: usage?.promptTokenCount, completionTokens: usage?.candidatesTokenCount,
+        });
         return out;
     } catch (e) {
         console.error('[agent-classify] generateContent threw', e);
+        logPipelineStep({
+            stepName: 'agent-classify', status: 'error', durationMs: Date.now() - stepStart,
+            conversationId: ctx?.conversationId, userId: ctx?.userId,
+            modelName: GEMINI_MODEL_NAME,
+            errorMessage: e instanceof Error ? e.message : String(e),
+        });
         return { ...FALLBACK_CLASSIFICATION, requestFailed: true };
     }
 }

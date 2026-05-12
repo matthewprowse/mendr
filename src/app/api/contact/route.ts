@@ -11,7 +11,7 @@ const VALID_SUBJECTS = [
 ] as const;
 
 export async function POST(req: NextRequest) {
-    const limited = checkRateLimit(req, 'reviews'); // 5/hr — same as review submissions
+    const limited = await checkRateLimit(req, 'contactForm'); // dedicated bucket — 5/hr per IP
     if (limited) return limited;
 
     const body = await req.json().catch(() => null);

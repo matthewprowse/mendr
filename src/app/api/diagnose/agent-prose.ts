@@ -16,7 +16,9 @@
 
 import { SchemaType } from '@google/generative-ai';
 import type { Content as GeminiContent } from '@google/generative-ai';
-import { getDiagnosisModel } from '@/lib/ai-diagnosis-backend';
+import { getDiagnosisModel, GEMINI_MODEL_NAME } from '@/lib/ai-diagnosis-backend';
+import { logGeminiUsage } from '@/lib/ai-cost-logger';
+import { logPipelineStep } from '@/lib/ai-logging';
 import { toHeadlineStyle, stripFillerSentenceStarts } from '@/lib/prompt-utils';
 import type { ClassificationResult } from './agent-classify';
 
@@ -224,7 +226,9 @@ export async function runProseGeneration(params: {
     classification: ClassificationResult;
     baseSystemInstruction: string;
     isProviderHydration?: boolean;
+    ctx?: { userId?: string | null; conversationId?: string | null };
 }): Promise<ProseResult> {
+    const stepStart = Date.now();
     try {
         const model = getDiagnosisModel();
 
@@ -263,17 +267,39 @@ export async function runProseGeneration(params: {
             },
         });
 
+        const usage = result.response.usageMetadata;
+
+        // Fire-and-forget cost log — never blocks the response
+        void logGeminiUsage(usage, {
+            endpoint: 'diagnose/prose',
+            modelName: GEMINI_MODEL_NAME,
+            userId: params.ctx?.userId,
+            conversationId: params.ctx?.conversationId,
+        });
+
         let raw: string;
         try {
             raw = result.response.text().trim();
         } catch (texErr) {
             console.error('[agent-prose] response.text() failed', texErr);
+            logPipelineStep({
+                stepName: 'agent-prose', status: 'error', durationMs: Date.now() - stepStart,
+                conversationId: params.ctx?.conversationId, userId: params.ctx?.userId,
+                modelName: GEMINI_MODEL_NAME, errorMessage: 'response.text() threw',
+                promptTokens: usage?.promptTokenCount, completionTokens: usage?.candidatesTokenCount,
+            });
             return { ...FALLBACK_PROSE, requestFailed: true };
         }
 
         if (!raw) {
             console.error('[agent-prose] empty model text', {
                 cand: result.response.candidates?.length ?? 0,
+            });
+            logPipelineStep({
+                stepName: 'agent-prose', status: 'error', durationMs: Date.now() - stepStart,
+                conversationId: params.ctx?.conversationId, userId: params.ctx?.userId,
+                modelName: GEMINI_MODEL_NAME, errorMessage: 'empty model text',
+                promptTokens: usage?.promptTokenCount, completionTokens: usage?.candidatesTokenCount,
             });
             return { ...FALLBACK_PROSE, requestFailed: true };
         }
@@ -283,6 +309,12 @@ export async function runProseGeneration(params: {
             parsed = JSON.parse(raw) as ProseResult;
         } catch {
             console.error('[agent-prose] JSON.parse failed', raw.slice(0, 600));
+            logPipelineStep({
+                stepName: 'agent-prose', status: 'error', durationMs: Date.now() - stepStart,
+                conversationId: params.ctx?.conversationId, userId: params.ctx?.userId,
+                modelName: GEMINI_MODEL_NAME, errorMessage: 'JSON parse failed',
+                promptTokens: usage?.promptTokenCount, completionTokens: usage?.candidatesTokenCount,
+            });
             return { ...FALLBACK_PROSE, requestFailed: true };
         }
 
@@ -299,9 +331,21 @@ export async function runProseGeneration(params: {
             parsed.clarification_questions = [];
         }
 
+        logPipelineStep({
+            stepName: 'agent-prose', status: 'ok', durationMs: Date.now() - stepStart,
+            conversationId: params.ctx?.conversationId, userId: params.ctx?.userId,
+            modelName: GEMINI_MODEL_NAME,
+            promptTokens: usage?.promptTokenCount, completionTokens: usage?.candidatesTokenCount,
+        });
         return parsed;
     } catch (e) {
         console.error('[agent-prose] generateContent threw', e);
+        logPipelineStep({
+            stepName: 'agent-prose', status: 'error', durationMs: Date.now() - stepStart,
+            conversationId: params.ctx?.conversationId, userId: params.ctx?.userId,
+            modelName: GEMINI_MODEL_NAME,
+            errorMessage: e instanceof Error ? e.message : String(e),
+        });
         return { ...FALLBACK_PROSE, requestFailed: true };
     }
 }

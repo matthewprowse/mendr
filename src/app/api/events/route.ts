@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { checkRateLimit } from '@/lib/rate-limit-config';
+
 import { createSupabaseAdminClient } from '@/lib/supabase-server';
 import { createHash } from 'crypto';
 
@@ -22,6 +24,9 @@ function getIp(req: NextRequest): string {
 }
 
 export async function POST(req: NextRequest) {
+    const limited = await checkRateLimit(req, 'analyticsEvents');
+    if (limited) return limited;
+
     const body = await req.json().catch(() => null);
     if (!body) return NextResponse.json({ ok: true }); // fail silently
 

@@ -2,19 +2,13 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseAdminClient } from '@/lib/supabase-server';
+import { requireAdmin } from '@/lib/admin-auth';
 
-function checkAdminCookie(req: NextRequest): boolean {
-    const password = process.env.ADMIN_PASSWORD;
-    if (!password) return false;
-    const session = req.cookies.get('admin_session')?.value;
-    return session === Buffer.from(password).toString('base64');
-}
 
 // GET — list all provider applications, newest first.
 export async function GET(req: NextRequest) {
-    if (!checkAdminCookie(req)) {
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const deny = await requireAdmin(req);
+    if (deny) return deny;
     const admin = await createSupabaseAdminClient();
     const { data, error } = await admin
         .from('provider_applications')
@@ -27,9 +21,8 @@ export async function GET(req: NextRequest) {
 
 // PATCH — update status, notes, or sendgrid_sent_at on a single record.
 export async function PATCH(req: NextRequest) {
-    if (!checkAdminCookie(req)) {
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const deny = await requireAdmin(req);
+    if (deny) return deny;
     const body = await req.json().catch(() => null);
     const id = typeof body?.id === 'string' ? body.id : '';
     if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 });

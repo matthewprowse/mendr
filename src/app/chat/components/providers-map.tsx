@@ -455,7 +455,7 @@ export function ProvidersMap({
     const base = typeof window !== 'undefined' ? window.location.origin : '';
     const providerUrl =
         activeProvider && (activeProvider.place_id ?? activeProvider.id)
-            ? `${base}/pro/${encodeURIComponent(activeProvider.place_id ?? activeProvider.id ?? '')}`
+            ? `${base}/contractors/${encodeURIComponent(activeProvider.place_id ?? activeProvider.id ?? '')}`
             : '';
 
 

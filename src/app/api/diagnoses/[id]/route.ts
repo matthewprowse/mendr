@@ -19,7 +19,7 @@ const PATCH_KEYS = new Set([
 type RouteContext = { params: Promise<{ id: string }> };
 
 export async function GET(_req: NextRequest, context: RouteContext) {
-    const limited = checkRateLimit(_req, 'conversationRead');
+    const limited = await checkRateLimit(_req, 'conversationRead');
     if (limited) return limited;
 
     const { id } = await context.params;
@@ -55,7 +55,7 @@ export async function GET(_req: NextRequest, context: RouteContext) {
 }
 
 export async function PATCH(req: NextRequest, context: RouteContext) {
-    const limited = checkRateLimit(req, 'conversationUpsert');
+    const limited = await checkRateLimit(req, 'conversationUpsert');
     if (limited) return limited;
 
     const { id } = await context.params;

@@ -1,15 +1,25 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { safeRedirectPath } from '@/lib/safe-redirect';
+
+const ADMIN_FALLBACK = '/admin';
+const ADMIN_REDIRECT_OPTIONS = { allowedPathPrefixes: ['/admin'] } as const;
 
 export default function AdminLoginPage() {
     const router = useRouter();
     const searchParams = useSearchParams();
-    const next = searchParams.get('next') || '/admin';
+    const rawNext = searchParams.get('next');
+    // Compute the safe redirect once per `next` change so the form submit
+    // and any server-side intent stay in sync.
+    const safeNext = useMemo(
+        () => safeRedirectPath(rawNext, ADMIN_FALLBACK, ADMIN_REDIRECT_OPTIONS),
+        [rawNext],
+    );
 
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
@@ -23,13 +33,13 @@ export default function AdminLoginPage() {
             const res = await fetch('/api/admin/login', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ password, next }),
+                body: JSON.stringify({ password, next: safeNext }),
             });
             if (!res.ok) {
                 setError('Incorrect password.');
                 return;
             }
-            router.push(next);
+            router.push(safeNext);
             router.refresh();
         } catch {
             setError('Something went wrong. Try again.');

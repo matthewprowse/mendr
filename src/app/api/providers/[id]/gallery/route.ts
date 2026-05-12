@@ -38,7 +38,7 @@ function isMissingRelationError(error: unknown): boolean {
 }
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-    const limited = checkRateLimit(req, 'uploadImage');
+    const limited = await checkRateLimit(req, 'uploadImage');
     if (limited) return limited;
 
     try {

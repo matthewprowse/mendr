@@ -3,7 +3,7 @@ import { createSupabaseServerClient } from '@/lib/supabase-server';
 import { checkRateLimit } from '@/lib/rate-limit-config';
 
 export async function POST(req: NextRequest) {
-    const limited = checkRateLimit(req, 'reviewsCount');
+    const limited = await checkRateLimit(req, 'reviewsCount');
     if (limited) return limited;
 
     try {

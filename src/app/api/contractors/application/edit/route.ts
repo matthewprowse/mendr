@@ -42,7 +42,7 @@ async function validateToken(
 // ─── GET — load edit page payload ────────────────────────────────────────────
 
 export async function GET(req: NextRequest) {
-    const limited = checkRateLimit(req, 'applicationEdit');
+    const limited = await checkRateLimit(req, 'applicationEdit');
     if (limited) return limited;
 
     const rawToken = req.nextUrl.searchParams.get('token') ?? '';
@@ -78,7 +78,7 @@ export async function GET(req: NextRequest) {
 // ─── POST — save applicant edits ─────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
-    const limited = checkRateLimit(req, 'applicationEdit');
+    const limited = await checkRateLimit(req, 'applicationEdit');
     if (limited) return limited;
 
     const body     = await req.json().catch(() => null);

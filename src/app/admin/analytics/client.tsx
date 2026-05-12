@@ -179,9 +179,9 @@ function FunnelTooltip({ active, payload }: { active?: boolean; payload?: any[] 
     return (
         <div className="rounded-md border bg-popover px-3 py-2 text-xs shadow-sm">
             <p className="font-medium text-foreground">{d.label}</p>
-            <p className="text-muted-foreground">Sessions: <span className="font-mono text-foreground">{d.sessions}</span></p>
+            <p className="text-muted-foreground">Sessions: <span className="font-sans text-foreground">{d.sessions}</span></p>
             {d.rate !== null && (
-                <p className="text-muted-foreground">From prev: <span className="font-mono text-foreground">{d.rate}</span></p>
+                <p className="text-muted-foreground">From prev: <span className="font-sans text-foreground">{d.rate}</span></p>
             )}
         </div>
     );
@@ -200,7 +200,7 @@ function TimelineTooltip({ active, payload, label }: { active?: boolean; payload
                         <span className="inline-block size-2 rounded-full" style={{ backgroundColor: p.color }} />
                         {CHART_CONFIG[p.dataKey as keyof typeof CHART_CONFIG]?.label ?? p.dataKey}
                     </span>
-                    <span className="font-mono text-foreground">{p.value}</span>
+                    <span className="font-sans text-foreground">{p.value}</span>
                 </div>
             ))}
         </div>
@@ -667,8 +667,8 @@ export default function AdminAnalyticsPage() {
                                         {formatEventTime(e.created_at, period)}
                                     </TableCell>
                                     <TableCell><EventBadge type={e.event_type} /></TableCell>
-                                    <TableCell className="font-mono text-xs text-muted-foreground">{e.session_id.slice(0, 8)}</TableCell>
-                                    <TableCell className="font-mono text-xs text-muted-foreground">{e.diagnosis_id?.slice(0, 8) ?? '—'}</TableCell>
+                                    <TableCell className="font-sans text-xs text-muted-foreground">{e.session_id.slice(0, 8)}</TableCell>
+                                    <TableCell className="font-sans text-xs text-muted-foreground">{e.diagnosis_id?.slice(0, 8) ?? '—'}</TableCell>
                                     <TableCell className="text-xs text-muted-foreground">{e.provider_id?.slice(0, 8) ?? '—'}</TableCell>
                                 </TableRow>
                             ))}
@@ -704,7 +704,7 @@ export default function AdminAnalyticsPage() {
                                                         : 'border-border/50 bg-background'
                                                 }`}
                                             >
-                                                <span className="shrink-0 font-mono text-xs text-muted-foreground">
+                                                <span className="shrink-0 font-sans text-xs text-muted-foreground">
                                                     {sid.slice(0, 8)}
                                                 </span>
                                                 <SessionTimeline events={sEvents} />
@@ -725,10 +725,10 @@ export default function AdminAnalyticsPage() {
                     {selectedEvent && (
                         <div className="space-y-2 text-sm">
                             <p><span className="text-muted-foreground">Time:</span> {new Date(selectedEvent.created_at).toLocaleString('en-ZA')}</p>
-                            <p><span className="text-muted-foreground">Session:</span> <span className="font-mono">{selectedEvent.session_id}</span></p>
+                            <p><span className="text-muted-foreground">Session:</span> <span className="font-sans">{selectedEvent.session_id}</span></p>
                             <p><span className="text-muted-foreground">Event:</span> {selectedEvent.event_type}</p>
-                            <p><span className="text-muted-foreground">Diagnosis:</span> <span className="font-mono">{selectedEvent.diagnosis_id ?? '—'}</span></p>
-                            <p><span className="text-muted-foreground">Provider:</span> <span className="font-mono">{selectedEvent.provider_id ?? '—'}</span></p>
+                            <p><span className="text-muted-foreground">Diagnosis:</span> <span className="font-sans">{selectedEvent.diagnosis_id ?? '—'}</span></p>
+                            <p><span className="text-muted-foreground">Provider:</span> <span className="font-sans">{selectedEvent.provider_id ?? '—'}</span></p>
                             <div className="flex gap-2 pt-1">
                                 <Button variant="secondary" onClick={() => setEditDraft({ ...selectedEvent })}>Edit</Button>
                                 <Button variant="outline" onClick={() => setSelectedEvent(null)}>Close</Button>

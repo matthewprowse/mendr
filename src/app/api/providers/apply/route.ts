@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { checkRateLimit } from '@/lib/rate-limit-config';
+
 import { createSupabaseAdminClient } from '@/lib/supabase-server';
 import { sendScandioEmail, confirmationEmail } from '@/lib/sendgrid-mail';
 import { getAppOrigin } from '@/lib/site-url';
@@ -42,6 +44,9 @@ type ApplyBody = {
 };
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
+    const limited = await checkRateLimit(req, 'providerApply');
+    if (limited) return limited;
+
     const forwardedFor = req.headers.get('x-forwarded-for') || '';
     const applicantIp = forwardedFor.split(',')[0]?.trim() || null;
 

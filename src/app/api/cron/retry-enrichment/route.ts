@@ -4,6 +4,7 @@ import { isAuthorizedCronRequest } from '@/lib/cron-auth';
 import { enrichProvider } from '@/lib/provider-enrichment';
 
 export const dynamic = 'force-dynamic';
+export const maxDuration = 60;
 
 const FAILED_RETRY_MS = 48 * 60 * 60 * 1000;
 const LOW_QUALITY_RETRY_MS = 24 * 60 * 60 * 1000;

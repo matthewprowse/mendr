@@ -37,20 +37,9 @@ export function CoverageMap({ apiKey }: CoverageMapProps) {
     const [addressPopoverOpen, setAddressPopoverOpen] = useState(false);
     const [locationError, setLocationError] = useState<string | null>(null);
 
-    const fetchProviders = useCallback(async (lat: number, lng: number) => {
-        try {
-            const res = await fetch('/api/providers/coverage', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ lat, lng }),
-            });
-            const data = await res.json();
-            if (res.ok && data.providers) {
-                setProviders(data.providers);
-            }
-        } catch {
-            setProviders([]);
-        }
+    /** Coverage-by-location API is not wired; map UI is retained without provider markers. */
+    const fetchProviders = useCallback(async (_lat: number, _lng: number) => {
+        setProviders([]);
     }, []);
 
     useEffect(() => {
@@ -199,7 +188,7 @@ export function CoverageMap({ apiKey }: CoverageMapProps) {
     return (
         <div className="space-y-4">
             <p className="text-sm text-muted-foreground">
-                Coverage shown within a 25km radius of your selected location.
+                Map preview — provider coverage markers are not enabled here yet.
             </p>
             <div className="flex flex-col gap-2">
                 {address ? (

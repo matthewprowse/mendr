@@ -15,7 +15,7 @@ const VALID_SOURCES = [
 ] as const;
 
 export async function POST(req: NextRequest) {
-    const limited = checkRateLimit(req, 'reviews'); // reuse existing review bucket (5/hr per IP)
+    const limited = await checkRateLimit(req, 'contractorWaitlist'); // dedicated bucket — 5/hr per IP
     if (limited) return limited;
 
     const body = await req.json().catch(() => null);

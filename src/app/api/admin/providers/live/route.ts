@@ -5,15 +5,10 @@ import {
     CERTIFICATION_SLUGS,
     getCertificationBySlug,
 } from '@/lib/certifications/catalog';
+import { requireAdmin } from '@/lib/admin-auth';
 
 const ALLOWED_COMPANY_SIZES = new Set(['solo', 'small', 'mid', 'large']);
 
-function checkAdminCookie(req: NextRequest): boolean {
-    const password = process.env.ADMIN_PASSWORD;
-    if (!password) return false;
-    const session = req.cookies.get('admin_session')?.value;
-    return session === Buffer.from(password).toString('base64');
-}
 
 type ProviderPerfRow = {
     provider_id: string;
@@ -21,9 +16,8 @@ type ProviderPerfRow = {
 };
 
 export async function GET(req: NextRequest) {
-    if (!checkAdminCookie(req)) {
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const deny = await requireAdmin(req);
+    if (deny) return deny;
 
     const admin = await createSupabaseAdminClient();
 
@@ -125,9 +119,8 @@ export async function GET(req: NextRequest) {
 
 /** Re-fetch rating, review count, and related Google data for a provider (by DB id). */
 export async function POST(req: NextRequest) {
-    if (!checkAdminCookie(req)) {
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const deny = await requireAdmin(req);
+    if (deny) return deny;
     const body = await req.json().catch(() => null);
     const id = typeof body?.id === 'string' ? body.id.trim() : '';
     if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 });
@@ -165,9 +158,8 @@ export async function POST(req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
-    if (!checkAdminCookie(req)) {
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const deny = await requireAdmin(req);
+    if (deny) return deny;
     const body = await req.json().catch(() => null);
     const id = typeof body?.id === 'string' ? body.id.trim() : '';
     if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 });

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { checkRateLimit } from '@/lib/rate-limit-config';
-import { RETAIL_TYPES } from '@/app/api/providers/providers-route-constants';
+import { RETAIL_TYPES } from '@/app/api/providers/constants';
 import { normalizePlaceId } from '@/app/api/providers/place-id';
 
 const DEFAULT_LAT = -33.9249;
@@ -23,7 +23,7 @@ type SearchBody = {
 };
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
-    const limited = checkRateLimit(req, 'onboardingSearch');
+    const limited = await checkRateLimit(req, 'onboardingSearch');
     if (limited) return limited;
 
     let body: SearchBody;

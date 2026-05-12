@@ -7,40 +7,60 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
 
+const CATEGORY_KEYS = ['punctuality', 'cleanliness', 'work_quality', 'quote_accuracy'] as const;
+
 const CATEGORIES = [
-    { key: 'punctuality', label: 'Punctuality', hint: 'Did they arrive on time and communicate any delays?' },
-    { key: 'professionalism', label: 'Professionalism', hint: 'How they interacted with you and explained the work.' },
-    { key: 'cleanliness', label: 'Cleanliness', hint: 'How well they protected your home and cleaned up.' },
-    { key: 'quote_accuracy', label: 'Quote accuracy', hint: 'How close the final price was to the original quote.' },
-] as const;
+    { key: 'punctuality' as const, label: 'Punctuality', hint: 'Did they arrive on time and communicate any delays?' },
+    { key: 'cleanliness' as const, label: 'Cleanliness', hint: 'How well they protected your home and cleaned up.' },
+    { key: 'work_quality' as const, label: 'Work quality', hint: 'Quality of workmanship and how they explained the work.' },
+    { key: 'quote_accuracy' as const, label: 'Quote accuracy', hint: 'How close the final price was to the original quote.' },
+];
 
 export function ProReviewForm({ providerId }: { providerId: string }) {
     const [body, setBody] = useState('');
     const [reviewerName, setReviewerName] = useState('');
-    const [ratings, setRatings] = useState<Record<string, number>>({});
-    const [imagePaths, setImagePaths] = useState<string[]>([]);
+    const [ratings, setRatings] = useState<Partial<Record<(typeof CATEGORY_KEYS)[number], number>>>({});
     const [loading, setLoading] = useState(false);
 
-    const setRating = (key: string, value: number) => {
+    const setRating = (key: (typeof CATEGORY_KEYS)[number], value: number) => {
         setRatings((prev) => ({ ...prev, [key]: value }));
     };
 
     const handleSubmit = async (e: FormEvent) => {
         e.preventDefault();
+        const name = reviewerName.trim();
+        if (!name) {
+            toast.error('Please enter your name.');
+            return;
+        }
         if (!body.trim()) {
             toast.error('Please write your review.');
             return;
         }
+        const missingCategory = CATEGORY_KEYS.some((k) => {
+            const v = ratings[k];
+            return typeof v !== 'number' || v < 1 || v > 5;
+        });
+        if (missingCategory) {
+            toast.error('Please rate all categories.');
+            return;
+        }
+
         setLoading(true);
         try {
-            const res = await fetch(`/api/providers/${providerId}/reviews`, {
+            const res = await fetch('/api/reviews', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    body: body.trim(),
-                    reviewer_name: reviewerName.trim() || undefined,
-                    category_ratings: Object.keys(ratings).length > 0 ? ratings : undefined,
-                    image_urls: imagePaths.length > 0 ? imagePaths : undefined,
+                    providerId,
+                    reviewerName: name,
+                    reviewBody: body.trim(),
+                    categoryRatings: {
+                        punctuality: ratings.punctuality!,
+                        cleanliness: ratings.cleanliness!,
+                        work_quality: ratings.work_quality!,
+                        quote_accuracy: ratings.quote_accuracy!,
+                    },
                 }),
             });
             const data = await res.json().catch(() => ({}));
@@ -49,7 +69,6 @@ export function ProReviewForm({ providerId }: { providerId: string }) {
             setBody('');
             setReviewerName('');
             setRatings({});
-            setImagePaths([]);
         } catch (e) {
             toast.error(e instanceof Error ? e.message : 'Failed to submit review');
         } finally {
@@ -60,13 +79,14 @@ export function ProReviewForm({ providerId }: { providerId: string }) {
     return (
         <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
-                <Label htmlFor="reviewer_name">Your name (optional)</Label>
+                <Label htmlFor="reviewer_name">Your name *</Label>
                 <Input
                     id="reviewer_name"
                     value={reviewerName}
                     onChange={(e) => setReviewerName(e.target.value)}
                     placeholder="e.g. John"
                     className="max-w-xs"
+                    required
                 />
             </div>
             <div className="space-y-2">
@@ -81,7 +101,7 @@ export function ProReviewForm({ providerId }: { providerId: string }) {
                 />
             </div>
             <div className="space-y-3">
-                <p className="text-sm font-medium">Rate by Category (Optional)</p>
+                <p className="text-sm font-medium">Rate by category *</p>
                 <div className="grid gap-3 sm:grid-cols-2">
                     {CATEGORIES.map(({ key, label, hint }) => (
                         <div key={key} className="space-y-1">
@@ -89,7 +109,7 @@ export function ProReviewForm({ providerId }: { providerId: string }) {
                             <p className="text-[11px] text-muted-foreground">{hint}</p>
                             <div className="flex gap-1">
                                 {[1, 2, 3, 4, 5].map((n) => {
-                                    const active = ratings[key] >= n;
+                                    const active = (ratings[key] ?? 0) >= n;
                                     return (
                                         <button
                                             key={n}

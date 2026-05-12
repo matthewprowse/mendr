@@ -2,7 +2,8 @@
  * Uses Gemini to extract a ZAR price range for a single part from web snippets.
  */
 
-import { getGeminiModel } from '@/lib/ai-client';
+import { getGeminiModel, GEMINI_MODEL_NAME } from '@/lib/ai-client';
+import { logGeminiUsage } from '@/lib/ai-cost-logger';
 import type { MarketRateSource } from '@/lib/market-rates/types';
 import { coerceWholeRand } from './coerce-rand';
 
@@ -74,17 +75,38 @@ JSON shape (exactly these three keys, no others):
 
     try {
         const model = getGeminiModel();
-        const result = await model.generateContent({
-            contents: [{ role: 'user', parts: [{ text: prompt }] }],
-            generationConfig: {
-                temperature: 0.1,
-                maxOutputTokens: 256,
-            },
+
+        const TIMEOUT_MS = 15_000;
+        const timeoutPromise = new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('extract_price_timeout')), TIMEOUT_MS),
+        );
+
+        const result = await Promise.race([
+            model.generateContent({
+                contents: [{ role: 'user', parts: [{ text: prompt }] }],
+                generationConfig: {
+                    temperature: 0.1,
+                    maxOutputTokens: 256,
+                },
+            }),
+            timeoutPromise,
+        ]);
+
+        // Fire-and-forget cost log
+        void logGeminiUsage(result.response.usageMetadata, {
+            endpoint: 'parts-prices/extract-price',
+            modelName: GEMINI_MODEL_NAME,
         });
+
         const text = result.response.text();
         return tryParsePrice(text || '') ?? EMPTY;
     } catch (err) {
-        console.error('[extract-price] Gemini extraction failed:', err);
+        const msg = err instanceof Error ? err.message : String(err);
+        if (msg === 'extract_price_timeout') {
+            console.warn('[extract-price] Gemini extraction timed out after 15s');
+        } else {
+            console.error('[extract-price] Gemini extraction failed:', err);
+        }
         return EMPTY;
     }
 }

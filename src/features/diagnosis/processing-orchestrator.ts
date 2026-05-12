@@ -1,4 +1,4 @@
-import type { DiagnosisData } from '@/app/chat/components/types';
+import type { DiagnosisData } from '@/features/diagnosis/types';
 import { fetchProvidersApi } from '@/features/match/api/client';
 import { saveMatchPageCache } from '@/features/match/cache/match-page-cache';
 import { fetchConversationDiagnosis, patchConversation, type ConversationDiagnosisRow } from '@/lib/diagnoses-api';

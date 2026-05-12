@@ -1048,7 +1048,7 @@ export default function AdminProvidersPage() {
                                             Provider ID:{' '}
                                             <button
                                                 type="button"
-                                                className="font-mono text-primary underline-offset-2 hover:underline"
+                                                className="font-sans text-primary underline-offset-2 hover:underline"
                                                 onClick={() => void copyToClipboard(selectedApplication.matched_provider_id!, 'Provider ID')}
                                             >
                                                 {selectedApplication.matched_provider_id}
@@ -1293,7 +1293,7 @@ export default function AdminProvidersPage() {
                             {selectedLiveProvider.google_place_id ? (
                                 <div className="rounded border bg-muted/20 p-2">
                                     <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Google Place ID</p>
-                                    <p className="text-xs break-all font-mono">{selectedLiveProvider.google_place_id}</p>
+                                    <p className="text-xs break-all font-sans">{selectedLiveProvider.google_place_id}</p>
                                 </div>
                             ) : null}
                             {selectedLiveProvider.enrichment_review_required ? (
@@ -1307,13 +1307,13 @@ export default function AdminProvidersPage() {
                                     </p>
                                     {selectedLiveProvider.enrichment_last_failure ? (
                                         <p className="mt-2 text-[11px] text-amber-900/80">
-                                            <span className="font-mono">Last failure:</span>{' '}
+                                            <span className="font-sans">Last failure:</span>{' '}
                                             {selectedLiveProvider.enrichment_last_failure}
                                         </p>
                                     ) : null}
                                     {selectedLiveProvider.enrichment_last_failure_at ? (
                                         <p className="text-[11px] text-amber-900/80">
-                                            <span className="font-mono">When:</span>{' '}
+                                            <span className="font-sans">When:</span>{' '}
                                             {new Date(selectedLiveProvider.enrichment_last_failure_at).toLocaleString()}
                                         </p>
                                     ) : null}
@@ -1452,7 +1452,7 @@ export default function AdminProvidersPage() {
                             <div>
                                 <Label className="text-xs">Highlights (one per line)</Label>
                                 <Textarea
-                                    className="mt-1 text-sm font-mono"
+                                    className="mt-1 text-sm font-sans"
                                     rows={4}
                                     value={editLiveProvider.highlights.join('\n')}
                                     onChange={(e) =>
@@ -1466,7 +1466,7 @@ export default function AdminProvidersPage() {
                             <div>
                                 <Label className="text-xs">Specialisations (one per line)</Label>
                                 <Textarea
-                                    className="mt-1 text-sm font-mono"
+                                    className="mt-1 text-sm font-sans"
                                     rows={4}
                                     value={editLiveProvider.specialisations.join('\n')}
                                     onChange={(e) =>

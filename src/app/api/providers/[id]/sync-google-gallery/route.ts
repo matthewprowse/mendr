@@ -10,7 +10,7 @@ import { checkRateLimit } from '@/lib/rate-limit-config';
  * Uses `refreshProviderByPlaceId` (same path as pro profile backfill).
  */
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-    const limited = checkRateLimit(req, 'syncGallery');
+    const limited = await checkRateLimit(req, 'syncGallery');
     if (limited) return limited;
     try {
         const { id: providerId } = await params;

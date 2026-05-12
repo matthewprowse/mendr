@@ -48,7 +48,7 @@ function buildFallbackMessage(input: {
  * Builds a short WhatsApp-ready message (Gemini when configured, else template).
  */
 export async function POST(req: NextRequest) {
-    const limited = checkRateLimit(req, 'whatsappMessage');
+    const limited = await checkRateLimit(req, 'whatsappMessage');
     if (limited) return limited;
 
     try {

@@ -2,103 +2,63 @@
 @import 'tw-animate-css';
 @import 'shadcn/tailwind.css';
 
-/* Söhne by Klim Type Foundry — explicit faces to avoid next/font load-order gaps with Tailwind theme. */
-/* Weight mapping: Extraleicht=200, Leicht=300, Buch=400, Kraftig=500, Halbfett=600, Dreiviertelfett=700, Fett=800, Extrafett=900 */
+/* Söhne by Klim Type Foundry — `Soehne*.otf` masters (German spellings on disk). */
+/* Leicht=300, Buch=400 (`Soehne.otf`), Kraftig=500, Halbfett=600, Dreiviertelfett=700, Extrafett=900 */
 @font-face {
     font-family: 'Sohne';
-    src: url('/fonts/Sohne-Leicht.otf') format('opentype');
+    src: url("/fonts/Soehne Leicht.otf") format('opentype');
     font-weight: 300;
     font-style: normal;
     font-display: swap;
 }
 @font-face {
     font-family: 'Sohne';
-    src: url('/fonts/Sohne-Leicht-Kursiv.otf') format('opentype');
-    font-weight: 300;
-    font-style: italic;
-    font-display: swap;
-}
-@font-face {
-    font-family: 'Sohne';
-    src: url('/fonts/Sohne-Buch.otf') format('opentype');
+    src: url('/fonts/Soehne.otf') format('opentype');
     font-weight: 400;
     font-style: normal;
     font-display: swap;
 }
 @font-face {
     font-family: 'Sohne';
-    src: url('/fonts/Sohne-Buch-Kursiv.otf') format('opentype');
-    font-weight: 400;
-    font-style: italic;
-    font-display: swap;
-}
-@font-face {
-    font-family: 'Sohne';
-    src: url('/fonts/Sohne-Kraftig.otf') format('opentype');
+    src: url("/fonts/Soehne Kraftig.otf") format('opentype');
     font-weight: 500;
     font-style: normal;
     font-display: swap;
 }
 @font-face {
     font-family: 'Sohne';
-    src: url('/fonts/Sohne-Kraftig-Kursiv.otf') format('opentype');
-    font-weight: 500;
-    font-style: italic;
-    font-display: swap;
-}
-@font-face {
-    font-family: 'Sohne';
-    src: url('/fonts/Sohne-Halbfett.otf') format('opentype');
+    src: url("/fonts/Soehne Halbfett.otf") format('opentype');
     font-weight: 600;
     font-style: normal;
     font-display: swap;
 }
 @font-face {
     font-family: 'Sohne';
-    src: url('/fonts/Sohne-Halbfett-Kursiv.otf') format('opentype');
-    font-weight: 600;
-    font-style: italic;
-    font-display: swap;
-}
-@font-face {
-    font-family: 'Sohne';
-    src: url('/fonts/Sohne-Dreiviertelfett.otf') format('opentype');
+    src: url("/fonts/Soehne Dreiviertelfett.otf") format('opentype');
     font-weight: 700;
     font-style: normal;
     font-display: swap;
 }
 @font-face {
     font-family: 'Sohne';
-    src: url('/fonts/Sohne-Dreiviertelfett-Kursiv.otf') format('opentype');
-    font-weight: 700;
-    font-style: italic;
-    font-display: swap;
-}
-@font-face {
-    font-family: 'Sohne';
-    src: url('/fonts/Sohne-Fett.otf') format('opentype');
-    font-weight: 800;
-    font-style: normal;
-    font-display: swap;
-}
-@font-face {
-    font-family: 'Sohne';
-    src: url('/fonts/Sohne-Fett-Kursiv.otf') format('opentype');
-    font-weight: 800;
-    font-style: italic;
-    font-display: swap;
-}
-@font-face {
-    font-family: 'Sohne';
-    src: url('/fonts/Sohne-Extrafett.otf') format('opentype');
+    src: url("/fonts/Soehne Extrafett.otf") format('opentype');
     font-weight: 900;
     font-style: normal;
     font-display: swap;
 }
+
+/* Signifier VF — editorial serif (wght axis 100–900) */
 @font-face {
-    font-family: 'Sohne';
-    src: url('/fonts/Sohne-Extrafett-Kursiv.otf') format('opentype');
-    font-weight: 900;
+    font-family: 'Signifier';
+    src: url('/fonts/SignifierVF-Roman.ttf') format('truetype');
+    font-weight: 100 900;
+    font-style: normal;
+    font-display: swap;
+}
+@font-face {
+    font-family: 'Signifier';
+    src: url('/fonts/SignifierVF-Italic.ttf') format('truetype');
+    font-weight: 100 900;
     font-style: italic;
     font-display: swap;
 }
@@ -107,8 +67,7 @@
     --color-background: var(--background);
     --color-foreground: var(--foreground);
     --font-sans: 'Sohne', ui-sans-serif, system-ui, sans-serif;
-    --font-serif: 'Sohne', ui-sans-serif, system-ui, sans-serif;
-    --font-mono: 'Sohne', ui-monospace, monospace;
+    --font-serif: 'Signifier', ui-serif, Georgia, 'Times New Roman', serif;
     --color-sidebar-ring: var(--sidebar-ring);
     --color-sidebar-border: var(--sidebar-border);
     --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -167,6 +126,7 @@
     --popover-foreground: #131312;
     --primary: #DCF763;
     --primary-foreground: #131312;
+    --primary-hover: #ccea50;
     --secondary: #F2F2F0;
     --secondary-foreground: #131312;
     --muted: #F2F2F0;

@@ -23,7 +23,7 @@ export async function GET(
     req: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ): Promise<NextResponse> {
-    const limited = checkRateLimit(req, 'providers');
+    const limited = await checkRateLimit(req, 'providers');
     if (limited) return limited;
 
     try {

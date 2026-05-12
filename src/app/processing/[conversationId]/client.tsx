@@ -1,7 +1,6 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { motion } from 'framer-motion';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { runDiagnosisProcessingPipeline, type ProcessingStepUpdate } from '@/features/diagnosis/processing-orchestrator';
 import { patchConversation } from '@/lib/diagnoses-api';
@@ -181,11 +180,12 @@ export default function ProcessingPageClient({ conversationId }: { conversationI
 
                     <div className="flex flex-col gap-3 items-center">
                         <div className="h-2 w-full rounded-sm bg-secondary overflow-hidden">
-                            <motion.div
+                            <div
                                 className="h-full rounded-sm bg-foreground"
-                                initial={{ width: '0%' }}
-                                animate={{ width: `${((stepIndex + 1) / processingSteps.length) * 100}%` }}
-                                transition={{ duration: 0.45, ease: 'easeOut' }}
+                                style={{
+                                    width: `${((stepIndex + 1) / processingSteps.length) * 100}%`,
+                                    transition: 'width 0.45s ease-out',
+                                }}
                             />
                         </div>
                         <p className="text-sm text-foreground font-medium">{activeStep}</p>

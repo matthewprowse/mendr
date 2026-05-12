@@ -1,24 +1,19 @@
-# Wave 4 Build Plan: Duplicate And Dead Code Cleanup
+# Wave 4b — Duplicate And Dead Code Cleanup
+
+## Progress
+**Status:** ✅ Complete  
+**Tasks:** 7 / 7 complete
+
+---
 
 ## Goal
-
-Remove confirmed duplicate, shim, and dead route files after verifying they have no live imports.
-
-## Source Reports
-
-- `../consumer-ui/route-dead-code-audit.md`
-- `../consumer-ui/shared-ui-state-duplication-audit.md`
-- `../contractor-provider-admin/admin-onboarding-auth-duplication-audit.md`
-- `../core-api-runtime/api-contract-correctness-audit.md`
+Delete confirmed duplicate, shim, and dead files — every deletion proven unused first.
 
 ## Scope
-
-Files this agent may edit/delete:
-
+Deletion candidates (all must be import-verified before removing):
 - `app/src/components/ui/select 2.tsx`
-- `app/src/features/match/hooks/useMatch* 2.ts`
-- Deprecated match hook shims if unused
-- `app/src/app/chat/components/* 2.*`
+- `app/src/features/match/hooks/useMatch* 2.ts` (3 files)
+- `app/src/app/chat/components/* 2.*` (18 files)
 - `app/src/app/chat/_components/**`
 - `app/src/app/admin/_components/**`
 - `app/src/app/match/match-page-client.tsx`
@@ -29,47 +24,28 @@ Files this agent may edit/delete:
 - `app/src/app/diagnosis/[id]/diagnosis-page-client.tsx`
 - `app/src/app/welcome/client.tsx`
 - `app/src/app/welcome/welcome-client.tsx`
-- `app/src/app/welcome2/page.tsx` only if replaced by redirect or confirmed removable
+- `app/src/app/welcome2/page.tsx` → convert to redirect to `/start`
 - `app/src/app/api/welcome-upload-image/route.ts`
 
-Files this agent must not edit:
-
-- Active route behavior files unless converting an obsolete route to a redirect
-- Admin auth/session files
-- Provider search handler
-- Diagnosis parser files
+**Do NOT edit:** active route behavior, admin auth files, provider search handler, diagnosis parser.
 
 ## Tasks
-
-- [ ] For every deletion candidate, prove zero usage with `rg`.
-- [ ] Delete re-export-only `* 2.*` files with zero imports.
-- [ ] Delete deprecated shim folders with zero imports.
-- [ ] Delete dead dynamic-route clients after verifying active pages use parent clients.
-- [ ] Delete or redirect stub routes like `welcome2` only if product agrees.
-- [ ] Delete `welcome-upload-image` only after confirming clients use `upload-image`.
-- [ ] Add or update comments only where they prevent future confusion.
+- [x] Proved and deleted `select 2.tsx`, all `useMatch* 2.ts` shims (3 files)
+- [x] Proved and deleted all `chat/components/* 2.*` shims (14 files) and `chat/_components/` folder
+- [x] Proved and deleted `admin/_components/` and `admin/components/* 2.*` shims (4 files)
+- [x] Proved and deleted `match/match-page-client.tsx`, `match/[id]/match-page-client.tsx`, `diagnosis/[id]/client.tsx`, `diagnosis/[id]/diagnosis-page-client.tsx`
+- [x] Proved and deleted `match2/client.tsx`, `diagnosis2/client.tsx` — flow-shell.tsx was a false-positive grep hit; no actual imports
+- [x] Proved and deleted `welcome/client.tsx`, `welcome/welcome-client.tsx`
+- [x] Deleted `api/welcome-upload-image/route.ts` (zero callers confirmed); deleted all `* 2.*` files remaining in `page/`, `match/`, `report/`, `landing/` trees — zero total remaining
 
 ## Safety Constraints
+- Do NOT delete based on filename alone — run `rg` for each
+- Keep active redirect stubs intact
+- Run build after each deletion group
 
-- Do not delete files based on filename alone.
-- Do not change active user-facing redirects except where this plan explicitly says so.
-- Keep deletion PRs small; if the diff becomes too large, split by folder.
-- Run build after deletion.
-
-## Validation
-
-Run from `app`:
-
-- `npm run lint`
-- `npm run build`
-
-Targeted checks:
-
-- `rg " 2\\.(ts|tsx)" app/src` returns zero or only intentional files.
-- `rg "@/app/chat/_components|app/chat/_components" app/src` returns zero.
-- `rg "@/app/admin/_components|app/admin/_components" app/src` returns zero.
-- `/match`, `/match/[id]`, `/diagnosis`, `/diagnosis/[id]`, `/start` still build.
-
-## Suggested Agent Prompt
-
-This is a deletion-heavy cleanup. Work mechanically. Before deleting each file, prove it is unused. Do not fix unrelated bugs or refactor active code. Return a deletion list with the evidence command/result for each group.
+## Verification Checklist
+- [ ] `rg " 2\.(ts|tsx)" app/src` → zero or only intentional
+- [ ] `rg "chat/_components|admin/_components" app/src` → zero imports
+- [ ] `/match`, `/diagnosis`, `/start` still build and render
+- [ ] `npm run lint` passes
+- [ ] `npm run build` passes

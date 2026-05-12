@@ -11,6 +11,7 @@ import {
     Section,
     Text,
 } from '@react-email/components';
+import { BRAND_NAME } from '@/lib/brand-system';
 
 const palette = {
     pageBg: '#fafafa',
@@ -23,7 +24,7 @@ const palette = {
 };
 
 export interface ScandioAuthEmailProps {
-    /** Public site origin for self-hosted Sohne fonts, e.g. https://scandio.com */
+    /** Public site origin for self-hosted `/fonts/Soehne*.otf` (+ Signifier if added to emails later), e.g. https://example.com */
     assetOrigin: string;
     preview: string;
     heading: string;
@@ -40,20 +41,38 @@ function sohneFontFaceCss(origin: string): string {
     return `
 @font-face {
   font-family: 'Sohne';
-  src: url('${base}/fonts/Sohne-Buch.otf') format('opentype');
+  src: url('${base}/fonts/Soehne%20Leicht.otf') format('opentype');
+  font-weight: 300;
+  font-style: normal;
+}
+@font-face {
+  font-family: 'Sohne';
+  src: url('${base}/fonts/Soehne.otf') format('opentype');
   font-weight: 400;
   font-style: normal;
 }
 @font-face {
   font-family: 'Sohne';
-  src: url('${base}/fonts/Sohne-Kraftig.otf') format('opentype');
+  src: url('${base}/fonts/Soehne%20Kraftig.otf') format('opentype');
   font-weight: 500;
   font-style: normal;
 }
 @font-face {
   font-family: 'Sohne';
-  src: url('${base}/fonts/Sohne-Halbfett.otf') format('opentype');
+  src: url('${base}/fonts/Soehne%20Halbfett.otf') format('opentype');
+  font-weight: 600;
+  font-style: normal;
+}
+@font-face {
+  font-family: 'Sohne';
+  src: url('${base}/fonts/Soehne%20Dreiviertelfett.otf') format('opentype');
   font-weight: 700;
+  font-style: normal;
+}
+@font-face {
+  font-family: 'Sohne';
+  src: url('${base}/fonts/Soehne%20Extrafett.otf') format('opentype');
+  font-weight: 900;
   font-style: normal;
 }
 `.trim();
@@ -86,7 +105,7 @@ export function ScandioAuthEmail({
             <Body style={{ ...styles.body, fontFamily: fontStack }}>
                 <Container style={styles.container}>
                     <Section style={styles.card}>
-                        <Text style={styles.brand}>Scandio</Text>
+                        <Text style={styles.brand}>{BRAND_NAME}</Text>
                         <Heading style={{ ...styles.h1, fontFamily: fontStack }}>{heading}</Heading>
                         <Text style={{ ...styles.paragraph, fontFamily: fontStack }}>{body}</Text>
                         {ctaUrl && ctaLabel ? (

@@ -7,13 +7,14 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import heic2any from 'heic2any';
+// heic2any is loaded lazily on first HEIC conversion — keeps it out of the initial bundle.
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { getSupabase } from '@/lib/supabase';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import type { DiagnosisData, Provider } from '@/app/chat/components/types';
+import type { DiagnosisData } from '@/features/diagnosis/types';
+import type { Provider } from '@/app/chat/components/types';
 import { DiagnosisLeaveDialog } from '@/components/diagnosis-leave-dialog';
 import { BetaCostEstimateCard } from '@/components/beta-cost-estimate-card';
 import { cleanThoughtSentenceStarts, splitDetailAndHazard } from '@/lib/diagnosis-display';
@@ -104,6 +105,7 @@ async function readBlobAsDataUrl(blob: Blob): Promise<string> {
 }
 
 async function convertHeicBlobToJpegDataUrl(blob: Blob): Promise<string> {
+    const { default: heic2any } = await import('heic2any');
     const converted = await heic2any({
         blob,
         toType: 'image/jpeg',

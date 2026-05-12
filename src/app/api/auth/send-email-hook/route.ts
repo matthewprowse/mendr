@@ -13,7 +13,7 @@ export const runtime = 'nodejs';
  * - SEND_EMAIL_HOOK_SECRET (from Supabase; format v1,whsec_…)
  * - SENDGRID_API_KEY, SENDGRID_FROM_EMAIL (same as contact form)
  * - NEXT_PUBLIC_SUPABASE_URL
- * Optional: AUTH_EMAIL_PUBLIC_URL — public origin for /fonts/Sohne-*.otf (defaults to NEXT_PUBLIC_APP_URL or VERCEL_URL)
+ * Optional: AUTH_EMAIL_PUBLIC_URL — public origin for `/fonts/Soehne*.otf` (defaults to NEXT_PUBLIC_APP_URL or VERCEL_URL)
  */
 export async function POST(req: NextRequest) {
     const rawSecret = process.env.SEND_EMAIL_HOOK_SECRET;

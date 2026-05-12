@@ -351,7 +351,7 @@ export function DesignPreviewClient() {
                             <div className={`h-16 ${border ? 'border-b border-[#EBEBEB]' : ''}`} style={{ backgroundColor: hex }} />
                             <div className="p-3">
                                 <p className="text-sm font-medium text-[#131312]">{name}</p>
-                                <p className="font-mono text-xs text-[#6B6B6B]">{hex}</p>
+                                <p className="font-sans text-xs text-[#6B6B6B]">{hex}</p>
                                 <p className="text-xs text-[#B0B0A8]">{role}</p>
                             </div>
                         </div>
@@ -369,7 +369,7 @@ export function DesignPreviewClient() {
                             <div className={`h-10 ${border ? 'border-b border-[#EBEBEB]' : ''}`} style={{ backgroundColor: hex }} />
                             <div className="p-3">
                                 <p className="text-sm font-medium text-[#131312]">{name}</p>
-                                <p className="font-mono text-xs text-[#6B6B6B]">{hex}</p>
+                                <p className="font-sans text-xs text-[#6B6B6B]">{hex}</p>
                                 <p className="text-xs text-[#B0B0A8]">{role}</p>
                             </div>
                         </div>
@@ -389,7 +389,7 @@ export function DesignPreviewClient() {
                             </div>
                             <div className="p-3">
                                 <p className="text-sm font-medium text-[#131312]">{name}</p>
-                                <p className="font-mono text-xs text-[#6B6B6B]">{bgHex} / {textHex}</p>
+                                <p className="font-sans text-xs text-[#6B6B6B]">{bgHex} / {textHex}</p>
                                 <p className="text-xs text-[#B0B0A8]">Background / Text</p>
                             </div>
                         </div>
@@ -408,7 +408,7 @@ export function DesignPreviewClient() {
                         { token: 'space-12', px: 48 }, { token: 'space-16', px: 64 },
                     ].map(({ token, px }) => (
                         <div key={token} className="flex items-center gap-4">
-                            <span className="w-20 shrink-0 font-mono text-xs text-[#6B6B6B]">{token}</span>
+                            <span className="w-20 shrink-0 font-sans text-xs text-[#6B6B6B]">{token}</span>
                             <div className="h-4 rounded-sm bg-[#DCF763]" style={{ width: px }} />
                             <span className="text-xs text-[#B0B0A8]">{px}px</span>
                         </div>
@@ -431,7 +431,7 @@ export function DesignPreviewClient() {
                                 <div key={name} className="flex items-center gap-3 rounded-md border border-[#EBEBEB] bg-white px-4 py-3 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
                                     <div className="h-5 w-5 rounded border-2" style={{ borderColor: hex }} />
                                     <span className="flex-1 text-sm font-medium text-[#131312]">{name}</span>
-                                    <span className="font-mono text-xs text-[#6B6B6B]">{hex}</span>
+                                    <span className="font-sans text-xs text-[#6B6B6B]">{hex}</span>
                                     <span className="text-xs text-[#B0B0A8]">{use}</span>
                                 </div>
                             ))}
@@ -450,7 +450,7 @@ export function DesignPreviewClient() {
                                 <div key={name} className="flex items-center gap-3 rounded-md border border-[#EBEBEB] bg-white px-4 py-3 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
                                     <div className="h-5 w-5 border-2 border-[#131312]" style={{ borderRadius: px }} />
                                     <span className="flex-1 text-sm font-medium text-[#131312]">{name}</span>
-                                    <span className="font-mono text-xs text-[#6B6B6B]">{px}</span>
+                                    <span className="font-sans text-xs text-[#6B6B6B]">{px}</span>
                                     <span className="text-xs text-[#B0B0A8]">{use}</span>
                                 </div>
                             ))}
@@ -499,7 +499,7 @@ export function DesignPreviewClient() {
                         ].map(({ icon: Icon, name }) => (
                             <div key={name} className="flex flex-col items-center gap-1.5">
                                 <Icon size={20} className="text-[#131312]" />
-                                <span className="text-[10px] text-center leading-tight text-[#6B6B6B]">{name}</span>
+                                <span className="text-xs text-center leading-tight text-[#6B6B6B]">{name}</span>
                             </div>
                         ))}
                     </div>
@@ -520,7 +520,7 @@ export function DesignPreviewClient() {
                                         <Button size={size}>
                                             {size === 'xs' ? 'Label' : 'Start Diagnosis'}
                                         </Button>
-                                        <span className="font-mono text-[10px] text-[#B0B0A8]">
+                                        <span className="font-sans text-xs text-[#B0B0A8]">
                                             {size === 'default' ? 'md' : size}
                                         </span>
                                     </div>
@@ -535,7 +535,7 @@ export function DesignPreviewClient() {
                                         <Button variant="outline" size={size}>
                                             {size === 'xs' ? 'Label' : 'Review Report'}
                                         </Button>
-                                        <span className="font-mono text-[10px] text-[#B0B0A8]">
+                                        <span className="font-sans text-xs text-[#B0B0A8]">
                                             {size === 'default' ? 'md' : size}
                                         </span>
                                     </div>
@@ -550,7 +550,7 @@ export function DesignPreviewClient() {
                                         <Button variant="ghost" size={size}>
                                             {size === 'xs' ? 'Label' : 'View Details'}
                                         </Button>
-                                        <span className="font-mono text-[10px] text-[#B0B0A8]">
+                                        <span className="font-sans text-xs text-[#B0B0A8]">
                                             {size === 'default' ? 'md' : size}
                                         </span>
                                     </div>
@@ -614,7 +614,7 @@ export function DesignPreviewClient() {
                                     { size: 'lg', label: 'Large',   h: 'h-10' },
                                 ]).map(({ size, label, h }) => (
                                     <div key={size} className="flex items-center gap-3">
-                                        <span className="w-12 shrink-0 font-mono text-[10px] text-[#B0B0A8]">{size} / {label}</span>
+                                        <span className="w-12 shrink-0 font-sans text-xs text-[#B0B0A8]">{size} / {label}</span>
                                         <Input className={`${inputClass} ${h}`} placeholder="Ceiling pipe leak in the kitchen" />
                                     </div>
                                 ))}

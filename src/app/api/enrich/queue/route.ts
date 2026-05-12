@@ -61,7 +61,7 @@ function createSemaphore(max: number) {
 // ── Route handler ─────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
-    const limited = checkRateLimit(req, 'enrichQueue');
+    const limited = await checkRateLimit(req, 'enrichQueue');
     if (limited) return limited;
 
     try {

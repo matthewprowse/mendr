@@ -77,6 +77,11 @@ type EnrichmentPayload = {
 
 // ─── Main handler ─────────────────────────────────────────────────────────────
 
+/** Same auth and behavior as GET — supports fire-and-forget POST from `providers/apply`. */
+export async function POST(req: NextRequest) {
+    return GET(req);
+}
+
 export async function GET(req: NextRequest) {
     if (!isAuthorizedCronRequest(req)) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });

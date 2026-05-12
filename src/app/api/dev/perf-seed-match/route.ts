@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'Not found' }, { status: 404 });
     }
 
-    const limited = checkRateLimit(req, 'conversationUpsert');
+    const limited = await checkRateLimit(req, 'conversationUpsert');
     if (limited) return limited;
 
     let body: SeedBody = {};

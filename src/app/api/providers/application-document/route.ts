@@ -11,7 +11,7 @@ const KIND_PREFIX: Record<string, string> = {
 };
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
-    const limited = checkRateLimit(req, 'providerApplicationUpload');
+    const limited = await checkRateLimit(req, 'providerApplicationUpload');
     if (limited) return limited;
 
     const formData = await req.formData().catch(() => null);

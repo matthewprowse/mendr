@@ -15,7 +15,7 @@ const WEEKLY_CAP = 5;
 const DEDUPE_WINDOW_MS = 45_000;
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
-    const limited = checkRateLimit(req, 'restoreToken');
+    const limited = await checkRateLimit(req, 'restoreToken');
     if (limited) return limited;
 
     try {

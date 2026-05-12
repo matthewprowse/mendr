@@ -189,9 +189,17 @@ export async function lookupPartPrices(
         return true;
     });
 
-    const settled = await Promise.allSettled(
-        unique.map((part) => resolveOne(part, trade, tradeDetail, regionKey)),
-    );
+    // Cap concurrency at 3 — each part can chain a Brave fetch + Gemini call,
+    // so running all 8 simultaneously exhausts the route budget under maxDuration=30.
+    const CONCURRENCY = 3;
+    const settled: PromiseSettledResult<PartPrice>[] = [];
+    for (let i = 0; i < unique.length; i += CONCURRENCY) {
+        const batch = unique.slice(i, i + CONCURRENCY);
+        const batchResults = await Promise.allSettled(
+            batch.map((part) => resolveOne(part, trade, tradeDetail, regionKey)),
+        );
+        settled.push(...batchResults);
+    }
 
     return settled.map((result, i) => {
         if (result.status === 'fulfilled') return result.value;
