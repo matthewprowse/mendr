@@ -1,5 +1,5 @@
 import { Redis } from '@upstash/redis';
-import { createSupabaseAdminClient } from '@/lib/auth/supabase-server';
+import { SERVICE_LABELS } from '@/lib/services';
 
 const REDIS_KEY = 'scandio:service_catalog:active_labels_v1';
 const TTL_SEC = 300;
@@ -9,27 +9,12 @@ let memoryCache: { labels: string[]; expiresAt: number } | null = null;
 let inFlight: Promise<string[]> | null = null;
 
 /**
- * Returns labels exactly as stored in Supabase — no mapping or expansion.
- * Supabase is the single source of truth for service label names.
+ * Returns the canonical service labels from the TypeScript constant.
+ * The `services` Supabase table was removed — SERVICE_LABELS in services.ts
+ * is now the single source of truth.
  */
-function normalizeLabels(rows: unknown): string[] {
-    if (!Array.isArray(rows)) return [];
-    return rows
-        .map((row) => {
-            if (!row || typeof row !== 'object') return '';
-            return String((row as { label?: unknown }).label ?? '').trim();
-        })
-        .filter((label) => label.length > 0);
-}
-
-async function loadLabelsFromDatabase(): Promise<string[]> {
-    const admin = await createSupabaseAdminClient();
-    const { data } = await admin
-        .from('services')
-        .select('label')
-        .eq('active', true)
-        .order('sort_order', { ascending: true });
-    return normalizeLabels(data);
+function loadLabelsFromConstant(): string[] {
+    return SERVICE_LABELS.filter((l) => l.trim().length > 0);
 }
 
 function redisClient(): Redis | null {
@@ -77,7 +62,7 @@ export async function getServiceCatalogLabelsCached(): Promise<string[]> {
             }
         }
 
-        const labels = await loadLabelsFromDatabase();
+        const labels = loadLabelsFromConstant();
         if (labels.length > 0) {
             memoryCache = { labels, expiresAt: Date.now() + TTL_MS };
             if (redis) {
