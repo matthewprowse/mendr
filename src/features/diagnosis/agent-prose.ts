@@ -73,9 +73,9 @@ const PROSE_SCHEMA = {
             items: {
                 type: SchemaType.STRING,
                 description:
-                    'One entry per image: max 2 plain-language sentences of pure visual observation — what the camera shows (parts, position, condition) and what appears wrong. Be specific, not generic. Distinct from thought: no textbook statistics, no "common failure point" filler, no causal chain beyond what is visibly implied.',
+                    'One entry per image: max 2 plain-language sentences of pure visual observation — name the specific components visible and their condition. Critically: note any component that is MISSING, detached, absent, or asymmetric (e.g. spring present on one side but not the other, bent rod, displaced bracket). Be specific, not generic. No causal chain beyond what is directly visible.',
             },
-            description: 'One pure visual description per image provided.',
+            description: 'Exactly one entry per image provided, in order. Count must match the number of images submitted.',
         },
         clarification_questions: {
             type: SchemaType.ARRAY,
@@ -149,6 +149,7 @@ VISUAL ANCHORING (Agent 2b — thought, image_descriptions, and teaching paragra
 - Do NOT pad with generic encyclopaedic filler: avoid "common point of failure", "often fails here", "typical weak spot", "many homeowners see this", or statistical generalities unless the user asked for prevalence.
 - Do NOT use progressive-damage wording ("before the fault spreads", "could spread", "might spread") unless the issue is genuinely progressive (active flooding, worsening leak, runaway electrical fault, fire risk). Static mechanical faults (misaligned rack, worn nylon teeth, noisy hinge) do not "spread" like mould or water.
 - Multi-image requirement: explicitly account for each image. If one image shows direct component failure (missing spring, bent rod, fractured bracket, detached hinge), that component-level evidence must be reflected in thought/image_descriptions and should outweigh weaker incidental cues.
+- Absence detection: compare left vs right, upper vs lower, near side vs far side. A component absent on one side when symmetry is expected (e.g. a spring bracket, a hinge, a roller) is a primary fault signal — name it explicitly ("left torsion spring is absent", "right cable is detached").
 - Conflict handling: when two images appear to point at different causes, prioritise the cause supported by direct mechanical/electrical damage and acknowledge uncertainty in message rather than confidently selecting a cosmetic or secondary cue.`.trim();
 
     const parts = [baseSystemInstruction, classBlock, clarificationBlock, visualAndUrgencyBlock].filter(
@@ -183,6 +184,8 @@ export async function runProseGeneration(params: {
     classification: ClassificationResult;
     baseSystemInstruction: string;
     isProviderHydration?: boolean;
+    /** Number of images passed in contents — used to enforce image_descriptions count. */
+    imageCount?: number;
     ctx?: { userId?: string | null; conversationId?: string | null };
 }): Promise<ProseResult> {
     const stepStart = Date.now();
@@ -194,14 +197,21 @@ export async function runProseGeneration(params: {
             params.baseSystemInstruction,
         );
 
+        // When images were supplied, tell the model exactly how many descriptions to produce
+        // and instruct it to look specifically for absent/detached components in each image.
+        const imageCount = typeof params.imageCount === 'number' ? params.imageCount : 0;
+        const imageInstruction =
+            imageCount > 0
+                ? ` ${imageCount} image${imageCount > 1 ? 's were' : ' was'} provided — image_descriptions MUST contain exactly ${imageCount} entries, one per image in order. For each image, explicitly name the components visible and call out any part that is MISSING, detached, or asymmetric (e.g. a spring present on one side but absent on the other, a bent connecting rod, a displaced bracket).`
+                : '';
+
         const proseContents: GeminiContent[] = [
             ...params.contents,
             {
                 role: 'user' as const,
                 parts: [
                     {
-                        text:
-                            'Write the prose fields for the home maintenance issue above. Use British English. Output structured JSON only.',
+                        text: `Write the prose fields for the home maintenance issue above. Use British English. Output structured JSON only.${imageInstruction}`,
                     },
                 ],
             },

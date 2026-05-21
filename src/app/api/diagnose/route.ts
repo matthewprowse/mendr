@@ -1278,6 +1278,7 @@ export async function POST(req: NextRequest) {
                                     classification,
                                     baseSystemInstruction: proseBaseInstruction,
                                     isProviderHydration,
+                                    imageCount: tieringLogMeta.imagesAfterTier as number,
                                 });
                                 const prose = normaliseProse(rawProse);
                                 recordStage(timings, 'agent2b_prose_ms', pipelineStartedAt);
@@ -1302,6 +1303,7 @@ export async function POST(req: NextRequest) {
                                     classification,
                                     baseSystemInstruction: proseBaseInstruction,
                                     isProviderHydration,
+                                    imageCount: tieringLogMeta.imagesAfterTier as number,
                                 });
                                 const prose = normaliseProse(rawProse);
                                 recordStage(timings, 'agent2b_prose_ms', pipelineStartedAt);
@@ -1372,6 +1374,7 @@ export async function POST(req: NextRequest) {
                 classification,
                 baseSystemInstruction: proseBaseInstruction,
                 isProviderHydration,
+                imageCount: tieringLogMeta.imagesAfterTier as number,
             });
             const prose = normaliseProse(rawProse);
             recordStage(timings, 'agent2b_prose_ms', pipelineStartedAt);

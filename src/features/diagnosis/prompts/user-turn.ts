@@ -9,8 +9,10 @@
 /** Quick <thought>-only prompt used for the image_thought_only analysis phase. */
 export function buildQuickThoughtPrompt(imageCount: number): string {
     return (
-        `Analyse ${imageCount > 1 ? 'these images' : 'this image'} and return only a short ` +
-        `<thought> block (1–2 sentences). First extract the unique visible detail from each image, then combine those details into one unified likely issue pattern. ` +
+        `Analyse ${imageCount > 1 ? `all ${imageCount} images` : 'this image'} and return only a short ` +
+        `<thought> block (1–2 sentences). ` +
+        `For each image: note specific parts visible, their position, any deformation, and — critically — any component that is MISSING, detached, asymmetric, or absent compared to the other side. ` +
+        `Then combine that per-image evidence into one unified likely fault pattern. ` +
         `Do not include JSON or extra sections.`
     );
 }
@@ -20,7 +22,10 @@ export function buildQuickThoughtPrompt(imageCount: number): string {
  * stream that fires while Agent 2a classification is running).
  */
 export function buildStreamingQuickThoughtPrompt(): string {
-    return 'Analyse all provided images. Return ONLY a short <thought> block (2 sentences): sentence 1 should combine unique visible clues across images, sentence 2 should state the likely fault pattern from that combined evidence. No JSON.';
+    return (
+        'Analyse all provided images. For each image note specific components visible, their condition, and — critically — any component that is MISSING, detached, disconnected, or absent (compare left vs right, upper vs lower where relevant). ' +
+        'Return ONLY a short <thought> block (2 sentences): sentence 1 combines specific visible and absent clues across images; sentence 2 states the likely fault pattern from that combined evidence. No JSON.'
+    );
 }
 
 /** First-message prompt for text-only submissions (no image attached). */
