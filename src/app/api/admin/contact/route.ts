@@ -1,8 +1,8 @@
 // Required env vars: SUPABASE_SERVICE_ROLE_KEY, NEXT_PUBLIC_SUPABASE_URL, ADMIN_PASSWORD
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createSupabaseAdminClient } from '@/lib/supabase-server';
-import { requireAdmin } from '@/lib/admin-auth';
+import { createSupabaseAdminClient } from '@/lib/auth/supabase-server';
+import { requireAdmin } from '@/lib/auth/admin-auth';
 
 
 // GET — list all contact messages, newest first.

@@ -25,7 +25,7 @@ export const SORT_OPTIONS = [
     { value: 'rating_desc', label: 'Rating (high → low)' },
     { value: 'distance_asc', label: 'Distance (closest)' },
     { value: 'reviews_desc', label: 'Most reviewed' },
-    { value: 'newest', label: 'Newest on Scandio' },
+    { value: 'newest', label: 'Newest on Menda' },
 ] as const;
 
 export type MatchSortKey = (typeof SORT_OPTIONS)[number]['value'];

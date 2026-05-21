@@ -1,6 +1,8 @@
+// Required env vars: NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, CRON_SECRET
+
 import { NextRequest, NextResponse } from 'next/server';
-import { createSupabaseAdminClient } from '@/lib/supabase-server';
-import { isAuthorizedCronRequest } from '@/lib/cron-auth';
+import { createSupabaseAdminClient } from '@/lib/auth/supabase-server';
+import { isAuthorizedCronRequest } from '@/lib/auth/cron-auth';
 
 export const dynamic = 'force-dynamic';
 

@@ -1,6 +1,9 @@
+// Required env vars: NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY,
+//                    GOOGLE_MAPS_API_KEY, UPSTASH_REDIS_REST_URL, UPSTASH_REDIS_REST_TOKEN
+
 import { NextRequest, NextResponse } from 'next/server';
-import { createSupabaseAdminClient } from '@/lib/supabase-server';
-import { refreshProviderByPlaceId } from '@/lib/refresh-provider-by-place-id';
+import { createSupabaseAdminClient } from '@/lib/auth/supabase-server';
+import { refreshProviderByPlaceId } from '@/lib/providers/refresh-provider-by-place-id';
 import { checkRateLimit } from '@/lib/rate-limit-config';
 
 /**
@@ -20,7 +23,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
         const admin = await createSupabaseAdminClient();
 
-        // Only pull from Google when this provider has no Google-sourced rows yet (pending Scandio uploads don't block this).
+        // Only pull from Google when this provider has no Google-sourced rows yet (pending Menda uploads don't block this).
         const { count, error: countErr } = await admin
             .from('provider_images')
             .select('id', { count: 'exact', head: true })

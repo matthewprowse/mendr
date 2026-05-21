@@ -1,7 +1,9 @@
+// Required env vars: GOOGLE_MAPS_API_KEY, UPSTASH_REDIS_REST_URL, UPSTASH_REDIS_REST_TOKEN
+
 import { NextRequest, NextResponse } from 'next/server';
 import { checkRateLimit } from '@/lib/rate-limit-config';
-import { RETAIL_TYPES } from '@/app/api/providers/constants';
-import { normalizePlaceId } from '@/app/api/providers/place-id';
+import { RETAIL_TYPES } from '@/lib/providers/constants';
+import { normalizePlaceId } from '@/lib/providers/place-id';
 
 const DEFAULT_LAT = -33.9249;
 const DEFAULT_LNG = 18.4241;

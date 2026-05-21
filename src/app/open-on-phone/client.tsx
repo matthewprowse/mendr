@@ -55,7 +55,7 @@ export default function OpenOnPhonePageClient() {
         <div className="min-h-dvh bg-background px-4 py-10">
             <div className="mx-auto w-full max-w-md space-y-6">
                 <div className="space-y-2">
-                    <h1 className="text-2xl font-semibold tracking-tight text-foreground">Open Scandio on your phone</h1>
+                    <h1 className="text-2xl font-semibold tracking-tight text-foreground">Open Menda on your phone</h1>
                     <p className="text-sm text-muted-foreground">
                         Scan this QR code with your phone camera to continue the flow.
                     </p>
@@ -67,7 +67,7 @@ export default function OpenOnPhonePageClient() {
                             // eslint-disable-next-line @next/next/no-img-element
                             <img
                                 src={qrDataUrl}
-                                alt="QR code to open Scandio on your phone"
+                                alt="QR code to open Menda on your phone"
                                 className="h-56 w-56 rounded-lg bg-white p-2"
                             />
                         ) : (
@@ -101,7 +101,7 @@ export default function OpenOnPhonePageClient() {
                                 disabled={!canShareUrl()}
                                 onClick={async () => {
                                     try {
-                                        await navigator.share({ url, title: 'Scandio' });
+                                        await navigator.share({ url, title: 'Menda' });
                                     } catch {
                                         // ignore
                                     }

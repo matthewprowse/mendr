@@ -1,6 +1,9 @@
+// Required env vars: NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY,
+//                    GOOGLE_MAPS_API_KEY, UPSTASH_REDIS_REST_URL, UPSTASH_REDIS_REST_TOKEN
+
 import { NextRequest, NextResponse } from 'next/server';
 import { checkRateLimit } from '@/lib/rate-limit-config';
-import { createSupabaseAdminClient } from '@/lib/supabase-server';
+import { createSupabaseAdminClient } from '@/lib/auth/supabase-server';
 
 type GeocodeRequestBody = {
     lat?: number;
@@ -166,6 +169,8 @@ export async function POST(req: NextRequest) {
         }
 
         if (data.status !== 'OK' || !Array.isArray(data.results) || data.results.length === 0) {
+            // 422 (not 404): route exists; this is an empty / failed geocode result — avoids DevTools
+            // looking like a missing `/api/geocode` handler.
             return NextResponse.json(
                 {
                     error:
@@ -173,7 +178,7 @@ export async function POST(req: NextRequest) {
                             ? 'No match in the Western Cape. Try a fuller street address in Western Cape, South Africa.'
                             : data.error_message || 'No geocoding results found',
                 },
-                { status: 404 }
+                { status: 422 }
             );
         }
 
@@ -187,13 +192,13 @@ export async function POST(req: NextRequest) {
         if (westernCapeOnly && hasCoords) {
             const inWc = (data.results as GeocoderResult[]).find((r) => resultIsInWesternCape(r));
             if (!inWc) {
-                return NextResponse.json({ error: wcMsg }, { status: 404 });
+                return NextResponse.json({ error: wcMsg }, { status: 422 });
             }
             chosen = inWc;
         } else if (westernCapeOnly && hasAddress) {
             const inWc = (data.results as GeocoderResult[]).find((r) => resultIsInWesternCape(r));
             if (!inWc) {
-                return NextResponse.json({ error: wcAddressHint }, { status: 404 });
+                return NextResponse.json({ error: wcAddressHint }, { status: 422 });
             }
             chosen = inWc;
         }
@@ -229,9 +234,10 @@ export async function POST(req: NextRequest) {
             address: typeof address === 'string' ? address : undefined,
             cacheHit: false,
         });
-    } catch (error: any) {
+    } catch (error: unknown) {
+        const msg = error instanceof Error ? error.message : 'Failed to geocode request';
         return NextResponse.json(
-            { error: error?.message || 'Failed to geocode request' },
+            { error: msg },
             { status: 500 }
         );
     }

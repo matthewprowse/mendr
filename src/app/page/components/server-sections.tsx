@@ -14,7 +14,7 @@ export function HomeMarketingProblemSection() {
                     That uncertainty leads to unclear quotes, repeated explanations, and wasted call-outs.
                 </p>
                 <p className="mt-3 text-base text-background sm:text-lg">
-                    Scandio gives you a written diagnosis before the first call - so you know what you are dealing with.
+                    Menda gives you a written diagnosis before the first call - so you know what you are dealing with.
                 </p>
             </div>
         </section>
@@ -26,7 +26,7 @@ export function HomeMarketingValueSection() {
         <section id="value" className="scroll-mt-16 bg-muted/30 py-16 sm:py-20">
             <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
                 <div className="mx-auto mb-10 max-w-3xl text-center sm:mb-12">
-                    <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">Why Homeowners Use Scandio</h2>
+                    <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">Why Homeowners Use Menda</h2>
                     <p className="mt-3 text-base text-muted-foreground">
                         A written diagnosis before any call. No jargon, no account, no cost.
                     </p>
@@ -62,7 +62,7 @@ export function HomeMarketingCtaSection() {
                 <p className="mt-3 text-base text-white/70">Free. Fast. Built For Homeowners.</p>
                 <div className="mt-6">
                     <Button asChild size="lg" className="bg-white font-medium text-black hover:bg-white/90">
-                        <Link href="/start">Generate Free Scandio Report</Link>
+                        <Link href="/start">Generate Free Menda Report</Link>
                     </Button>
                 </div>
             </div>
@@ -76,7 +76,7 @@ export function HomeMarketingFooter() {
             <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
                 <div className="grid gap-10 lg:grid-cols-[2fr_1fr_1fr]">
                     <div>
-                        <p className="text-base font-semibold text-foreground">Scandio</p>
+                        <p className="text-base font-semibold text-foreground">Menda</p>
                         <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
                             Home maintenance diagnosis and smarter provider matching, built to reduce uncertainty before
                             repair work begins.
@@ -88,7 +88,7 @@ export function HomeMarketingFooter() {
                             {(
                                 [
                                     ['How It Works', '#how-it-works'],
-                                    ['Why Scandio', '#value'],
+                                    ['Why Menda', '#value'],
                                     ['FAQ', '#faq'],
                                 ] as [string, string][]
                             ).map(([label, href]) => (
@@ -125,7 +125,7 @@ export function HomeMarketingFooter() {
                     </div>
                 </div>
                 <div className="mt-10 border-t border-border/50 pt-6">
-                    <p className="text-sm text-muted-foreground">&copy; {new Date().getFullYear()} Scandio. All Rights Reserved.</p>
+                    <p className="text-sm text-muted-foreground">&copy; {new Date().getFullYear()} Menda. All Rights Reserved.</p>
                 </div>
             </div>
         </footer>

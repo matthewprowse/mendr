@@ -1,5 +1,8 @@
+// Required env vars: NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY
+
 import { NextRequest, NextResponse } from 'next/server';
-import { createSupabaseServerClient } from '@/lib/supabase-server';
+import { createSupabaseServerClient } from '@/lib/auth/supabase-server';
+import { checkRateLimit } from '@/lib/rate-limit-config';
 
 function pickDiagnosisStrings(
     diagnosis: unknown
@@ -19,6 +22,9 @@ function pickDiagnosisStrings(
  * Reports are public/shareable so this endpoint only returns non-sensitive summary fields.
  */
 export async function GET(req: NextRequest) {
+    const limited = await checkRateLimit(req, 'reportInfo');
+    if (limited) return limited;
+
     const conversationId = req.nextUrl.searchParams.get('conversation_id')?.trim() ?? '';
     if (!conversationId) {
         return NextResponse.json({ error: 'Missing conversation_id' }, { status: 400 });

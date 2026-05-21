@@ -1,11 +1,13 @@
+// Required env vars: NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, ADMIN_PASSWORD
+
 import { NextRequest, NextResponse } from 'next/server';
-import { createSupabaseAdminClient } from '@/lib/supabase-server';
-import { refreshProviderByPlaceId } from '@/lib/refresh-provider-by-place-id';
+import { createSupabaseAdminClient } from '@/lib/auth/supabase-server';
+import { refreshProviderByPlaceId } from '@/lib/providers/refresh-provider-by-place-id';
 import {
     CERTIFICATION_SLUGS,
     getCertificationBySlug,
 } from '@/lib/certifications/catalog';
-import { requireAdmin } from '@/lib/admin-auth';
+import { requireAdmin } from '@/lib/auth/admin-auth';
 
 const ALLOWED_COMPANY_SIZES = new Set(['solo', 'small', 'mid', 'large']);
 

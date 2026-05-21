@@ -1,12 +1,23 @@
 import type { Metadata } from 'next';
+import { redirect } from 'next/navigation';
+import { createSupabaseServerClient } from '@/lib/auth/supabase-server';
 import ApplicationEditClient from './client';
 
 export const metadata: Metadata = {
-    title: 'Review your Scandio profile',
-    description: 'Review and edit your Scandio contractor profile summary before it goes live.',
+    title: 'Review your Menda profile',
+    description: 'Review and edit your Menda contractor profile summary before it goes live.',
     robots: { index: false, follow: false },
 };
 
-export default function ApplicationEditPage() {
+export default async function ApplicationEditPage() {
+    const supabase = await createSupabaseServerClient();
+    const {
+        data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+        redirect('/contractors/auth?next=/contractors/application/edit');
+    }
+
     return <ApplicationEditClient />;
 }

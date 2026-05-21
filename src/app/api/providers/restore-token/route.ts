@@ -1,7 +1,10 @@
+// Required env vars: NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY,
+//                    UPSTASH_REDIS_REST_URL, UPSTASH_REDIS_REST_TOKEN
+
 import { NextRequest, NextResponse } from 'next/server';
-import { createSupabaseAdminClient } from '@/lib/supabase-server';
-import { getISOWeekKey } from '../ranking';
-import { logAiEvent } from '@/lib/ai-logging';
+import { createSupabaseAdminClient } from '@/lib/auth/supabase-server';
+import { getISOWeekKey } from '@/lib/providers/ranking';
+import { logAiEvent } from '@/lib/ai/ai-logging';
 import { checkRateLimit } from '@/lib/rate-limit-config';
 
 type RestoreTokenBody = {

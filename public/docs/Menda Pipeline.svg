@@ -1,0 +1,227 @@
+<svg viewBox="0 0 830 1260" xmlns="http://www.w3.org/2000/svg" role="img" font-family="system-ui, -apple-system, sans-serif">
+  <title>Menda AI Diagnosis Pipeline</title>
+  <desc>How problem description, photos, and location flow through Menda's two-agent Gemini pipeline to produce a structured fault diagnosis</desc>
+
+  <!-- Background -->
+  <rect width="830" height="1260" fill="#FAFAFA"/>
+
+  <!-- ═══════════ TITLE ═══════════ -->
+  <text x="415" y="34" text-anchor="middle" font-size="15" font-weight="700" fill="#131312">Menda — AI Diagnosis Pipeline</text>
+  <text x="415" y="52" text-anchor="middle" font-size="11" fill="#888">How your description, photos, and location become an accurate fault diagnosis</text>
+
+  <!-- ═══════════ SECTION 1: USER INPUTS ═══════════ -->
+  <text x="20" y="74" font-size="9.5" font-weight="700" fill="#4A6800" letter-spacing="1">USER INPUTS  ·  /start page</text>
+
+  <!-- Box 1: Problem Description -->
+  <rect x="20" y="82" width="178" height="112" rx="10" fill="#FFFFFF" stroke="#DDDBD6" stroke-width="1.2"/>
+  <text x="109" y="100" text-anchor="middle" font-size="10.5" font-weight="600" fill="#131312">Problem Description</text>
+  <text x="109" y="115" text-anchor="middle" font-size="9" fill="#666">What the user types or speaks</text>
+  <line x1="35" y1="121" x2="183" y2="121" stroke="#EBEBEB" stroke-width="0.8"/>
+  <text x="109" y="134" text-anchor="middle" font-size="8.5" fill="#666">25–2,000 characters required</text>
+  <text x="109" y="148" text-anchor="middle" font-size="8.5" fill="#888">Voice input transcribed client-side</text>
+  <text x="109" y="162" text-anchor="middle" font-size="8.5" fill="#888">before text reaches the server</text>
+  <text x="109" y="178" text-anchor="middle" font-size="8.5" fill="#999">Stored per-session for follow-ups</text>
+
+  <!-- Box 2: Photos -->
+  <rect x="208" y="82" width="178" height="112" rx="10" fill="#FFFFFF" stroke="#DDDBD6" stroke-width="1.2"/>
+  <text x="297" y="100" text-anchor="middle" font-size="10.5" font-weight="600" fill="#131312">Photos  (up to 5)</text>
+  <text x="297" y="115" text-anchor="middle" font-size="9" fill="#666">Fault photos from camera or library</text>
+  <line x1="223" y1="121" x2="371" y2="121" stroke="#EBEBEB" stroke-width="0.8"/>
+  <text x="297" y="134" text-anchor="middle" font-size="8.5" fill="#666">HEIC → JPEG via heic2any (client)</text>
+  <text x="297" y="148" text-anchor="middle" font-size="8.5" fill="#888">Each image capped at 2 MB</text>
+  <text x="297" y="162" text-anchor="middle" font-size="8.5" fill="#888">Image-tier logic selects the most</text>
+  <text x="297" y="176" text-anchor="middle" font-size="8.5" fill="#888">diagnostic shots to send to Gemini</text>
+
+  <!-- Box 3: Location -->
+  <rect x="396" y="82" width="178" height="112" rx="10" fill="#FFFFFF" stroke="#DDDBD6" stroke-width="1.2"/>
+  <text x="485" y="100" text-anchor="middle" font-size="10.5" font-weight="600" fill="#131312">Location</text>
+  <text x="485" y="115" text-anchor="middle" font-size="9" fill="#666">GPS coordinates or typed address</text>
+  <line x1="411" y1="121" x2="559" y2="121" stroke="#EBEBEB" stroke-width="0.8"/>
+  <text x="485" y="134" text-anchor="middle" font-size="8.5" fill="#666">Geocoded server-side to lat/lng</text>
+  <text x="485" y="148" text-anchor="middle" font-size="8.5" fill="#888">Scoped to Western Cape region</text>
+  <text x="485" y="162" text-anchor="middle" font-size="8.5" fill="#888">Seeds the contractor provider search</text>
+  <text x="485" y="178" text-anchor="middle" font-size="8.5" fill="#999">Area context passed into prompt</text>
+
+  <!-- Box 4: Session Context -->
+  <rect x="584" y="82" width="224" height="112" rx="10" fill="#FFFFFF" stroke="#DDDBD6" stroke-width="1.2"/>
+  <text x="696" y="100" text-anchor="middle" font-size="10.5" font-weight="600" fill="#131312">Session Context</text>
+  <text x="696" y="115" text-anchor="middle" font-size="9" fill="#666">State carried across conversation turns</text>
+  <line x1="599" y1="121" x2="793" y2="121" stroke="#EBEBEB" stroke-width="0.8"/>
+  <text x="696" y="134" text-anchor="middle" font-size="8.5" fill="#666">isFollowUp flag · feedback (up / down)</text>
+  <text x="696" y="148" text-anchor="middle" font-size="8.5" fill="#888">diagnosisRejected flag from prior turn</text>
+  <text x="696" y="162" text-anchor="middle" font-size="8.5" fill="#888">Prior image_descriptions (text only)</text>
+  <text x="696" y="176" text-anchor="middle" font-size="8.5" fill="#999">Raw image bytes never resent in follow-ups</text>
+
+  <!-- Convergence arrows from inputs to pre-flight -->
+  <line x1="109" y1="194" x2="109" y2="228" stroke="#C8C6C2" stroke-width="1.2" stroke-dasharray="4,3"/>
+  <line x1="297" y1="194" x2="297" y2="228" stroke="#C8C6C2" stroke-width="1.2" stroke-dasharray="4,3"/>
+  <line x1="485" y1="194" x2="415" y2="228" stroke="#C8C6C2" stroke-width="1.2" stroke-dasharray="4,3"/>
+  <line x1="696" y1="194" x2="696" y2="228" stroke="#C8C6C2" stroke-width="1.2" stroke-dasharray="4,3"/>
+  <line x1="109" y1="228" x2="696" y2="228" stroke="#C8C6C2" stroke-width="1.2" stroke-dasharray="4,3"/>
+  <line x1="415" y1="228" x2="415" y2="244" stroke="#C8C6C2" stroke-width="1.3"/>
+  <polygon points="410,240 415,250 420,240" fill="#C8C6C2"/>
+
+  <!-- ═══════════ SECTION 2: PRE-FLIGHT GUARDS ═══════════ -->
+  <text x="20" y="265" font-size="9.5" font-weight="700" fill="#4A6800" letter-spacing="1">SERVER — PRE-FLIGHT GUARDS  ·  runs before any AI or DB work</text>
+
+  <rect x="20" y="272" width="790" height="88" rx="12" fill="#FFFDF5" stroke="#DEB860" stroke-width="1.3"/>
+
+  <!-- Guard 1: Rate Limiter -->
+  <rect x="36" y="285" width="365" height="62" rx="8" fill="#FFFFFF" stroke="#DEB860" stroke-width="1"/>
+  <text x="218" y="302" text-anchor="middle" font-size="10.5" font-weight="600" fill="#131312">① Rate Limiter</text>
+  <text x="218" y="317" text-anchor="middle" font-size="8.5" fill="#555">Upstash Redis · bucket 'diagnose' · shared across all Vercel instances</text>
+  <text x="218" y="331" text-anchor="middle" font-size="8.5" fill="#555">Counts requests per user in a sliding window · returns HTTP 429 if exceeded</text>
+  <text x="218" y="342" text-anchor="middle" font-size="8" fill="#999">Evaluated first — no DB or Gemini cost incurred on rejected requests</text>
+
+  <!-- Guard 2: Daily Quota -->
+  <rect x="415" y="285" width="380" height="62" rx="8" fill="#FFFFFF" stroke="#DEB860" stroke-width="1"/>
+  <text x="605" y="302" text-anchor="middle" font-size="10.5" font-weight="600" fill="#131312">② Daily Diagnosis Quota</text>
+  <text x="605" y="317" text-anchor="middle" font-size="8.5" fill="#555">Supabase RPC: incrementDiagnosisQuota(userId, date)</text>
+  <text x="605" y="331" text-anchor="middle" font-size="8.5" fill="#555">Atomic INSERT … ON CONFLICT DO UPDATE RETURNING count</text>
+  <text x="605" y="342" text-anchor="middle" font-size="8" fill="#999">Race-condition safe · HTTP 429 if count exceeds per-user daily limit</text>
+
+  <!-- Arrow down -->
+  <line x1="415" y1="360" x2="415" y2="382" stroke="#C8C6C2" stroke-width="1.3"/>
+  <polygon points="410,378 415,388 420,378" fill="#C8C6C2"/>
+
+  <!-- ═══════════ SECTION 3: PROMPT ASSEMBLY ═══════════ -->
+  <text x="20" y="403" font-size="9.5" font-weight="700" fill="#4A6800" letter-spacing="1">SERVER — PROMPT ASSEMBLY  ·  features/diagnosis/prompts/</text>
+
+  <rect x="80" y="410" width="670" height="104" rx="12" fill="#F2FBB0" stroke="#9CC000" stroke-width="1.4"/>
+  <text x="415" y="430" text-anchor="middle" font-size="11" font-weight="600" fill="#131312">PromptContext Builder + Composer</text>
+  <text x="415" y="444" text-anchor="middle" font-size="8.5" fill="#5C7A00">composer.ts  ·  prompt version v6.0  ·  deterministic: same context produces identical system instruction every time</text>
+  <line x1="96" y1="451" x2="734" y2="451" stroke="#B8D840" stroke-width="0.9"/>
+  <text x="415" y="464" text-anchor="middle" font-size="8.5" fill="#333">System instruction:  Menda identity  ·  full service catalogue  ·  nearby provider names + ratings  ·  tone rules</text>
+  <text x="415" y="478" text-anchor="middle" font-size="8.5" fill="#333">                     thumbs-down feedback penalty (if feedback='down')  ·  rejection-recovery mode (if diagnosisRejected=true)</text>
+  <text x="415" y="493" text-anchor="middle" font-size="8.5" fill="#333">User turn:  problem text (priority-prefixed)  +  up to 5 image parts as inlineData (base64 bytes, seen simultaneously by model)</text>
+  <text x="415" y="507" text-anchor="middle" font-size="8" fill="#777">History appended as plain text only — no image bytes in follow-up turns, only stored image_descriptions</text>
+
+  <!-- Arrow down -->
+  <line x1="415" y1="514" x2="415" y2="536" stroke="#C8C6C2" stroke-width="1.3"/>
+  <polygon points="410,532 415,542 420,532" fill="#C8C6C2"/>
+
+  <!-- ═══════════ SECTION 4: TWO-AGENT PIPELINE ═══════════ -->
+  <text x="20" y="555" font-size="9.5" font-weight="700" fill="#4A6800" letter-spacing="1">GEMINI 2.5 FLASH — TWO-AGENT PIPELINE</text>
+
+  <!-- Outer container -->
+  <rect x="20" y="562" width="790" height="282" rx="14" fill="#FFFFFF" stroke="#DDDBD6" stroke-width="1.4"/>
+
+  <!-- Agent 2a box -->
+  <rect x="38" y="578" width="357" height="200" rx="10" fill="#F4F4F2" stroke="#C8C6C2" stroke-width="1.1"/>
+  <text x="216" y="597" text-anchor="middle" font-size="11" font-weight="700" fill="#131312">Agent 2a — Classifier</text>
+  <text x="216" y="612" text-anchor="middle" font-size="8.5" fill="#888">Gemini 2.5 Flash  ·  temperature 0.1  ·  ~500ms</text>
+  <line x1="53" y1="619" x2="380" y2="619" stroke="#D8D6D2" stroke-width="0.8"/>
+  <text x="216" y="633" text-anchor="middle" font-size="8.5" fill="#444">Receives: full prompt context + all images in one call</text>
+  <text x="216" y="647" text-anchor="middle" font-size="8.5" fill="#444">responseSchema enforced — output is structured JSON, no prose</text>
+  <text x="216" y="661" text-anchor="middle" font-size="8.5" fill="#444">Determines:  trade · trade_detail · subcategory_id</text>
+  <text x="216" y="675" text-anchor="middle" font-size="8.5" fill="#444">urgency_key (immediate / urgent / soon / planned)</text>
+  <text x="216" y="689" text-anchor="middle" font-size="8.5" fill="#444">confidence (0–100) · requires_clarification</text>
+  <text x="216" y="703" text-anchor="middle" font-size="8.5" fill="#444">rejected · unserviced · refetch_providers flags</text>
+  <text x="216" y="719" text-anchor="middle" font-size="8.5" fill="#888">Output validated against service catalogue taxonomy</text>
+  <text x="216" y="733" text-anchor="middle" font-size="8.5" fill="#888">Trade/trade_detail coerced if subcategory_id is ambiguous</text>
+  <rect x="55" y="746" width="322" height="20" rx="5" fill="#ECFAA0"/>
+  <text x="216" y="760" text-anchor="middle" font-size="8.5" font-weight="600" fill="#4A6800">→ Classification result injected as ground truth into Agent 2b</text>
+
+  <!-- Arrow 2a to 2b -->
+  <line x1="395" y1="678" x2="428" y2="678" stroke="#C8C6C2" stroke-width="1.3"/>
+  <polygon points="424,673 434,678 424,683" fill="#C8C6C2"/>
+  <text x="411" y="671" text-anchor="middle" font-size="8" fill="#AAA">ground</text>
+  <text x="411" y="689" text-anchor="middle" font-size="8" fill="#AAA">truth</text>
+
+  <!-- Agent 2b box -->
+  <rect x="440" y="578" width="356" height="200" rx="10" fill="#F4F4F2" stroke="#C8C6C2" stroke-width="1.1"/>
+  <text x="618" y="597" text-anchor="middle" font-size="11" font-weight="700" fill="#131312">Agent 2b — Prose Writer</text>
+  <text x="618" y="612" text-anchor="middle" font-size="8.5" fill="#888">Gemini 2.5 Flash  ·  temperature 0.35  ·  runs after 2a completes</text>
+  <line x1="455" y1="619" x2="781" y2="619" stroke="#D8D6D2" stroke-width="0.8"/>
+  <text x="618" y="633" text-anchor="middle" font-size="8.5" fill="#444">Receives: 2a classification result + full prompt context</text>
+  <text x="618" y="647" text-anchor="middle" font-size="8.5" fill="#444">Trade is LOCKED — 2b inherits 2a's result, cannot override it</text>
+  <text x="618" y="661" text-anchor="middle" font-size="8.5" fill="#444">thought:  2–3 sentences anchored in visual evidence</text>
+  <text x="618" y="675" text-anchor="middle" font-size="8.5" fill="#444">    (schema first key → streamed to user immediately)</text>
+  <text x="618" y="689" text-anchor="middle" font-size="8.5" fill="#444">diagnosis · message · action_required · estimated_cost</text>
+  <text x="618" y="703" text-anchor="middle" font-size="8.5" fill="#444">expected_parts · image_descriptions · urgency_sentence</text>
+  <text x="618" y="717" text-anchor="middle" font-size="8.5" fill="#444">clarification_questions (only when requires_clarification=true)</text>
+  <text x="618" y="733" text-anchor="middle" font-size="8.5" fill="#888">Higher temp allows expressive, readable homeowner prose</text>
+  <text x="618" y="747" text-anchor="middle" font-size="8.5" fill="#888">Each agent head is independently tuneable from the other</text>
+
+  <!-- Image note strip inside outer container -->
+  <rect x="38" y="790" width="757" height="46" rx="7" fill="#FFFBF6" stroke="#EDE0D0" stroke-width="1"/>
+  <text x="415" y="807" text-anchor="middle" font-size="8.5" font-weight="600" fill="#A06000">How images are processed:</text>
+  <text x="415" y="821" text-anchor="middle" font-size="8.5" fill="#555">All photos arrive in the same single Gemini API call as separate inlineData parts — the model sees every image simultaneously, not one at a time.</text>
+  <text x="415" y="834" text-anchor="middle" font-size="8.5" fill="#888">In follow-up turns, only stored text descriptions (image_descriptions) are sent. Raw image bytes are never re-uploaded to save cost and latency.</text>
+
+  <!-- Arrow down -->
+  <line x1="415" y1="844" x2="415" y2="868" stroke="#C8C6C2" stroke-width="1.3"/>
+  <polygon points="410,864 415,874 420,864" fill="#C8C6C2"/>
+
+  <!-- ═══════════ SECTION 5: POST-PROCESSING ═══════════ -->
+  <text x="20" y="887" font-size="9.5" font-weight="700" fill="#4A6800" letter-spacing="1">SERVER — POST-PROCESSING  ·  before response leaves the server</text>
+
+  <rect x="100" y="894" width="630" height="86" rx="10" fill="#F7F7F5" stroke="#DDDBD6" stroke-width="1.2"/>
+  <text x="415" y="912" text-anchor="middle" font-size="10.5" font-weight="600" fill="#131312">normaliseProse  +  finalizeClassificationAgainstCatalogAndTaxonomy</text>
+  <line x1="116" y1="918" x2="714" y2="918" stroke="#E0DEDA" stroke-width="0.8"/>
+  <text x="415" y="932" text-anchor="middle" font-size="8.5" fill="#444">Title-case: diagnosis · action_required · trade fields  ·  strip filler sentence openers  ·  trim all whitespace</text>
+  <text x="415" y="946" text-anchor="middle" font-size="8.5" fill="#444">Re-validate trade against service catalogue  ·  apply unrelated-image trade override if triggered by rejected flag</text>
+  <text x="415" y="960" text-anchor="middle" font-size="8.5" fill="#888">Inject metadata:  prompt_version ('v6.0')  ·  ai_model ('gemini-2.5-flash')  ·  prompt_id  ·  logPipelineStep timing</text>
+  <text x="415" y="972" text-anchor="middle" font-size="8" fill="#999">logGeminiUsage fires fire-and-forget to record token cost for both agent calls in ai_cost_events table</text>
+
+  <!-- Arrow down -->
+  <line x1="415" y1="980" x2="415" y2="1002" stroke="#C8C6C2" stroke-width="1.3"/>
+  <polygon points="410,998 415,1008 420,998" fill="#C8C6C2"/>
+
+  <!-- ═══════════ SECTION 6: NDJSON STREAM ═══════════ -->
+  <text x="20" y="1022" font-size="9.5" font-weight="700" fill="#4A6800" letter-spacing="1">NDJSON STREAM  ·  newline-delimited JSON piped to the /processing page</text>
+
+  <rect x="20" y="1028" width="790" height="74" rx="10" fill="#FFFFFF" stroke="#DDDBD6" stroke-width="1.2"/>
+
+  <!-- Event 1: thought -->
+  <rect x="38" y="1040" width="365" height="50" rx="8" fill="#FFF8F5" stroke="#F0C0A0" stroke-width="1"/>
+  <text x="220" y="1057" text-anchor="middle" font-size="9.5" font-weight="600" fill="#A05000">{ type: "thought",  text: "…" }</text>
+  <text x="220" y="1071" text-anchor="middle" font-size="8.5" fill="#555">Streamed live as Agent 2b runs · thought field output first by schema design</text>
+  <text x="220" y="1083" text-anchor="middle" font-size="8.5" fill="#888">Shows in /processing UI as the user-visible "what we found" summary</text>
+
+  <!-- Arrow between events -->
+  <line x1="403" y1="1065" x2="423" y2="1065" stroke="#C8C6C2" stroke-width="1.2"/>
+  <polygon points="419,1060 429,1065 419,1070" fill="#C8C6C2"/>
+
+  <!-- Event 2: complete -->
+  <rect x="430" y="1040" width="365" height="50" rx="8" fill="#F4F4F2" stroke="#C8C6C2" stroke-width="1"/>
+  <text x="612" y="1057" text-anchor="middle" font-size="9.5" font-weight="600" fill="#131312">{ type: "complete",  full: "{ …DiagnosisData }" }</text>
+  <text x="612" y="1071" text-anchor="middle" font-size="8.5" fill="#555">Sent when both agents and post-processing are done</text>
+  <text x="612" y="1083" text-anchor="middle" font-size="8.5" fill="#888">Client parses full JSON · triggers redirect to /report/[id] + provider prefetch</text>
+
+  <!-- Arrow down -->
+  <line x1="415" y1="1102" x2="415" y2="1124" stroke="#C8C6C2" stroke-width="1.3"/>
+  <polygon points="410,1120 415,1130 420,1120" fill="#C8C6C2"/>
+
+  <!-- ═══════════ SECTION 7: OUTPUT ═══════════ -->
+  <text x="20" y="1143" font-size="9.5" font-weight="700" fill="#4A6800" letter-spacing="1">OUTPUT — DiagnosisData  ·  what renders in the UI</text>
+
+  <rect x="20" y="1150" width="790" height="84" rx="12" fill="#FFFFFF" stroke="#DDDBD6" stroke-width="1.4"/>
+
+  <!-- Thought output -->
+  <rect x="38" y="1162" width="228" height="60" rx="8" fill="#FFF8F5" stroke="#F0C0A0" stroke-width="1"/>
+  <text x="152" y="1178" text-anchor="middle" font-size="10" font-weight="600" fill="#A05000">thought  field</text>
+  <text x="152" y="1192" text-anchor="middle" font-size="8.5" fill="#555">2–3 sentences anchored in visual evidence</text>
+  <text x="152" y="1206" text-anchor="middle" font-size="8.5" fill="#888">Shown live in /processing UI · top of report</text>
+
+  <!-- Structured JSON output -->
+  <rect x="278" y="1162" width="516" height="60" rx="8" fill="#F4F4F2" stroke="#C8C6C2" stroke-width="1"/>
+  <text x="536" y="1178" text-anchor="middle" font-size="10" font-weight="600" fill="#131312">Structured  DiagnosisData</text>
+  <text x="536" y="1192" text-anchor="middle" font-size="8.5" fill="#555">diagnosis · trade · trade_detail · urgency_key · confidence · requires_clarification · rejected · unserviced</text>
+  <text x="536" y="1206" text-anchor="middle" font-size="8.5" fill="#888">action_required · message · estimated_cost · expected_parts · image_descriptions · urgency_sentence  → drives report + contractor match</text>
+
+  <!-- ═══════════ LEGEND ═══════════ -->
+  <rect x="20" y="1232" width="10" height="10" rx="2" fill="#F4F4F2" stroke="#C8C6C2" stroke-width="1"/>
+  <text x="35" y="1241" font-size="8.5" fill="#666">AI agent</text>
+  <rect x="100" y="1232" width="10" height="10" rx="2" fill="#F2FBB0" stroke="#9CC000" stroke-width="1.2"/>
+  <text x="115" y="1241" font-size="8.5" fill="#666">Prompt layer</text>
+  <rect x="200" y="1232" width="10" height="10" rx="2" fill="#FFFFFF" stroke="#DDDBD6" stroke-width="1.2"/>
+  <text x="215" y="1241" font-size="8.5" fill="#666">Data / input</text>
+  <rect x="285" y="1232" width="10" height="10" rx="2" fill="#FFFDF5" stroke="#DEB860" stroke-width="1.2"/>
+  <text x="300" y="1241" font-size="8.5" fill="#666">Server guard</text>
+  <line x1="385" y1="1237" x2="410" y2="1237" stroke="#C8C6C2" stroke-width="1.3" stroke-dasharray="4,3"/>
+  <text x="415" y="1241" font-size="8.5" fill="#666">convergence</text>
+
+  <!-- Footer note -->
+  <text x="415" y="1254" text-anchor="middle" font-size="8" fill="#BBB">The thought field is what the homeowner reads first. The structured DiagnosisData drives the report card, cost estimates, parts list, and contractor pre-fetch in the background.</text>
+</svg>

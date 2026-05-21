@@ -1,8 +1,8 @@
 import type { Metadata } from 'next';
 
 import DiagnosisPageClient from '../client';
-import { fetchConversationDiagnosisAdmin } from '@/lib/fetch-conversation-diagnosis-server';
-import { fetchReportDetailOnServer } from '@/lib/fetch-report-detail-server';
+import { fetchConversationDiagnosisAdmin } from '@/lib/diagnosis/fetch-conversation-diagnosis-server';
+import { fetchReportDetailOnServer } from '@/lib/diagnosis/fetch-report-detail-server';
 import { buildDiagnosisMeta } from '@/lib/site-metadata';
 
 type PageProps = {

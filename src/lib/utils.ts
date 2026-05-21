@@ -5,49 +5,6 @@ export function cn(...inputs: ClassValue[]) {
     return twMerge(clsx(inputs));
 }
 
-/** Try to parse AI response JSON with multiple strategies. Returns { message?, ... } or null. */
-export function tryParseDiagnosisJson(raw: string): Record<string, unknown> | null {
-    if (!raw?.trim()) return null;
-    const stripMarkdown = (s: string) =>
-        s
-            .replace(/^```(?:json)?\s*/i, '')
-            .replace(/```\s*$/i, '')
-            .trim();
-
-    const candidates = [
-        raw.match(/<json>([\s\S]*?)(?:<\/json>|$)/i)?.[1],
-        raw.match(/```(?:json)?\s*([\s\S]*?)```/i)?.[1],
-        raw.trim(),
-    ]
-        .filter(Boolean)
-        .map((s) => stripMarkdown(s!));
-
-    for (const candidate of candidates) {
-        let toParse = candidate;
-        if (!toParse.endsWith('}')) {
-            const lastBrace = toParse.lastIndexOf('}');
-            if (lastBrace !== -1) toParse = toParse.substring(0, lastBrace + 1);
-        }
-        toParse = toParse.replace(/,(\s*[}\]])/g, '$1');
-        try {
-            return JSON.parse(toParse) as Record<string, unknown>;
-        } catch {
-            continue;
-        }
-    }
-    const msgTag = raw.match(/<message>([\s\S]*?)<\/message>/i);
-    if (msgTag?.[1]?.trim()) {
-        return {
-            message: msgTag[1].trim(),
-            diagnosis: '',
-            trade: 'N/A',
-            action_required: 'N/A',
-            estimated_cost: 'N/A',
-        };
-    }
-    return null;
-}
-
 /** Extract message from raw text when JSON parse fails. Handles multiline and escaped content. */
 export function extractMessageFromRaw(raw: string): string | null {
     const patterns = [

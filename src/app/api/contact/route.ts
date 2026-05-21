@@ -1,9 +1,9 @@
 // Required env vars: SUPABASE_SERVICE_ROLE_KEY, NEXT_PUBLIC_SUPABASE_URL,
-//                    SENDGRID_API_KEY, SENDGRID_FROM_EMAIL, SENDGRID_ADMIN_EMAIL
+//                    RESEND_API_KEY, RESEND_FROM, RESEND_ADMIN_EMAIL
 
 import { NextRequest, NextResponse } from 'next/server';
-import sgMail from '@sendgrid/mail';
-import { createSupabaseAdminClient } from '@/lib/supabase-server';
+import { Resend } from 'resend';
+import { createSupabaseAdminClient } from '@/lib/auth/supabase-server';
 import { checkRateLimit } from '@/lib/rate-limit-config';
 
 const VALID_SUBJECTS = [
@@ -42,18 +42,18 @@ export async function POST(req: NextRequest) {
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
     // Send admin notification email — fire and forget, don't fail the response.
-    const apiKey = process.env.SENDGRID_API_KEY;
-    const fromEmail = process.env.SENDGRID_FROM_EMAIL;
-    const adminEmail = process.env.SENDGRID_ADMIN_EMAIL || fromEmail;
+    const apiKey     = process.env.RESEND_API_KEY;
+    const from       = process.env.RESEND_FROM;
+    const adminEmail = process.env.RESEND_ADMIN_EMAIL || from;
 
-    if (apiKey && fromEmail && adminEmail) {
-        sgMail.setApiKey(apiKey);
-        void sgMail
+    if (apiKey && from && adminEmail) {
+        const resend = new Resend(apiKey);
+        void resend.emails
             .send({
-                to: adminEmail,
-                from: { email: fromEmail, name: 'Scandio' },
-                subject: `New Scandio contact message from ${name}`,
-                text: [
+                to:      adminEmail,
+                from,
+                subject: `New Menda contact message from ${name}`,
+                text:    [
                     `From: ${name} <${email}>`,
                     `Subject: ${subject || 'No subject'}`,
                     '',

@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import dynamic from 'next/dynamic';
 import MatchLoading from '../loading';
-import { fetchReportDetailOnServer } from '@/lib/fetch-report-detail-server';
+import { fetchReportDetailOnServer } from '@/lib/diagnosis/fetch-report-detail-server';
 import { buildMatchMeta } from '@/lib/site-metadata';
 
 const MatchPageClient = dynamic(() => import('../client'), {

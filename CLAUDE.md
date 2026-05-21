@@ -1,4 +1,4 @@
-# Scandio — Project Brief
+# Menda — Project Brief
 
 This file is read automatically by Claude, Cursor, and other AI coding assistants at the start of every session. Keep it accurate. Update it whenever the architecture, conventions, or key patterns change.
 
@@ -6,7 +6,7 @@ This file is read automatically by Claude, Cursor, and other AI coding assistant
 
 ## What This Is
 
-Scandio is an AI-powered home fault diagnosis product for Western Cape homeowners. A user photographs a fault, describes the problem, and the app produces a written diagnosis report — then connects them with vetted local contractors who can fix it.
+Menda is an AI-powered home fault diagnosis product for Western Cape homeowners. A user photographs a fault, describes the problem, and the app produces a written diagnosis report — then connects them with vetted local contractors who can fix it.
 
 The primary homeowner journey is:
 
@@ -43,8 +43,9 @@ src/
 │   ├── api/                Thin route handlers only. No business logic here.
 │   │   ├── diagnose/       Core diagnosis pipeline entry point (route.ts)
 │   │   ├── providers/      Provider search/match entry point (route.ts)
+│   │   ├── cron/           Scheduled jobs (enrichment retry, cleanup)
+│   │   ├── enrich/         Provider enrichment queue entry point
 │   │   └── admin/          Admin-only endpoints (guarded by requireAdmin)
-│   ├── chat/               Legacy streaming chat interface
 │   ├── diagnosis/          Diagnosis upload + processing pages
 │   ├── match/              Contractor match results page
 │   ├── report/             Diagnosis report page
@@ -55,20 +56,18 @@ src/
 │   ├── diagnosis/          Diagnosis domain: types, agents, prompts, orchestrator
 │   │   ├── types.ts        Canonical DiagnosisData type — import from here
 │   │   ├── prompts/        All Gemini prompt files and prompt-changelog.md
-│   │   ├── agent-classify.ts   Agent 2a: classification (trade, urgency, confidence)
+│   │   ├── agent-classify.ts   Agent 2a: trade classification and confidence
 │   │   ├── agent-prose.ts      Agent 2b: narrative fields (title, message, thought)
 │   │   └── processing-orchestrator.ts  Step sequencing for /processing
 │   └── match/              Match domain: provider hooks, filters, location
 │
-├── lib/                    Shared utilities used across multiple features
+├── lib/                    Shared utilities — organised by domain
 │   ├── ai/                 Gemini client, config, logging, cost tracking
 │   ├── providers/          Provider business logic (ranking, persistence, enrichment)
 │   ├── diagnosis/          Diagnosis utilities (parsing, display, taxonomy, stream)
 │   ├── auth/               Supabase clients, admin auth, cron auth
-│   ├── market-rates/       Market rate research (Brave + Gemini)
-│   ├── parts-prices/       Spare parts price lookup (Brave + Gemini)
 │   ├── certifications/     Contractor certification catalogue
-│   └── (flat ~15 files)    rate-limit, safe-redirect, services, utils, etc.
+│   └── (flat files)        rate-limit, rate-limit-config, safe-redirect, utils, etc.
 │
 └── components/             Shared UI components
     └── ui/                 shadcn/ui primitives — do not modify directly
@@ -87,7 +86,7 @@ These are enforced conventions, not preferences. Deviating creates disambiguatio
 | React hooks                    | `use-[name].ts`          | `use-match-map.ts`                   |
 | API route files                | `route.ts` only          | `src/app/api/diagnose/route.ts`      |
 | Canonical domain types         | `types.ts`               | `src/features/diagnosis/types.ts`    |
-| Test files                     | `__tests__/[name].test.ts` | `__tests__/extract-price.test.ts`  |
+| Test files                     | `__tests__/[name].test.ts` | `__tests__/processing-orchestrator.test.ts` |
 | Supabase migrations            | `YYYYMMDDHHMMSS_desc.sql` | `20260512000000_atomic_quota.sql`   |
 
 **Never** use camelCase file names (e.g. `useMatchMap.ts` — use `use-match-map.ts`).
@@ -122,7 +121,7 @@ The canonical type is `src/features/diagnosis/types.ts`. Always import from ther
 ```typescript
 import type { DiagnosisData } from '@/features/diagnosis/types';
 ```
-Do **not** import from `@/app/chat/components/types` — that re-exports from the canonical source and exists for backward compatibility only.
+Do **not** redefine `DiagnosisData` inline or import it from any other location.
 
 ### Diagnosis parsing
 There is one canonical parser:
@@ -171,7 +170,7 @@ Prompt version: currently `v6.0` (see `features/diagnosis/prompts/prompt-version
 
 - **Do not add business logic to `app/api/` directories.** Route handlers are thin entry points. Business logic belongs in `lib/` or `features/`.
 - **Do not add top-level files to `lib/` without a subdirectory.** Put new files in the relevant domain folder (`lib/ai/`, `lib/providers/`, etc.).
-- **Do not import `DiagnosisData` from `@/app/chat/components/types`.** Use `@/features/diagnosis/types`.
+- **Do not import `DiagnosisData` from anywhere other than `@/features/diagnosis/types`.**
 - **Do not add `framer-motion` imports to hot-path routes** (`/processing`, `/diagnosis`, `/report`). Use CSS transitions instead.
 - **Do not use `any` in catch clauses.** Use `unknown` and narrow explicitly.
 - **Do not create barrel `index.ts` files in `lib/` subdirectories** unless the module has a clearly defined public surface. Prefer direct imports.
@@ -187,11 +186,20 @@ Prompt version: currently `v6.0` (see `features/diagnosis/prompts/prompt-version
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon key (browser-safe)             |
 | `SUPABASE_SERVICE_ROLE_KEY`     | Supabase service role (server-only)          |
 | `GEMINI_API_KEY`                | Google Gemini API key                        |
-| `BRAVE_SEARCH_API_KEY`          | Brave Search API key                         |
 | `UPSTASH_REDIS_REST_URL`        | Upstash Redis URL (production rate limiting) |
 | `UPSTASH_REDIS_REST_TOKEN`      | Upstash Redis token                          |
 | `NEXT_PUBLIC_SENTRY_DSN`        | Sentry DSN (enables error monitoring)        |
 | `ADMIN_PASSWORD`                | Hashed password for admin dashboard access  |
+| `CRON_SECRET`                   | Bearer token for Vercel cron job auth        |
+| `AI_PROVIDER_ENRICHMENT_VERSION`| Increment to trigger re-enrichment of all providers |
+| `RESEND_API_KEY`                | Resend API key for transactional email       |
+| `RESEND_FROM`                   | From address — format: `Menda <noreply@menda.co.za>` <!-- TODO(menda-domain): update to real domain once menda.co.za is live --> |
+| `RESEND_REPLY_TO`               | Optional reply-to override                   |
+| `RESEND_ADMIN_EMAIL`            | Admin notification destination (contact form) |
+| `SEND_EMAIL_HOOK_SECRET`        | Supabase auth hook signing secret (format: `v1,whsec_…`) |
+| `DATAFORSEO_LOGIN`              | DataForSEO account login (email) — review sync cron      |
+| `DATAFORSEO_PASSWORD`           | DataForSEO account password — review sync cron            |
+| `GOOGLE_PLACES_API_KEY`         | Google Places API (New) key — review fetch & generative summary |
 
 ---
 

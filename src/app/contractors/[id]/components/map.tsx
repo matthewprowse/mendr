@@ -1,7 +1,7 @@
 'use client';
 
-import { ProvidersMap } from '@/app/chat/components/providers-map';
-import type { Provider } from '@/app/chat/components/types';
+import { ProvidersMap } from '@/components/providers-map';
+import type { Provider } from '@/lib/providers/types';
 
 type ProPageMapProps = {
     apiKey: string;

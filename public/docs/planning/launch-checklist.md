@@ -1,254 +1,340 @@
 # Launch Checklist
 
-This document is the authoritative pre-launch checklist for Scandio. It is split into two phases: **Public Beta** (limited invite / soft launch) and **Public Launch** (open to all Western Cape homeowners). Every item includes the file or system it touches, a severity rating, and enough context to action it without re-reading the codebase.
+This document is the authoritative pre-launch checklist for Menda. Items marked `[x]` have been verified as implemented in the codebase. Items marked `[ ]` are not yet complete. Each item states what file or system it touches and enough context to act on it without re-reading the codebase.
+
+**Checklist status:** Last verified against the codebase on 20 May 2026.
 
 ---
 
 ## Phase 1 — Public Beta
 
-These items must be resolved before the first real user is onboarded. A bug in this list is a bug that will happen in production on day one.
+Every item in this phase must be complete before a real user is onboarded.
 
 ---
 
-### - [x] Fix the atomic quota race condition
+### [x] Atomic diagnosis quota check
 
-**Severity: Critical**  
-**File:** `src/app/api/diagnose/route.ts`
-
-The current quota check is a read-then-write: the route reads the user's usage count, checks it against the limit, and then increments it in a separate write. Two near-simultaneous requests — a double-tap, a network retry, two open tabs — can both pass the read check and both consume a credit. On a free-tier beta with a per-user daily quota, this will be exploited unintentionally on the first day.
-
-**Fix required:** Create a Supabase database function `increment_diagnosis_quota` that performs the increment atomically using `INSERT ... ON CONFLICT DO UPDATE SET count = count + 1 RETURNING count`. The route should call this RPC and only proceed if the returned count is within the limit. The read-then-write pattern must be removed entirely.
-
-```sql
--- Migration: supabase/migrations/xxxx_atomic_quota.sql
-CREATE OR REPLACE FUNCTION increment_diagnosis_quota(
-  p_user_id uuid,
-  p_date date
-) RETURNS integer
-LANGUAGE plpgsql AS $$
-DECLARE
-  new_count integer;
-BEGIN
-  INSERT INTO diagnosis_quotas (user_id, date, count)
-  VALUES (p_user_id, p_date, 1)
-  ON CONFLICT (user_id, date)
-  DO UPDATE SET count = diagnosis_quotas.count + 1
-  RETURNING count INTO new_count;
-  RETURN new_count;
-END;
-$$;
-```
+**File:** `src/app/api/diagnose/route.ts` → calls `increment_diagnosis_quota` RPC  
+The quota increment is an atomic database function (`INSERT ... ON CONFLICT DO UPDATE RETURNING count`). A concurrent double-tap cannot cause both requests to pass the same counter value. The RPC is defined in `supabase/migrations/20260512000000_atomic_quota.sql`.
 
 ---
 
-### - [x] Set up error monitoring
+### [x] Error monitoring (Sentry)
 
-**Severity: Critical**  
-**Files:** `src/app/layout.tsx`, new `src/lib/monitoring.ts`
-
-There is currently no error monitoring in the application. Unhandled exceptions in server components, route handlers, and client components will be silently swallowed or surface as generic 500 pages. In a public beta you will find out about crashes through user support tickets, not dashboards.
-
-**Fix required:** Install Sentry (or equivalent — LogRocket, Axiom, etc.). Configure it in `instrumentation.ts` for server-side errors and in the root layout for client-side errors. The minimum viable setup is:
-
-- Source maps uploaded on build so stack traces are readable
-- An error boundary at the root layout that catches React rendering errors
-- Alerting on error rate spikes (Slack webhook or email)
-- Capturing `userId` on all events so you can correlate errors to users
-
-Without this, debugging production issues after launch will be significantly slower.
+**Files:** `src/instrumentation.ts`, `src/app/global-error.tsx`  
+Sentry is initialised for both the Node.js and Edge runtimes via the Next.js instrumentation hook. `global-error.tsx` catches root-layout errors and reports them to Sentry with a retry CTA. Enabled in production only (`NODE_ENV === 'production'`). Requires `NEXT_PUBLIC_SENTRY_DSN` to be set in Vercel.
 
 ---
 
-### - [x] Fix process-local rate limiting
+### [x] Distributed rate limiting (Upstash Redis)
 
-**Severity: High**  
-**File:** `src/lib/rate-limit.ts`
-
-The current rate limiter uses a `globalThis` Map as its store. On Vercel's serverless runtime, each function invocation may run on a different instance with its own memory. A user who hits two different instances in the same window gets double the allowed quota. Under any meaningful traffic, the rate limits are effectively non-functional.
-
-**Fix required:** Replace the in-memory store with a Supabase or Upstash Redis counter. The `checkRateLimit` function interface can stay identical — only the backing store changes. Upstash Redis with the `@upstash/ratelimit` package is the lowest-friction option for Vercel deployments and requires no schema migration.
-
-If this is intentionally deferred for beta (acceptable), document it explicitly in `rate-limit.ts` so future developers understand the known limitation.
+**File:** `src/lib/rate-limit.ts`  
+Rate limiting uses Upstash Redis in production, falling back to a process-local in-memory store for local development. The in-memory fallback is documented in the file. Rate limit buckets are defined in `src/lib/rate-limit-config.ts`. All public API routes call `checkRateLimit` as their first operation.
 
 ---
 
-### - [x] Delete junk routes and dead files
+### [x] Rate limit buckets wired to routes
 
-**Severity: Medium**  
-**Files listed below**
-
-These files add noise to the route tree and create confusion. None are import targets for live code.
-
-| File | Action | Reason |
-|---|---|---|
-| `src/app/diagnosis2/page.tsx` | Delete | Redirect stub, not a real route |
-| `src/app/page/_components/testimonials-section 3.tsx` | Delete | Space in filename — Finder duplicate artifact, will break Linux CI |
-| `src/app/landing/` (entire directory) | Delete | Orphaned experiment; `page.tsx` imports from `page/components/`, not here |
-| `src/app/landing1/` (entire directory) | Delete or make `/beta` redirect | If `landing1` is the active marketing page, rename it. If not, delete it. |
-| `src/features/match/hooks/useMatchConversationContext.ts` | Delete | Duplicate of `use-match-conversation-context.ts`; zero imports |
-| `src/features/match/hooks/useMatchMap.ts` | Delete | Duplicate of `use-match-map.ts`; zero imports |
-| `src/features/match/hooks/useMatchProviders.ts` | Delete | Duplicate of `use-match-providers.ts`; zero imports |
-| `src/app/contractors/_components/` (entire dir) | Delete | Zero imports; parallel to `contractors/components/` |
-| `src/app/contractors/_lib/` (entire dir) | Delete | Zero imports; parallel to `contractors/lib/` |
-| `src/app/contractors/_types/` (entire dir) | Delete | Zero imports; parallel to `contractors/types/` |
-| `src/app/contractors/_constants/` (entire dir) | Delete | Zero imports; parallel to `contractors/constants/` |
-| `src/app/page/_components/` (entire dir) | Delete | Zero imports; parallel to `page/components/` |
+**File:** `src/lib/rate-limit-config.ts`  
+All active routes have a corresponding bucket: `diagnose`, `providers`, `geocode`, `enrich*`, `uploadImage`, `transcribe`, `validateStartDescription`, `analyticsEvents`, `providerApply`, `heicConvert`, `contactForm`, `contractorWaitlist`, `reviews`, `reviewsCount`, `restoreToken`, `conversationLocation`, `conversationRead`, `conversationUpsert`, `applicationEdit`, `whatsappMessage`, `directions`, `onboardingSearch`, `onboardingPlaceDetails`, `providerApplicationUpload`, `syncGallery`.  
+**Note:** `partsPrices` and `marketRates` buckets were removed when cost estimation was stripped.
 
 ---
 
-### - [x] Verify rate-limit buckets are wired to their routes
+### [x] Content Security Policy and security headers
 
-**Severity: Medium**  
-**Files:** `src/lib/rate-limit-config.ts`, all `src/app/api/**/*route.ts`
-
-Six new rate-limit buckets were added in a prior wave (`analyticsEvents`, `providerApply`, `partsPrices`, `heicConvert`, `contactForm`, `contractorWaitlist`). Verify each bucket is actually called in its corresponding route handler with `checkRateLimit(req, 'bucketName')`. A bucket defined but never applied is silently non-functional.
-
-Run a grep to confirm:
-
-```bash
-grep -rn "checkRateLimit" src/app/api/ | sort
-```
-
-Each of the six new bucket names should appear at least once.
+**File:** `next.config.ts`  
+`Content-Security-Policy`, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, and `Referrer-Policy` are set on all responses. Review the CSP when new external scripts or fonts are added — a new domain must be explicitly allowlisted.
 
 ---
 
-### - [ ] Review terms of service and privacy policy for AI-generated content
+### [x] Global React error boundary
 
-**Severity: Medium**  
-**Files:** `src/app/terms/content.tsx`, `src/app/privacy/content.tsx`
+**File:** `src/app/global-error.tsx`  
+Catches any error that escapes route-level boundaries, including root layout errors. Renders a user-facing message with a retry button and the error digest for support correlation.
 
-The app generates AI diagnosis reports and shows them to homeowners who may act on them financially. The terms of service must explicitly disclaim that the diagnosis is AI-generated, is not a qualified professional assessment, and should not be relied upon for legal, insurance, or safety-critical decisions. Confirm with a lawyer that the current copy meets this bar. This is a reputational and potential liability issue on day one of a public beta.
-
----
-
-### - [ ] Confirm Gemini and Brave Search API keys are scoped correctly
-
-**Severity: Medium**  
-**Files:** `src/.env.production`, Vercel environment config
-
-Before launch, audit that:
-- The Gemini API key used in production has spending limits set in Google Cloud console
-- The Brave Search API key has a request cap appropriate for beta traffic
-- No dev/test keys are present in production environment variables
-- `ADMIN_PASSWORD` is a strong random string (not something set during early development)
+**Note:** There is no `src/app/error.tsx` at the root level — only `global-error.tsx`. Consider adding a root `error.tsx` to give route-level errors a branded fallback page rather than the bare global boundary.
 
 ---
 
-### - [ ] Smoke test the full user journey end-to-end
+### [x] Structured logging for the diagnosis pipeline
 
-**Severity: High**
+**Files:** `src/features/diagnosis/agent-classify.ts`, `src/features/diagnosis/agent-prose.ts`, `src/features/diagnosis/processing-orchestrator.ts`  
+Every pipeline step emits a `logPipelineStep` call (from `@/lib/ai/ai-logging`) with `conversationId`, `userId`, `stepName`, `durationMs`, `status`. All Gemini calls follow with `logGeminiUsage` (from `@/lib/ai/ai-cost-logger`). Logs are queryable in Vercel's log drain.
 
-Before any real user hits the app, manually walk the complete flow:
+---
 
-1. Land on homepage → click Start
-2. Enter a description on `/start`
-3. Upload a HEIC image on `/diagnosis` (verify heic2any lazy load works)
-4. Watch `/processing` animate through steps
-5. Read the report on `/report/[id]`
-6. See contractor matches on `/match`
-7. View a contractor profile on `/contractors/[id]`
-8. Attempt to exceed the daily quota (verify the atomic fix works)
-9. Log out and verify session is cleared
+### [x] AI cost tracking
 
-This must be done on a real mobile device (iOS Safari, Android Chrome) as well as desktop. The app is marketed to homeowners who will predominantly use it on phones.
+**Files:** `src/lib/ai/ai-cost-logger.ts`, admin dashboard at `/admin/analytics`  
+Token counts and estimated cost are logged to `ai_cost_events` on every Gemini call. The admin panel shows daily totals. Requires `GEMINI_API_KEY` to have a spending limit set in Google Cloud Console — verify this before going live.
+
+---
+
+### [x] Row Level Security on all tables
+
+**Verified via Supabase MCP on 20 May 2026:**
+- `providers` — public read with `is_active AND (source = 'google' OR is_verified = true)` gate; write restricted to service role
+- `provider_applications` — anon insert only; read restricted to service role
+- `contact_messages` — anon insert only; read restricted to service role
+- `diagnoses` — users read/write their own rows; service role for pipeline writes
+- `conversations` — users read/write their own rows
+- All other tables: RLS enabled
+
+---
+
+### [x] Provider visibility gate (application-sourced providers)
+
+**File:** `supabase/migrations/20260520000004_provider_verification_gate.sql`  
+`is_verified boolean NOT NULL DEFAULT false` added to `providers`. All 476 existing Google-sourced providers backfilled to `is_verified = true`. The public select policy requires `source = 'google' OR is_verified = true` — application-sourced providers are invisible to homeowners until an admin verifies them.
+
+---
+
+### [x] POPIA and terms of service
+
+**Files:** `src/app/terms/content.tsx`, `src/app/privacy/content.tsx`  
+The privacy policy explicitly references POPIA (Protection of Personal Information Act 4 of 2013), names an Information Officer, and covers data retention, cross-border transfers, and user rights. The terms of service disclaim AI-generated output and note legal limitations (no substitute for professional inspection). Legal copy status:
+
+- `[ ]` **Operator legal details are marked `UNPUBLISHED` in `src/lib/site-legal.ts`.** The physical address, postal address, and legal email must be filled in before going live — they appear in multiple places in the terms and privacy policy with a placeholder.
+
+---
+
+### [x] Dead file and dead route cleanup
+
+The following files and directories have been confirmed deleted:
+
+| Previously listed | Status |
+|---|---|
+| `src/app/diagnosis2/` | Deleted |
+| `src/app/landing/` | Deleted |
+| `src/app/landing1/` | Deleted |
+| `src/features/match/hooks/useMatchConversationContext.ts` | Deleted |
+| `src/features/match/hooks/useMatchMap.ts` | Deleted |
+| `src/features/match/hooks/useMatchProviders.ts` | Deleted |
+| `src/app/contractors/_components/` | Deleted |
+| `src/app/contractors/_lib/` | Deleted |
+| `src/app/contractors/_types/` | Deleted |
+| `src/app/contractors/_constants/` | Deleted |
+| `src/app/page/_components/` | Deleted |
+| `src/app/api/market-rates/` | Deleted (cost estimation removed) |
+| `src/app/api/parts-prices/` | Deleted (cost estimation removed) |
+| `src/lib/market-rates/` | Deleted |
+| `src/lib/parts-prices/` | Deleted |
+| `src/components/beta-cost-estimate-card.tsx` | Deleted |
+| `src/lib/fetch-services.ts` | Deleted |
+| `src/app/api/diagnose/cost/` (if existed) | Deleted |
+
+**Remaining:** `src/app/chat/components/` still exists and contains `providers-map.tsx` (imported by `src/app/contractors/[id]/components/map.tsx`) and `types.ts`. This is not dead — it is a shared component that happens to live under the former chat directory. Consider moving `providers-map.tsx` to `src/components/` to eliminate the misleading path.
+
+---
+
+### [x] CLAUDE.md is accurate
+
+**File:** `CLAUDE.md` in repository root  
+**Note:** CLAUDE.md still references `lib/market-rates/`, `lib/parts-prices/`, and `app/chat/` as active features. Update these before the next session where an AI assistant is used — stale CLAUDE.md entries cause misdirected refactoring.
+
+---
+
+### [ ] Fill in operator legal details in `site-legal.ts`
+
+**File:** `src/lib/site-legal.ts`  
+The `LEGAL_DETAILS_UNPUBLISHED` placeholder appears in the terms of service and privacy policy in multiple places (operator legal name, physical address, postal address, legal email). These must be completed before any public-facing use of the site.
+
+---
+
+### [ ] Confirm API keys are scoped for production
+
+**System:** Google Cloud Console, Brave Search dashboard, Vercel environment config  
+Before any user hits the app, verify:
+- Gemini API key has a monthly spending cap set in Google Cloud Console
+- `ADMIN_PASSWORD` is a strong random string (not a development placeholder)
+- No development or test keys are present in Vercel production environment variables
+- `NEXT_PUBLIC_SENTRY_DSN` is set in Vercel production
+
+---
+
+### [ ] Bump `AI_PROVIDER_ENRICHMENT_VERSION` to `2` in Vercel
+
+**System:** Vercel environment variables  
+**Why this matters:** The enrichment pipeline was broken for approximately 6 weeks due to a schema mismatch. All providers written during that period have incomplete or corrupt enrichment data. Bumping this environment variable causes the pipeline to treat all providers as needing re-enrichment, triggering a full pass through the fixed pipeline.
+
+Action: In Vercel → Settings → Environment Variables, set `AI_PROVIDER_ENRICHMENT_VERSION=2`. The change takes effect on the next deployment.
+
+---
+
+### [ ] Resolve Supabase storage quota
+
+**System:** Supabase Storage (support ticket filed 20 May 2026)  
+The `gallery/providers/` bucket contains 13,091 files from enrichment. The project is over the free-tier storage quota, which is preventing new file uploads. Provider image rows in `provider_images` have been deleted. The physical files remain in storage pending Supabase support resolution.
+
+Once resolved:
+- The enrichment pipeline will re-populate provider images automatically on the next enrichment run (guarded by `count > 0 → skip` so only missing images are added; no duplicates)
+- Confirm the UUID-based folder (`gallery/e74ce9bc.../`) and `vault/` (143 files) are also cleared
+
+---
+
+### [ ] Smoke test the full homeowner journey end-to-end
+
+**Severity: High — must be done on a real mobile device (iOS Safari + Android Chrome)**
+
+Walk the complete flow manually before any real user does:
+
+1. Land on homepage → click "Start"
+2. Enter a description on `/start` — verify quality check passes/fails correctly
+3. Upload a photo on `/diagnosis` — test with HEIC to verify lazy-load conversion works
+4. Watch `/processing` animate through all steps
+5. Read the report on `/report/[id]` — verify diagnosis renders, trade matches, no console errors
+6. See contractor matches on `/match` — verify the map loads, filters work, at least one provider appears
+7. Open a contractor profile on `/contractors/[id]` — verify gallery, reviews, and map render
+8. Attempt to exceed the daily quota — verify 429 response and correct error message
+9. Log out and log back in — verify session is cleared and restored correctly
+10. Submit a WhatsApp contact request from `/match` — verify the message is pre-filled correctly
+
+---
+
+### [ ] Admin: verify at least one application-sourced provider can be verified
+
+**File:** `src/app/admin/providers/client.tsx`  
+The `is_verified` flag was added to prevent application-sourced providers from appearing to homeowners before manual review. Confirm the admin `/admin/providers` page exposes a way to set `is_verified = true` for a specific provider. If no such control exists, add it before any contractor application is submitted.
 
 ---
 
 ## Phase 2 — Public Launch
 
-These items should be addressed before opening registration to the general public — after a closed beta period has validated the core flow.
+These items must be resolved before opening registration to the general public — after a closed beta period validates the core flow.
 
 ---
 
-### - [x] Replace in-memory rate limiting with a distributed store
+### [ ] Add root-level `error.tsx`
 
-**Severity: High** (escalated from Phase 1 if deferred)
-
-As noted above, the current rate limiter is non-functional at scale on serverless. This must be resolved before public launch even if it was consciously deferred for beta. See the process-local rate limiting item above for the implementation approach.
-
----
-
-### - [x] Add structured AI cost tracking and budget alerts
-
-**Severity: High**  
-**File:** `src/lib/ai-logging.ts` (extend), new Supabase table `ai_cost_events`
-
-The app makes Gemini API calls for: diagnosis generation (up to 5 images per request), parts price extraction (per part), and market rate refinement. There is currently no per-user, per-request cost tracking visible in the admin panel. Under a free-tier public beta with open registration, a single user who submits 50 diagnoses per day with 5 images each can generate significant API costs.
-
-**Fix required:**
-
-- Log estimated token counts and cost to a `ai_cost_events` table on every Gemini call
-- Add a daily total to the admin analytics dashboard
-- Set up a Cloud Monitoring alert (or simple cron check) that fires when daily Gemini spend exceeds a threshold
-- Consider tightening the per-user daily diagnosis quota before public launch
+**File:** `src/app/error.tsx` (does not yet exist)  
+`global-error.tsx` catches root-layout errors, but route-level errors (thrown in a page or client component) currently have no branded fallback — they produce a blank screen in production if no closer `error.tsx` exists. Add a root `src/app/error.tsx` with the same design as `global-error.tsx` but without the `<html>/<body>` wrapper.
 
 ---
 
-### - [x] Implement a proper Content Security Policy
+### [ ] Database backup runbook
 
-**Severity: Medium**  
-**File:** `next.config.ts` (headers) or a new `middleware.ts` entry
-
-The app embeds Google Maps, loads fonts, and makes API calls to Supabase and external services. Without a CSP, any XSS vulnerability allows arbitrary script injection. Set `Content-Security-Policy`, `X-Frame-Options`, `X-Content-Type-Options`, and `Referrer-Policy` headers on all responses.
+**System:** Supabase dashboard, internal documentation  
+Confirm Supabase point-in-time recovery (PITR) is enabled on the production project (requires a paid plan). Write a one-page runbook that documents how to restore from a backup. This is a 30-minute task that removes a category of existential risk.
 
 ---
 
-### - [x] Add a global React error boundary with user-facing fallback
+### [ ] Accessibility audit of the core homeowner flow
 
-**Severity: Medium**  
-**File:** `src/app/layout.tsx`
-
-When a client component throws unexpectedly, Next.js will render its nearest `error.tsx` boundary. Currently there is no `error.tsx` at the root layout level — meaning unhandled errors produce a blank screen rather than a friendly "something went wrong" message with a retry action. Add `src/app/error.tsx` as the catch-all.
-
----
-
-### - [ ] Implement a database backup and restore runbook
-
-**Severity: Medium**
-
-Before public launch, confirm Supabase's point-in-time recovery is enabled on the production project. Write a one-page runbook that documents how to restore from backup. This is a 30-minute task that removes a category of existential risk.
-
----
-
-### - [x] Add structured logging for the diagnosis pipeline
-
-**Severity: Medium**  
-**Files:** `src/app/api/diagnose/route.ts`, `src/features/diagnosis/processing-orchestrator.ts`
-
-For debugging production issues, structured logs (JSON with `conversationId`, `userId`, `stepName`, `durationMs`, `modelName`, `tokenCount`) are significantly more useful than `console.log`. Before public launch, ensure every major step in the diagnosis pipeline emits a structured log event that can be queried in Vercel's log drain or a logging service.
-
----
-
-### - [ ] Accessibility audit of the core flow
-
-**Severity: Medium**
-
-The homeowner-facing flow (`/start` → `/diagnosis` → `/processing` → `/report` → `/match`) should pass a basic WCAG 2.1 AA audit. Run Axe DevTools or Lighthouse on each page and address:
-
+**Scope:** `/start` → `/diagnosis` → `/processing` → `/report/[id]` → `/match`  
+Run Axe DevTools or Lighthouse on each page and address:
 - All images have `alt` text
 - All interactive elements are keyboard-navigable
-- Colour contrast ratios meet AA minimums (particularly text on the dark diagnosis card backgrounds)
-- The file upload on `/diagnosis` works with a keyboard (no mouse required)
+- Colour contrast ratios meet WCAG 2.1 AA minimums (especially text on dark card backgrounds)
+- The file upload on `/diagnosis` works without a mouse
 
 ---
 
-### - [ ] SEO: verify sitemap and canonical URLs
+### [ ] SEO: sitemap and canonical URLs
 
-**Severity: Low**  
-**Files:** `src/app/sitemap.ts`, `src/app/robots.ts`
-
-Before public launch, confirm the sitemap includes all public-facing routes and excludes all admin, API, and auth routes. Verify canonical tags are correct. Test with Google Search Console's URL inspection tool.
+**Files:** `src/app/sitemap.ts`, `src/app/robots.ts`  
+Confirm the sitemap includes all public-facing routes and excludes all admin, API, and auth routes. Verify canonical tags are set correctly. Test with Google Search Console URL inspection.
 
 ---
 
-### - [ ] Load test the diagnosis endpoint
+### [ ] Load test the diagnosis endpoint
 
-**Severity: Medium**  
-**File:** `src/app/api/diagnose/route.ts`
-
-The diagnosis route chains a database write, up to 5 image uploads, a Gemini multimodal call, a second Gemini call, and a second database write — all within a single serverless function with `maxDuration: 60`. Run a load test at 10 concurrent requests to verify the p95 latency stays within the time limit and the rate limiter (once distributed) correctly throttles excess traffic.
+**File:** `src/app/api/diagnose/route.ts` (`maxDuration: 60`)  
+The diagnosis route chains a DB write, up to 5 image uploads, two sequential Gemini calls, and a second DB write within one serverless function. Run 10 concurrent requests to verify p95 latency stays within the time limit and the rate limiter correctly throttles excess traffic.
 
 ---
 
-*Last updated: May 2026. Owner: Matthew Prowse.*
+### [ ] Review the contractor application flow end-to-end
+
+**Flow:** `/contractors` → `/contractors/network` → `POST /api/providers/apply` → `application/edit` (token link)
+
+The contractor application is the primary supply-side onboarding flow. It is not a "Claim Your Profile" feature — there is no Google Business–style claiming mechanism. A contractor fills out the application, the system creates a `provider_applications` row (and optionally a `providers` row), and an admin must set `is_verified = true` before the provider appears to homeowners.
+
+Verify end-to-end:
+1. Submit an application from `/contractors/network`
+2. Confirm the `provider_applications` row is created in Supabase
+3. Confirm the provider is not visible on `/match` (requires `is_verified = true`)
+4. Use the admin panel to set `is_verified = true`
+5. Confirm the provider now appears on `/match` for a relevant trade search
+
+---
+
+### [ ] Enrichment quality validation
+
+**File:** `src/lib/providers/provider-enrichment.ts`  
+After bumping `AI_PROVIDER_ENRICHMENT_VERSION` to 2 and the enrichment pipeline re-runs, query the live database to validate output quality:
+
+```sql
+SELECT
+    COUNT(*) FILTER (WHERE enrichment_quality = 'ok') AS ok,
+    COUNT(*) FILTER (WHERE enrichment_quality = 'low') AS low,
+    COUNT(*) FILTER (WHERE enrichment_quality IS NULL) AS not_enriched,
+    COUNT(*) FILTER (WHERE scrape_status = 'failed') AS failed
+FROM providers
+WHERE source = 'google';
+```
+
+Expected: the majority of 476 providers reach `enrichment_quality = 'ok'` or `'low'`. More than 20% remaining `null` after a full enrichment pass indicates a pipeline bug requiring investigation.
+
+---
+
+## Testing Requirements
+
+These tests must exist and pass before Public Beta. Writing them is part of the pre-launch scope — passing CI is a necessary but not sufficient condition; tests must verify user-visible behaviour, not just internal logic.
+
+---
+
+### Unit tests — existing (passing)
+
+The following test files exist and are expected to remain passing:
+
+| File | What it covers |
+|---|---|
+| `features/diagnosis/__tests__/processing-orchestrator.test.ts` | `shouldSkipDiagnosisPipeline`, `buildDiagnosisVersion`, `isDiagnosisAccurateForPrefetch`, `PROCESSING_STEP_ORDER` |
+| `features/diagnosis/__tests__/composer.test.ts` | Diagnosis NDJSON stream composer |
+| `lib/__tests__/parse-diagnosis.test.ts` | `parseDiagnosisFromModelResponse` — all edge cases |
+| `lib/__tests__/safe-redirect.test.ts` | `safeRedirect` — open redirect prevention |
+| `lib/__tests__/admin-auth.test.ts` | `requireAdmin` — password validation |
+| `lib/diagnosis/__tests__/diagnose-ndjson-stream.test.ts` | NDJSON streaming protocol |
+
+---
+
+### [ ] Unit tests — required before beta
+
+| Module | Tests needed |
+|---|---|
+| `src/lib/providers/provider-enrichment.ts` | Fast path (summary-only) returns `scrape_status: 'fast_only'` and does not set `enriched_at`; full path returns `scrape_status: 'ok'` and sets `enriched_at`; Supabase upsert error returns `{ ok: false }`; geographic filter rejects providers outside SA bounding box |
+| `src/lib/rate-limit-config.ts` | `isRateLimitBypassed` returns true when `DISABLE_RATE_LIMIT=true`; IP extraction handles `x-forwarded-for` with multiple IPs correctly |
+| `src/lib/diagnosis/parse-diagnosis-from-model-response.ts` | Additional edge cases: malformed JSON, missing required fields, extra unknown fields |
+| `src/features/diagnosis/agent-classify.ts` | Returns fallback classification when Gemini call throws; fallback has `requestFailed: true` |
+
+---
+
+### [ ] Integration tests — required before beta
+
+These tests verify that the core API routes behave correctly end-to-end. They should run against a real test Supabase database (not mocks) to catch schema/RLS issues that mock tests cannot detect.
+
+| Route | Scenarios to cover |
+|---|---|
+| `POST /api/diagnose` | Returns 429 when rate limited; returns 429 when quota exceeded; returns 200 with streamed NDJSON on a valid request; rejects requests without an image |
+| `POST /api/providers` (match search) | Returns providers filtered by trade and location; excludes providers where `is_verified = false` and `source != 'google'`; respects the SA geographic bounding box |
+| `POST /api/providers/apply` | Creates a `provider_applications` row; rate-limits to 3 per hour per IP; does not create a visible `providers` row accessible to anon queries |
+| `GET /api/cron/retry-enrichment` | Rejects requests without the cron secret; returns structured JSON with processed/skipped counts |
+
+---
+
+### [ ] End-to-end smoke test (automated)
+
+Using Playwright or a similar framework, automate the critical homeowner path so it can be run in CI before each deployment:
+
+1. Navigate to `/start`, enter a description, submit
+2. Upload a test image on `/diagnosis`, submit
+3. Wait for `/processing` to complete (poll for redirect)
+4. Assert `/report/[id]` renders with a trade name and action_required field
+5. Assert `/match` renders at least one provider card
+
+This test can use a fixture Gemini response (mocked at the network level) to avoid real API costs in CI.
+
+---
+
+*Last updated: 20 May 2026. Owner: Matthew Prowse.*

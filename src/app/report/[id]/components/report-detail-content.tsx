@@ -3,20 +3,20 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
-import { supabase } from '@/lib/supabase';
+import { supabase } from '@/lib/auth/supabase';
 import { sanitizeAiContent } from '@/lib/utils';
 import { Spinner } from '@/components/ui/spinner';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { ArrowLeft } from 'lucide-react';
-import { UnrelatedImageCard } from '@/app/chat/components/unrelated-image-card';
-import { UnservicedCategoryCard } from '@/app/chat/components/unserviced-category-card';
+import { UnrelatedImageCard } from './unrelated-image-card';
+import { UnservicedCategoryCard } from './unserviced-category-card';
 import {
     diagnosisSectionsDuplicate,
     reportThoughtsParagraph,
     splitDetailAndHazard,
-} from '@/lib/diagnosis-display';
-import type { ReportDetailServerResult } from '@/lib/fetch-report-detail-server';
+} from '@/lib/diagnosis/diagnosis-display';
+import type { ReportDetailServerResult } from '@/lib/diagnosis/fetch-report-detail-server';
 
 type ReportData = {
     diagnosis: Record<string, unknown> | null;
@@ -25,12 +25,6 @@ type ReportData = {
     customer_lat: number | null;
     customer_lng: number | null;
     initial_image_description: string | null;
-    messages?: {
-        content: string;
-        role: string;
-        attachments?: string[];
-        diagnosis?: Record<string, unknown> | null;
-    }[];
 };
 
 export interface ReportDetailContentProps {
@@ -151,34 +145,7 @@ export function ReportDetailContent({ reportId, serverResult }: ReportDetailCont
                 return;
             }
 
-            const { data: msgsRaw } = await (supabase as any)
-                .from('messages')
-                .select('content, role, attachments, diagnosis')
-                .eq('conversation_id', id)
-                .order('created_at', { ascending: true });
-
-            const msgs = (msgsRaw ?? []) as Array<{
-                content: string;
-                role: string;
-                attachments?: string[];
-                diagnosis?: Record<string, unknown> | null;
-            }>;
-
-            let resolvedDiagnosis = conv.diagnosis as Record<string, unknown> | null;
-            if (!resolvedDiagnosis) {
-                const lastWithDiag = [...msgs]
-                    .reverse()
-                    .find(
-                        (m) =>
-                            m.role === 'assistant' &&
-                            m.diagnosis &&
-                            typeof m.diagnosis === 'object' &&
-                            (m.diagnosis as Record<string, unknown>).diagnosis
-                    );
-                if (lastWithDiag?.diagnosis) {
-                    resolvedDiagnosis = lastWithDiag.diagnosis as Record<string, unknown>;
-                }
-            }
+            const resolvedDiagnosis = conv.diagnosis as Record<string, unknown> | null;
 
             setReportData({
                 diagnosis: resolvedDiagnosis,
@@ -190,7 +157,6 @@ export function ReportDetailContent({ reportId, serverResult }: ReportDetailCont
                     typeof (conv as { initial_image_description?: unknown }).initial_image_description === 'string'
                         ? (conv as { initial_image_description: string }).initial_image_description
                         : null,
-                messages: msgs || [],
             });
         } catch (e: unknown) {
             const errMsg =
@@ -219,8 +185,8 @@ export function ReportDetailContent({ reportId, serverResult }: ReportDetailCont
         if (navigator.share) {
             try {
                 await navigator.share({
-                    title: 'My Scandio Diagnosis Report',
-                    text: 'Here is my home diagnosis report from Scandio.',
+                    title: 'My Menda Diagnosis Report',
+                    text: 'Here is my home diagnosis report from Menda.',
                     url,
                 });
                 return;
@@ -274,11 +240,6 @@ export function ReportDetailContent({ reportId, serverResult }: ReportDetailCont
 
     const allImages: string[] = [];
     if (reportData.image_url) allImages.push(reportData.image_url);
-    reportData.messages?.forEach((m) => {
-        m.attachments?.forEach((url) => {
-            if (url && !allImages.includes(url)) allImages.push(url);
-        });
-    });
     const bannerImage = allImages[0] ?? null;
     const extraImages = allImages.slice(1);
 
@@ -357,7 +318,7 @@ export function ReportDetailContent({ reportId, serverResult }: ReportDetailCont
                         <ArrowLeft className="size-5" aria-hidden />
                     </Button>
                     <h3 className="text-lg text-foreground font-semibold truncate max-w-[min(280px,55vw)] text-center">
-                        Scandio Report
+                        Menda Report
                     </h3>
                     <div className="h-10 w-10 shrink-0" aria-hidden />
                 </div>
@@ -412,7 +373,6 @@ export function ReportDetailContent({ reportId, serverResult }: ReportDetailCont
                 {isRejected && (
                     <UnrelatedImageCard
                         conversationId={id}
-                        diagnosisMessage={reportData.messages?.[0]?.content}
                         recordFeedback={false}
                     />
                 )}

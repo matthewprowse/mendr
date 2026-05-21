@@ -29,8 +29,8 @@ export async function register() {
 // Capture unhandled promise rejections from React Server Components
 export const onRequestError = async (
     err: unknown,
-    request: { path: string; method: string },
-    context: { routerKind: string; routePath: string },
+    request: Parameters<typeof import('@sentry/nextjs').captureRequestError>[1],
+    context: Parameters<typeof import('@sentry/nextjs').captureRequestError>[2],
 ) => {
     const { captureRequestError } = await import('@sentry/nextjs');
     captureRequestError(err, request, context);

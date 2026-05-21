@@ -28,7 +28,7 @@ export function TermsPageContent({ c }: { c: SiteLegalConfig }) {
         <LegalFlowDocument>
             <LegalFlowIntro>
             <p className="text-muted-foreground">
-                These Terms of Service (&quot;Terms&quot;) govern your access to and use of Scandio,
+                These Terms of Service (&quot;Terms&quot;) govern your access to and use of Menda,
                 including our website, web application, and related services (collectively, the
                 &quot;Service&quot;). The Service is operated from and targeted primarily at users
                 in South Africa, in particular homeowners and contractors in regions we describe in
@@ -39,7 +39,7 @@ export function TermsPageContent({ c }: { c: SiteLegalConfig }) {
                 not use the Service.
             </p>
             <p>
-                <strong className="font-semibold text-foreground">Important:</strong> Scandio
+                <strong className="font-semibold text-foreground">Important:</strong> Menda
                 provides <strong className="font-semibold text-foreground">information technology and information services</strong>. It does <strong className="font-semibold text-foreground">not</strong> replace licensed inspections, statutory compliance, or professional advice where required by South African law (for example, electrical compliance certificates, structural engineering, or municipal bylaws).{' '}
                 <strong className="font-semibold text-foreground">
                     You use AI-assisted outputs at your own risk
@@ -86,7 +86,7 @@ export function TermsPageContent({ c }: { c: SiteLegalConfig }) {
                             <td className="px-3 py-2">
                                 {c.operatorLegalName === LEGAL_DETAILS_UNPUBLISHED ? (
                                     <>
-                                        Scandio (Pty) Ltd — {c.legalForm}{' '}
+                                        Menda (Pty) Ltd — {c.legalForm}{' '}
                                         <span className="italic text-muted-foreground">
                                             (placeholder — insert registered company name before
                                             launch)
@@ -157,7 +157,7 @@ export function TermsPageContent({ c }: { c: SiteLegalConfig }) {
                             <td className="px-3 py-2">
                                 {c.legalEmail === LEGAL_DETAILS_UNPUBLISHED ? (
                                     <>
-                                        <span className="text-muted-foreground">legal@scandio.app</span>{' '}
+                                        <span className="text-muted-foreground">legal@menda.co.za</span>{' '}
                                         <span className="italic text-muted-foreground">
                                             (placeholder — confirm before launch)
                                         </span>
@@ -229,12 +229,12 @@ export function TermsPageContent({ c }: { c: SiteLegalConfig }) {
             </LegalFlowSection>
             <LegalFlowSection>
             <h2 className="text-lg font-semibold text-foreground">
-                The Service (What Scandio Does and Does Not Do)
+                The Service (What Menda Does and Does Not Do)
             </h2>
             <LegalFlowSubsections>
             <LegalFlowSubsection>
             <h3 className="text-base font-semibold text-foreground">Nature of the Service</h3>
-            <p>Scandio may include:</p>
+            <p>Menda may include:</p>
             <ul className="list-disc space-y-2 pl-5 marker:text-muted-foreground">
                 <li>Upload and analysis of images and text you provide;</li>
                 <li>
@@ -255,7 +255,7 @@ export function TermsPageContent({ c }: { c: SiteLegalConfig }) {
             <LegalFlowSubsection>
             <h3 className="text-base font-semibold text-foreground">Not Professional Services</h3>
             <p>
-                Scandio does not perform on-site work, issue compliance certificates, or warrant
+                Menda does not perform on-site work, issue compliance certificates, or warrant
                 that any contractor is suitable, licensed, or available. Contractors are independent
                 third parties. Any agreement for work is between you and the contractor unless we
                 explicitly state otherwise in a separate written agreement.
@@ -274,7 +274,7 @@ export function TermsPageContent({ c }: { c: SiteLegalConfig }) {
                     humans;
                 </li>
                 <li>
-                    Not rely on Scandio as the sole basis for decisions that could affect health,
+                    Not rely on Menda as the sole basis for decisions that could affect health,
                     safety, or significant property value.
                 </li>
             </ul>
@@ -431,7 +431,7 @@ export function TermsPageContent({ c }: { c: SiteLegalConfig }) {
                 You agree to indemnify and hold harmless{' '}
                 {c.operatorLegalName === LEGAL_DETAILS_UNPUBLISHED ? (
                     <>
-                        Scandio (Pty) Ltd
+                        Menda (Pty) Ltd
                         <span className="italic text-muted-foreground">
                             {' '}
                             (placeholder — insert registered company name before launch)
@@ -489,7 +489,7 @@ export function TermsPageContent({ c }: { c: SiteLegalConfig }) {
                     href="/contact"
                     className="font-medium text-foreground underline underline-offset-4 hover:no-underline"
                 >
-                    Contact on the Scandio website
+                    Contact on the Menda website
                 </Link>{' '}
                 to resolve disputes. Where the CPA or industry ombud schemes apply, you may have
                 additional alternative dispute resolution options.
@@ -511,7 +511,7 @@ export function TermsPageContent({ c }: { c: SiteLegalConfig }) {
             <p>
                 <strong className="font-semibold text-foreground">
                     {c.operatorLegalName === LEGAL_DETAILS_UNPUBLISHED
-                        ? 'Scandio (Pty) Ltd'
+                        ? 'Menda (Pty) Ltd'
                         : c.operatorLegalName}
                 </strong>
                 {c.operatorLegalName === LEGAL_DETAILS_UNPUBLISHED && (
@@ -537,7 +537,7 @@ export function TermsPageContent({ c }: { c: SiteLegalConfig }) {
                 <strong className="font-semibold text-foreground">Email:</strong>{' '}
                 {c.legalEmail === LEGAL_DETAILS_UNPUBLISHED ? (
                     <>
-                        <span className="text-muted-foreground">legal@scandio.app</span>{' '}
+                        <span className="text-muted-foreground">legal@menda.co.za</span>{' '}
                         <span className="italic text-muted-foreground">
                             (placeholder — confirm before launch)
                         </span>
@@ -552,7 +552,7 @@ export function TermsPageContent({ c }: { c: SiteLegalConfig }) {
                     href="/contact"
                     className="font-medium text-foreground underline underline-offset-4 hover:no-underline"
                 >
-                    Contact on the Scandio website
+                    Contact on the Menda website
                 </Link>
             </p>
 

@@ -3,7 +3,7 @@
 /**
  * Match provider card (post-redesign):
  *  - Airbnb-style top banner image carousel (paginated dots, swipe-friendly).
- *  - Header row: name + "verified on Scandio" shield when `provider.providerId` is set.
+ *  - Header row: name + "verified on Menda" shield when `provider.providerId` is set.
  *  - Stats row: rating (filled star + N reviews), distance, drive time, open/closed pill.
  *  - Chip row: certifications + specialisations (truncated to 4 visible + "+N").
  *  - Clamped summary (3 lines) — defers to skeleton/long-wait copy supplied by parent.

@@ -10,21 +10,20 @@ import { useRouter, useSearchParams } from 'next/navigation';
 // heic2any is loaded lazily on first HEIC conversion — keeps it out of the initial bundle.
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { getSupabase } from '@/lib/supabase';
+import { getSupabase } from '@/lib/auth/supabase';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import type { DiagnosisData } from '@/features/diagnosis/types';
-import type { Provider } from '@/app/chat/components/types';
+import type { Provider } from '@/lib/providers/types';
 import { DiagnosisLeaveDialog } from '@/components/diagnosis-leave-dialog';
-import { BetaCostEstimateCard } from '@/components/beta-cost-estimate-card';
-import { cleanThoughtSentenceStarts, splitDetailAndHazard } from '@/lib/diagnosis-display';
-import { parseDiagnosisFromModelResponse } from '@/lib/parse-diagnosis-from-model-response';
+import { cleanThoughtSentenceStarts, splitDetailAndHazard } from '@/lib/diagnosis/diagnosis-display';
+import { parseDiagnosisFromModelResponse } from '@/lib/diagnosis/parse-diagnosis-from-model-response';
 import {
     consumeDiagnoseNdjsonStream,
     DiagnoseStreamHttpError,
     responseLooksLikeDiagnoseNdjson,
-} from '@/lib/diagnose-ndjson-stream';
-import { writeMatchTradeContextStorage } from '@/lib/match-trade-context';
+} from '@/lib/diagnosis/diagnose-ndjson-stream';
+import { writeMatchTradeContextStorage } from '@/lib/diagnosis/match-trade-context';
 import { prewarmProvidersApi } from '@/features/match/api/client';
 import { fetchActiveServiceCatalogClient } from '@/lib/services-catalog';
 import {
@@ -32,26 +31,17 @@ import {
     invalidateConversationDiagnosisCache,
     patchConversation,
     type ConversationDiagnosisRow,
-} from '@/lib/diagnoses-api';
-import { enrichDiagnosisWithPartPrices } from '@/lib/parts-prices/enrich-diagnosis';
+} from '@/lib/diagnosis/diagnoses-api';
 import {
     isDiagnosisAccurateForPrefetch,
     prefetchProvidersIntoMatchCache,
     shouldSkipDiagnosisPipeline,
 } from '@/features/diagnosis/processing-orchestrator';
-import { mergeMarketRatesResponseIntoDiagnosis } from '@/lib/market-rates/merge-client';
-import { getPendingDiagnosisImages } from '@/lib/pending-diagnosis-images-cache';
+import { getPendingDiagnosisImages } from '@/lib/diagnosis/pending-diagnosis-images-cache';
 import { useAuth } from '@/context/auth-context';
 import { ShareNetwork, ArrowLeft } from '@phosphor-icons/react';
 import { trackEvent } from '@/lib/analytics';
 import { StepHeading } from '@/components/match/flow-shell';
-
-const URGENCY_LABELS: Record<string, string> = {
-    immediate: 'Immediate',
-    urgent: 'Urgent',
-    soon: 'Soon',
-    planned: 'Planned',
-};
 
 const DIAGNOSIS_MAX_RETRIES = 3;
 /** Inline header region (~pt-5 + h-11 + pb-2) for sticky title swap. */
@@ -68,10 +58,9 @@ function providerHydrateSessionKey(id: string): string {
 }
 
 /** Single UX for unsupported trade and unrelated / non-maintenance photos (see `isServiceBlocked`). */
-const DIAGNOSIS_REJECT_HEADLINE = "We Can't Match This Job on Scandio Yet";
+const DIAGNOSIS_REJECT_HEADLINE = "We Can't Match This Job on Menda Yet";
 const DIAGNOSIS_REJECT_DETAIL =
-    "Either this does not look like a home repair or maintenance issue we can assess from your photo, or it is not a service on Scandio's list yet. Add a clearer photo or a few words about the job below, then tap Re-Scan Report. If we still cannot match you, you will need to reach a specialist outside Scandio.";
-const SHOW_COST_ESTIMATE_UI = false;
+    "Either this does not look like a home repair or maintenance issue we can assess from your photo, or it is not a service on Menda's list yet. Add a clearer photo or a few words about the job below, then tap Re-Scan Report. If we still cannot match you, you will need to reach a specialist outside Menda.";
 
 function isLikelyRenderableImageSource(value: string | null | undefined): boolean {
     const src = (value ?? '').trim();
@@ -161,7 +150,6 @@ export default function DiagnosisPageClient({
     const [hazardText, setHazardText] = useState('');
     const [tradeLabel, setTradeLabel] = useState('');
     const [tradeDetailLabel, setTradeDetailLabel] = useState('');
-    const [urgencyKey, setUrgencyKey] = useState<'immediate' | 'urgent' | 'soon' | 'planned'>('soon');
     const [requiresClarification, setRequiresClarification] = useState(false);
     const [isRejectedDiagnosis, setIsRejectedDiagnosis] = useState(false);
     const [isUnservicedDiagnosis, setIsUnservicedDiagnosis] = useState(false);
@@ -181,19 +169,23 @@ export default function DiagnosisPageClient({
     const [customerAddress, setCustomerAddress] = useState<string>('');
     const [selectedTradeHint, setSelectedTradeHint] = useState<string>('');
     const [leaveDialogOpen, setLeaveDialogOpen] = useState(false);
+    const [currentDiagnosis, setCurrentDiagnosis] = useState<DiagnosisData | null>(null);
+    const currentDiagnosisRef = useRef<DiagnosisData | null>(null);
     const footerRef = useRef<HTMLDivElement | null>(null);
     const scrollContainerRef = useRef<HTMLDivElement | null>(null);
     const headerTitleAnchorRef = useRef<HTMLHeadingElement | null>(null);
     const [useStickyHeaderName, setUseStickyHeaderName] = useState(false);
-    const [diagnosisForCostUi, setDiagnosisForCostUi] = useState<DiagnosisData | null>(null);
-    const diagnosisForCostUiRef = useRef<DiagnosisData | null>(null);
+
     const savedCustomerCoordsRef = useRef<{ lat: number; lng: number } | null>(null);
     const providersForDiagnoseRef = useRef<Provider[]>([]);
     const customerInfoItemsRef = useRef<string[]>([]);
     const [clarificationSubmitLoading, setClarificationSubmitLoading] = useState(false);
     const [clarificationCustomText, setClarificationCustomText] = useState('');
-    const marketResearchInFlightRef = useRef<Set<string>>(new Set());
-    const marketResearchDoneRef = useRef<Set<string>>(new Set());
+
+
+    useEffect(() => {
+        currentDiagnosisRef.current = currentDiagnosis;
+    }, [currentDiagnosis]);
 
     const getPersistedCustomerInfoItems = useCallback(
         (data: ConversationDiagnosisRow | null, fallbackPrompt: string): string[] => {
@@ -286,7 +278,7 @@ export default function DiagnosisPageClient({
         }
         if (catalog.length === 0) {
             setDiagnosisFailureMessage(
-                'We could not load the service list for your Scandio Report. Please retry now.'
+                'We could not load the service list for your Menda Report. Please retry now.'
             );
             return null;
         }
@@ -399,7 +391,6 @@ export default function DiagnosisPageClient({
                             trade_detail: diag.trade_detail ?? '',
                             message: diag.message ?? '',
                             action_required: diag.action_required ?? '',
-                            estimated_cost: diag.estimated_cost ?? '',
                         },
                     }),
                 });
@@ -418,7 +409,7 @@ export default function DiagnosisPageClient({
                     (parsed.thinking ?? '').trim() ||
                     thoughtFromJson;
                 const diagWithThought: DiagnosisData = { ...parsed, thinking: thought };
-                const toSave = await enrichDiagnosisWithPartPrices(diagWithThought);
+                const toSave = diagWithThought;
                 const detail =
                     (toSave.action_required ?? '').trim() ||
                     (toSave.message ?? '').trim() ||
@@ -428,13 +419,12 @@ export default function DiagnosisPageClient({
                 setHazardText(split.hazard);
                 setTradeLabel((toSave.trade ?? '').trim());
                 setTradeDetailLabel((toSave.trade_detail ?? '').trim());
-                setUrgencyKey((toSave.urgency_key as any) ?? 'soon');
                 setRequiresClarification(Boolean(toSave.requires_clarification));
                 setIsRejectedDiagnosis(Boolean((toSave as any).rejected));
                 setIsUnservicedDiagnosis(Boolean((toSave as any).unserviced));
                 setActionRequiredRaw((toSave.action_required ?? '').trim());
                 setDiagnosisTitle(toSave.diagnosis);
-                setDiagnosisForCostUi(toSave);
+                setCurrentDiagnosis(toSave);
                 const finalThoughtRaw = (thought || '').trim();
                 setThoughtText(
                     finalThoughtRaw ? cleanThoughtSentenceStarts(finalThoughtRaw) : ''
@@ -448,7 +438,6 @@ export default function DiagnosisPageClient({
                     title: toSave.diagnosis || 'New Diagnosis',
                     image_url: img,
                     diagnosis: toSave as unknown,
-                    urgency_key: toSave.urgency_key ?? null,
                     device: deviceType,
                     user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : '',
                     user_id: user?.id ?? null,
@@ -542,11 +531,11 @@ export default function DiagnosisPageClient({
                                   : String(
                                         parsed?.message ||
                                             parsed?.error ||
-                                            'Scandio is busy right now. Please try again shortly.'
+                                            'Menda is busy right now. Please try again shortly.'
                                     )
                         );
                     } catch {
-                        setDiagnosisFailureMessage('Scandio is busy right now. Please try again shortly.');
+                        setDiagnosisFailureMessage('Menda is busy right now. Please try again shortly.');
                     }
                 };
 
@@ -577,20 +566,19 @@ export default function DiagnosisPageClient({
                     let text: string;
                     let gotStreamThought = false;
                     try {
-                        const latestDiagnosisForCostUi = diagnosisForCostUiRef.current;
-                        const ar = (latestDiagnosisForCostUi?.action_required ?? '').trim();
+                        const latestDiagnosis = currentDiagnosisRef.current;
+                        const ar = (latestDiagnosis?.action_required ?? '').trim();
                         const hasRejectablePrior =
-                            Boolean(latestDiagnosisForCostUi?.diagnosis?.trim()) &&
+                            Boolean(latestDiagnosis?.diagnosis?.trim()) &&
                             ar.length > 0 &&
                             !/^n\/a$/i.test(ar);
                         const previousDiagnosisPayload = hasRejectablePrior
                             ? {
-                                  diagnosis: latestDiagnosisForCostUi!.diagnosis,
-                                  trade: latestDiagnosisForCostUi!.trade,
-                                  trade_detail: latestDiagnosisForCostUi!.trade_detail ?? '',
-                                  message: latestDiagnosisForCostUi!.message ?? '',
-                                  action_required: latestDiagnosisForCostUi!.action_required ?? '',
-                                  estimated_cost: latestDiagnosisForCostUi!.estimated_cost ?? '',
+                                  diagnosis: latestDiagnosis!.diagnosis,
+                                  trade: latestDiagnosis!.trade,
+                                  trade_detail: latestDiagnosis!.trade_detail ?? '',
+                                  message: latestDiagnosis!.message ?? '',
+                                  action_required: latestDiagnosis!.action_required ?? '',
                               }
                             : null;
                         text = await fetchDiagnoseScan(
@@ -635,7 +623,7 @@ export default function DiagnosisPageClient({
                                 continue;
                             }
                             setDiagnosisFailureMessage(
-                                'We could not finish your Scandio Report automatically. Please retry now.'
+                                'We could not finish your Menda Report automatically. Please retry now.'
                             );
                             return null;
                         }
@@ -686,7 +674,7 @@ export default function DiagnosisPageClient({
                         // Persist user clarification history so page refresh restores message chips/list.
                         customer_info_items: buildCustomerInfoItemsForPersistence(prompt),
                     } as DiagnosisData;
-                    const toSave = await enrichDiagnosisWithPartPrices(diagWithThought);
+                    const toSave = diagWithThought;
                     const detail =
                         (toSave.action_required ?? '').trim() ||
                         (toSave.message ?? '').trim() ||
@@ -696,14 +684,13 @@ export default function DiagnosisPageClient({
                     setHazardText(split.hazard);
                     setTradeLabel((toSave.trade ?? '').trim());
                     setTradeDetailLabel((toSave.trade_detail ?? '').trim());
-                    setUrgencyKey((toSave.urgency_key as any) ?? 'soon');
                     setRequiresClarification(Boolean((toSave as DiagnosisData).requires_clarification));
                     setIsRejectedDiagnosis(Boolean((toSave as any).rejected));
                     setIsUnservicedDiagnosis(Boolean((toSave as any).unserviced));
                     setActionRequiredRaw((toSave.action_required ?? '').trim());
                     setDiagnosisTitle(toSave.diagnosis);
+                    setCurrentDiagnosis(toSave);
                     setDiagnosisFailureMessage(null);
-                    setDiagnosisForCostUi(toSave);
                     setIsDetailStageReady(true);
                     setThoughtText(
                         finalThoughtRaw ? cleanThoughtSentenceStarts(finalThoughtRaw) : ''
@@ -718,7 +705,6 @@ export default function DiagnosisPageClient({
                         title: toSave.diagnosis || 'New Diagnosis',
                         image_url: img,
                         diagnosis: toSave as unknown,
-                        urgency_key: toSave.urgency_key ?? null,
                         initial_image_description: (prompt ?? '').trim() || null,
                         device: deviceType,
                         user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : '',
@@ -727,7 +713,7 @@ export default function DiagnosisPageClient({
                     if (!saveResult.ok) {
                         setDiagnosisFailureMessage(
                             saveResult.error ||
-                                'We could not save your Scandio Report. Please check your connection and try again.'
+                                'We could not save your Menda Report. Please check your connection and try again.'
                         );
                         return null;
                     }
@@ -763,36 +749,10 @@ export default function DiagnosisPageClient({
                         buildPromptWithContext(prompt).trim()
                     );
 
-                    void (async () => {
-                        try {
-                            const addr =
-                                typeof customerAddress === 'string' ? customerAddress.trim() : '';
-                            const res = await fetch('/api/market-rates/research', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({
-                                    trade: toSave.trade,
-                                    tradeDetail: toSave.trade_detail,
-                                    customerAddress: addr,
-                                    conversationId: cid,
-                                    baselineDiagnosis: toSave,
-                                }),
-                            });
-                            const json = (await res.json()) as Record<string, unknown>;
-                            if (!json?.ok) return;
-                            invalidateConversationDiagnosisCache(cid);
-                            setDiagnosisForCostUi((prev) =>
-                                mergeMarketRatesResponseIntoDiagnosis(prev, json)
-                            );
-                        } catch {
-                            /* ignore */
-                        }
-                    })();
-
                     return toSave;
                 }
                 setDiagnosisFailureMessage(
-                    'We could not complete your Scandio Report right now. Please retry now.'
+                    'We could not complete your Menda Report right now. Please retry now.'
                 );
                 return null;
             } finally {
@@ -818,10 +778,6 @@ export default function DiagnosisPageClient({
     }, [customerInfoItems]);
 
     useEffect(() => {
-        diagnosisForCostUiRef.current = diagnosisForCostUi;
-    }, [diagnosisForCostUi]);
-
-    useEffect(() => {
         uploadedImageSourcesRef.current = uploadedImageSources;
     }, [uploadedImageSources]);
 
@@ -842,7 +798,7 @@ export default function DiagnosisPageClient({
             if (!conversationId) return;
             // Reset guard when the route id changes.
             didRunDiagnosisRef.current = null;
-            setDiagnosisForCostUi(null);
+            setCurrentDiagnosis(null);
             setDiagnosisTitle('Diagnosing…');
             // URL saved on /welcome after a successful upload — used if the client cannot read
             // the conversation row yet (slow network) or RLS hides rows created via the admin API.
@@ -967,8 +923,7 @@ export default function DiagnosisPageClient({
                 setHazardText(persistedSplit.hazard);
                 setTradeLabel((existingDiagnosis.trade ?? '').trim());
                 setTradeDetailLabel((existingDiagnosis.trade_detail ?? '').trim());
-                setUrgencyKey(((existingDiagnosis.urgency_key as any) ?? 'soon') as any);
-                setDiagnosisForCostUi(existingDiagnosis);
+                setCurrentDiagnosis(existingDiagnosis);
                 if (imageUrlForDiagnosis) {
                     const catalog = await fetchActiveServiceCatalogClient(supabase as any);
                     if (!cancelled && catalog.length > 0) {
@@ -1019,65 +974,6 @@ export default function DiagnosisPageClient({
         prefetchedConversation,
     ]);
 
-    useEffect(() => {
-        if (!conversationId) return;
-        const d = diagnosisForCostUi;
-        if (!d?.diagnosis?.trim()) return;
-        if (d.requires_clarification || d.rejected || d.unserviced) return;
-        const src = d.market_rates?.sources;
-        if (Array.isArray(src) && src.length > 0) return;
-        const researchKey = [
-            conversationId,
-            d.diagnosis?.trim() ?? '',
-            d.trade?.trim() ?? '',
-            d.trade_detail?.trim() ?? '',
-            customerAddress.trim(),
-        ].join('|');
-        if (marketResearchDoneRef.current.has(researchKey)) return;
-        if (marketResearchInFlightRef.current.has(researchKey)) return;
-        marketResearchInFlightRef.current.add(researchKey);
-
-        let cancelled = false;
-        void (async () => {
-            try {
-                const res = await fetch('/api/market-rates/research', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        trade: d.trade,
-                        tradeDetail: d.trade_detail,
-                        customerAddress: customerAddress.trim(),
-                        conversationId,
-                        baselineDiagnosis: d,
-                    }),
-                });
-                const json = (await res.json()) as Record<string, unknown>;
-                if (cancelled || !json?.ok) return;
-                invalidateConversationDiagnosisCache(conversationId);
-                marketResearchDoneRef.current.add(researchKey);
-                setDiagnosisForCostUi((prev) =>
-                    mergeMarketRatesResponseIntoDiagnosis(prev, json)
-                );
-            } catch {
-                /* ignore */
-            } finally {
-                marketResearchInFlightRef.current.delete(researchKey);
-            }
-        })();
-        return () => {
-            cancelled = true;
-        };
-    }, [
-        conversationId,
-        customerAddress,
-        diagnosisForCostUi?.diagnosis,
-        diagnosisForCostUi?.trade,
-        diagnosisForCostUi?.trade_detail,
-        diagnosisForCostUi?.requires_clarification,
-        diagnosisForCostUi?.rejected,
-        diagnosisForCostUi?.unserviced,
-        diagnosisForCostUi?.market_rates?.sources?.length,
-    ]);
 
     const showThoughtSkeleton = (isPageLoading || isImageAnalysing) && !thoughtText.trim();
     const showSkeleton = isPageLoading || isImageAnalysing || (isDiagnosing && !isDetailStageReady);
@@ -1088,7 +984,7 @@ export default function DiagnosisPageClient({
     const isUnsupportedDiagnosis =
         tradeLabel.trim().toLowerCase() === 'n/a' ||
         diagnosisTitle.toLowerCase().includes('not currently supported') ||
-        diagnosisTitle.toLowerCase().includes('not on scandio');
+        diagnosisTitle.toLowerCase().includes('not on menda');
     const isServiceBlocked = isUnsupportedDiagnosis || isUnrelatedDiagnosis;
 
     const scanForMatchEligibility = `${diagnosisTitle}\n${thoughtText}\n${diagnosisDetailText}\n${hazardText}`.toLowerCase();
@@ -1124,8 +1020,8 @@ export default function DiagnosisPageClient({
         return /[.!?]$/.test(capped) ? capped : `${capped}.`;
     };
     const clarificationQuestions =
-        Array.isArray(diagnosisForCostUi?.clarification_questions)
-            ? diagnosisForCostUi.clarification_questions
+        Array.isArray(currentDiagnosis?.clarification_questions)
+            ? currentDiagnosis.clarification_questions
                   .map((q) => (typeof q === 'string' ? q.trim() : ''))
                   .map((q) => toSentence(q))
                   .filter((q) => q.length > 0)
@@ -1143,14 +1039,14 @@ export default function DiagnosisPageClient({
           ? 'Need More Information'
           : diagnosisTitle;
 
-    const pageTitle = 'Your Scandio Report';
+    const pageTitle = 'Your Menda Report';
     const pageSubtitle =
         'Here is what your photos suggest and sensible next steps for booking a contractor.';
     const stickyHeaderTitle =
         showSkeleton || !isDetailStageReady
             ? diagnosisTitle.trim() || 'Diagnosing…'
             : diagnosisHeadline;
-    const displayThoughtText = (thoughtText || diagnosisForCostUi?.thinking || '').trim();
+    const displayThoughtText = thoughtText.trim();
     const activeFullscreenImageSrc =
         fullscreenImageIndex != null && fullscreenImageIndex >= 0
             ? uploadedImageSources[fullscreenImageIndex] ?? null
@@ -1286,10 +1182,10 @@ export default function DiagnosisPageClient({
             url.searchParams.set('location', customerAddress);
         }
         const shareData = {
-            title: 'Scandio Report',
+            title: 'Menda Report',
             text: customerAddress
-                ? `Scandio report for ${customerAddress}`
-                : 'Scandio report',
+                ? `Menda report for ${customerAddress}`
+                : 'Menda report',
             url: url.toString(),
         };
         try {
@@ -1541,26 +1437,12 @@ export default function DiagnosisPageClient({
                             {hazardText && !isServiceBlocked ? (
                                 <p className="text-sm text-foreground">{hazardText}</p>
                             ) : null}
-                            {SHOW_COST_ESTIMATE_UI && diagnosisForCostUi && !isServiceBlocked && !requiresClarification ? (
-                                <BetaCostEstimateCard diagnosis={diagnosisForCostUi} />
-                            ) : null}
-                            {!isServiceBlocked && !requiresClarification && conversationId ? (
-                                <div className="flex flex-col gap-2">
-                                    <h3 className="text-base font-semibold text-foreground">Estimated Cost</h3>
-                                    {diagnosisForCostUi ? (
-                                        <BetaCostEstimateCard diagnosis={diagnosisForCostUi} />
-                                    ) : (
-                                        <p className="text-sm text-muted-foreground">
-                                            Cost details are not available for this diagnosis yet.
-                                        </p>
-                                    )}
-                                </div>
-                            ) : null}
+
                         </>
                     )}
                     {isServiceBlocked && serviceCatalog.length > 0 ? (
                         <p className="text-sm text-muted-foreground">
-                            Trades Scandio can match today: {serviceCatalog.join(', ')}.
+                            Trades Menda can match today: {serviceCatalog.join(', ')}.
                         </p>
                     ) : null}
                 </>

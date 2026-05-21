@@ -6,10 +6,11 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { getSupabase } from '@/lib/auth/supabase';
 import { useRouter } from 'next/navigation';
 import { createClientId } from '@/lib/client-random-id';
 import { compressImage } from '@/lib/image-compression';
-import { setPendingDiagnosisImages } from '@/lib/pending-diagnosis-images-cache';
+import { setPendingDiagnosisImages } from '@/lib/diagnosis/pending-diagnosis-images-cache';
 import { setImageData } from '@/lib/image-store';
 import { Textarea } from '@/components/ui/textarea';
 import { importLibrary } from '@googlemaps/js-api-loader';
@@ -27,11 +28,12 @@ import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
 import { FlowTopBar, StepHeading } from '@/components/match/flow-shell';
 import { INK } from '@/lib/design-tokens';
-import { START_DESCRIPTION_MIN_CHARS } from '@/lib/start-description-quality';
+import { START_DESCRIPTION_MIN_CHARS } from '@/lib/diagnosis/start-description-quality';
 import { SERVICE_LABELS } from '@/lib/services';
 
 const ACCENT = 'hsl(var(--foreground))';
 const WESTERN_CAPE_ERROR = 'Please use a location in the Western Cape, South Africa.';
+const LOCATION_GENERIC_ERROR = 'Could not verify your location. Please try again or enter your address manually.';
 type StepNumber = 1 | 2 | 3;
 type FlowStep = StepNumber;
 type LocationMode = 'choose' | 'gps-loading' | 'gps-done' | 'manual';
@@ -44,6 +46,36 @@ type SelectedPhoto = {
     diagnosisSrc: string | null;
     errorMessage?: string;
 };
+
+function toUserFriendlyLocationError(input: string | null | undefined): string {
+    const msg = (input ?? '').trim();
+    if (!msg) return LOCATION_GENERIC_ERROR;
+    const lower = msg.toLowerCase();
+
+    if (lower.includes('outside the western cape') || lower.includes('western cape')) {
+        return 'This location looks outside the Western Cape. Please use an address in Western Cape, South Africa.';
+    }
+    if (lower.includes('request_denied') || lower.includes('api key') || lower.includes('not authorized')) {
+        return 'Location services are temporarily unavailable (map key configuration issue). Please enter your address manually for now.';
+    }
+    if (lower.includes('billing') || lower.includes('payment') || lower.includes('account')) {
+        return 'Location services are temporarily unavailable due to account billing setup. Please enter your address manually for now.';
+    }
+    if (lower.includes('over_query_limit') || lower.includes('quota') || lower.includes('rate limit')) {
+        return 'Location services are busy right now. Please try again in a minute or enter your address manually.';
+    }
+    if (lower.includes('zero_results') || lower.includes('no geocoding results')) {
+        return 'We could not find that location. Try a fuller street address in Western Cape, South Africa.';
+    }
+    if (lower.includes('timeout')) {
+        return 'Location check timed out. Please try again or enter your address manually.';
+    }
+    if (lower.includes('network')) {
+        return 'Network issue while checking your location. Please try again or enter your address manually.';
+    }
+
+    return LOCATION_GENERIC_ERROR;
+}
 
 function createSelectedPhotoId(): string {
     return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
@@ -504,6 +536,8 @@ function Step2({
 
 // ── Step 3 — Location ──────────────────────────────────────────────────────────
 
+type SavedAddress = { id: string; label: string; address: string };
+
 function Step3({
     locationMode,
     setLocationMode,
@@ -514,6 +548,7 @@ function Step3({
     onGetCurrentLocation,
     onStart,
     isStarting,
+    savedAddresses,
 }: {
     locationMode: LocationMode;
     setLocationMode: (m: LocationMode) => void;
@@ -524,6 +559,7 @@ function Step3({
     onGetCurrentLocation: () => Promise<void>;
     onStart: () => Promise<void>;
     isStarting: boolean;
+    savedAddresses: SavedAddress[];
 }) {
     const manualRef = useRef<HTMLInputElement>(null);
 
@@ -584,6 +620,33 @@ function Step3({
                                 title="Get Nearby Contractors"
                                 sub="Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nunc quis arcu at velit cursus mollis."
                             />
+
+                            {savedAddresses.length > 0 && (
+                                <div className="flex flex-col gap-2">
+                                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                        Saved Addresses
+                                    </p>
+                                    {savedAddresses.map((addr) => (
+                                        <button
+                                            key={addr.id}
+                                            type="button"
+                                            className="flex w-full flex-col items-start rounded-lg border bg-secondary px-4 py-3 text-left hover:bg-secondary/80"
+                                            onClick={() => {
+                                                setLocationValue(addr.address);
+                                                setLocationMode('gps-done');
+                                            }}
+                                        >
+                                            <span className="text-sm font-medium text-foreground">
+                                                {addr.label}
+                                            </span>
+                                            <span className="truncate text-xs text-muted-foreground">
+                                                {addr.address}
+                                            </span>
+                                        </button>
+                                    ))}
+                                    <Separator />
+                                </div>
+                            )}
 
                             <Button
                                 variant="secondary"
@@ -657,6 +720,28 @@ export function StartPageClient() {
 
     const [isStarting, setIsStarting] = useState(false);
     const [isStep1Validating, setIsStep1Validating] = useState(false);
+    const [savedAddresses, setSavedAddresses] = useState<SavedAddress[]>([]);
+
+    // Load saved addresses if the user is authenticated
+    useEffect(() => {
+        let cancelled = false;
+        void (async () => {
+            try {
+                const supabase = getSupabase();
+                const { data: { session } } = await supabase.auth.getSession();
+                if (!session || cancelled) return;
+                const res = await fetch('/api/account/locations', { credentials: 'same-origin' });
+                if (!res.ok || cancelled) return;
+                const json = (await res.json().catch(() => null)) as { locations?: unknown } | null;
+                const locs = Array.isArray(json?.locations) ? json!.locations as SavedAddress[] : [];
+                if (!cancelled && locs.length > 0) setSavedAddresses(locs);
+            } catch {
+                // Non-fatal — just no saved addresses shown
+            }
+        })();
+        return () => { cancelled = true; };
+    }, []);
+
     useEffect(() => {
         document.documentElement.classList.add('start-overflow-lock');
         document.body.classList.add('start-overflow-lock');
@@ -826,7 +911,7 @@ export function StartPageClient() {
                 lng: pos.coords.longitude,
             });
             if (!result.address) {
-                toast.error(WESTERN_CAPE_ERROR);
+                toast.error(toUserFriendlyLocationError(result.error || WESTERN_CAPE_ERROR));
                 setLocationMode('choose');
                 return;
             }
@@ -992,6 +1077,7 @@ export function StartPageClient() {
                         onGetCurrentLocation={handleGetCurrentLocation}
                         onStart={handleStartDiagnosis}
                         isStarting={isStarting}
+                        savedAddresses={savedAddresses}
                     />
                 )}
             </div>

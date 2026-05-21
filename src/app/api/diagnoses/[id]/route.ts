@@ -1,5 +1,8 @@
+// Required env vars: NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY,
+//                    UPSTASH_REDIS_REST_URL, UPSTASH_REDIS_REST_TOKEN
+
 import { NextRequest, NextResponse } from 'next/server';
-import { createSupabaseAdminClient } from '@/lib/supabase-server';
+import { createSupabaseAdminClient } from '@/lib/auth/supabase-server';
 import { checkRateLimit } from '@/lib/rate-limit-config';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -8,7 +11,6 @@ const PATCH_KEYS = new Set([
     'title',
     'image_url',
     'diagnosis',
-    'urgency_key',
     'initial_image_description',
     'customer_address',
     'device',
@@ -79,7 +81,7 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
             patch[key] = typeof v === 'string' && v.trim() ? v.trim() : null;
             continue;
         }
-        if (key === 'diagnosis' || key === 'image_url' || key === 'title' || key === 'urgency_key') {
+        if (key === 'diagnosis' || key === 'image_url' || key === 'title') {
             patch[key] = v ?? null;
             continue;
         }
@@ -125,7 +127,6 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
             title,
             image_url: patch.image_url ?? null,
             diagnosis: patch.diagnosis ?? null,
-            urgency_key: patch.urgency_key ?? null,
             initial_image_description: patch.initial_image_description ?? null,
             customer_address: patch.customer_address ?? null,
             device: patch.device ?? null,

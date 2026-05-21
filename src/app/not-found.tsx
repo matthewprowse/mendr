@@ -46,7 +46,7 @@ export default function NotFound() {
                                     <Link href="/">Go To Home</Link>
                                 </Button>
                                 <Button variant="secondary" asChild>
-                                    <Link href="/start">Generate Free Scandio Report</Link>
+                                    <Link href="/start">Generate Free Menda Report</Link>
                                 </Button>
                                 <Button variant="ghost" asChild>
                                     <Link href="/contractors">For Providers</Link>

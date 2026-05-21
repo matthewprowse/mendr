@@ -5,16 +5,24 @@
             "schedule": "0 4 * * 0"
         },
         {
-            "path": "/api/cron/retry-enrichment",
-            "schedule": "0 5 * * *"
+            "path": "/api/cron/sync-provider-reviews",
+            "schedule": "0 2 * * *"
         },
         {
             "path": "/api/enrich/prewarm",
             "schedule": "0 3 * * *"
         },
         {
+            "path": "/api/cron/retry-enrichment",
+            "schedule": "0 5 * * *"
+        },
+        {
             "path": "/api/cron/process-provider-applications",
             "schedule": "*/5 * * * *"
+        },
+        {
+            "path": "/api/cron/lead-digest",
+            "schedule": "0 8 1 * *"
         }
     ]
 }

@@ -6,7 +6,7 @@ import { FAQS } from '@/app/page/components/content';
 export async function generateMetadata(): Promise<Metadata> {
     const base = getSiteUrl();
     const canonical = `${base}/`;
-    const title = 'Home Fault Diagnosis Cape Town — Free Report | Scandio';
+    const title = 'Home Fault Diagnosis Cape Town — Free Report | Menda';
     const description =
         'Upload a photo of any home fault — plumbing, electrical, damp, roofing — and get a clear written report in under 60 seconds. Free for Western Cape homeowners. No account needed.';
 
@@ -24,10 +24,10 @@ export async function generateMetadata(): Promise<Metadata> {
             locale: 'en_ZA',
             images: [
                 {
-                    url: '/og-scandio.jpg',
+                    url: '/og-menda.jpg',
                     width: 1200,
                     height: 630,
-                    alt: 'Scandio home maintenance diagnosis app showing a completed fault report on a mobile phone screen',
+                    alt: 'Menda home maintenance diagnosis app showing a completed fault report on a mobile phone screen',
                 },
             ],
         },
@@ -35,7 +35,7 @@ export async function generateMetadata(): Promise<Metadata> {
             card: 'summary_large_image',
             title,
             description: 'Upload a photo of any home fault and get a written diagnosis report in under 60 seconds. Free. No account needed.',
-            images: ['/og-scandio.jpg'],
+            images: ['/og-menda.jpg'],
         },
     };
 }
@@ -53,20 +53,20 @@ function buildJsonLd(base: string) {
             {
                 '@type': 'Organization',
                 '@id': orgId,
-                name: 'Scandio',
+                name: 'Menda',
                 url: base,
             },
             {
                 '@type': 'WebSite',
                 '@id': websiteId,
-                name: 'Scandio',
+                name: 'Menda',
                 url: base,
                 publisher: { '@id': orgId },
             },
             {
                 '@type': 'SoftwareApplication',
                 '@id': softwareId,
-                name: 'Scandio',
+                name: 'Menda',
                 applicationCategory: 'HomeImprovement',
                 operatingSystem: 'Web',
                 description:
@@ -76,7 +76,7 @@ function buildJsonLd(base: string) {
                     '@type': 'Offer',
                     price: '0',
                     priceCurrency: 'ZAR',
-                    description: 'Free Scandio Report — no account required',
+                    description: 'Free Menda Report — no account required',
                 },
                 areaServed: {
                     '@type': 'State',
@@ -89,7 +89,7 @@ function buildJsonLd(base: string) {
             {
                 '@type': 'LocalBusiness',
                 '@id': localBusinessId,
-                name: 'Scandio',
+                name: 'Menda',
                 description: 'AI-powered home fault diagnosis for Western Cape homeowners.',
                 url: base,
                 areaServed: [

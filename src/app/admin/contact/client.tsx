@@ -59,7 +59,7 @@ export default function AdminContactPage() {
     function openMessage(msg: ContactMessage) {
         setSelected(msg);
         setReplyText(
-            `Dear ${msg.name},\n\n[your reply here]\n\nKind regards,\nThe Scandio Team`
+            `Dear ${msg.name},\n\n[your reply here]\n\nKind regards,\nThe Menda Team`
         );
         // Mark as read if unread.
         if (msg.status === 'unread') {

@@ -5,8 +5,8 @@ import type {
     ProvidersResponse,
 } from '../contracts';
 import type { EnrichmentCacheEntry } from '@/app/api/enrich/get/route';
-import { toGooglePlaceId } from '@/app/api/providers/persistence';
-import { aiConfig } from '@/lib/ai-config';
+import { toGooglePlaceId } from '@/lib/providers/persistence';
+import { aiConfig } from '@/lib/ai/ai-config';
 
 const ENRICH_PROVIDER_UUID_RE =
     /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

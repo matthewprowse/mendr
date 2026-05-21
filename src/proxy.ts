@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server';
-import { verifyAdminCookie } from '@/lib/admin-auth';
+import { verifyAdminCookie } from '@/lib/auth/admin-auth';
 
 export async function proxy(req: NextRequest) {
     const { nextUrl } = req;

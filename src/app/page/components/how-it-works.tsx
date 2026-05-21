@@ -9,7 +9,7 @@ export function HomeMarketingHowItWorksClient() {
         <section id="how-it-works" className="scroll-mt-16 py-16 sm:py-20">
             <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
                 <div className="mx-auto mb-12 max-w-3xl text-center sm:mb-16">
-                    <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">How Scandio Works</h2>
+                    <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">How Menda Works</h2>
                     <p className="mt-3 text-base text-muted-foreground">
                         Three practical steps to understand your issue and take action with confidence.
                     </p>

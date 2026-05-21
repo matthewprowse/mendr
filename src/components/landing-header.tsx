@@ -31,7 +31,7 @@ export function LandingHeader({
     rightSlot,
     logoBadge,
     mobileCtaHref = '/start',
-    mobileCtaLabel = 'Generate Free Scandio Report',
+    mobileCtaLabel = 'Generate Free Menda Report',
 }: LandingHeaderProps) {
     const pathname = usePathname();
     const { user, isLoading: authLoading } = useAuth();
@@ -76,7 +76,7 @@ export function LandingHeader({
                         className="flex items-center gap-2 text-lg font-semibold text-foreground"
                         onClick={() => setMobileOpen(false)}
                     >
-                        <span>Scandio</span>
+                        <span>Menda</span>
                         {logoBadge}
                     </Link>
 

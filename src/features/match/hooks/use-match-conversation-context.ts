@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { supabase } from '@/lib/supabase';
+import { supabase } from '@/lib/auth/supabase';
 import {
     fetchConversationDiagnosis,
     peekCachedConversationDiagnosis,
-} from '@/lib/diagnoses-api';
-import { readMatchTradeContextStorage } from '@/lib/match-trade-context';
+} from '@/lib/diagnosis/diagnoses-api';
+import { readMatchTradeContextStorage } from '@/lib/diagnosis/match-trade-context';
 import { geocodeApi } from '../api/client';
 import type { MatchLocation } from '../contracts';
 import { useAuth } from '@/context/auth-context';

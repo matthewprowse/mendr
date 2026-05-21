@@ -3,9 +3,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { runDiagnosisProcessingPipeline, type ProcessingStepUpdate } from '@/features/diagnosis/processing-orchestrator';
-import { patchConversation } from '@/lib/diagnoses-api';
+import { patchConversation } from '@/lib/diagnosis/diagnoses-api';
 import { useAuth } from '@/context/auth-context';
-import { getPendingDiagnosisImages } from '@/lib/pending-diagnosis-images-cache';
+import { getPendingDiagnosisImages } from '@/lib/diagnosis/pending-diagnosis-images-cache';
 
 const BASE_PROCESSING_STEPS = ['Saving Request', 'Generating Diagnosis'];
 const WESTERN_CAPE_ERROR = 'Please use a location in the Western Cape, South Africa.';

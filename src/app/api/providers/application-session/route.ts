@@ -1,5 +1,8 @@
+// Required env vars: NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
+
 import { NextRequest, NextResponse } from 'next/server';
-import { createSupabaseAdminClient } from '@/lib/supabase-server';
+import { createSupabaseAdminClient } from '@/lib/auth/supabase-server';
+import { checkRateLimit } from '@/lib/rate-limit-config';
 
 function getClientIp(req: NextRequest): string | null {
     const forwardedFor = req.headers.get('x-forwarded-for') || '';
@@ -8,6 +11,9 @@ function getClientIp(req: NextRequest): string | null {
 }
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
+    const limited = await checkRateLimit(req, 'applicationEdit');
+    if (limited) return limited;
+
     const ip = getClientIp(req);
     const phone = req.nextUrl.searchParams.get('phone')?.trim() || '';
     const admin = await createSupabaseAdminClient();
@@ -31,6 +37,9 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 }
 
 export async function DELETE(req: NextRequest): Promise<NextResponse> {
+    const limited = await checkRateLimit(req, 'applicationEdit');
+    if (limited) return limited;
+
     const ip = getClientIp(req);
     const body = await req.json().catch(() => null);
     const id = typeof body?.id === 'string' ? body.id : '';

@@ -37,13 +37,13 @@ import {
     restoreProviderTokenApi,
 } from '@/features/match/api/client';
 import type { EnrichmentCacheEntry } from '@/app/api/enrich/get/route';
-import { toGooglePlaceId } from '@/app/api/providers/persistence';
+import { toGooglePlaceId } from '@/lib/providers/persistence';
 import { useMatchConversationContext } from '@/features/match/hooks/use-match-conversation-context';
 import { useMatchProviders } from '@/features/match/hooks/use-match-providers';
 import { useMatchMap } from '@/features/match/hooks/use-match-map';
 import { loadMatchPageCache, saveMatchPageCache } from '@/features/match/cache/match-page-cache';
 import { MatchNoProvidersEmpty } from '@/app/match/components/empty';
-import { fetchConversationDiagnosis } from '@/lib/diagnoses-api';
+import { fetchConversationDiagnosis } from '@/lib/diagnosis/diagnoses-api';
 import { buildDiagnosisVersion } from '@/features/diagnosis/processing-orchestrator';
 function totalReviewCountForProvider(
     p: MatchProvider,

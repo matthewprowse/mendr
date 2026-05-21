@@ -1,3 +1,6 @@
+// Required env vars: NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY,
+//                    CRON_SECRET, GEMINI_API_KEY
+
 /**
  * Cron: process-provider-applications
  *
@@ -11,10 +14,11 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
-import { createSupabaseAdminClient } from '@/lib/supabase-server';
-import { isAuthorizedCronRequest } from '@/lib/cron-auth';
-import { getGeminiModel } from '@/lib/ai-client';
-import { normalizeProviderName } from '@/app/api/providers/provider-display-name';
+import { createSupabaseAdminClient } from '@/lib/auth/supabase-server';
+import { isAuthorizedCronRequest } from '@/lib/auth/cron-auth';
+import { SchemaType } from '@google/generative-ai';
+import { getGeminiModel } from '@/lib/ai/ai-client';
+import { normalizeProviderName } from '@/lib/providers/provider-display-name';
 
 export const maxDuration = 60; // seconds — Vercel Hobby allows up to 60s
 
@@ -313,8 +317,8 @@ async function generateGeminiSummary(
         payload.cache?.services?.length && `Services listed: ${payload.cache.services.join(', ')}`,
     ].filter(Boolean).join('\n');
 
-    const reviewSection = payload.topReviews.length > 0
-        ? `Top customer reviews:\n${payload.topReviews.map((r) => `- (${r.rating}★) ${r.text.slice(0, 200)}`).join('\n')}`
+    const reviewSection = payload.topReviews.slice(0, 6).length > 0
+        ? `Top customer reviews:\n${payload.topReviews.slice(0, 6).map((r) => `- (${r.rating}★) ${r.text.slice(0, 200)}`).join('\n')}`
         : '';
 
     const applicationSection = [
@@ -332,18 +336,33 @@ ${applicationSection}
 
 ${reviewSection}
 
-Write a concise public profile summary in 2–3 short paragraphs. Guidelines:
-- Direct, warm, and factual — no marketing fluff or hype.
-- Describe what they do and who they are, not just that they are "great" or "excellent".
-- If rating and review data is available, weave in what customers say — without quoting verbatim.
-- End with a practical statement about coverage area or availability if the data supports it.
-- Plain text only — no headings, no bullet points, no markdown.
-- Maximum 200 words.`;
+Write a concise public profile summary in 2–3 short paragraphs. Direct, warm, and factual — no marketing fluff. Describe what they do and who they are. Weave in customer sentiment if available (no verbatim quotes). End with coverage area or availability if the data supports it. Return a JSON object with a single "summary" field.`;
 
     try {
-        const result = await model.generateContent(prompt);
-        const text   = result.response.text().trim();
-        return text || 'Profile summary could not be generated.';
+        const result = await model.generateContent({
+            contents: [{ role: 'user', parts: [{ text: prompt }] }],
+            generationConfig: {
+                temperature: 0.3,
+                topK: 20,
+                topP: 0.75,
+                maxOutputTokens: 512,
+                responseMimeType: 'application/json',
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                responseSchema: {
+                    type: SchemaType.OBJECT,
+                    properties: {
+                        summary: {
+                            type: SchemaType.STRING,
+                            description: '2–3 short paragraphs. Direct, warm, factual. Max 200 words. No headings, no bullet points, no markdown.',
+                        },
+                    },
+                    required: ['summary'],
+                } as any,
+            },
+        });
+        const raw    = result.response.text().trim();
+        const parsed = JSON.parse(raw) as { summary: string };
+        return parsed.summary?.trim() || 'Profile summary could not be generated.';
     } catch (err) {
         console.error('[process-applications] Gemini error:', err);
         return 'Profile summary could not be generated.';

@@ -1,5 +1,7 @@
+// Required env vars: GEMINI_API_KEY, UPSTASH_REDIS_REST_URL, UPSTASH_REDIS_REST_TOKEN
+
 import { NextRequest, NextResponse } from 'next/server';
-import { getGeminiModel } from '@/lib/ai-client';
+import { getGeminiModel } from '@/lib/ai/ai-client';
 import { checkRateLimit } from '@/lib/rate-limit-config';
 
 type Body = {
@@ -7,7 +9,6 @@ type Body = {
     provider_name?: string;
     trade?: string;
     action_required?: string;
-    estimated_cost?: string;
     report_url?: string;
     profile_url?: string;
 };
@@ -17,12 +18,11 @@ function buildFallbackMessage(input: {
     provider_name: string;
     trade: string;
     action_required: string;
-    estimated_cost: string;
     report_url: string;
     profile_url: string;
 }): string {
     const lines: string[] = [];
-    lines.push(`Hi, I'm messaging about work I need help with on Scandio.`);
+    lines.push(`Hi, I'm messaging about work I need help with on Menda.`);
     lines.push('');
     lines.push(`Business: ${input.provider_name}`);
     if (input.trade) lines.push(`Trade: ${input.trade}`);
@@ -31,12 +31,11 @@ function buildFallbackMessage(input: {
         lines.push(`Context: ${input.diagnosis.slice(0, 500)}${input.diagnosis.length > 500 ? '…' : ''}`);
     }
     if (input.action_required) lines.push(`Action: ${input.action_required.slice(0, 200)}`);
-    if (input.estimated_cost) lines.push(`Estimated cost (from Scandio): ${input.estimated_cost}`);
     lines.push('');
     if (input.report_url) {
-        lines.push(`My Scandio report: ${input.report_url}`);
+        lines.push(`My Menda report: ${input.report_url}`);
     } else if (input.profile_url) {
-        lines.push(`I found you on Scandio: ${input.profile_url}`);
+        lines.push(`I found you on Menda: ${input.profile_url}`);
     }
     lines.push('');
     lines.push(`Could you help with a quote or next steps?`);
@@ -57,7 +56,6 @@ export async function POST(req: NextRequest) {
         const diagnosis = String(body.diagnosis || '').trim() || 'Home repair or maintenance';
         const trade = String(body.trade || '').trim();
         const action_required = String(body.action_required || '').trim();
-        const estimated_cost = String(body.estimated_cost || '').trim();
         const report_url = String(body.report_url || '').trim();
         const profile_url = String(body.profile_url || '').trim();
 
@@ -66,7 +64,6 @@ export async function POST(req: NextRequest) {
             provider_name,
             trade,
             action_required,
-            estimated_cost,
             report_url,
             profile_url,
         });
@@ -89,9 +86,8 @@ Context:
 - What they need / diagnosis: ${diagnosis}
 ${trade ? `- Trade: ${trade}` : ''}
 ${action_required ? `- Action: ${action_required}` : ''}
-${estimated_cost ? `- Cost note: ${estimated_cost}` : ''}
-${report_url ? `- Their Scandio report URL (include exactly): ${report_url}` : ''}
-${!report_url && profile_url ? `- Scandio profile URL (include exactly): ${profile_url}` : ''}
+${report_url ? `- Their Menda report URL (include exactly): ${report_url}` : ''}
+${!report_url && profile_url ? `- Menda profile URL (include exactly): ${profile_url}` : ''}
 
 Reply with only the message text, nothing else.`;
 

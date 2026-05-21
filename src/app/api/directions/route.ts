@@ -1,5 +1,8 @@
+// Required env vars: NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY,
+//                    GOOGLE_MAPS_API_KEY, UPSTASH_REDIS_REST_URL, UPSTASH_REDIS_REST_TOKEN
+
 import { NextRequest, NextResponse } from 'next/server';
-import { createSupabaseAdminClient } from '@/lib/supabase-server';
+import { createSupabaseAdminClient } from '@/lib/auth/supabase-server';
 import { checkRateLimit } from '@/lib/rate-limit-config';
 
 const DIRECTIONS_CACHE_DAYS = 7;
@@ -107,8 +110,9 @@ export async function GET(req: NextRequest) {
             duration_text,
             duration_seconds,
         });
-    } catch (e: any) {
-        console.error('Directions API error:', e);
-        return NextResponse.json({ error: e?.message || 'Internal error' }, { status: 500 });
+    } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Internal error';
+        console.error(JSON.stringify({ type: 'directions_error', error: message }));
+        return NextResponse.json({ error: message }, { status: 500 });
     }
 }

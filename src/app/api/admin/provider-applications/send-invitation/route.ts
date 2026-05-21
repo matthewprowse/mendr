@@ -1,3 +1,6 @@
+// Required env vars: NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY,
+//                    ADMIN_PASSWORD, RESEND_API_KEY, RESEND_FROM
+
 /**
  * POST /api/admin/provider-applications/send-invitation
  *
@@ -13,10 +16,10 @@
 
 import crypto from 'crypto';
 import { NextRequest, NextResponse } from 'next/server';
-import { createSupabaseAdminClient } from '@/lib/supabase-server';
-import { sendScandioEmail, invitationEmail } from '@/lib/sendgrid-mail';
+import { createSupabaseAdminClient } from '@/lib/auth/supabase-server';
+import { sendScandioEmail, invitationEmail } from '@/lib/resend-mail';
 import { getSiteUrl } from '@/lib/site-url';
-import { requireAdmin } from '@/lib/admin-auth';
+import { requireAdmin } from '@/lib/auth/admin-auth';
 
 
 const TOKEN_TTL_DAYS = 14;
@@ -90,13 +93,13 @@ export async function POST(req: NextRequest) {
     const firstName         = (app.contact_name as string).split(/\s+/)[0] ?? app.contact_name as string;
     const { text, html }    = invitationEmail(
         firstName,
-        summary ?? '[Profile summary will be added by the Scandio team.]',
+        summary ?? '[Profile summary will be added by the Menda team.]',
         editUrl,
     );
 
     const result = await sendScandioEmail({
         to:      { email: app.email as string, name: app.contact_name as string },
-        subject: 'Your Scandio profile is ready to review',
+        subject: 'Your Menda profile is ready to review',
         text,
         html,
     });

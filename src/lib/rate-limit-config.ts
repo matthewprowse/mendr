@@ -129,13 +129,6 @@ export const RATE_LIMITS = {
         max: 3,
     },
 
-    // Parts-prices lookup — chains up to 8 Brave + Gemini calls per request.
-    // Very tight: 5 per hour is more than enough for real homeowners.
-    partsPrices: {
-        windowMs: 60 * 60 * 1000, // 1 hour
-        max: 5,
-    },
-
     // HEIC image conversion — CPU + storage work per request.
     // 20 per hour covers a normal multi-photo diagnosis session.
     heicConvert: {
@@ -163,6 +156,32 @@ export const RATE_LIMITS = {
         max: 60,
     },
 
+    // Public service catalogue read — backed by Redis + DB cache, very cheap.
+    serviceCatalog: {
+        windowMs: 60 * 1000, // 1 minute
+        max: 60,
+    },
+
+    // Public marketing stats — response is cached for 5 minutes at the CDN layer.
+    // Light DB read; rate limit is a backstop against cache stampedes.
+    marketingStats: {
+        windowMs: 60 * 1000, // 1 minute
+        max: 20,
+    },
+
+    // Report info read — returns non-sensitive summary fields for WhatsApp prefill.
+    reportInfo: {
+        windowMs: 60 * 1000, // 1 minute
+        max: 60,
+    },
+
+    // Provider profile text normalisation — unauthenticated POST that mutates providers.
+    // Tight limit: legitimate callers (enrichment pipeline) need at most a handful per run.
+    providerCleanProfile: {
+        windowMs: 60 * 60 * 1000, // 1 hour
+        max: 20,
+    },
+
     // Token restoration. Has internal 45-second dedup; this is the outer bound.
     restoreToken: {
         windowMs: 60 * 60 * 1000, // 1 hour
@@ -187,16 +206,29 @@ export const RATE_LIMITS = {
         max: 60,
     },
 
-    // Google Custom Search + Gemini refinement for Beta cost outlook (cached per trade/region).
-    marketRatesResearch: {
-        windowMs: 10 * 60 * 1000,
-        max: 15,
-    },
-
     // Public applicant edit page — token validation + save. Tight to prevent
     // token enumeration. Legitimate applicants need at most a handful of calls.
     applicationEdit: {
         windowMs: 15 * 60 * 1000, // 15 minutes
+        max: 20,
+    },
+
+    // Contractor reapply after rejection — creates a new application row.
+    // Very low limit: a legitimate contractor reapplies at most once or twice.
+    contractorReapply: {
+        windowMs: 60 * 60 * 1000, // 1 hour
+        max: 3,
+    },
+
+    // Homeowner account location management — read, add, delete saved addresses.
+    accountLocations: {
+        windowMs: 60 * 1000, // 1 minute
+        max: 40,
+    },
+
+    // Homeowner contacts a contractor from a match/report page.
+    contactContractor: {
+        windowMs: 60 * 1000, // 1 minute
         max: 20,
     },
 

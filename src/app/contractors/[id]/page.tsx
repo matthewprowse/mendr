@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation';
-import ContractorClient from './components/contractor-client';
-import { loadContractorProfileById } from '@/lib/contractor-profile-server';
+import ContractorClient from './components/client';
+import { loadContractorProfileById } from '@/lib/providers/contractor-profile-server';
 
 type PageProps = {
     params: Promise<{ id: string }>;

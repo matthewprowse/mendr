@@ -1,8 +1,11 @@
+// Required env vars: NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY,
+//                    RESEND_API_KEY, RESEND_FROM, UPSTASH_REDIS_REST_URL, UPSTASH_REDIS_REST_TOKEN
+
 import { NextRequest, NextResponse } from 'next/server';
 import { checkRateLimit } from '@/lib/rate-limit-config';
 
-import { createSupabaseAdminClient } from '@/lib/supabase-server';
-import { sendScandioEmail, confirmationEmail } from '@/lib/sendgrid-mail';
+import { createSupabaseServerClient, createSupabaseAdminClient } from '@/lib/auth/supabase-server';
+import { sendScandioEmail, confirmationEmail } from '@/lib/resend-mail';
 import { getAppOrigin } from '@/lib/site-url';
 
 const CONTRACTOR_TYPES = new Set(['individual', 'team', 'enterprise']);
@@ -49,6 +52,16 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
     const forwardedFor = req.headers.get('x-forwarded-for') || '';
     const applicantIp = forwardedFor.split(',')[0]?.trim() || null;
+
+    // Capture authenticated user if present (optional — applicants may not be signed in yet)
+    let authenticatedUserId: string | null = null;
+    try {
+        const serverClient = await createSupabaseServerClient();
+        const { data: { user } } = await serverClient.auth.getUser();
+        authenticatedUserId = user?.id ?? null;
+    } catch {
+        // Non-fatal — unauthenticated applications are still valid
+    }
 
     let body: ApplyBody | null = null;
     try {
@@ -164,6 +177,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
                 application_images:  uploads.length > 0 ? uploads : null,
                 service_areas:       serviceAreaRadii.length > 0 ? serviceAreaRadii : null,
                 applicant_ip:        applicantIp,
+                user_id:             authenticatedUserId,
                 status:              'new',
             })
             .select('id')
@@ -196,7 +210,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
         const emailResult = await sendScandioEmail({
             to:      { email: emailRaw, name: contactPerson },
-            subject: 'We received your Scandio application',
+            subject: 'We received your Menda application',
             text:    emailText,
             html:    emailHtml,
         });

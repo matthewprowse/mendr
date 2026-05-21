@@ -1,9 +1,8 @@
 import type { DiagnosisData } from '@/features/diagnosis/types';
 import { fetchProvidersApi } from '@/features/match/api/client';
 import { saveMatchPageCache } from '@/features/match/cache/match-page-cache';
-import { fetchConversationDiagnosis, patchConversation, type ConversationDiagnosisRow } from '@/lib/diagnoses-api';
-import { enrichDiagnosisWithPartPrices } from '@/lib/parts-prices/enrich-diagnosis';
-import { parseDiagnosisFromModelResponse } from '@/lib/parse-diagnosis-from-model-response';
+import { fetchConversationDiagnosis, patchConversation, type ConversationDiagnosisRow } from '@/lib/diagnosis/diagnoses-api';
+import { parseDiagnosisFromModelResponse } from '@/lib/diagnosis/parse-diagnosis-from-model-response';
 
 
 export type ProcessingStepKey =
@@ -189,13 +188,12 @@ export async function runDiagnosisProcessingPipeline({
         throw new Error('Could not parse diagnosis response.');
     }
 
-    const parsedWithPartPrices = await enrichDiagnosisWithPartPrices(parsed);
+    const result = parsed;
 
     const saveResult = await patchConversation(conversationId, {
-        title: parsedWithPartPrices.diagnosis || 'New Diagnosis',
+        title: result.diagnosis || 'New Diagnosis',
         image_url: primaryImage,
-        diagnosis: parsedWithPartPrices,
-        urgency_key: parsedWithPartPrices.urgency_key ?? null,
+        diagnosis: result,
         initial_image_description: normalizedPrompt || (normalizedSelectedService ? `${normalizedSelectedService} services` : null),
         device: typeof navigator !== 'undefined' && /Mobi|Android/i.test(navigator.userAgent) ? 'mobile' : 'desktop',
         user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : '',
@@ -206,18 +204,18 @@ export async function runDiagnosisProcessingPipeline({
     }
     onStep({ key: 'fullDiagnosisComplete', status: 'done' });
 
-    const prefetchEligibility = isDiagnosisAccurateForPrefetch(parsedWithPartPrices);
+    const prefetchEligibility = isDiagnosisAccurateForPrefetch(result);
     if (!prefetchEligibility.eligible) {
         onStep({ key: 'prefetchSkipped', status: 'done', message: `Skipped: ${prefetchEligibility.reason}` });
-        return parsedWithPartPrices;
+        return result;
     }
 
     onStep({ key: 'prefetchQueued', status: 'running' });
     const latest = await fetchConversationDiagnosis(conversationId);
     const conv = latest.ok ? latest.data : conversationRow;
-    await prefetchProvidersIntoMatchCache(conversationId, conv, parsedWithPartPrices);
+    await prefetchProvidersIntoMatchCache(conversationId, conv, result);
     onStep({ key: 'prefetchQueued', status: 'done' });
-    return parsedWithPartPrices;
+    return result;
 }
 
 export async function prefetchProvidersIntoMatchCache(

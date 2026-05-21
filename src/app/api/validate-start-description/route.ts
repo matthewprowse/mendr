@@ -1,5 +1,7 @@
+// Required env vars: UPSTASH_REDIS_REST_URL, UPSTASH_REDIS_REST_TOKEN (optional — falls back to in-memory)
+
 import { NextRequest } from 'next/server';
-import { assessStartDescription } from '@/lib/start-description-quality';
+import { assessStartDescription } from '@/lib/diagnosis/start-description-quality';
 import { checkRateLimit } from '@/lib/rate-limit-config';
 
 export async function POST(req: NextRequest) {

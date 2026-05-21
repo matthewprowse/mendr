@@ -52,7 +52,7 @@ export default function AdminLoginPage() {
         <div className="flex min-h-screen flex-col items-center justify-center bg-background px-4">
             <div className="w-full max-w-sm space-y-8">
                 <div className="flex flex-col items-center gap-2 text-center">
-                    <span className="text-xl font-bold tracking-tight text-foreground">Scandio</span>
+                    <span className="text-xl font-bold tracking-tight text-foreground">Menda</span>
                     <p className="text-sm text-muted-foreground">Admin access</p>
                 </div>
 

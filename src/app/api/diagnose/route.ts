@@ -1,21 +1,24 @@
+// Required env vars: NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY,
+//                    GEMINI_API_KEY, UPSTASH_REDIS_REST_URL, UPSTASH_REDIS_REST_TOKEN
+
 export const maxDuration = 60;
 
 import { NextRequest } from 'next/server';
 import type { Content as GeminiContent } from '@google/generative-ai';
-import { GEMINI_MODEL_NAME, getDiagnosisModel } from '@/lib/ai-diagnosis-backend';
-import { logAiEvent } from '@/lib/ai-logging';
-import { logIfDiagnosisJsonShapeUnexpected } from './diagnosis-json-validate';
-import { DIAGNOSE_PROMPT_VERSION } from './prompts/prompt-version';
+import { GEMINI_MODEL_NAME, getDiagnosisModel } from '@/lib/ai/ai-diagnosis-backend';
+import { logAiEvent } from '@/lib/ai/ai-logging';
+import { logIfDiagnosisJsonShapeUnexpected } from '@/features/diagnosis/diagnosis-json-validate';
+import { DIAGNOSE_PROMPT_VERSION } from '@/features/diagnosis/prompts/prompt-version';
 import { checkRateLimit, isRateLimitBypassed } from '@/lib/rate-limit-config';
-import { createSupabaseServerClient, createSupabaseAdminClient } from '@/lib/supabase-server';
+import { createSupabaseServerClient, createSupabaseAdminClient } from '@/lib/auth/supabase-server';
 import { getServiceCatalogLabelsCached } from '@/lib/service-catalog-server';
-import { normalizeProvidersForPrompt } from '@/lib/diagnose-prompt-providers';
-import { buildSystemInstruction, buildProseBaseInstruction } from './prompts';
-import { buildProviderHydrationPromptBlock } from './prompts/provider-hydration';
+import { normalizeProvidersForPrompt } from '@/lib/diagnosis/diagnose-prompt-providers';
+import { buildSystemInstruction, buildProseBaseInstruction } from '@/features/diagnosis/prompts/composer';
+import { buildProviderHydrationPromptBlock } from '@/features/diagnosis/prompts/provider-hydration';
 import {
     buildUnrelatedImageMessage,
     buildUnsupportedHomeServiceMessage,
-} from './prompts/special-cases';
+} from '@/features/diagnosis/prompts/special-cases';
 import {
     buildQuickThoughtPrompt,
     buildStreamingQuickThoughtPrompt,
@@ -23,11 +26,11 @@ import {
     buildImageFirstMessagePrompt,
     buildImageFollowUpPrompt,
     buildProviderHydrationImagePrompt,
-} from './prompts/user-turn';
-import { runClassification } from './agent-classify';
-import { runProseGeneration, normaliseProse } from './agent-prose';
-import { toHeadlineStyle, stripFillerSentenceStarts } from '@/lib/prompt-utils';
-import { inferTradeFromSignals, TAXONOMY_NONE_ID } from '@/lib/diagnosis-trade-taxonomy';
+} from '@/features/diagnosis/prompts/user-turn';
+import { runClassification } from '@/features/diagnosis/agent-classify';
+import { runProseGeneration, normaliseProse } from '@/features/diagnosis/agent-prose';
+import { toHeadlineStyle, stripFillerSentenceStarts } from '@/lib/ai/prompt-utils';
+import { inferTradeFromSignals, TAXONOMY_NONE_ID } from '@/lib/diagnosis/diagnosis-trade-taxonomy';
 import { tradeToServiceLabel, SERVICE_LABELS } from '@/lib/services';
 
 // Image URLs are fetched server-side — restrict to known-safe origins to prevent SSRF.
@@ -56,7 +59,7 @@ function recordStage(timings: Record<string, number>, key: string, startedAt: nu
 function logDiagnoseTimings(status: 'ok' | 'error', timings: Record<string, number>): void {
     if (process.env.NODE_ENV !== 'development') return;
     // eslint-disable-next-line no-console
-    console.log(
+    console.warn(
         JSON.stringify({
             type: 'diagnose_timing',
             status,
@@ -235,8 +238,6 @@ export async function POST(req: NextRequest) {
         attachment_descriptions?: string[];
         attachments?: unknown[];
     }
-    // eslint-disable-next-line no-console
-    console.log('POST /api/diagnose received request');
     try {
         const parseStageStartedAt = Date.now();
         const body = await req.json();
@@ -296,7 +297,7 @@ export async function POST(req: NextRequest) {
 
         // Basic request-shape logging only; detailed metrics are captured at the end.
         // eslint-disable-next-line no-console
-        console.log(
+        console.warn(
             JSON.stringify({
                 type: 'ai_request',
                 endpoint: 'diagnose',
@@ -331,7 +332,6 @@ export async function POST(req: NextRequest) {
                   trade_detail?: string;
                   message?: string;
                   action_required?: string;
-                  estimated_cost?: string;
               }
             | null
             | undefined;
@@ -771,8 +771,6 @@ export async function POST(req: NextRequest) {
         // is the existing <thought>…</thought><json>…</json> string that the frontend
         // already knows how to parse. This keeps all downstream UI code unchanged.
 
-        // eslint-disable-next-line no-console
-        console.log('Starting multi-agent diagnosis pipeline (2a → 2b)...');
         const pipelineStartedAt = Date.now();
 
         // ── Helper: stream a quick thought while Agent 2a runs ──────────────────
@@ -1018,12 +1016,6 @@ export async function POST(req: NextRequest) {
                 estimated_diagnosis_sentence: prose.estimated_diagnosis_sentence,
                 message: prose.message,
                 action_required: prose.action_required,
-                estimated_cost: prose.estimated_cost,
-                repair_cost_range: '',
-                replacement_cost_range: '',
-                equipment_parts_range: '',
-                urgency_sentence: prose.urgency_sentence ?? '',
-                expected_parts: Array.isArray(prose.expected_parts) ? prose.expected_parts : [],
                 image_descriptions: prose.image_descriptions ?? [],
                 image_thought_breakdown: Array.isArray(prose.image_descriptions)
                     ? prose.image_descriptions
@@ -1037,7 +1029,6 @@ export async function POST(req: NextRequest) {
                 // Classification fields (Agent 2a — ground truth)
                 trade: classification.trade,
                 trade_detail: classification.trade_detail,
-                urgency_key: classification.urgency_key,
                 confidence: classification.confidence,
                 rejected: classification.rejected,
                 requires_clarification: classification.requires_clarification,
@@ -1139,7 +1130,6 @@ export async function POST(req: NextRequest) {
                                 ? Number(finalJson.confidence)
                                 : 75
                         ),
-                        estimated_cost: '',
                         diagnosis: 'Needs Clarification',
                         estimated_diagnosis_sentence: 'Needs Clarification',
                         clarification_questions: fallbackClarificationQuestions,
@@ -1197,7 +1187,6 @@ export async function POST(req: NextRequest) {
                     requires_clarification: true,
                     rejected: Boolean(finalJson.rejected),
                     unserviced: Boolean(finalJson.unserviced),
-                    estimated_cost: '',
                     confidence: Math.min(
                         65,
                         Number.isFinite(Number(finalJson.confidence)) ? Number(finalJson.confidence) : 65
@@ -1329,8 +1318,6 @@ export async function POST(req: NextRequest) {
                                 emit({ type: 'complete', full });
                             }
 
-                            // eslint-disable-next-line no-console
-                            console.log('Multi-agent pipeline completed successfully');
                         } catch (e) {
                             console.error('Multi-agent pipeline error:', e);
                             controller.error(e);

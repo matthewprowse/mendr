@@ -40,7 +40,7 @@ describe('admin-auth', () => {
     });
 
     it('createAdminSession returns a token in <expiry>.<sig> format', async () => {
-        const { createAdminSession } = await import('../admin-auth');
+        const { createAdminSession } = await import('../auth/admin-auth');
         const token = await createAdminSession();
         expect(token).not.toBeNull();
         expect(token).toMatch(/^\d+\.[a-f0-9]{64}$/);
@@ -48,18 +48,16 @@ describe('admin-auth', () => {
 
     it('createAdminSession returns null when ADMIN_PASSWORD is unset', async () => {
         delete process.env.ADMIN_PASSWORD;
-        // Force fresh import
-        const mod = await import('../admin-auth?v=nopass');
-        const token = await (mod as any).createAdminSession?.() ??
-            // fallback: call via dynamic re-import workaround
-            await (await import('../admin-auth')).createAdminSession();
-        // With env unset, should return null
-        // Note: module may be cached; this tests the guard path
+        // Module may be cached with the env already set; call the live function and
+        // accept either null (env unset at import time) or string (module cached).
+        const { createAdminSession } = await import('../auth/admin-auth');
+        const token = await createAdminSession();
+        // Note: module may be cached; this tests the guard path where possible
         expect(token === null || typeof token === 'string').toBe(true);
     });
 
     it('verifyAdminCookie accepts a fresh valid token', async () => {
-        const { createAdminSession, verifyAdminCookie } = await import('../admin-auth');
+        const { createAdminSession, verifyAdminCookie } = await import('../auth/admin-auth');
         const token = await createAdminSession();
         expect(token).not.toBeNull();
         const req = makeReq(token!);
@@ -68,13 +66,13 @@ describe('admin-auth', () => {
     });
 
     it('verifyAdminCookie rejects a missing cookie', async () => {
-        const { verifyAdminCookie } = await import('../admin-auth');
+        const { verifyAdminCookie } = await import('../auth/admin-auth');
         const req = makeReq(undefined);
         expect(await verifyAdminCookie(req)).toBe(false);
     });
 
     it('verifyAdminCookie rejects an expired token', async () => {
-        const { verifyAdminCookie } = await import('../admin-auth');
+        const { verifyAdminCookie } = await import('../auth/admin-auth');
         // Build a token whose expiry is in the past
         const expiredExpiry = (Date.now() - 1000).toString();
         // We can't forge a valid HMAC, so use a structurally valid but incorrect token
@@ -84,7 +82,7 @@ describe('admin-auth', () => {
     });
 
     it('verifyAdminCookie rejects a tampered signature', async () => {
-        const { createAdminSession, verifyAdminCookie } = await import('../admin-auth');
+        const { createAdminSession, verifyAdminCookie } = await import('../auth/admin-auth');
         const token = await createAdminSession();
         // Flip one character in the signature half
         const [expiry, sig] = token!.split('.');
@@ -94,7 +92,7 @@ describe('admin-auth', () => {
     });
 
     it('verifyAdminCookie rejects the old base64 password token format', async () => {
-        const { verifyAdminCookie } = await import('../admin-auth');
+        const { verifyAdminCookie } = await import('../auth/admin-auth');
         const oldToken = Buffer.from(TEST_PASSWORD).toString('base64');
         const req = makeReq(oldToken);
         // Old format has no dot separator — verifyAdminCookie should return false
@@ -102,7 +100,7 @@ describe('admin-auth', () => {
     });
 
     it('requireAdmin returns null for a valid session', async () => {
-        const { createAdminSession, requireAdmin } = await import('../admin-auth');
+        const { createAdminSession, requireAdmin } = await import('../auth/admin-auth');
         const token = await createAdminSession();
         const req = makeReq(token!);
         const result = await requireAdmin(req);
@@ -110,7 +108,7 @@ describe('admin-auth', () => {
     });
 
     it('requireAdmin returns a 401 NextResponse for an invalid session', async () => {
-        const { requireAdmin } = await import('../admin-auth');
+        const { requireAdmin } = await import('../auth/admin-auth');
         const req = makeReq('invalid.token');
         const result = await requireAdmin(req);
         expect(result).not.toBeNull();
@@ -118,7 +116,7 @@ describe('admin-auth', () => {
     });
 
     it('setAdminCookie and clearAdminCookie operate on the cookie jar', async () => {
-        const { createAdminSession, setAdminCookie, clearAdminCookie } = await import('../admin-auth');
+        const { createAdminSession, setAdminCookie, clearAdminCookie } = await import('../auth/admin-auth');
         const token = await createAdminSession();
         const res = makeRes();
         setAdminCookie(res, token!);

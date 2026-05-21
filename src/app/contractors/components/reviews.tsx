@@ -6,8 +6,8 @@ import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
-import { SCANDIO_CATEGORY_ROWS, REVIEWS_PAGE_SIZE } from '../constants/constants';
-import type { CategoryKey, ReviewCard } from '../types/types';
+import { SCANDIO_CATEGORY_ROWS, REVIEWS_PAGE_SIZE } from '../lib/constants';
+import type { CategoryKey, ReviewCard } from '../lib/types';
 import { ReviewsPaginationFooter } from './pagination';
 import { StarRatingDisplay } from './star-rating';
 import { Star } from 'lucide-react';
@@ -164,7 +164,7 @@ export function ProReviewsTab(props: {
                 ) : providerSummary?.trim() ? (
                     <p className="text-sm text-foreground">{providerSummary.trim()}</p>
                 ) : (
-                    <p className="text-sm text-muted-foreground">No Scandio summary yet.</p>
+                    <p className="text-sm text-muted-foreground">No Menda summary yet.</p>
                 )}
             </div>
 
@@ -193,7 +193,7 @@ export function ProReviewsTab(props: {
             <div className="flex flex-col gap-6">
                 <div className="flex flex-col gap-3">
                     <div className="flex flex-row items-center justify-between gap-3">
-                        <h6 className="text-md text-foreground font-bold">Scandio Reviews</h6>
+                        <h6 className="text-md text-foreground font-bold">Menda Reviews</h6>
                         {isReviewsLoading || isOperatingHoursLoading ? (
                             <Skeleton className="h-6 w-9 rounded-full" />
                         ) : (
@@ -340,14 +340,14 @@ export function ProReviewsTab(props: {
                         <ReviewsPaginationFooter
                             showingCount={scandioReviewsVisibleCount}
                             total={scandioReviewCardsLength}
-                            categoryLabel="Scandio Reviews"
+                            categoryLabel="Menda Reviews"
                             onViewMore={() =>
                                 setScandioReviewsVisibleCount((prev) => Math.min(prev + REVIEWS_PAGE_SIZE, scandioReviewCardsLength))
                             }
                         />
                     </>
                 ) : (
-                    <p className="text-sm text-muted-foreground">No Scandio Reviews</p>
+                    <p className="text-sm text-muted-foreground">No Menda Reviews</p>
                 )}
             </div>
 

@@ -7,16 +7,16 @@ import { getSiteUrl } from '@/lib/site-url';
 export async function generateMetadata(): Promise<Metadata> {
     const base = getSiteUrl();
     return {
-        title: 'About Scandio — Home Fault Diagnosis for Western Cape Homeowners',
+        title: 'About Menda — Home Fault Diagnosis for Western Cape Homeowners',
         description:
-            'Scandio was built to give Western Cape homeowners a clearer picture of home maintenance faults before the first provider call. Founded 2025 in Cape Town.',
+            'Menda was built to give Western Cape homeowners a clearer picture of home maintenance faults before the first provider call. Founded 2025 in Cape Town.',
         alternates: {
             canonical: `${base}/about`,
         },
         openGraph: {
-            title: 'About Scandio',
+            title: 'About Menda',
             description:
-                'Built in Cape Town to reduce uncertainty in home maintenance. Learn about the problem Scandio was designed to solve.',
+                'Built in Cape Town to reduce uncertainty in home maintenance. Learn about the problem Menda was designed to solve.',
             type: 'website',
             url: `${base}/about`,
             locale: 'en_ZA',
@@ -33,7 +33,7 @@ export default function AboutPage() {
         jobTitle: 'Founder',
         worksFor: {
             '@type': 'Organization',
-            name: 'Scandio',
+            name: 'Menda',
             url: base,
         },
         address: {
@@ -60,14 +60,14 @@ export default function AboutPage() {
                 <section className="mx-auto max-w-4xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
                     <div className="text-center">
                         <h1 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
-                            Why Scandio Exists
+                            Why Menda Exists
                         </h1>
                         <p className="mx-auto mt-4 max-w-3xl text-base leading-relaxed text-muted-foreground">
                             Most homeowners hit the same wall: something breaks, they do not know what
                             it is, they call a provider, and the conversation starts from zero.
                             <br />
                             <br />
-                            Scandio was built to change that. Matthew Prowse founded it in Cape Town in
+                            Menda was built to change that. Matthew Prowse founded it in Cape Town in
                             late 2025 after running into the same problem. The hardest part of home
                             repair is not the repair. It is knowing what you are dealing with before it
                             starts.
@@ -80,7 +80,7 @@ export default function AboutPage() {
                             <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
                                 Matthew studied Information Systems and is completing his BCIS honours.
                                 His research looks at how people make decisions when information is
-                                incomplete — which is the exact problem Scandio was built to address.
+                                incomplete — which is the exact problem Menda was built to address.
                                 He lives and works in Cape Town.
                             </p>
                         </div>
@@ -93,7 +93,7 @@ export default function AboutPage() {
                                 understanding what was wrong.
                                 <br />
                                 <br />
-                                Scandio does not fix that. It gives you the starting point that makes
+                                Menda does not fix that. It gives you the starting point that makes
                                 the rest easier.
                             </p>
                         </div>
@@ -104,12 +104,12 @@ export default function AboutPage() {
                         <div className="relative mt-5 space-y-5 pl-7">
                             <div className="absolute left-2.5 top-0 h-full w-px bg-border/80" />
                             {[
-                                ['September 2025', 'Scandio founded with an initial provider-discovery concept.'],
+                                ['September 2025', 'Menda founded with an initial provider-discovery concept.'],
                                 ['Late 2025', 'Product direction shifted toward diagnosis-first homeowner workflows.'],
                                 ['Early 2026', 'Matching quality and report clarity became core priorities.'],
                                 [
                                     '2026',
-                                    'Scandio is live across the Western Cape. Fault coverage and provider matching continue to expand based on real homeowner usage.',
+                                    'Menda is live across the Western Cape. Fault coverage and provider matching continue to expand based on real homeowner usage.',
                                 ],
                             ].map(([date, text]) => (
                                 <div key={date} className="relative">
@@ -123,7 +123,7 @@ export default function AboutPage() {
 
                     <div className="mt-10 text-center">
                         <Button asChild size="lg">
-                            <Link href="/start">Generate Free Scandio Report</Link>
+                            <Link href="/start">Generate Free Menda Report</Link>
                         </Button>
                     </div>
                 </section>

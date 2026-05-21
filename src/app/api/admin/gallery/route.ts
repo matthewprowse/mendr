@@ -1,6 +1,8 @@
+// Required env vars: NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, ADMIN_PASSWORD
+
 import { NextRequest, NextResponse } from 'next/server';
-import { createSupabaseAdminClient } from '@/lib/supabase-server';
-import { requireAdmin } from '@/lib/admin-auth';
+import { createSupabaseAdminClient } from '@/lib/auth/supabase-server';
+import { requireAdmin } from '@/lib/auth/admin-auth';
 
 
 export async function GET(req: NextRequest) {

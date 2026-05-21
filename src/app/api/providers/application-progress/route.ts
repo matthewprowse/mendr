@@ -1,5 +1,8 @@
+// Required env vars: NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
+
 import { NextRequest, NextResponse } from 'next/server';
-import { createSupabaseAdminClient } from '@/lib/supabase-server';
+import { createSupabaseAdminClient } from '@/lib/auth/supabase-server';
+import { checkRateLimit } from '@/lib/rate-limit-config';
 
 function requestIp(req: NextRequest): string | null {
     const forwarded = req.headers.get('x-forwarded-for') || '';
@@ -8,6 +11,9 @@ function requestIp(req: NextRequest): string | null {
 }
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
+    const limited = await checkRateLimit(req, 'applicationEdit');
+    if (limited) return limited;
+
     const phone = req.nextUrl.searchParams.get('phone')?.trim() || null;
     const ip = requestIp(req);
     const admin = await createSupabaseAdminClient();
@@ -29,6 +35,9 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 }
 
 export async function DELETE(req: NextRequest): Promise<NextResponse> {
+    const limited = await checkRateLimit(req, 'applicationEdit');
+    if (limited) return limited;
+
     const body = (await req.json().catch(() => null)) as { id?: string } | null;
     const id = typeof body?.id === 'string' ? body.id : '';
     if (!id) return NextResponse.json({ error: 'Missing application id.' }, { status: 400 });

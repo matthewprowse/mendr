@@ -1,6 +1,9 @@
+// Required env vars: NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
+
 import { NextRequest, NextResponse } from 'next/server';
-import { createSupabaseAdminClient } from '@/lib/supabase-server';
-import { normalizeProfileTextForStorage } from '@/lib/provider-profile-clean';
+import { createSupabaseAdminClient } from '@/lib/auth/supabase-server';
+import { normalizeProfileTextForStorage } from '@/lib/providers/provider-profile-clean';
+import { checkRateLimit } from '@/lib/rate-limit-config';
 
 type ProviderRow = {
     id: string;
@@ -11,6 +14,9 @@ type ProviderRow = {
 };
 
 export async function POST(req: NextRequest) {
+    const limited = await checkRateLimit(req, 'providerCleanProfile');
+    if (limited) return limited;
+
     try {
         const body = await req.json().catch(() => ({}));
         const providerId =

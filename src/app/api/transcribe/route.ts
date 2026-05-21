@@ -1,8 +1,11 @@
+// Required env vars: NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY,
+//                    GOOGLE_APPLICATION_CREDENTIALS, UPSTASH_REDIS_REST_URL, UPSTASH_REDIS_REST_TOKEN
+
 import fs from 'node:fs';
 import { NextRequest } from 'next/server';
 import { SpeechClient, protos } from '@google-cloud/speech';
 import { checkRateLimit } from '@/lib/rate-limit-config';
-import { createSupabaseAdminClient, createSupabaseServerClient } from '@/lib/supabase-server';
+import { createSupabaseAdminClient, createSupabaseServerClient } from '@/lib/auth/supabase-server';
 
 const MAX_AUDIO_BYTES = 10 * 1024 * 1024;
 const DEFAULT_LANGUAGE_CODE = 'en-ZA';

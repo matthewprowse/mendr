@@ -17,7 +17,7 @@ const HOW_IT_WORKS = [
     },
     {
         title: 'Receive a structured diagnosis',
-        body: 'Scandio generates a clear starting-point report with likely issue context, scope cues, and practical next steps that are easier to act on. This gives you a stronger baseline understanding before you call providers, so conversations start with more precision and less confusion.',
+        body: 'Menda generates a clear starting-point report with likely issue context, scope cues, and practical next steps that are easier to act on. This gives you a stronger baseline understanding before you call providers, so conversations start with more precision and less confusion.',
         label: 'Diagnosis report screen',
     },
     {
@@ -40,12 +40,12 @@ const BENTO_POINTS = [
 
 const FAQS = [
     {
-        q: 'Is the Scandio report really free?',
-        a: 'Yes. Scandio report generation is currently free for homeowners. You only pay a provider if you decide to proceed with work.',
+        q: 'Is the Menda report really free?',
+        a: 'Yes. Menda report generation is currently free for homeowners. You only pay a provider if you decide to proceed with work.',
     },
     {
         q: 'How accurate is the diagnosis?',
-        a: 'Scandio provides a strong starting point from your photo and context. It does not replace an on-site inspection, but it improves pre-visit clarity.',
+        a: 'Menda provides a strong starting point from your photo and context. It does not replace an on-site inspection, but it improves pre-visit clarity.',
     },
     {
         q: 'Can I share the report with multiple providers?',
@@ -57,18 +57,18 @@ const FAQS = [
     },
     {
         q: 'Do you guarantee provider work quality?',
-        a: 'No. Scandio is a decision-support platform and does not guarantee third-party workmanship.',
+        a: 'No. Menda is a decision-support platform and does not guarantee third-party workmanship.',
     },
     {
-        q: 'What services does Scandio support?',
-        a: 'Scandio supports multiple home maintenance categories. The active services list updates as backend coverage changes.',
+        q: 'What services does Menda support?',
+        a: 'Menda supports multiple home maintenance categories. The active services list updates as backend coverage changes.',
     },
     {
         q: 'Is my report private?',
         a: 'Yes. Reports are private by default and are only shared when you explicitly choose to share them.',
     },
     {
-        q: 'Can I contact Scandio directly?',
+        q: 'Can I contact Menda directly?',
         a: 'Yes. You can message us from the contact form for homeowner, provider, or partnership questions.',
     },
 ];
@@ -89,7 +89,7 @@ export function HomeMarketingPageClient() {
                 <LandingHeader
                     navLinks={[
                         { href: '#how-it-works', label: 'How It Works' },
-                        { href: '#value', label: 'Why Scandio' },
+                        { href: '#value', label: 'Why Menda' },
                         { href: '/contact', label: 'Contact' },
                         { href: '#faq', label: 'FAQ' },
                         { href: '/contractors', label: 'For Pros' },
@@ -111,9 +111,9 @@ export function HomeMarketingPageClient() {
                                         Upload a photo, get a clearer understanding of what is likely happening, and make a better decision before speaking to providers.
                                     </p>
                                     <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                                        <StartDiagnosisButton size="lg">Generate Free Scandio Report</StartDiagnosisButton>
+                                        <StartDiagnosisButton size="lg">Generate Free Menda Report</StartDiagnosisButton>
                                         <Button variant="ghost" className="h-10 text-sm" asChild>
-                                            <Link href="#how-it-works">How Scandio works</Link>
+                                            <Link href="#how-it-works">How Menda works</Link>
                                         </Button>
                                     </div>
                                     <p className="text-sm text-muted-foreground">Free report · No account required</p>
@@ -129,14 +129,14 @@ export function HomeMarketingPageClient() {
                         <div className="mx-auto max-w-4xl px-4 text-center sm:px-6 lg:px-8">
                             <p className="text-2xl font-semibold text-background sm:text-3xl">Most homeowners do not know what is actually wrong.</p>
                             <p className="mt-3 text-base text-background/80 sm:text-lg">That uncertainty leads to unclear quotes, repeated explanations, and wasted call-outs.</p>
-                            <p className="mt-3 text-base text-background sm:text-lg">Scandio gives you a clearer starting point before the first call.</p>
+                            <p className="mt-3 text-base text-background sm:text-lg">Menda gives you a clearer starting point before the first call.</p>
                         </div>
                     </section>
 
                     <section id="how-it-works" className="scroll-mt-16 py-16 sm:py-20">
                         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
                             <div className="mx-auto mb-12 max-w-3xl text-center sm:mb-16">
-                                <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">How Scandio Works</h2>
+                                <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">How Menda Works</h2>
                                 <p className="mt-3 text-base text-muted-foreground">
                                     Three practical steps to understand your issue and take action with confidence.
                                 </p>
@@ -160,9 +160,9 @@ export function HomeMarketingPageClient() {
                     <section id="value" className="scroll-mt-16 bg-muted/30 py-16 sm:py-20">
                         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
                             <div className="mx-auto mb-10 max-w-3xl text-center sm:mb-12">
-                                <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">Why Homeowners Use Scandio</h2>
+                                <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">Why Homeowners Use Menda</h2>
                                 <p className="mt-3 text-base text-muted-foreground">
-                                    Scandio is built to empower homeowners to better understand maintenance issues before speaking to anyone, so each decision starts from stronger context.
+                                    Menda is built to empower homeowners to better understand maintenance issues before speaking to anyone, so each decision starts from stronger context.
                                 </p>
                             </div>
                             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-6">
@@ -214,7 +214,7 @@ export function HomeMarketingPageClient() {
                             </p>
                             <div className="mt-6">
                                 <Button asChild size="lg" className="bg-white font-medium text-black hover:bg-white/90">
-                                    <Link href="/start">Generate Free Scandio Report</Link>
+                                    <Link href="/start">Generate Free Menda Report</Link>
                                 </Button>
                             </div>
                         </div>
@@ -225,7 +225,7 @@ export function HomeMarketingPageClient() {
                     <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
                         <div className="grid gap-10 lg:grid-cols-[2fr_1fr_1fr]">
                             <div>
-                                <p className="text-base font-semibold text-foreground">Scandio</p>
+                                <p className="text-base font-semibold text-foreground">Menda</p>
                                 <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
                                     Home maintenance diagnosis and smarter provider matching, built to reduce uncertainty before repair work begins.
                                 </p>
@@ -240,7 +240,7 @@ export function HomeMarketingPageClient() {
                             <div>
                                 <p className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Explore</p>
                                 <nav className="mt-3 flex flex-col gap-2">
-                                    {([['How It Works', '#how-it-works'], ['Why Scandio', '#value'], ['FAQ', '#faq']] as [string, string][]).map(([label, href]) => (
+                                    {([['How It Works', '#how-it-works'], ['Why Menda', '#value'], ['FAQ', '#faq']] as [string, string][]).map(([label, href]) => (
                                         <Link key={`${label}-${href}`} href={href} className="text-sm text-muted-foreground transition-colors hover:text-foreground">
                                             {label}
                                         </Link>
@@ -259,7 +259,7 @@ export function HomeMarketingPageClient() {
                             </div>
                         </div>
                         <div className="mt-10 border-t border-border/50 pt-6">
-                            <p className="text-sm text-muted-foreground">&copy; {new Date().getFullYear()} Scandio. All Rights Reserved.</p>
+                            <p className="text-sm text-muted-foreground">&copy; {new Date().getFullYear()} Menda. All Rights Reserved.</p>
                         </div>
                     </div>
                 </footer>

@@ -41,12 +41,12 @@ export function AppHeader({
                     <Link href="/" className="flex items-center gap-2">
                         <NextImage
                             src="/logo.svg"
-                            alt="Scandio"
+                            alt="Menda"
                             width={28}
                             height={28}
                             className="h-7 w-7 shrink-0 rounded-lg"
                         />
-                        <span className="text-sm font-semibold tracking-tight">Scandio</span>
+                        <span className="text-sm font-semibold tracking-tight">Menda</span>
                     </Link>
                 </div>
 

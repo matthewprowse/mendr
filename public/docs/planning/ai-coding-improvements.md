@@ -6,7 +6,7 @@ The core principle throughout is: **AI tools navigate by convention, not by memo
 
 ---
 
-## - [ ] 1. Reorganise `lib/` from 74 flat files into domain subdirectories
+## - [x] 1. Reorganise `lib/` from 74 flat files into domain subdirectories
 
 **Impact: Very High — affects every future task**  
 **Effort: Medium (mechanical moves + import updates)**
@@ -72,7 +72,7 @@ src/lib/
 
 ---
 
-## - [ ] 2. Move business logic out of `app/api/` directories
+## - [x] 2. Move business logic out of `app/api/` directories
 
 **Impact: Very High — affects every provider and diagnosis task**  
 **Effort: Medium**
@@ -126,7 +126,7 @@ The same principle applies to `app/api/diagnose/`, which currently holds the age
 
 ---
 
-## - [ ] 3. Move the prompt system to `features/diagnosis/prompts/`
+## - [x] 3. Move the prompt system to `features/diagnosis/prompts/`
 
 **Impact: Very High — the most AI-critical logic in the codebase**  
 **Effort: Low (move + update imports)**
@@ -144,7 +144,7 @@ This makes the diagnosis feature self-contained: types, orchestration, prompts, 
 
 ---
 
-## - [ ] 4. Consolidate the dual diagnosis parser
+## - [x] 4. Consolidate the dual diagnosis parser
 
 **Impact: High — affects every future diagnosis parsing change**  
 **Effort: Low**
@@ -185,7 +185,7 @@ After deletion, an AI searching for "the match hooks" or "the contractors compon
 
 ---
 
-## - [ ] 6. Enforce consistent file naming conventions across the entire codebase
+## - [x] 6. Enforce consistent file naming conventions across the entire codebase
 
 **Impact: Medium — reduces disambiguation overhead on every task**  
 **Effort: Low (renames)**
@@ -214,7 +214,7 @@ The current codebase has four different patterns for the same concept in differe
 
 ---
 
-## - [ ] 7. Create a `CLAUDE.md` project brief at the repository root
+## - [x] 7. Create a `CLAUDE.md` project brief at the repository root
 
 **Impact: High — front-loads context on every AI session**  
 **Effort: Low (one-time writing)**
@@ -226,7 +226,7 @@ A `CLAUDE.md` file at the repository root is read automatically by Claude Code a
 **Recommended sections:**
 
 ```markdown
-# Scandio — Project Brief
+# Menda — Project Brief
 
 ## What this is
 AI-powered home fault diagnosis for Western Cape homeowners. 
@@ -269,7 +269,7 @@ Vercel for deployment. The primary user flow is:
 
 ---
 
-## - [ ] 8. Add an index file (`index.ts`) to each feature module
+## - [x] 8. Add an index file (`index.ts`) to each feature module
 
 **Impact: Medium — simplifies imports across the codebase**  
 **Effort: Low**
@@ -282,7 +282,7 @@ Barrel exports are low-risk for this codebase since Next.js handles tree-shaking
 
 ---
 
-## - [ ] 9. Expand test coverage to the diagnosis pipeline hot path
+## - [x] 9. Expand test coverage to the diagnosis pipeline hot path
 
 **Impact: High — prevents regressions on the most critical code path**  
 **Effort: Medium**
@@ -302,7 +302,7 @@ Prompt composition tests are particularly valuable for AI-assisted development: 
 
 ---
 
-## - [ ] 10. Add a `prompt-changelog.md` to the prompt system
+## - [x] 10. Add a `prompt-changelog.md` to the prompt system
 
 **Impact: Medium — institutional memory for the most sensitive code**  
 **Effort: Very Low (documentation only)**
@@ -319,7 +319,7 @@ This is especially valuable for AI-assisted prompt engineering, where the model 
 
 ---
 
-## - [ ] 11. Standardise how types are exported across the codebase
+## - [x] 11. Standardise how types are exported across the codebase
 
 **Impact: Medium — reduces type import confusion**  
 **Effort: Low**
@@ -334,7 +334,7 @@ The current codebase has types defined in several inconsistent locations:
 
 ---
 
-## - [ ] 12. Remove the `constants/constants.ts` and `types/types.ts` anti-pattern
+## - [x] 12. Remove the `constants/constants.ts` and `types/types.ts` anti-pattern
 
 **Impact: Low — cosmetic but causes AI disambiguation failures**  
 **Effort: Very Low**

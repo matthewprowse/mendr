@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { FlowStepHeader } from '@/components/flow-header';
-import { supabase } from '@/lib/supabase';
+import { supabase } from '@/lib/auth/supabase';
 import { toast } from 'sonner';
 import Link from 'next/link';
 
@@ -110,7 +110,7 @@ export default function LoginPage() {
                                 <p className="text-sm text-muted-foreground">
                                     {mode === 'magic'
                                         ? "We'll email you a sign-in link — no password needed."
-                                        : 'Sign in to your Scandio account.'}
+                                        : 'Sign in to your Menda account.'}
                                 </p>
                             </div>
 

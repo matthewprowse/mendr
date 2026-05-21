@@ -1,5 +1,5 @@
 /**
- * Scandio Design Tokens
+ * Menda Design Tokens
  * ─────────────────────
  * Single source of truth for every shared colour, typography class, layout
  * class, and interactive pattern across the app.
@@ -22,7 +22,7 @@ export const INK = '#16120E';
 // ── Typography ─────────────────────────────────────────────────────────────────
 
 export const typography = {
-    /** Hero / page-title: 24px semibold. e.g. "Your Scandio Report" */
+    /** Hero / page-title: 24px semibold. e.g. "Your Menda Report" */
     pageTitle: 'text-2xl font-semibold leading-snug',
 
     /** Section heading inside a step or page: 20px semibold. */

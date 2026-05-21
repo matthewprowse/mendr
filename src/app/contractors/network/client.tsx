@@ -22,7 +22,7 @@ import {
 } from '@/components/ui/dialog';
 import { FlowStepHeader } from '@/components/flow-header';
 import { Separator } from '@/components/ui/separator';
-import { getSupabase } from '@/lib/supabase';
+import { getSupabase } from '@/lib/auth/supabase';
 import { geocodeApi } from '@/features/match/api/client';
 import { createClientId } from '@/lib/client-random-id';
 import { formatSaRegistrationInput, isValidSaRegistrationNumber, registrationNumberPlaceholder } from './sa-registration';
@@ -1108,7 +1108,7 @@ function Step5({
                 <Separator />
 
                 <div className="flex flex-col gap-4 pb-22">
-                    <RequiredLabel htmlFor="referralSource">How did you hear about Scandio?</RequiredLabel>
+                    <RequiredLabel htmlFor="referralSource">How did you hear about Menda?</RequiredLabel>
                     <Select value={data.referralSource} onValueChange={(v) => onChange({ referralSource: v })}>
                         <SelectTrigger id="referralSource" className="h-10 min-h-10 w-full data-[size=default]:h-10">
                             <SelectValue placeholder="Select referral source" />
@@ -1602,7 +1602,7 @@ function SuccessScreen() {
             <div className="flex flex-col gap-2">
                 <h1 className="text-2xl font-bold text-foreground">Application Received</h1>
                 <p className="max-w-sm text-base text-muted-foreground">
-                    Thank you for applying to join the Scandio contractor network. We&apos;ll review your application and be in touch within 2 business days.
+                    Thank you for applying to join the Menda contractor network. We&apos;ll review your application and be in touch within 2 business days.
                 </p>
             </div>
             <Button variant="secondary" onClick={() => router.push('/contractors')}>
@@ -2077,7 +2077,6 @@ export default function ProOnboardPage() {
                     certifications: tokenizeCsv(data.certifications).join(', '),
                     bio: data.bio,
                     highlights: data.highlights,
-                    bio: data.bio,
                     referralSource: data.referralSource,
                     referralOther: data.referralOther,
                     serviceAreas: radii.map((r) => `${r.address} (${r.radiusKm}km)`).join(', '),
@@ -2124,7 +2123,7 @@ export default function ProOnboardPage() {
                     }
                     router.push('/contractors');
                 }}
-                centerLabel="Scandio"
+                centerLabel="Menda"
             />
             <main
                 ref={contentRef}

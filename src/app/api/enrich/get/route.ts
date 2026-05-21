@@ -1,3 +1,6 @@
+// Required env vars: NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY,
+//                    UPSTASH_REDIS_REST_URL, UPSTASH_REDIS_REST_TOKEN
+
 /**
  * POST /api/enrich/get
  *
@@ -7,10 +10,10 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createSupabaseAdminClient } from '@/lib/supabase-server';
-import { expandPlaceIdsForDbQuery, toGooglePlaceId } from '@/app/api/providers/persistence';
+import { createSupabaseAdminClient } from '@/lib/auth/supabase-server';
+import { expandPlaceIdsForDbQuery, toGooglePlaceId } from '@/lib/providers/persistence';
 import { checkRateLimit } from '@/lib/rate-limit-config';
-import { aiConfig } from '@/lib/ai-config';
+import { aiConfig } from '@/lib/ai/ai-config';
 
 const UUID_RE =
     /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -60,12 +63,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     try {
         const t0 = Date.now();
         const stageTimings: Record<string, number> = {};
-        const logStage = (label: string, key?: string) => {
-            if (process.env.NODE_ENV === 'development') {
-                const elapsed = Date.now() - t0;
-                if (key) stageTimings[key] = elapsed;
-                console.log(`[enrich/get] ${label} at +${elapsed}ms`);
-            }
+        const logStage = (_label: string, key?: string) => {
+            const elapsed = Date.now() - t0;
+            if (key) stageTimings[key] = elapsed;
         };
         const body = await req.json().catch(() => null) as {
             placeIds?: unknown;

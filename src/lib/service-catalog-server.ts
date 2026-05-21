@@ -1,5 +1,5 @@
 import { Redis } from '@upstash/redis';
-import { createSupabaseAdminClient } from '@/lib/supabase-server';
+import { createSupabaseAdminClient } from '@/lib/auth/supabase-server';
 
 const REDIS_KEY = 'scandio:service_catalog:active_labels_v1';
 const TTL_SEC = 300;

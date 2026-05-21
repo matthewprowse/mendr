@@ -5,8 +5,8 @@
 //   ?days=7   — look-back window in days (default 7, max 90)
 
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAdmin } from '@/lib/admin-auth';
-import { getAiCostDailyTotals } from '@/lib/ai-cost-logger';
+import { requireAdmin } from '@/lib/auth/admin-auth';
+import { getAiCostDailyTotals } from '@/lib/ai/ai-cost-logger';
 
 export async function GET(req: NextRequest) {
     const deny = await requireAdmin(req);

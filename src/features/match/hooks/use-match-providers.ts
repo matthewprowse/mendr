@@ -173,9 +173,6 @@ export function useMatchProviders(params: {
 
             const inFlight = inFlightRef.current;
             if (inFlight && inFlight.key === requestKey && !inFlight.controller.signal.aborted) {
-                if (process.env.NODE_ENV === 'development') {
-                    console.log('[match] de-duped identical providers request');
-                }
                 await inFlight.promise;
                 return;
             }
@@ -192,10 +189,6 @@ export function useMatchProviders(params: {
             setIsProvidersLoading(!hasCachedProviders);
             setIsRefreshingProvidersInBackground(hasCachedProviders);
             try {
-                const t0 = Date.now();
-                if (process.env.NODE_ENV === 'development') {
-                    console.log('[match] fetching providers (viewport)…');
-                }
                 await waitForPageVisible(controller.signal);
                 if (controller.signal.aborted) return;
 
@@ -226,11 +219,6 @@ export function useMatchProviders(params: {
                     setProviders(fetchedProviders);
                     writeCachedProviders(requestKey, fetchedProviders);
                     setCompanyIndex(1);
-                    if (process.env.NODE_ENV === 'development') {
-                        console.log(
-                            `[match] providers received in ${Date.now() - t0}ms — ${fetchedProviders.length} results`
-                        );
-                    }
                     return;
                 }
 

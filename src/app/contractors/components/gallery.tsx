@@ -12,7 +12,7 @@ import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
 import { X } from 'lucide-react';
-import type { GalleryDraftItem, GalleryImage } from '../types/types';
+import type { GalleryDraftItem, GalleryImage } from '../lib/types';
 import { galleryImageSourceLabel } from '../lib/gallery';
 
 export function ProGalleryTab(props: {

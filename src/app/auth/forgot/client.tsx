@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { FlowStepHeader } from '@/components/flow-header';
-import { supabase } from '@/lib/supabase';
+import { supabase } from '@/lib/auth/supabase';
 import { toast } from 'sonner';
 import Link from 'next/link';
 

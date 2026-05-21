@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createClientId } from '@/lib/client-random-id';
-import { supabase } from '@/lib/supabase';
-import type { GalleryDraftItem, GalleryImage } from '../types/types';
+import { supabase } from '@/lib/auth/supabase';
+import type { GalleryDraftItem, GalleryImage } from '../lib/types';
 
 type ProviderImageRow = {
     id?: unknown;

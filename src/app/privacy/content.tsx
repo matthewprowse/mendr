@@ -32,7 +32,7 @@ export function PrivacyPageContent({ c }: { c: SiteLegalConfig }) {
                     <strong className="font-semibold text-foreground">Responsible party (operator):</strong>{' '}
                     {c.operatorLegalName === LEGAL_DETAILS_UNPUBLISHED ? (
                         <>
-                            Scandio (Pty) Ltd{' '}
+                            Menda (Pty) Ltd{' '}
                             <span className="italic text-muted-foreground">
                                 (placeholder — insert registered company name before launch)
                             </span>
@@ -62,7 +62,7 @@ export function PrivacyPageContent({ c }: { c: SiteLegalConfig }) {
                     </strong>{' '}
                     {c.privacyEmail === LEGAL_DETAILS_UNPUBLISHED ? (
                         <>
-                            <span className="text-muted-foreground">privacy@scandio.app</span>{' '}
+                            <span className="text-muted-foreground">privacy@menda.co.za</span>{' '}
                             <span className="italic text-muted-foreground">
                                 (placeholder — confirm before launch)
                             </span>
@@ -77,7 +77,7 @@ export function PrivacyPageContent({ c }: { c: SiteLegalConfig }) {
                     >
                         contact form
                     </Link>{' '}
-                    on the Scandio website
+                    on the Menda website
                 </p>
                 <p>
                     <strong className="font-semibold text-foreground">Website:</strong>{' '}
@@ -92,7 +92,7 @@ export function PrivacyPageContent({ c }: { c: SiteLegalConfig }) {
 
             <p>
                 This Privacy Policy explains how we collect, use, store, disclose, and protect personal
-                information when you use Scandio, a South Africa-focused digital service that helps
+                information when you use Menda, a South Africa-focused digital service that helps
                 homeowners obtain AI-assisted maintenance insights and discover local service providers.
             </p>
             <p>
@@ -116,15 +116,15 @@ export function PrivacyPageContent({ c }: { c: SiteLegalConfig }) {
             <h2 className="text-lg font-semibold text-foreground">Who We Are</h2>
             <p>
                 We are the <strong className="font-semibold text-foreground">responsible party</strong>{' '}
-                (as defined in POPIA) in respect of personal information processed through Scandio,
+                (as defined in POPIA) in respect of personal information processed through Menda,
                 unless we state otherwise (for example, where a processor acts strictly on our
                 instructions).
             </p>
             <p>
-                Where this policy refers to &quot;we&quot;, &quot;us&quot;, or &quot;Scandio&quot;, it
+                Where this policy refers to &quot;we&quot;, &quot;us&quot;, or &quot;Menda&quot;, it
                 means{' '}
                 {c.operatorLegalName === LEGAL_DETAILS_UNPUBLISHED ? (
-                    <>Scandio (Pty) Ltd.</>
+                    <>Menda (Pty) Ltd.</>
                 ) : (
                     <>{c.operatorLegalName}.</>
                 )}
@@ -156,7 +156,7 @@ export function PrivacyPageContent({ c }: { c: SiteLegalConfig }) {
                 <strong className="font-semibold text-foreground">Email:</strong>{' '}
                 {c.privacyEmail === LEGAL_DETAILS_UNPUBLISHED ? (
                     <>
-                        <span className="text-muted-foreground">privacy@scandio.app</span>{' '}
+                        <span className="text-muted-foreground">privacy@menda.co.za</span>{' '}
                         <span className="italic text-muted-foreground">
                             (placeholder — confirm before launch)
                         </span>
@@ -186,12 +186,12 @@ export function PrivacyPageContent({ c }: { c: SiteLegalConfig }) {
                 </li>
                 <li>
                     Anyone whose personal information we otherwise process in connection with
-                    Scandio.
+                    Menda.
                 </li>
             </ul>
             <p>
                 It does not apply to personal information processed solely by independent third parties
-                (such as a contractor you contact directly outside Scandio), except where we facilitate
+                (such as a contractor you contact directly outside Menda), except where we facilitate
                 that processing as described below.
             </p>
             </LegalFlowSection>
@@ -200,7 +200,7 @@ export function PrivacyPageContent({ c }: { c: SiteLegalConfig }) {
                 What Personal Information We Collect
             </h2>
             <p>
-                The nature and category of information depend on how you use Scandio. It may include:
+                The nature and category of information depend on how you use Menda. It may include:
             </p>
             <LegalFlowSubsections>
             <LegalFlowSubsection>
@@ -312,7 +312,7 @@ export function PrivacyPageContent({ c }: { c: SiteLegalConfig }) {
             <ul className="list-disc space-y-2 pl-5 marker:text-muted-foreground">
                 <li>
                     Provider directory data from public or licensed sources (for example, business
-                    listings and reviews aggregated from third-party services) shown on Scandio. That
+                    listings and reviews aggregated from third-party services) shown on Menda. That
                     information may relate to juristic persons or to individuals (for example, sole
                     traders). Where it is personal information, we process it for legitimate business
                     purposes and in line with POPIA.
@@ -332,7 +332,7 @@ export function PrivacyPageContent({ c }: { c: SiteLegalConfig }) {
             <p>We process personal information to:</p>
             <ul className="list-disc space-y-2 pl-5 marker:text-muted-foreground">
                 <li>
-                    Provide, operate, secure, and improve Scandio (including AI-assisted diagnosis,
+                    Provide, operate, secure, and improve Menda (including AI-assisted diagnosis,
                     reporting, and provider matching);
                 </li>
                 <li>
@@ -518,7 +518,7 @@ export function PrivacyPageContent({ c }: { c: SiteLegalConfig }) {
             </ul>
             <p>
                 You can control cookies through your browser settings. Blocking essential cookies may
-                prevent parts of Scandio from working.
+                prevent parts of Menda from working.
             </p>
             </LegalFlowSection>
             <LegalFlowSection>
@@ -599,7 +599,7 @@ export function PrivacyPageContent({ c }: { c: SiteLegalConfig }) {
                 To exercise rights, email{' '}
                 {c.privacyEmail === LEGAL_DETAILS_UNPUBLISHED ? (
                     <>
-                        <span className="text-muted-foreground">privacy@scandio.app</span>{' '}
+                        <span className="text-muted-foreground">privacy@menda.co.za</span>{' '}
                         <span className="italic text-muted-foreground">
                             (placeholder — confirm before launch)
                         </span>
@@ -674,7 +674,7 @@ export function PrivacyPageContent({ c }: { c: SiteLegalConfig }) {
             <LegalFlowSection>
             <h2 className="text-lg font-semibold text-foreground">Children</h2>
             <p>
-                Scandio is not directed at children under 18. We do not knowingly collect personal
+                Menda is not directed at children under 18. We do not knowingly collect personal
                 information from children without appropriate parental consent. If you believe we have
                 done so, contact us and we will take steps to delete the information where required.
             </p>
@@ -686,7 +686,7 @@ export function PrivacyPageContent({ c }: { c: SiteLegalConfig }) {
             <p>
                 We may update this Privacy Policy from time to time. The &quot;Last updated&quot; date
                 at the top will change, and for material changes we will provide additional notice
-                where appropriate (for example, a banner or email). Continued use of Scandio after
+                where appropriate (for example, a banner or email). Continued use of Menda after
                 the effective date may constitute acceptance of the updated policy where law allows.
             </p>
             </LegalFlowSection>
@@ -710,7 +710,7 @@ export function PrivacyPageContent({ c }: { c: SiteLegalConfig }) {
                 <strong className="font-semibold text-foreground">Email:</strong>{' '}
                 {c.privacyEmail === LEGAL_DETAILS_UNPUBLISHED ? (
                     <>
-                        <span className="text-muted-foreground">privacy@scandio.app</span>{' '}
+                        <span className="text-muted-foreground">privacy@menda.co.za</span>{' '}
                         <span className="italic text-muted-foreground">
                             (placeholder — confirm before launch)
                         </span>
@@ -725,7 +725,7 @@ export function PrivacyPageContent({ c }: { c: SiteLegalConfig }) {
                     href="/contact"
                     className="font-medium text-foreground underline underline-offset-4 hover:no-underline"
                 >
-                    scandio.app/contact
+                    menda.co.za/contact
                 </Link>
             </p>
             <p>

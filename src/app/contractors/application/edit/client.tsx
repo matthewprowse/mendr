@@ -132,7 +132,7 @@ export default function ApplicationEditClient() {
         <div className="mx-auto max-w-xl px-4 py-16">
             {/* Header */}
             <div className="mb-8">
-                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Scandio</p>
+                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Menda</p>
                 <h1 className="mt-2 text-2xl font-bold text-foreground">Review your profile</h1>
                 <p className="mt-2 text-sm text-muted-foreground">
                     Hi {payload.contactName.split(' ')[0]}. Below is the profile summary we put together

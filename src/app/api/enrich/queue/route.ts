@@ -1,3 +1,6 @@
+// Required env vars: NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY,
+//                    GEMINI_API_KEY, UPSTASH_REDIS_REST_URL, UPSTASH_REDIS_REST_TOKEN
+
 /**
  * POST /api/enrich/queue
  *
@@ -17,13 +20,14 @@
 export const maxDuration = 300;
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createSupabaseAdminClient } from '@/lib/supabase-server';
-import { enrichProvider, enrichProviderReviewSummaryFast } from '@/lib/provider-enrichment';
-import { expandPlaceIdsForDbQuery, toGooglePlaceId } from '@/app/api/providers/persistence';
+import { createSupabaseAdminClient } from '@/lib/auth/supabase-server';
+import { enrichProvider, enrichProviderReviewSummaryFast } from '@/lib/providers/provider-enrichment';
+import { expandPlaceIdsForDbQuery, toGooglePlaceId } from '@/lib/providers/persistence';
 import { checkRateLimit } from '@/lib/rate-limit-config';
 
-const MAX_CONCURRENT = 10;
-const JOB_TIMEOUT_FULL_MS = 30_000;
+const MAX_CONCURRENT_FAST = 10;
+const MAX_CONCURRENT_FULL = 3;
+const JOB_TIMEOUT_FULL_MS = 60_000;
 /** Wall budget for fast review-summary jobs (Gemini + DB; slightly above model timeout). */
 /** Must cover cold DB + Gemini; 8s caused silent timeouts before cache upsert (see debug S_GET rows=0). */
 const JOB_TIMEOUT_SUMMARY_FAST_MS = 30_000;
@@ -67,12 +71,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     try {
         const t0 = Date.now();
         const stageTimings: Record<string, number> = {};
-        const logStage = (label: string, key?: string) => {
-            if (process.env.NODE_ENV === 'development') {
-                const elapsed = Date.now() - t0;
-                if (key) stageTimings[key] = elapsed;
-                console.log(`[enrich/queue] ${label} at +${elapsed}ms`);
-            }
+        const logStage = (_label: string, key?: string) => {
+            const elapsed = Date.now() - t0;
+            if (key) stageTimings[key] = elapsed;
         };
         const body = await req.json().catch(() => null) as {
             placeIds?: unknown;
@@ -205,7 +206,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
             return aOrder - bOrder;
         });
 
-        const semaphore = createSemaphore(MAX_CONCURRENT);
+        const semaphore = createSemaphore(summaryFast ? MAX_CONCURRENT_FAST : MAX_CONCURRENT_FULL);
 
         // IMPORTANT: run jobs within the request lifetime.
         // In serverless environments, detached async work after returning a response

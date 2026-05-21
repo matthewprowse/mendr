@@ -1,7 +1,13 @@
-import { NextResponse } from 'next/server';
-import { createSupabaseAdminClient } from '@/lib/supabase-server';
+// Required env vars: NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
 
-export async function GET() {
+import { NextRequest, NextResponse } from 'next/server';
+import { createSupabaseAdminClient } from '@/lib/auth/supabase-server';
+import { checkRateLimit } from '@/lib/rate-limit-config';
+
+export async function GET(req: NextRequest) {
+    const limited = await checkRateLimit(req, 'marketingStats');
+    if (limited) return limited;
+
     const admin = await createSupabaseAdminClient();
     const [diagnosesCountRes, matchViewCountRes, homeownerSessionsRes, providerCountRes, servicesRes] = await Promise.all([
         admin

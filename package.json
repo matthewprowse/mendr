@@ -1,5 +1,5 @@
 {
-  "name": "scandio",
+  "name": "menda",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -46,9 +46,10 @@
     "@radix-ui/react-tooltip": "^1.2.8",
     "@react-email/components": "^1.0.10",
     "@react-email/render": "^2.0.4",
-    "@sendgrid/mail": "^8.1.6",
+    "@sentry/nextjs": "^10.53.1",
     "@supabase/ssr": "^0.8.0",
     "@supabase/supabase-js": "^2.95.3",
+    "@upstash/ratelimit": "^2.0.8",
     "@upstash/redis": "^1.37.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -67,6 +68,7 @@
     "react-hook-form": "^7.71.1",
     "react-markdown": "^10.1.0",
     "recharts": "^2.15.4",
+    "resend": "^6.12.3",
     "sonner": "^2.0.7",
     "standardwebhooks": "^1.0.0",
     "tailwind-merge": "^3.4.0",

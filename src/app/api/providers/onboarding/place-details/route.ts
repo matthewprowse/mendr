@@ -1,12 +1,15 @@
+// Required env vars: NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY,
+//                    GOOGLE_MAPS_API_KEY, UPSTASH_REDIS_REST_URL, UPSTASH_REDIS_REST_TOKEN
+
 import { NextRequest, NextResponse } from 'next/server';
 import { checkRateLimit } from '@/lib/rate-limit-config';
-import { createSupabaseAdminClient } from '@/lib/supabase-server';
-import { normalizePlaceId } from '@/app/api/providers/place-id';
+import { createSupabaseAdminClient } from '@/lib/auth/supabase-server';
+import { normalizePlaceId } from '@/lib/providers/place-id';
 
 const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 const FIELD_MASK =
-    'id,displayName,formattedAddress,nationalPhoneNumber,websiteUri,location,types,rating,userRatingCount';
+    'id,displayName,formattedAddress,nationalPhoneNumber,websiteUri,location,types,rating,userRatingCount,generativeSummary,editorialSummary';
 
 function getPlacesApiKey(): string | null {
     return (

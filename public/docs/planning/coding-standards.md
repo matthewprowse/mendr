@@ -27,9 +27,11 @@ The folder structure below is the law. New files must go in the correct location
 ```
 src/
 ├── app/                        Next.js App Router — pages, layouts, route handlers
-│   ├── api/                    Server-only route handlers
+│   ├── api/                    Server-only route handlers (thin entry points only)
 │   │   ├── admin/              Admin endpoints, guarded by requireAdmin
-│   │   ├── diagnose/           Core AI diagnosis pipeline
+│   │   ├── cron/               Scheduled jobs (enrichment retry, cleanup)
+│   │   ├── diagnose/           Core AI diagnosis pipeline entry point
+│   │   ├── enrich/             Provider enrichment queue entry point
 │   │   └── [domain]/           One folder per API domain
 │   └── [route]/                Page routes — one folder per URL segment
 │       ├── page.tsx            Server Component: auth, data fetch, metadata
@@ -38,18 +40,30 @@ src/
 │       └── hooks/              Hooks private to this route
 │
 ├── features/                   Self-contained business logic slices
-│   ├── diagnosis/              Diagnosis domain — types, orchestration
-│   │   └── types.ts            Canonical type definitions for this feature
+│   ├── diagnosis/              Diagnosis domain — types, agents, prompts, orchestrator
+│   │   ├── types.ts            Canonical DiagnosisData type — import from here
+│   │   ├── prompts/            All Gemini prompt files and prompt-changelog.md
+│   │   ├── agent-classify.ts   Agent 2a: trade classification and confidence
+│   │   ├── agent-prose.ts      Agent 2b: narrative fields (title, message, thought)
+│   │   └── processing-orchestrator.ts  Step sequencing for /processing
 │   └── match/                  Contractor matching domain
+│       └── hooks/              Kebab-case hooks for match state
 │
-├── lib/                        Shared utilities used across multiple features
-│   ├── ai-client.ts            Gemini SDK initialisation and model factory
-│   ├── ai-logging.ts           Structured logging for pipeline events
-│   ├── ai-cost-logger.ts       Token-count logging and Gemini cost estimation
+├── lib/                        Shared utilities — organised by domain
+│   ├── ai/                     Gemini client, config, logging, cost tracking
+│   │   ├── ai-client.ts        Gemini SDK initialisation and model factory
+│   │   ├── ai-logging.ts       Structured pipeline event logging
+│   │   └── ai-cost-logger.ts   Token-count logging and cost estimation
+│   ├── auth/                   Supabase clients and authentication helpers
+│   │   ├── supabase.ts         Browser-side Supabase client (anon key)
+│   │   ├── supabase-server.ts  Server-side Supabase clients (anon + admin)
+│   │   ├── admin-auth.ts       requireAdmin guard for admin route handlers
+│   │   └── cron-auth.ts        requireCronSecret guard for cron route handlers
+│   ├── diagnosis/              Shared diagnosis utilities (parsing, display, stream)
+│   ├── providers/              Provider business logic (enrichment, ranking, persistence)
+│   ├── certifications/         Contractor certification catalogue
 │   ├── rate-limit.ts           Rate limiting (in-memory fallback + Upstash Redis)
-│   ├── rate-limit-config.ts    Rate limit bucket definitions and checkRateLimit
-│   ├── supabase.ts             Browser-side Supabase client (anon key)
-│   └── supabase-server.ts      Server-side Supabase clients (anon + admin)
+│   └── rate-limit-config.ts    Rate limit bucket definitions and checkRateLimit
 │
 └── components/                 Shared UI components used across routes
     └── ui/                     shadcn/ui primitives (Button, Input, Dialog, etc.)
@@ -81,7 +95,7 @@ All file names use `kebab-case`. This is the Next.js convention and the Node.js 
 | Shared React component              | `kebab-case.tsx`                     | `src/components/ui/button.tsx`           |
 | Custom hook                         | `use-kebab-case.ts`                  | `use-match-map.ts`                       |
 | Type definition file                | `types.ts`                           | `src/features/diagnosis/types.ts`        |
-| Test file                           | `[module-name].test.ts(x)`           | `extract-price.test.ts`                  |
+| Test file                           | `[module-name].test.ts(x)`           | `processing-orchestrator.test.ts`        |
 | Supabase migration                  | `YYYYMMDDHHMMSS_description.sql`     | `20260512000000_atomic_quota.sql`        |
 | Planning and documentation          | `kebab-case.md`                      | `coding-standards.md`                    |
 
@@ -200,7 +214,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 
 import { checkRateLimit } from '@/lib/rate-limit-config';
-import { logPipelineStep } from '@/lib/ai-logging';
+import { logPipelineStep } from '@/lib/ai/ai-logging';
 import type { DiagnosisData } from '@/features/diagnosis/types';
 
 import { buildSystemInstruction } from './prompts';
@@ -251,16 +265,23 @@ A function must do one thing. If you cannot describe a function's purpose in a s
 
 Functions longer than approximately 60 lines are a signal to refactor. There is no hard limit, because some functions are legitimately complex, but the default assumption when a function grows past this point is that extraction is warranted.
 
-### JSDoc on every exported function
+### JSDoc on exported functions with non-obvious contracts
 
-Every exported function must have a JSDoc block. This is not optional and it is not a nice-to-have — it is the primary mechanism by which the codebase stays navigable as it grows, and it is the single most important thing you can do to reduce the cost of AI-assisted development.
+Not every exported function needs JSDoc, but any function whose purpose, dependencies, or behaviour is not immediately clear from the name and type signature must have one. This applies without exception to:
 
-The JSDoc block for an exported function must answer four questions:
+- Functions in `lib/` that wrap an external service (Supabase, Gemini, Redis, Google APIs)
+- Functions in `lib/` or `features/` that have non-obvious parameters, ordering constraints, or side effects
+- Any `async` function in a route handler or pipeline orchestrator
+- Any function with more than two parameters, where the intent of each is not obvious from the name
+
+The JSDoc block for such a function must answer four questions:
 
 1. What does this function do? (one sentence, written as an instruction: "Returns...", "Inserts...", "Applies...")
 2. What are its external dependencies? (Supabase, Gemini, Redis, env vars, browser APIs)
 3. Who calls it, or what flow does it participate in?
 4. What are the non-obvious behaviours of its parameters or return value?
+
+Simple, self-evident helpers in the same file as their caller do not need JSDoc. A function named `normaliseTradeLabel(label: string): string` is self-describing. A function named `applyEnrichment(provider, ctx)` that calls three external services and has a quality gate must have JSDoc.
 
 ```typescript
 /**
@@ -698,7 +719,7 @@ console.error(JSON.stringify({
 console.error(`[agent-classify] failed for user ${userId}: ${message}`);
 ```
 
-Use `logPipelineStep` from `@/lib/ai-logging` for all diagnosis pipeline events. Use `logGeminiUsage` from `@/lib/ai-cost-logger` for all Gemini API calls. These two functions produce consistent, queryable output — do not replace them with ad-hoc `console.log` calls.
+Use `logPipelineStep` from `@/lib/ai/ai-logging` for all diagnosis pipeline events. Use `logGeminiUsage` from `@/lib/ai/ai-cost-logger` for all Gemini API calls. These two functions produce consistent, queryable output — do not replace them with ad-hoc `console.log` calls.
 
 ---
 
@@ -712,13 +733,13 @@ The description of each test must be a precise specification of the behaviour un
 
 ```typescript
 // Correct: a complete specification.
-it('returns EMPTY when the Gemini call times out after 15 seconds')
-it('deduplicates identical part names before calling Gemini')
-it('preserves result order to match the input order of part names')
+it('returns false for the placeholder "Diagnosing…" value')
+it('returns ineligible with reason low_confidence when confidence < 85')
+it('returns ineligible with reason requires_clarification when that flag is set')
 
 // Wrong: vague and not machine-searchable.
-it('handles timeout')
-it('works with duplicates')
+it('handles placeholder')
+it('checks confidence')
 ```
 
 ### Arrange, Act, Assert
@@ -726,18 +747,16 @@ it('works with duplicates')
 Every test must follow the Arrange / Act / Assert structure, with a blank line between each phase. The structure makes it immediately clear what is being set up, what is being invoked, and what is being verified:
 
 ```typescript
-it('returns EMPTY when all sources have blank snippets and the model returns null prices', async () => {
+it('returns ineligible with reason low_confidence when confidence < 85', () => {
     // Arrange
-    mockGenerateContent.mockResolvedValue({
-        response: { text: () => JSON.stringify({ price_min: null, price_max: null, price_display: null }) },
-    });
-    const sources: MarketRateSource[] = [{ title: 'Some result', snippet: '' }];
+    const diagnosis = makeDiagnosis({ confidence: 84 });
 
     // Act
-    const result = await extractPrice('replacement tap washer', sources);
+    const result = isDiagnosisAccurateForPrefetch(diagnosis);
 
     // Assert
-    expect(result).toEqual(EMPTY);
+    expect(result.eligible).toBe(false);
+    expect(result.reason).toBe('low_confidence');
 });
 ```
 
@@ -839,6 +858,78 @@ if (classification.requestFailed) {
     // Handle gracefully — return a partial response or an error to the client.
 }
 ```
+
+---
+
+## 15. Cron Jobs
+
+Cron routes live in `src/app/api/cron/[job-name]/route.ts`. Every cron handler must:
+
+1. Call `requireCronSecret(req)` as its first operation (from `@/lib/auth/cron-auth`). This validates the `Authorization: Bearer <CRON_SECRET>` header that Vercel sets when invoking scheduled routes.
+2. Declare the schedule in `vercel.json` under `crons`. The schedule and the route must match.
+3. Be idempotent — running the same cron twice must not corrupt data or double-process records.
+4. Return structured JSON with a summary of what was processed: `{ processed: N, skipped: M, errors: [...] }`.
+
+```typescript
+// Required env vars: CRON_SECRET, NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
+
+export async function GET(req: NextRequest) {
+    const deny = await requireCronSecret(req);
+    if (deny) return deny;
+
+    // ... business logic ...
+
+    return NextResponse.json({ processed: 12, skipped: 3, errors: [] });
+}
+```
+
+Cron jobs that process a queue must batch their work (e.g. `LIMIT 20` per invocation) and be designed so that a hung invocation does not block the next run.
+
+---
+
+## 16. Database Migrations
+
+Every schema change — table creation, column add/drop, index creation, constraint change, RLS policy change — must have a migration file. Schema changes applied directly in the Supabase dashboard without a migration break reproducibility.
+
+### Naming
+
+`YYYYMMDDHHMMSS_description.sql` — use a full 14-digit timestamp, not just a date. The description must be a kebab-case phrase that answers "what does this migration do?":
+
+```
+20260520000004_provider_verification_gate.sql  ✓
+20260520_fix.sql                               ✗  (ambiguous)
+```
+
+### Content
+
+Every migration file must open with a comment block that explains what it changes and why. SQL alone does not carry the business context:
+
+```sql
+-- Add is_verified to providers and tighten the public select policy.
+--
+-- Google-sourced providers are already trusted (enrichment pipeline validates them).
+-- Application-sourced providers must be manually verified by an admin before
+-- appearing on the /matches page.
+```
+
+Use `IF EXISTS` / `IF NOT EXISTS` guards on all DDL so migrations are safe to replay:
+
+```sql
+ALTER TABLE public.providers ADD COLUMN IF NOT EXISTS is_verified boolean NOT NULL DEFAULT false;
+DROP TABLE IF EXISTS public.market_rates_cache;
+```
+
+Do not include `BEGIN` / `COMMIT` — Supabase wraps each migration in a transaction automatically.
+
+---
+
+## 17. CLAUDE.md
+
+`CLAUDE.md` in the repository root is the authoritative context document for AI coding assistants. It is loaded at the start of every session. It must be kept accurate and current. When architecture, naming conventions, key patterns, or the tech stack changes, update `CLAUDE.md` before the end of the session that made the change.
+
+`CLAUDE.md` is not this document. It is a shorter, faster-loading orientation file — what the app does, where things live, what patterns to follow, what to avoid. This document (`coding-standards.md`) contains the detailed rules. `CLAUDE.md` summarises them for session startup.
+
+If the two documents conflict, this document is authoritative.
 
 ---
 

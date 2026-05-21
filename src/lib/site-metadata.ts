@@ -42,7 +42,7 @@ import { BRAND_NAME } from '@/lib/brand-system';
 // ── Shared site constants ──────────────────────────────────────────────────────
 
 export const SITE_NAME = BRAND_NAME;
-export const SITE_URL = 'https://scandio.co.za';
+export const SITE_URL = 'https://menda.co.za'; // TODO(menda-domain): update to real domain once menda.co.za is live
 export const SITE_OG_IMAGE = '/og-menda.jpg';
 
 // ── Public homeowner pages ─────────────────────────────────────────────────────

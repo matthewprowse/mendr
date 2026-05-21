@@ -70,7 +70,7 @@ export function IdentityCard({
                         {!isLoading && verified ? (
                             <div className="inline-flex items-center gap-1.5 self-start rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-medium text-emerald-700">
                                 <ShieldCheck size={12} weight="fill" aria-hidden />
-                                Verified on Scandio
+                                Verified on Menda
                             </div>
                         ) : null}
                     </div>

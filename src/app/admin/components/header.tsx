@@ -29,7 +29,7 @@ export function AdminHeader() {
             <header className="sticky top-0 z-[100] bg-background/95 backdrop-blur">
                 <div className="mx-auto grid h-16 w-full max-w-7xl grid-cols-[1fr_auto_1fr] items-center px-4 sm:px-6 lg:px-8">
                     <Link href="/admin" className="justify-self-start flex items-center gap-2 text-lg font-semibold text-foreground">
-                        <span>Scandio</span>
+                        <span>Menda</span>
                         <Badge variant="secondary">Admin</Badge>
                     </Link>
 

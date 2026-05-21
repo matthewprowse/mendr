@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { FlowStepHeader } from '@/components/flow-header';
-import { supabase } from '@/lib/supabase';
+import { supabase } from '@/lib/auth/supabase';
 import { toast } from 'sonner';
 import Link from 'next/link';
 
@@ -112,7 +112,7 @@ export default function RegisterPage() {
                             <div className="flex flex-col gap-2">
                                 <h1 className="text-2xl font-bold text-foreground">Create your account.</h1>
                                 <p className="text-sm text-muted-foreground">
-                                    Get started with Scandio — free forever.
+                                    Get started with Menda — free forever.
                                 </p>
                             </div>
 

@@ -1,7 +1,13 @@
+// Required env vars: NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
+
 import { NextRequest, NextResponse } from 'next/server';
-import { createSupabaseAdminClient } from '@/lib/supabase-server';
+import { createSupabaseAdminClient } from '@/lib/auth/supabase-server';
+import { checkRateLimit } from '@/lib/rate-limit-config';
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
+    const limited = await checkRateLimit(req, 'providerApplicationUpload');
+    if (limited) return limited;
+
     const formData = await req.formData().catch(() => null);
     if (!formData) return NextResponse.json({ error: 'Invalid form data.' }, { status: 400 });
     const files = formData.getAll('files');

@@ -190,23 +190,23 @@ const EMAIL_TEMPLATES = [
     {
         id: 'waitlist',
         label: 'Application confirmation',
-        subject: 'We received your Scandio application',
+        subject: 'We received your Menda application',
         body: (name: string) =>
-            `Hi ${name},\n\nThank you for applying to join the Scandio contractor network. We have received your application and we’ll be in touch within 2 business days.\n\nIf you have any questions, you can reply directly to this email.\n\nKind regards,\nThe Scandio Team`,
+            `Hi ${name},\n\nThank you for applying to join the Menda contractor network. We have received your application and we’ll be in touch within 2 business days.\n\nIf you have any questions, you can reply directly to this email.\n\nKind regards,\nThe Menda Team`,
     },
     {
         id: 'invitation',
         label: 'Invitation to join',
-        subject: 'Your Scandio network invitation is ready',
+        subject: 'Your Menda network invitation is ready',
         body: (name: string) =>
-            `Hi ${name},\n\nGreat news — the Scandio contractor network is now open and your profile is ready to set up.\n\nAs a founding member you are locked in at the best available rate, and you will receive priority placement when paid tiers launch in late 2026.\n\nTo get started, complete your profile here: ${getAppOrigin()}/contractors/network\n\nIf you have any questions, just reply to this email.\n\nKind regards,\nThe Scandio Team`,
+            `Hi ${name},\n\nGreat news — the Menda contractor network is now open and your profile is ready to set up.\n\nAs a founding member you are locked in at the best available rate, and you will receive priority placement when paid tiers launch in late 2026.\n\nTo get started, complete your profile here: ${getAppOrigin()}/contractors/network\n\nIf you have any questions, just reply to this email.\n\nKind regards,\nThe Menda Team`,
     },
     {
         id: 'followup',
         label: 'Follow up',
-        subject: 'Checking in — Scandio provider network',
+        subject: 'Checking in — Menda provider network',
         body: (name: string) =>
-            `Hi ${name},\n\nI wanted to follow up on your Scandio application. We would love to have you in the founding network — the onboarding process takes just a few minutes.\n\nIf you have any questions or concerns, feel free to reply directly to this email.\n\nKind regards,\nThe Scandio Team`,
+            `Hi ${name},\n\nI wanted to follow up on your Menda application. We would love to have you in the founding network — the onboarding process takes just a few minutes.\n\nIf you have any questions or concerns, feel free to reply directly to this email.\n\nKind regards,\nThe Menda Team`,
     },
 ] as const;
 

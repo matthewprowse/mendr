@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { FlowStepHeader } from '@/components/flow-header';
-import { supabase } from '@/lib/supabase';
+import { supabase } from '@/lib/auth/supabase';
 import { toast } from 'sonner';
 
 export default function ResetPasswordPage() {
@@ -58,7 +58,7 @@ export default function ResetPasswordPage() {
                                 className="self-start text-sm text-foreground font-medium hover:underline"
                                 onClick={() => router.push('/')}
                             >
-                                Go to Scandio →
+                                Go to Menda →
                             </button>
                         </div>
                     ) : (

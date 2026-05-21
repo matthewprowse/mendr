@@ -1,5 +1,8 @@
+// Required env vars: NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY,
+//                    UPSTASH_REDIS_REST_URL, UPSTASH_REDIS_REST_TOKEN
+
 import { NextRequest, NextResponse } from 'next/server';
-import { createSupabaseAdminClient } from '@/lib/supabase-server';
+import { createSupabaseAdminClient } from '@/lib/auth/supabase-server';
 import { checkRateLimit } from '@/lib/rate-limit-config';
 
 type SeedBody = {
@@ -48,7 +51,6 @@ export async function POST(req: NextRequest) {
         diagnosis: 'Perf seed diagnosis',
         trade,
         trade_detail: tradeDetail || trade,
-        urgency_key: 'soon',
         requires_clarification: false,
         action_required: 'Inspect and repair',
     };
@@ -59,7 +61,6 @@ export async function POST(req: NextRequest) {
             id,
             title: 'Perf Seed',
             diagnosis,
-            urgency_key: 'soon',
             image_url: null,
             initial_image_description: 'perf seed',
             customer_lat: lat,

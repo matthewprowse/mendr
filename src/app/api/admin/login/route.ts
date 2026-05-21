@@ -2,7 +2,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { safeRedirectPath } from '@/lib/safe-redirect';
-import { createAdminSession, setAdminCookie, clearAdminCookie } from '@/lib/admin-auth';
+import { createAdminSession, setAdminCookie, clearAdminCookie } from '@/lib/auth/admin-auth';
 
 export async function POST(req: NextRequest) {
     const body = await req.json().catch(() => null);

@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { supabase } from '@/lib/supabase';
-import { REVIEWS_PAGE_SIZE, GOOGLE_REVIEWS_MAX_DISPLAY } from '../constants/constants';
+import { supabase } from '@/lib/auth/supabase';
+import { REVIEWS_PAGE_SIZE, GOOGLE_REVIEWS_MAX_DISPLAY } from '../lib/constants';
 import { formatReviewDateLabel, getInitials } from '../lib/review-formatters';
-import type { CategoryKey, ReviewCard } from '../types/types';
+import type { CategoryKey, ReviewCard } from '../lib/types';
 
 export function useProReviews(placeId: string) {
     const isUuid = (value: string) =>
@@ -152,7 +152,7 @@ export function useProReviews(placeId: string) {
                 const fullName =
                     typeof r?.reviewer_name === 'string' && r.reviewer_name.trim()
                         ? r.reviewer_name.trim()
-                        : 'Scandio review';
+                        : 'Menda review';
                 return {
                     id: String(r.id),
                     fullName,

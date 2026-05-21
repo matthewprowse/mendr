@@ -1,3 +1,6 @@
+// Required env vars: NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY,
+//                    UPSTASH_REDIS_REST_URL, UPSTASH_REDIS_REST_TOKEN
+
 /**
  * GET /api/providers/[id]
  *
@@ -17,7 +20,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { checkRateLimit } from '@/lib/rate-limit-config';
-import { loadContractorProfileById } from '@/lib/contractor-profile-server';
+import { loadContractorProfileById } from '@/lib/providers/contractor-profile-server';
 
 export async function GET(
     req: NextRequest,
