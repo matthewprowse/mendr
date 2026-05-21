@@ -232,6 +232,13 @@ export const RATE_LIMITS = {
         max: 20,
     },
 
+    // Direct match: homeowner skips AI diagnosis and goes straight to /match.
+    // DB write only — no AI or external API calls. 10 per hour is generous.
+    directMatch: {
+        windowMs: 60 * 60 * 1000, // 1 hour
+        max: 10,
+    },
+
 } as const satisfies Record<string, RateLimitConfig>;
 
 export type RateLimitBucket = keyof typeof RATE_LIMITS;

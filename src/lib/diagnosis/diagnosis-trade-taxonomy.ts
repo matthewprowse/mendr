@@ -267,6 +267,10 @@ export const TAXONOMY_SUBCATEGORIES: readonly TaxonomySubcategory[] = (
             label: 'Wooden Deck / Pergola',
             trade: 'Carpentry & Woodwork',
             scope: 'Any fault with an outdoor wooden deck, pergola, or timber entertainment area — including rotting deck boards, structurally unstable posts or bearers, damaged balustrades or handrails, and new deck or pergola installations.',
+            excludes: [
+                'Soft landscaping, planting, or garden design around the deck (→ Garden & Landscaping)',
+                'Outdoor paving or concrete slabs under the structure (→ Flooring & Tiling)',
+            ],
             inferenceAnchors: ['wooden deck', 'deck boards', 'pergola', 'outdoor deck', 'deck repair', 'timber deck', 'deck rotting'],
         },
         {
@@ -449,6 +453,84 @@ export const TAXONOMY_SUBCATEGORIES: readonly TaxonomySubcategory[] = (
             inferenceAnchors: ['pool cleaning', 'pool vacuum', 'clean pool', 'pool service', 'pool maintenance', 'dirty pool'],
         },
 
+        // ── Garden & Landscaping ──────────────────────────────────────────────────
+        //
+        // BOUNDARY RULES — where Garden & Landscaping starts and ends:
+        //
+        // Garden & Landscaping OWNS: all living plant work (lawn, trees, hedges,
+        //   planting), irrigation systems, soft landscaping design, and specialist
+        //   arborist tasks (tree felling, pruning, stump grinding).
+        //
+        // Building & Construction OWNS: any hard landscaping with masonry —
+        //   paving foundations, retaining walls, brick raised beds, concrete drainage.
+        //
+        // Carpentry & Woodwork OWNS: timber structures IN the garden — wooden decks,
+        //   pergolas, wooden raised beds, timber garden sheds.
+        //
+        // Rubble & Waste Removal OWNS: simply carting away cut branches or garden
+        //   waste with no horticultural skill required (→ garden_green_waste).
+        //
+        // Flooring & Tiling OWNS: laying paving slabs or tiles outdoors — the
+        //   paving itself, not the garden around it.
+        //
+        // Plumbing OWNS: a leaking outdoor tap, geyser-side irrigation supply
+        //   pipe, or mains connection — the fitting side of outdoor water supply.
+        //   Garden & Landscaping OWNS irrigation zone controllers, drip systems,
+        //   pop-up sprinklers, and pump-fed systems that are part of the garden.
+        //
+        // Electrical OWNS: outdoor lighting circuits, COC-required electrical
+        //   work in the garden. Garden & Landscaping does NOT do licensed electrical.
+
+        {
+            id: 'lawn_maintenance',
+            label: 'Lawn Mowing / Lawn Care',
+            trade: 'Garden & Landscaping',
+            scope: 'Regular or once-off lawn mowing, edging, scarifying, top-dressing, lawn repair, and general grass upkeep. Includes kikuyu, LM Berea, buffalo, and fine-leaf lawns common in the Western Cape. Also covers lawn diseases (dollar spot, brown patch) and lawn renovation after drought or load-shedding pump failure.',
+            excludes: [
+                'Cutting and removing branches or green waste only (→ garden_green_waste in Rubble & Waste Removal)',
+            ],
+            inferenceAnchors: ['lawn mowing', 'lawn care', 'grass cutting', 'lawn repair', 'lawn service', 'kikuyu', 'lm lawn', 'lawn dying'],
+        },
+        {
+            id: 'tree_arborist',
+            label: 'Tree Felling / Arborist',
+            trade: 'Garden & Landscaping',
+            scope: 'Professional tree felling, pruning, crown reduction, deadwood removal, and stump grinding. Covers large trees requiring a climber or machinery, storm-damaged trees requiring urgent safe removal, trees threatening foundations or structures, and municipal permit-required tree work. Cape Town\'s south-easter and winter storms regularly bring down large trees and branches.',
+            excludes: [
+                'Simply carting away already-cut branches or green waste with no skill (→ garden_green_waste in Rubble & Waste Removal)',
+            ],
+            inferenceAnchors: ['tree felling', 'tree cutting', 'tree removal', 'stump removal', 'arborist', 'tree pruning', 'tree too big', 'branch removal', 'fallen tree'],
+        },
+        {
+            id: 'irrigation_system',
+            label: 'Garden Irrigation System',
+            trade: 'Garden & Landscaping',
+            scope: 'Installation, repair, or programming of garden irrigation systems — including pop-up sprinklers, drip irrigation, soaker hoses, zone controllers, irrigation timers, and pump-fed garden water systems. Covers burst or blocked irrigation lines within the garden bed, blocked emitters, and faulty zone valves.',
+            excludes: [
+                'Leaking mains outdoor tap or supply pipe fitting (→ tap_toilet_repair or burst_pipe_leak in Plumbing)',
+            ],
+            inferenceAnchors: ['irrigation system', 'sprinkler', 'drip irrigation', 'irrigation timer', 'garden irrigation', 'zone controller', 'irrigation line', 'pop-up sprinkler'],
+        },
+        {
+            id: 'hedge_trimming_planting',
+            label: 'Hedge Trimming / Planting',
+            trade: 'Garden & Landscaping',
+            scope: 'Trimming, shaping, or reducing hedges, shrubs, and bushes. Includes removal and replanting of established plants, garden bed establishment, mulching, and seasonal planting or replanting. Covers all hedge types common in Cape Town including ficus, box, laurel, and restio-based plantings.',
+            inferenceAnchors: ['hedge trimming', 'hedge cutting', 'plant removal', 'garden planting', 'shrub trimming', 'bush cutting', 'garden clean up', 'overgrown hedge'],
+        },
+        {
+            id: 'landscaping_design',
+            label: 'Landscaping / Garden Design',
+            trade: 'Garden & Landscaping',
+            scope: 'Full garden design, soft landscaping, and established garden makeovers — including garden layout planning, planting schemes, raised bed installation, path or stepping-stone installation in garden beds, and water-wise or fynbos garden conversions. Fynbos and water-wise gardens are increasingly popular in the drought-prone Western Cape.',
+            excludes: [
+                'Paving, concrete patios, or hard outdoor surfaces (→ Flooring & Tiling)',
+                'Masonry retaining walls or brick raised beds (→ Building & Construction)',
+                'Timber decks or pergolas (→ Carpentry & Woodwork)',
+            ],
+            inferenceAnchors: ['garden design', 'landscaping', 'garden makeover', 'fynbos garden', 'water-wise', 'raised garden bed', 'garden path', 'stepping stones'],
+        },
+
         // ── Rubble & Waste Removal ────────────────────────────────────────────────
 
         {
@@ -462,7 +544,11 @@ export const TAXONOMY_SUBCATEGORIES: readonly TaxonomySubcategory[] = (
             id: 'garden_green_waste',
             label: 'Garden / Green Waste Removal',
             trade: 'Rubble & Waste Removal',
-            scope: 'Removal of garden and plant waste — including branches, tree stumps, hedge cuttings, grass clippings, and green waste from garden clean-ups. Includes large storm-damaged branch and tree removal, which is frequent in Cape Town after south-easter and winter storms.',
+            scope: 'Removal of already-cut garden and plant waste — including branches, tree stumps, hedge cuttings, grass clippings, and green waste from garden clean-ups. The material is already cut and only needs loading and carting. Frequent in Cape Town after south-easter and winter storms.',
+            excludes: [
+                'Professional tree felling or arborist work requiring skill (→ tree_arborist in Garden & Landscaping)',
+                'Hedge trimming or garden upkeep with horticulture skill (→ hedge_trimming_planting in Garden & Landscaping)',
+            ],
             inferenceAnchors: ['garden waste', 'green waste', 'tree branches', 'tree stump removal', 'hedge cuttings', 'garden clean up'],
         },
         {

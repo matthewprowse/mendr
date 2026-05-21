@@ -168,12 +168,14 @@ function Step1({
     selectedService,
     isValidatingContinue,
     onContinue,
+    onSkipToDirect,
 }: {
     infoText: string;
     setInfoText: (v: string) => void;
     selectedService: string | null;
     isValidatingContinue: boolean;
     onContinue: () => void | Promise<void>;
+    onSkipToDirect: () => void;
 }) {
     const ref = useRef<HTMLTextAreaElement>(null);
 
@@ -184,6 +186,8 @@ function Step1({
 
     const trimmedLen = infoText.trim().length;
     const canContinue = trimmedLen >= START_DESCRIPTION_MIN_CHARS || Boolean(selectedService);
+    // Show the direct-match shortcut whenever a trade is selected — description is optional.
+    const canSkipToDirect = Boolean(selectedService);
 
     return (
         <div className="h-full overflow-y-auto">
@@ -220,7 +224,7 @@ function Step1({
                     </div>
                 </div>
                 <div className="sticky bottom-0 shrink-0 bg-background px-6 py-3">
-                    <div className="w-full max-w-sm mx-auto">
+                    <div className="w-full max-w-sm mx-auto flex flex-col gap-2">
                         <Button
                             type="button"
                             className="h-10 w-full gap-2"
@@ -233,9 +237,28 @@ function Step1({
                                     Processing
                                 </>
                             ) : (
-                                'Continue'
+                                'Scan & Diagnose My Issue'
                             )}
                         </Button>
+
+                        {canSkipToDirect && (
+                            <>
+                                <div className="flex items-center gap-2 py-0.5">
+                                    <div className="h-px flex-1 bg-border" />
+                                    <span className="text-xs text-muted-foreground">or</span>
+                                    <div className="h-px flex-1 bg-border" />
+                                </div>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    className="h-10 w-full gap-2 text-sm"
+                                    onClick={onSkipToDirect}
+                                    disabled={isValidatingContinue}
+                                >
+                                    Find {selectedService} Contractors Directly
+                                </Button>
+                            </>
+                        )}
                     </div>
                 </div>
             </div>
@@ -549,6 +572,7 @@ function Step3({
     onStart,
     isStarting,
     savedAddresses,
+    isDirectMatch,
 }: {
     locationMode: LocationMode;
     setLocationMode: (m: LocationMode) => void;
@@ -560,6 +584,7 @@ function Step3({
     onStart: () => Promise<void>;
     isStarting: boolean;
     savedAddresses: SavedAddress[];
+    isDirectMatch?: boolean;
 }) {
     const manualRef = useRef<HTMLInputElement>(null);
 
@@ -686,7 +711,10 @@ function Step3({
                                 disabled={isStarting}
                         onClick={() => void onStart()}
                     >
-                        {isStarting ? 'Starting...' : 'Start Diagnosis'}
+                        {isStarting
+                            ? (isDirectMatch ? 'Finding contractors…' : 'Starting…')
+                            : (isDirectMatch ? 'Find Contractors' : 'Start Diagnosis')
+                        }
                             </Button>
                         ) : (
                             <Button type="button" variant="ghost" className="h-10 w-full text-muted-foreground">
@@ -711,6 +739,9 @@ export function StartPageClient() {
     const [infoText, setInfoText] = useState('');
     const [selectedService, setSelectedService] = useState<string | null>(null);
     const [serviceOptions, setServiceOptions] = useState<string[]>(() => [...SERVICE_LABELS]);
+    // When true the Step 3 location handler creates a direct-match record and goes
+    // straight to /match instead of /processing — no AI diagnosis pipeline.
+    const [isDirectMatch, setIsDirectMatch] = useState(false);
 
     const [locationValue, setLocationValue] = useState('');
     const [locationMode, setLocationMode] = useState<LocationMode>('choose');
@@ -821,6 +852,13 @@ export function StartPageClient() {
             setIsStep1Validating(false);
         }
     }, [infoText, selectedService]);
+
+    // Skip the diagnosis pipeline — go straight to location step, then /match.
+    const handleSkipToDirect = useCallback(() => {
+        if (!(selectedService ?? '').trim()) return;
+        setIsDirectMatch(true);
+        setStep(3);
+    }, [selectedService]);
 
     useEffect(() => {
         if (step !== 3 || locationMode !== 'manual') return;
@@ -934,6 +972,75 @@ export function StartPageClient() {
 
     const handleStartDiagnosis = useCallback(async () => {
         if (!locationValue.trim()) return;
+
+        // ── Direct-match path: no AI, go straight to /match ────────────────────
+        if (isDirectMatch) {
+            const trade = (selectedService ?? '').trim();
+            if (!trade) {
+                toast.error('Please select a service category first.');
+                setStep(1);
+                return;
+            }
+            setIsStarting(true);
+            try {
+                const conversationId = createClientId();
+
+                // Resolve lat/lng from the address the user entered.
+                let lat: number | null = null;
+                let lng: number | null = null;
+                try {
+                    const geoRes = await fetch('/api/geocode', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ address: locationValue.trim(), westernCapeOnly: true }),
+                    });
+                    if (geoRes.ok) {
+                        const geo = (await geoRes.json()) as { lat?: number; lng?: number };
+                        if (typeof geo.lat === 'number' && typeof geo.lng === 'number') {
+                            lat = geo.lat;
+                            lng = geo.lng;
+                        }
+                    }
+                } catch {
+                    // Non-fatal — proceed without coordinates, match page will ask again.
+                }
+
+                const res = await fetch('/api/diagnoses/direct', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        conversationId,
+                        trade,
+                        description: infoText.trim() || undefined,
+                        address: locationValue.trim() || undefined,
+                        lat: lat ?? undefined,
+                        lng: lng ?? undefined,
+                    }),
+                });
+
+                if (!res.ok) {
+                    const err = (await res.json().catch(() => null)) as { error?: string } | null;
+                    toast.error(err?.error ?? 'Could not find contractors. Please try again.');
+                    return;
+                }
+
+                const { id } = (await res.json()) as { id: string };
+                const qp = new URLSearchParams();
+                qp.set('conversationId', id);
+                if (lat !== null && lng !== null) {
+                    qp.set('lat', String(lat));
+                    qp.set('lng', String(lng));
+                }
+                router.push(`/match?${qp.toString()}`);
+            } catch {
+                toast.error('Could not find contractors. Please try again.');
+            } finally {
+                setIsStarting(false);
+            }
+            return;
+        }
+
+        // ── Standard diagnosis path ─────────────────────────────────────────────
         if (infoText.trim().length < START_DESCRIPTION_MIN_CHARS && !(selectedService ?? '').trim()) {
             toast.error(
                 `Either add at least ${START_DESCRIPTION_MIN_CHARS} characters about the issue or select a service.`
@@ -1034,7 +1141,7 @@ export function StartPageClient() {
         } finally {
             setIsStarting(false);
         }
-    }, [locationValue, infoText, router, selectedPhotos, selectedService, serviceOptions]);
+    }, [locationValue, infoText, router, selectedPhotos, selectedService, serviceOptions, isDirectMatch]);
 
     return (
         <div className="fixed inset-0 z-0 flex flex-col overflow-hidden bg-background">
@@ -1057,6 +1164,7 @@ export function StartPageClient() {
                         selectedService={selectedService}
                         isValidatingContinue={isStep1Validating}
                         onContinue={handleStep1Continue}
+                        onSkipToDirect={handleSkipToDirect}
                     />
                 )}
                 {step === 2 && (
@@ -1078,6 +1186,7 @@ export function StartPageClient() {
                         onStart={handleStartDiagnosis}
                         isStarting={isStarting}
                         savedAddresses={savedAddresses}
+                        isDirectMatch={isDirectMatch}
                     />
                 )}
             </div>
