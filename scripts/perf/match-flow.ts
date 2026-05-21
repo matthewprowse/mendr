@@ -197,7 +197,7 @@ async function run(): Promise<void> {
                 buffer: tinyPngBuffer(),
             });
 
-            const continueBtn = page.getByRole('button', { name: /Continue to Scandio Report/i });
+            const continueBtn = page.getByRole('button', { name: /Continue to Menda Report/i });
             await continueBtn.waitFor({ state: 'visible', timeout: 15_000 });
             await continueBtn.click();
 

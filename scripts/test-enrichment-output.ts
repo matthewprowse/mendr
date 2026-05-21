@@ -68,7 +68,7 @@ async function runEnrichment(params: {
 }): Promise<EnrichmentOutput | null> {
     const { providerName, trade, address, rating, ratingCount, websiteText, reviewsText } = params;
 
-    const prompt = `You are Scandio's provider enrichment engine. Extract everything useful about this South African home services business. Be aggressive — if something is plausibly inferable from context, include it. Do not invent facts, but do not be conservative either. Specific always beats vague.
+    const prompt = `You are Menda's provider enrichment engine. Extract everything useful about this South African home services business. Be aggressive — if something is plausibly inferable from context, include it. Do not invent facts, but do not be conservative either. Specific always beats vague.
 
 Provider: ${providerName}
 ${trade ? `Primary Trade: ${trade}` : ''}

@@ -39,7 +39,7 @@ async function sleep(ms: number) {
 }
 
 async function main() {
-    console.log('── Scandio Re-Enrichment Script ──────────────────────────────────');
+    console.log('── Menda Re-Enrichment Script ──────────────────────────────────');
     console.log(`BATCH_SIZE=${BATCH_SIZE}, DELAY_MS=${DELAY_MS}, DRY_RUN=${DRY_RUN}`);
 
     // Find providers eligible for re-enrichment.
