@@ -93,6 +93,130 @@ describe('buildSystemInstruction', () => {
         // The output format block always includes the structured JSON schema fragment.
         expect(result).toContain('confidence');
     });
+
+    // Ported from scripts/test-diagnose-prompts.ts ---------------------------
+
+    it('embeds the allowed service labels in canonical order', () => {
+        const result = buildSystemInstruction({
+            ...BASE_CONTEXT,
+            serviceListText: 'Electrical, Plumbing, Painting',
+        });
+        expect(result).toContain(
+            'Allowed service labels (in order): Electrical, Plumbing, Painting'
+        );
+    });
+
+    it('includes the UNRELATED IMAGE RULE block', () => {
+        const result = buildSystemInstruction(BASE_CONTEXT);
+        expect(result).toContain('UNRELATED IMAGE RULE');
+    });
+
+    it('includes the UNSUPPORTED HOME SERVICE RULE block', () => {
+        const result = buildSystemInstruction(BASE_CONTEXT);
+        expect(result).toContain('UNSUPPORTED HOME SERVICE RULE');
+    });
+
+    it('includes the OUTPUT FORMAT header', () => {
+        const result = buildSystemInstruction(BASE_CONTEXT);
+        expect(result).toContain('OUTPUT FORMAT:');
+    });
+
+    it('includes the strict JSON format header', () => {
+        const result = buildSystemInstruction(BASE_CONTEXT);
+        expect(result).toContain('JSON FORMAT (STRICT):');
+    });
+
+    it('shortens the thought guidance in follow-up mode', () => {
+        const result = buildSystemInstruction(
+            ctx({ isFollowUp: true, hasUserContext: true })
+        );
+        expect(result).toContain(
+            'FOLLOW-UP MODE: Keep <thought> to 2–3 short sentences.'
+        );
+    });
+
+    it('echoes the user-selected trade context when supplied', () => {
+        const result = buildSystemInstruction(
+            ctx({
+                isFollowUp: true,
+                hasUserContext: true,
+                userSelectedTrade: {
+                    diagnosis: 'Gate Motor Problem',
+                    trade: 'Security & Access',
+                },
+            })
+        );
+        expect(result).toContain('USER CONTEXT: The user first selected "Gate Motor Problem"');
+    });
+
+    it('flags text-only turns when no image is attached', () => {
+        const result = buildSystemInstruction(
+            ctx({
+                isFollowUp: true,
+                hasUserContext: true,
+                isTextOnlyNoAttachments: true,
+            })
+        );
+        expect(result).toContain(
+            'TEXT-ONLY (NO IMAGE): The user has NOT uploaded any image.'
+        );
+    });
+
+    it('surfaces the previous diagnosis when one is supplied', () => {
+        const result = buildSystemInstruction(
+            ctx({
+                isFollowUp: true,
+                hasUserContext: true,
+                previousDiagnosis: {
+                    diagnosis: 'Gate Motor Capacitor Fault',
+                    trade: 'Security & Access',
+                    trade_detail: 'Automated Gate Motor',
+                },
+            })
+        );
+        expect(result).toContain(
+            'The user already has a diagnosis: "Gate Motor Capacitor Fault"'
+        );
+    });
+
+    it('includes the negative feedback guidance when feedback is "down"', () => {
+        const result = buildSystemInstruction(ctx({ feedback: 'down' }));
+        expect(result).toContain(
+            'IMPORTANT: The user has indicated that the previous diagnosis was INCORRECT.'
+        );
+    });
+
+    it('emits the DIAGNOSIS REJECTED block when diagnosisRejected is true', () => {
+        const result = buildSystemInstruction(
+            ctx({ diagnosisRejected: true })
+        );
+        expect(result).toContain('DIAGNOSIS REJECTED:');
+        expect(result).toContain('The user has indicated the diagnosis is incorrect');
+    });
+
+    it('includes existing-providers guidance when providers are supplied', () => {
+        const result = buildSystemInstruction(
+            ctx({
+                isFollowUp: true,
+                hasUserContext: true,
+                providers: [
+                    {
+                        name: 'Provider One',
+                        rating: 4.8,
+                        ratingCount: 142,
+                        specialisations: ['Gate Motor Repair'],
+                        isFavourite: true,
+                        favouriteReason: 'Highest rating and response time',
+                    },
+                ],
+            })
+        );
+        expect(result).toContain(
+            'The following highly-rated service providers are already displayed'
+        );
+        // The supplied provider name should appear in the rendered list.
+        expect(result).toContain('Provider One');
+    });
 });
 
 // ---------------------------------------------------------------------------

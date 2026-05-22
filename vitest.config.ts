@@ -9,15 +9,24 @@ export default defineConfig({
         coverage: {
             provider: 'v8',
             reporter: ['text', 'lcov'],
-            include: [
-                'src/lib/safe-redirect.ts',
-                'src/lib/admin-auth.ts',
-                'src/lib/parse-diagnosis-from-model-response.ts',
-                'src/lib/rate-limit.ts',
-                'src/lib/parts-prices/lookup.ts',
-                'src/lib/parts-prices/extract-price.ts',
-                'src/lib/market-rates/brave-web-search.ts',
+            include: ['src/**/*.{ts,tsx}'],
+            exclude: [
+                'src/**/*.test.{ts,tsx}',
+                'src/**/__tests__/**',
+                'src/components/ui/**',
+                'src/**/*.d.ts',
+                'node_modules',
+                '.next',
             ],
+            // Phase 0 baseline thresholds — pinned just below current actuals
+            // measured after widening the coverage scope to `src/**/*`. Phase 1
+            // ratchets these upward as pure-function tests are added.
+            thresholds: {
+                lines: 3,
+                branches: 15,
+                functions: 14,
+                statements: 3,
+            },
         },
     },
     resolve: {

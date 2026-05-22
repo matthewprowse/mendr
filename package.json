@@ -12,17 +12,13 @@
     "lint": "eslint .",
     "format": "prettier --write \"src/**/*.{ts,tsx,js,jsx,json,css,md}\"",
     "format:check": "prettier --check \"src/**/*.{ts,tsx,js,jsx,json,css,md}\"",
-    "test:diagnose-prompts": "npx tsx scripts/test-diagnose-prompts.ts",
-    "test:match-flow": "npx tsx scripts/test-match-flow.ts",
-    "test:enrichment-summary": "npx tsx scripts/test-enrichment-summary.ts",
-    "test:llm-content-guard": "npx tsx scripts/test-llm-content-guard.ts",
     "perf:match-flow": "npx tsx scripts/perf/match-flow.ts",
     "scrape-providers": "npx tsx scripts/scrape-providers.ts",
     "sync-provider-reviews": "npx tsx scripts/sync-provider-reviews.ts",
     "check:diagnoses-table": "sh -c 'if grep -rE \"from\\(['\"'\"']conversations['\"'\"']\\)\" src scripts --include=\"*.ts\" --include=\"*.tsx\" -q; then echo \"Use diagnoses table, not conversations\"; exit 1; fi'",
-    "test:trade-taxonomy": "npx tsx scripts/test-trade-taxonomy.ts",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "@google-cloud/speech": "^7.3.0",
@@ -80,6 +76,7 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@vitest/coverage-v8": "^2.1.9",
     "dotenv": "^16.4.5",
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
