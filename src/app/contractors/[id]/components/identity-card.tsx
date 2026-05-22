@@ -22,7 +22,6 @@ export type IdentityCardProps = {
     companySize: 'solo' | 'small' | 'mid' | 'large' | null;
     yearsInBusiness: number | null;
     scandioReviewCount?: number | null;
-    keyPerson?: string | null;
 };
 
 export function IdentityCard({
@@ -35,7 +34,6 @@ export function IdentityCard({
     companySize,
     yearsInBusiness,
     scandioReviewCount,
-    keyPerson,
 }: IdentityCardProps) {
     const displayName = formatBusinessName(name) || name || 'Provider';
     const verified = (scandioReviewCount ?? 0) > 0;
@@ -70,7 +68,7 @@ export function IdentityCard({
                         {!isLoading && verified ? (
                             <div className="inline-flex items-center gap-1.5 self-start rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-medium text-emerald-700">
                                 <ShieldCheck size={12} weight="fill" aria-hidden />
-                                Verified on Menda
+                                Verified on Mendr
                             </div>
                         ) : null}
                     </div>
@@ -114,11 +112,6 @@ export function IdentityCard({
                     </div>
                 )}
 
-                {!isLoading && keyPerson ? (
-                    <p className="text-sm text-muted-foreground">
-                        Run by <span className="font-medium" style={{ color: INK }}>{keyPerson}</span>
-                    </p>
-                ) : null}
             </div>
         </section>
     );

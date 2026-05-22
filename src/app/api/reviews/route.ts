@@ -6,7 +6,7 @@ import { randomUUID } from 'crypto';
 import { createSupabaseAdminClient } from '@/lib/auth/supabase-server';
 import { checkRateLimit } from '@/lib/rate-limit-config';
 
-export type ScandioCategoryRatings = {
+export type MendrCategoryRatings = {
     punctuality: number;
     cleanliness: number;
     work_quality: number;
@@ -30,7 +30,7 @@ function isValidHalfStar(n: unknown): n is number {
  *   categoryRatings: { punctuality, cleanliness, work_quality, quote_accuracy } // 1–5 in half-star steps each
  * }
  *
- * Inserts into `reviews` with source `scandio`, status `pending`.
+ * Inserts into `reviews` with source `mendr`, status `pending`.
  * Expects columns: provider_id, source, source_ref, status, reviewer_name, rating, body,
  * category_ratings (jsonb), optional title (text), published_at, updated_at.
  */
@@ -46,7 +46,7 @@ export async function POST(req: NextRequest) {
         const reviewTitle =
             typeof body?.reviewTitle === 'string' ? body.reviewTitle.trim() : '';
         const reviewBody = typeof body?.reviewBody === 'string' ? body.reviewBody.trim() : '';
-        const cr = body?.categoryRatings as ScandioCategoryRatings | undefined;
+        const cr = body?.categoryRatings as MendrCategoryRatings | undefined;
 
         if (!providerId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(providerId)) {
             return NextResponse.json({ error: 'Invalid provider id' }, { status: 400 });
@@ -84,13 +84,13 @@ export async function POST(req: NextRequest) {
         const average = sum / 4;
 
         const nowIso = new Date().toISOString();
-        const sourceRef = `scandio:${providerId}:${randomUUID()}`;
+        const sourceRef = `mendr:${providerId}:${randomUUID()}`;
 
         const adminSupabase = await createSupabaseAdminClient();
 
         const row: Record<string, unknown> = {
             provider_id: providerId,
-            source: 'scandio',
+            source: 'mendr',
             source_ref: sourceRef.slice(0, 512),
             status: 'pending',
             reviewer_name: reviewerName,

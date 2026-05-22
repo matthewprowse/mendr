@@ -25,6 +25,8 @@ const UUID_RE =
 
 const MAX_GALLERY_THUMBS = 12;
 
+// NOTE: company_size, years_in_business, and profile_completeness are NOT columns
+// in the providers table — they live in provider_cache. Do not add them here.
 const PROVIDER_SELECT = [
     'id',
     'google_place_id',
@@ -43,11 +45,7 @@ const PROVIDER_SELECT = [
     'specialisations',
     'highlights',
     'service_areas',
-    'key_person',
     'weekday_descriptions',
-    'company_size',
-    'years_in_business',
-    'profile_completeness',
 ].join(', ');
 
 type ProviderRow = {
@@ -68,11 +66,7 @@ type ProviderRow = {
     specialisations: string[] | null;
     highlights: string[] | null;
     service_areas: string[] | null;
-    key_person: string | null;
     weekday_descriptions: string[] | null;
-    company_size: string | null;
-    years_in_business: number | null;
-    profile_completeness: number | null;
 };
 
 type CertificationRow = {
@@ -189,7 +183,7 @@ export async function loadContractorProfileById(id: string): Promise<LoadContrac
         const providerId = row.id;
         const googlePlaceId = row.google_place_id ?? null;
 
-        const [certsRes, imagesRes] = await Promise.all([
+        const [certsRes, imagesRes, cacheRes] = await Promise.all([
             admin
                 .from('provider_certifications')
                 .select('slug, label, issuer')
@@ -202,6 +196,11 @@ export async function loadContractorProfileById(id: string): Promise<LoadContrac
                 .order('sort_order', { ascending: true })
                 .order('id', { ascending: true })
                 .limit(MAX_GALLERY_THUMBS),
+            admin
+                .from('provider_cache')
+                .select('review_summary')
+                .eq('provider_id', providerId)
+                .maybeSingle(),
         ]);
 
         const certifications: MatchProviderCertification[] = ((certsRes.data ?? []) as CertificationRow[])
@@ -227,6 +226,9 @@ export async function loadContractorProfileById(id: string): Promise<LoadContrac
 
         const summarySanitised = normaliseGuardedText(row.summary);
         const summary = summarySanitised ? sanitizeCustomerSummary(summarySanitised) : '';
+        const cachedReviewSummary = normaliseGuardedText(
+            (cacheRes.data as { review_summary: string | null } | null)?.review_summary ?? null
+        );
         const summaryLong = normaliseGuardedText(row.summary_long);
         const about = normaliseGuardedText(row.about);
         const pastWork = normaliseGuardedText(row.past_work);
@@ -309,7 +311,6 @@ export async function loadContractorProfileById(id: string): Promise<LoadContrac
             about,
             pastWork,
             summaryLong,
-            keyPerson: row.key_person?.trim() || null,
             highlights: Array.isArray(row.highlights)
                 ? (row.highlights as unknown[]).filter(
                       (h): h is string => typeof h === 'string' && h.trim().length > 0
@@ -326,18 +327,13 @@ export async function loadContractorProfileById(id: string): Promise<LoadContrac
                   )
                 : [],
             hasWorkPhotos: images.length > 0,
-            enrichmentReviewSummary: null,
+            enrichmentReviewSummary: summarySanitised || cachedReviewSummary || null,
             responseProfile: null,
-            profileCompleteness:
-                typeof row.profile_completeness === 'number' &&
-                Number.isFinite(row.profile_completeness)
-                    ? row.profile_completeness
-                    : undefined,
-            companySize: isValidCompanySize(row.company_size),
-            yearsInBusiness:
-                typeof row.years_in_business === 'number' && Number.isFinite(row.years_in_business)
-                    ? row.years_in_business
-                    : null,
+            // company_size, years_in_business, profile_completeness are in provider_cache,
+            // not in providers — not available on this server-side path.
+            profileCompleteness: undefined,
+            companySize: null,
+            yearsInBusiness: null,
             certifications,
             images,
             nextOpensAt: openStatus.nextOpensAt ?? null,

@@ -16,7 +16,7 @@ export function HomeMarketingPage() {
             <LandingHeader
                 navLinks={[
                     { href: '#how-it-works', label: 'How It Works' },
-                    { href: '#value', label: 'Why Menda' },
+                    { href: '#value', label: 'Why Mendr' },
                     { href: '/contact', label: 'Contact' },
                     { href: '#faq', label: 'FAQ' },
                     { href: '/contractors', label: 'For Pros' },

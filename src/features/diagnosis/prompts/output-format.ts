@@ -27,16 +27,19 @@ export const OUTPUT_FORMAT_PROMPT_BLOCK = `INSTRUCTIONS:
 12. Do NOT output only a trade label (e.g. "Plumbing") or a generic statement in <thought>.
 
 MESSAGE RULES (apply to every 'message' value):
-Paragraph 1 — teaching diagnosis. 2–4 sentences for chemistry/water/maintenance-heavy issues; otherwise 2–3. Explain the causal chain: why this class of problem typically develops and what is likely going on in the system now. Frame hidden or chemical state as likely or typical, not as a confirmed lab result. Do not spend the whole paragraph restating the obvious visible symptom.
-- First sentence must be reassuring and fixable in tone.
-- Never include safety warnings or hazard information in Paragraph 1.
-- Never use vague severity words: significant, serious, major, severe, dangerous, unsafe, unusable.
-- Must start with the condition or diagnosis itself — not the photo subject, not a filler opener (The, A, An, Your, This, It, There, It is).
-- Use plain language; avoid unexplained jargon.
+The message field contains 3-4 named paragraphs separated by \n\n. Each paragraph has a specific purpose.
 
-Paragraph 2 — what happens next, from the homeowner's perspective. 2–4 sentences. Write for the person who owns the home, not the person doing the repair. Tell them what to expect: what the technician will check or do first, what a typical job looks like, and roughly how disruptive it will be. For sequence-sensitive work (pool chemistry, drainage), state order explicitly (First, … Then, … After that, …). Conditional phrasing is fine when the path genuinely depends on a condition. When RECOMMENDED PROVIDERS are listed and the user asked for companies near them, name those providers here per the RECOMMENDED PROVIDERS rules.
+Paragraph 1 — What's happening. 2-3 sentences. Explain the diagnosis in plain language, anchored in what is actually visible or stated. Must start with the condition or diagnosis itself — not a filler opener.
 
-Paragraph 3 — hazard warning only. Include only if there is a genuinely non-obvious hazard that could be significantly worsened by a specific action the user might take. 1–2 sentences. Do not include generic warnings. Must not start with filler openers. Omit entirely when no genuine hazard exists.
+Paragraph 2 — Why this typically develops. 2-3 sentences. Explain the causal mechanism that leads to this fault, not the symptom itself. Examples: "Geyser thermostats fail when scale builds up around the sensor, causing the heating element to stay on too long." or "Garage door torsion springs fatigue from repeated cycles; once one fails the door becomes unbalanced and the connecting rod takes load it was not designed for."
+
+Paragraph 3 — What gets worse if you wait. 1-2 sentences. Include ONLY when the fault is genuinely progressive (active leak, electrical fault, structural movement, etc.). Omit this paragraph entirely for static mechanical faults.
+
+Paragraph 4 — Hazard warning. 1-2 sentences. Include ONLY when there is a non-obvious hazard the homeowner could trigger by acting on the diagnosis. Omit otherwise.
+
+Severity language: use words like serious, significant, or unsafe when they are factually applicable. Do not use them as filler. Do not use any of them when they are not warranted.
+
+The diy_verification field (separate from message) covers homeowner self-check. Do not duplicate that content in message.
 
 ACTION_REQUIRED RULES:
 2–4 sentences describing what the technician will do, written for the homeowner's understanding. Use "Your technician will…" or "Specialists will…" framing throughout — not imperative commands. State sequence when order matters. Never mention the trade label or sub-trade label by name. Include hazard-prevention guidance only when genuinely relevant; omit otherwise.
@@ -56,17 +59,22 @@ JSON FORMAT (STRICT):
   "rejected": false,
   "requires_clarification": false,
   "unserviced": false,
-  "unsupported_reason": "1 sentence when rejected or unserviced explaining why it doesn't fit Menda. Never describe image contents. Use 'N/A' when supported.",
+  "unsupported_reason": "1 sentence when rejected or unserviced explaining why it doesn't fit Mendr. Never describe image contents. Use 'N/A' when supported.",
   "confidence": ${minConf},
   "refetch_providers": false,
-  "message": "2–3 paragraphs separated by \\n\\n, following MESSAGE RULES above.",
+  "message": "3-4 paragraphs separated by \\n\\n following the MESSAGE RULES above.",
   "diagnosis": "Plain-language title. Max 75 chars / 7 words. Headline-Style Title Case. Single most likely cause.",
   "estimated_diagnosis_sentence": "Same text as the diagnosis field — identical.",
   "trade": "Exactly one of: Electrical, Plumbing, Security, Building & Construction, Carpentry & Woodwork, Flooring & Tiling, General Handyman, Locksmith Services, Painting, Pool Maintenance, Rubble & Waste Removal, Welding. Use 'N/A' when rejected or requires_clarification.",
   "trade_detail": "Short specialty within that trade (max 12 words, Headline-Style Title Case). Empty string when not needed.",
   "action_required": "2–4 sentences in 'Your technician will…' voice per ACTION_REQUIRED RULES. Use 'N/A' when rejected or requires_clarification.",
   "image_descriptions": ["One entry per image: max 2 plain-language sentences of pure visual observation — what the camera shows and the likely fault visible. No interpretation beyond what is visible. No specialists, no actions."],
-  "clarification_questions": ["Only when requires_clarification is true: 2–4 user-perspective statements (e.g. 'It\\'s a gas geyser'). Max 8 words each. Empty array otherwise."]
+  "clarification_questions": ["Only when requires_clarification is true: 2–4 user-perspective statements (e.g. 'It\\'s a gas geyser'). Max 8 words each. Empty array otherwise."],
+  "failed_component": "Specific failed component (e.g. 'torsion spring'). Empty string when not identifiable.",
+  "cascading_damage": "Secondary damage caused by the failure. Empty string when none.",
+  "diy_verification": "One-sentence homeowner check that confirms the diagnosis. Empty string when no safe check exists.",
+  "photo_request": "When a specific photo would help, name exactly what photo. Empty string otherwise.",
+  "confidence_drivers": ["2-4 short bullets explaining what drove the confidence level."]
 }
 Set "unserviced" to true ONLY when the need is home-related but we don't offer that service category. Default is false.
 Set "refetch_providers" to true ONLY when the user explicitly asks for new/different/more providers.

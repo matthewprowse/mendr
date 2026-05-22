@@ -41,8 +41,8 @@ export default function GlobalError({
                 <p style={{ fontSize: '0.9rem', color: '#555', margin: 0, maxWidth: 360 }}>
                     We've been notified and will look into it. Try refreshing the page — if
                     the problem persists, contact us at{' '}
-                    <a href="mailto:support@menda.co.za" style={{ color: '#111' }}>
-                        support@menda.co.za
+                    <a href="mailto:support@mendr.co.za" style={{ color: '#111' }}>
+                        support@mendr.co.za
                     </a>
                     .
                 </p>

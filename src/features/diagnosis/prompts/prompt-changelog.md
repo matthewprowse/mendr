@@ -1,6 +1,6 @@
 # Prompt Changelog
 
-This file records every meaningful change to the Menda diagnosis prompt system.
+This file records every meaningful change to the Mendr diagnosis prompt system.
 It exists so that AI assistants and developers never re-suggest an approach that has
 already been tried and rejected, and so that regressions can be traced to a specific
 change rather than discovered through user support tickets.
@@ -16,6 +16,106 @@ Format for each entry:
 **Regressions / known side-effects:** [anything that got worse or needed a follow-up fix]
 **Why this approach:** [key reasoning — especially if alternative approaches were rejected]
 ```
+
+---
+
+## v7.3 — 2026-05-22
+
+**Changed:** `agent-prose.ts` (new `image_observations` structured array added to PROSE_SCHEMA and `ProseResult`; new `normaliseImageObservations` helper; post-parse derivation of `image_descriptions` from `image_observations` when missing; CROSS-IMAGE OBSERVATION TABLE block appended to the visual block of the prose system prompt). `features/diagnosis/types.ts` gains optional `image_observations` field. Report UI (`report-detail-content.tsx`) replaces the flat extra-images grid with a per-image observation section that pairs each image with a role badge, the primary observation, visible components and issues spotted; a top-of-section alert appears when any image is tagged `contradicting`.
+
+**Problem solved:**
+- Multi-image diagnoses were silently collapsing distinct per-image findings into a single summary. Real-world case: two clear photos (missing torsion spring + bent connecting rod) yielded a diagnosis of "door opening skewed" with no mention of either component. The model saw the photos but the output schema gave it no slot that forced enumeration before synthesis.
+
+**Behaviour:**
+- For every submitted image (1-4), the model now produces an `ImageObservation` with: `primary_observation` (5-20 words), `components_visible`, `components_missing_or_damaged`, and `role_in_diagnosis` (one of `primary_evidence` | `corroborating` | `contradicting` | `context_only`).
+- Exactly one image is tagged `primary_evidence` whenever at least one image is submitted. If two photos point to different causes the second is tagged `contradicting`, the conflict is named in `thought`, and confidence is lowered.
+- `image_descriptions` is preserved for backward compatibility — when the model leaves it empty (or omits it), the server derives it from each observation's `primary_observation` so older consumers continue to work.
+- Report UI shows a per-image card under each thumbnail with a role badge (green for primary, neutral for corroborating, orange for contradicting, muted for context). When any photo is `contradicting`, a small alert appears above the photo section.
+
+**Why this approach over alternatives:**
+- A second LLM pass to enumerate per-image observations was rejected — Gemini 2.5 Flash already has all images in parallel attention, so the fix is to force the OUTPUT structure to demonstrate that consideration, not to re-look at the photos.
+- Replacing `image_descriptions` outright was rejected — too many downstream consumers (refinement endpoint, processing client, legacy reports). Deriving it server-side preserves the contract while letting the model focus on the richer structure.
+
+**Regressions / known side-effects:**
+- Output tokens per diagnosis go up by a small but measurable amount (one structured object per image instead of one short sentence). Cost monitored via `logGeminiUsage`.
+- Old diagnoses without `image_observations` render via the existing flat `extraImages` grid — no per-image cards.
+
+---
+
+## v7.2 — 2026-05-22
+
+**Changed:** `prompts/followup.ts` (new `buildRefinementWithNewImagesPrompt`), `prompts/composer.ts` (emits the new block in both `buildSystemInstruction` and `buildProseBaseInstruction`), `prompts/types.ts` (`PromptContext.isRefinementWithNewImages`). New endpoint `app/api/diagnoses/[id]/refine/route.ts` re-runs the two-agent pipeline with `additionalImageUrls` prepended to the existing `image_urls`. Database migration `diagnoses_image_refinement_log` adds an append-only JSONB array recording each refinement event.
+
+**Problem solved:**
+- After an initial diagnosis, users could only refine via text. They had no way to attach more photos — the single most common reason diagnoses underperformed.
+- The new `photo_request` field on Agent 2b output (introduced in v7.0) was being generated but not surfaced anywhere. It now drives a prominent prompt on the report page that opens the refinement sheet.
+
+**Behaviour:**
+- New images submitted during refinement are placed FIRST in the parts array Gemini sees. Original images follow. Combined count is capped at 4 by silently dropping the OLDEST images from the back of the array (with a server-side warning).
+- REFINEMENT MODE prompt block tells the model: weight the new images, update the diagnosis if they contradict the prior conclusion, corroborate when they agree, do not invent unsupported faults, and try to answer the prior `photo_request` if one was set.
+- Refinement does NOT consume daily diagnosis quota (only the first message in a conversation does); it does pay its own `refineDiagnosis` rate-limit bucket.
+
+**Why this approach over alternatives:**
+- Reusing `/api/diagnose` was considered but the route is already large and has multiple branches (text-only, image, provider hydration, quick thought, streaming). A thin dedicated endpoint at `/api/diagnoses/[id]/refine` keeps the call site clean and makes the new-photos-first ordering explicit, while still calling the existing `runClassification` / `runProseGeneration` agents — no parallel pipeline.
+- Placing new images last (original-style "primary" first) was rejected because the homeowner's refinement is literally a "look at this new evidence" act; Gemini's first-image attention bias should serve that.
+
+**Regressions / known side-effects:**
+- Image cap is still 4. Heavy refiners may see older photos silently dropped — this is logged server-side; UI hints at remaining slots.
+
+---
+
+## v7.1 — 2026-05-22
+
+**Changed:** `agent-prose.ts` (visualAndUrgencyBlock fully replaced with explicit MULTI-IMAGE SYNTHESIS PROTOCOL; `imageInstruction` extended to reference the protocol when imageCount > 1). Database migration `diagnoses_multi_image_support` adds `image_urls jsonb` alongside the legacy `image_url text`. Server cap of 4 images per diagnosis enforced in `/api/diagnose/route.ts`.
+
+**Problem solved:**
+- Mendr previously persisted only ONE image per diagnosis (`diagnoses.image_url`). Faults that need multiple angles (e.g. garage door with broken spring + bent connecting rod + damaged rail) could not be evidenced properly.
+- Gemini 2.5 Flash processes images in parallel attention — the FIRST image carries the most weight. The prior single-line multi-image rule buried in `agent-prose.ts` did not give the model an explicit protocol for absence detection or conflict handling.
+
+**Changes:**
+- Added `image_urls jsonb` to `public.diagnoses`, backfilled from existing `image_url` (legacy column retained for backward-compat reads).
+- Cap of FOUR images per submission enforced both client-side (UI blocks adding a 5th) and server-side (extras dropped with a warning).
+- New explicit MULTI-IMAGE SYNTHESIS PROTOCOL: treat all images as a single evidence base; weight the first image as the user's primary view; anchor the diagnosis to the clearest fault image; absence detection across symmetric features; explicit conflict-handling step that lowers confidence rather than silently committing.
+- `image_descriptions` rule is now stricter: EXACTLY one entry per image in input order.
+- Client upload UI on `/start` accepts up to 4 photos, shows a reorderable thumbnail strip with a "Primary" badge on the first, and submits `imageUrls: string[]` in user-specified order.
+- Report page consumes the new `image_urls` JSONB array (falls back to `image_url` for older rows).
+
+**Why this approach over alternatives:**
+- A schema migration was preferred over packing URLs into the diagnosis JSONB blob because images are owned by the row, not the model output — they need to persist even if the diagnosis JSON is regenerated.
+- The legacy `image_url` column is intentionally retained for one release so any read path not yet migrated continues to work; a follow-up migration will drop it.
+- Four images is a chosen ceiling: past four, Gemini Flash attention dilutes faster than the diagnostic value of additional photos.
+
+**Regressions / known side-effects:**
+- Older diagnoses without `image_urls` (created before this migration) render via fallback to `image_url`; no UX regression observed.
+- 33 pre-existing rows already violated the `diagnoses_diagnosis_shape_check` constraint and were skipped during backfill (constraint was `NOT VALID` and re-added as `NOT VALID` after the UPDATE; data integrity unchanged).
+
+---
+
+## v7.0 — 2026-05-22
+
+**Changed:** `agent-classify.ts` (schema + interface), `agent-prose.ts` (schema + interface + min-length guard), `prompts/output-format.ts` (MESSAGE RULES + JSON FORMAT), `prompts/base.ts` (REPORT DEPTH), `types.ts` (additive optional fields), report UI (`report-detail-content.tsx`).
+
+**Problem solved:**
+- Diagnoses felt thinner than pasting the same problem into ChatGPT/Claude. Root cause: stacked length caps on `thought` and `message`, blanket prohibition on severity language ("significant", "serious", "unsafe"), and no schema slot forcing the model to identify the specific failed component.
+- Real-world failure case: garage door with missing torsion spring and bent connecting rod was diagnosed only as "door opening skewed" because there was no `failed_component` or `cascading_damage` field.
+
+**Changes:**
+- Added `failed_component` and `cascading_damage` to the classification schema (Agent 2a).
+- Added `diy_verification`, `photo_request`, and `confidence_drivers` to the prose schema (Agent 2b).
+- Reframed `thought` from a 125-character telegraphic snippet into a 400-700 character reasoning trace (the homeowner-facing "How I worked this out" panel).
+- Restructured message rules into four named paragraphs (What's happening / Why it develops / What gets worse / Hazard) — paragraphs 3 and 4 are conditional, not mandatory padding.
+- Removed the blanket prohibition on severity words; the model may now use "serious", "significant", or "unsafe" when factually applicable.
+- Report UI surfaces a "Failed Component" line, a "You can verify this yourself" panel, and a more prominent "How I worked this out" reasoning panel (with confidence drivers as bullets).
+
+**JSON-blob-only:** No DB migration. `DiagnosisData` is stored as JSON in `diagnoses.diagnosis`; all new fields are optional and existing diagnoses continue to render.
+
+**Why this approach over alternatives:**
+- A DB migration was rejected — `diagnoses.diagnosis` is already a JSON blob, so additive fields just appear at read-time.
+- Allowing the model to write longer reasoning was preferred over post-hoc enrichment (a second LLM call to expand a short thought) because thinking quality drops sharply when reasoning is fragmented across multiple passes.
+
+**Regressions / known side-effects:**
+- Output tokens per diagnosis go up materially (longer `thought`, new fields). Cost monitored via `logGeminiUsage`.
+- `photo_request` is stored but not yet rendered — Phase 3 UI work.
 
 ---
 

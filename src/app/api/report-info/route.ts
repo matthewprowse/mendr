@@ -32,25 +32,33 @@ export async function GET(req: NextRequest) {
 
     const supabase = await createSupabaseServerClient();
 
-    // Support both 'diagnosis' (new) and 'diagnosis_json' (legacy) column names.
     const { data: conv, error } = await supabase
         .from('diagnoses')
-        .select('id, diagnosis, diagnosis_json')
+        .select('id, diagnosis, initial_image_description, is_direct_match')
         .eq('id', conversationId)
         .maybeSingle();
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     if (!conv) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-    const diagObj = (conv as any).diagnosis ?? (conv as any).diagnosis_json ?? null;
+    const diagObj = (conv as any).diagnosis ?? null;
     const { diagnosis, trade } = pickDiagnosisStrings(diagObj);
+
+    // For direct-match users (no diagnosis), fall back to the initial image description.
+    const isDirectMatch = Boolean((conv as any).is_direct_match);
+    const fallbackDescription =
+        typeof (conv as any).initial_image_description === 'string' &&
+        (conv as any).initial_image_description.trim()
+            ? (conv as any).initial_image_description.trim()
+            : undefined;
 
     const report_url = `${req.nextUrl.origin}/report/${encodeURIComponent(conversationId)}`;
 
     return NextResponse.json({
-        diagnosis: diagnosis ?? 'Home repair or maintenance',
+        diagnosis: diagnosis ?? fallbackDescription ?? 'Home repair or maintenance',
         trade,
         report_url,
+        is_direct_match: isDirectMatch,
     });
 }
 

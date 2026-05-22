@@ -29,6 +29,7 @@ import {
 } from '@/features/diagnosis/prompts/user-turn';
 import { runClassification } from '@/features/diagnosis/agent-classify';
 import { runProseGeneration, normaliseProse } from '@/features/diagnosis/agent-prose';
+import { computeStructuralConfidence } from '@/lib/diagnosis/structural-confidence';
 import { toHeadlineStyle, stripFillerSentenceStarts } from '@/lib/ai/prompt-utils';
 import { inferTradeFromSignals, TAXONOMY_NONE_ID } from '@/lib/diagnosis/diagnosis-trade-taxonomy';
 import { tradeToServiceLabel, SERVICE_LABELS } from '@/lib/services';
@@ -243,7 +244,10 @@ export async function POST(req: NextRequest) {
         const body = await req.json();
         recordStage(timings, 'parse_request_body_ms', parseStageStartedAt);
         const {
-            image,
+            image: imageField,
+            imageUrl: imageUrlField,
+            images: imagesField,
+            imageUrls: imageUrlsField,
             textQuery,
             history,
             feedback,
@@ -260,16 +264,58 @@ export async function POST(req: NextRequest) {
         } = body;
         const wantsStream = streamResponse === true;
 
+        // Hard cap. Past four images, attention dilutes faster than the
+        // diagnostic value of additional photos. Extras are silently dropped
+        // with a server-side warning so the request still succeeds.
+        const MAX_DIAGNOSE_IMAGES = 4;
+
+        // Normalise to a flat image list regardless of which call shape was used.
+        // Preference order (highest first):
+        //   1. `imageUrls: string[]` — new canonical multi-image field
+        //   2. `images: string[]` — existing flat list
+        //   3. `imageUrl: string` (new) / `image: string` (legacy) + optional `attachments[]`
+        // The FIRST entry is treated as the user's primary view (Gemini attention weight).
+        const rawAllImages: string[] = (() => {
+            if (Array.isArray(imageUrlsField)) {
+                return (imageUrlsField as unknown[])
+                    .filter((x): x is string => typeof x === 'string' && x.trim().length > 0)
+                    .map((x) => x.trim());
+            }
+            if (Array.isArray(imagesField)) {
+                return (imagesField as unknown[])
+                    .filter((x): x is string => typeof x === 'string' && x.trim().length > 0)
+                    .map((x) => x.trim());
+            }
+            const primarySource =
+                typeof imageUrlField === 'string' && imageUrlField.trim()
+                    ? imageUrlField.trim()
+                    : typeof imageField === 'string' && imageField.trim()
+                      ? imageField.trim()
+                      : null;
+            const primary = primarySource ? [primarySource] : [];
+            const extras = Array.isArray(attachments)
+                ? (attachments as unknown[])
+                      .filter((a): a is string => typeof a === 'string' && a.trim().length > 0)
+                      .map((a) => a.trim())
+                : [];
+            return [...primary, ...extras];
+        })();
+
+        const allImages: string[] = rawAllImages.slice(0, MAX_DIAGNOSE_IMAGES);
+        if (rawAllImages.length > MAX_DIAGNOSE_IMAGES) {
+            console.warn(
+                `[diagnose] received ${rawAllImages.length} images; truncating to ${MAX_DIAGNOSE_IMAGES} (extras silently dropped).`,
+            );
+        }
+
+        // The first image is used for the DB thumbnail / legacy `image` field consumers.
+        const image = allImages[0] ?? null;
+        const attachmentImages = allImages.slice(1);
+
         // ── Input guards ───────────────────────────────────────────────────────
         if (Array.isArray(history) && history.length > 20) {
             return new Response(
                 JSON.stringify({ error: 'History too long. Maximum 20 turns allowed.' }),
-                { status: 400 },
-            );
-        }
-        if (Array.isArray(attachments) && attachments.length > 9) {
-            return new Response(
-                JSON.stringify({ error: 'Too many attachments. Maximum 9 extra images (10 total with primary).' }),
                 { status: 400 },
             );
         }
@@ -279,21 +325,15 @@ export async function POST(req: NextRequest) {
                 { status: 400 },
             );
         }
-        // SSRF guard: if image is a URL (not a data URI), ensure it is from an
-        // allowed origin. This prevents server-side requests to internal endpoints.
-        if (typeof image === 'string' && image.startsWith('http') && !isAllowedImageUrl(image)) {
-            return new Response(
-                JSON.stringify({ error: 'Invalid image URL.' }),
-                { status: 400 },
-            );
+        // SSRF guard: reject any non-data-URI images pointing to disallowed origins.
+        for (const img of allImages) {
+            if (img.startsWith('http') && !isAllowedImageUrl(img)) {
+                return new Response(
+                    JSON.stringify({ error: 'Invalid image URL.' }),
+                    { status: 400 },
+                );
+            }
         }
-
-        const attachmentImages = Array.isArray(attachments)
-            ? attachments
-                  .filter((a: unknown) => typeof a === 'string')
-                  .map((a) => String(a).trim())
-                  .filter(Boolean)
-            : [];
 
         // Basic request-shape logging only; detailed metrics are captured at the end.
         // eslint-disable-next-line no-console
@@ -1026,6 +1066,15 @@ export async function POST(req: NextRequest) {
                 clarification_questions: Array.isArray(prose.clarification_questions)
                     ? prose.clarification_questions.filter((q) => typeof q === 'string' && q.trim().length > 0)
                     : [],
+                contractor_checklist: Array.isArray(prose.contractor_checklist)
+                    ? prose.contractor_checklist.filter((s) => typeof s === 'string' && s.trim().length > 0)
+                    : [],
+                homeowner_prep: typeof prose.homeowner_prep === 'string' ? prose.homeowner_prep : '',
+                diy_verification: typeof prose.diy_verification === 'string' ? prose.diy_verification : '',
+                photo_request: typeof prose.photo_request === 'string' ? prose.photo_request : '',
+                confidence_drivers: Array.isArray(prose.confidence_drivers)
+                    ? prose.confidence_drivers.filter((s) => typeof s === 'string' && s.trim().length > 0)
+                    : [],
                 // Classification fields (Agent 2a — ground truth)
                 trade: classification.trade,
                 trade_detail: classification.trade_detail,
@@ -1036,6 +1085,8 @@ export async function POST(req: NextRequest) {
                 refetch_providers: classification.refetch_providers,
                 unsupported_reason: classification.unsupported_reason ?? '',
                 subcategory_id: classification.subcategory_id,
+                failed_component: typeof classification.failed_component === 'string' ? classification.failed_component : '',
+                cascading_damage: typeof classification.cascading_damage === 'string' ? classification.cascading_damage : '',
                 // Metadata
                 prompt_version: DIAGNOSE_PROMPT_VERSION,
                 ai_model: GEMINI_MODEL_NAME,
@@ -1214,6 +1265,53 @@ export async function POST(req: NextRequest) {
                 };
             }
 
+            // ── Phase 4: structural confidence ────────────────────────────────
+            // Deterministic score over observable signals — replaces the model's
+            // self-reported `confidence` integer as the routing gate. Persisted
+            // inside the diagnosis JSONB; we drop the compute-time `drivers`
+            // since they are derived from the same signals.
+            const structuralImageCount =
+                (tieringLogMeta.imagesAfterTier as number | null) ??
+                (Boolean(image) ? 1 + attachmentImages.length : attachmentImages.length);
+            const historyTextForStructural = Array.isArray(history)
+                ? (history as HistoryMessage[])
+                      .map((h) => (typeof h?.content === 'string' ? h.content : ''))
+                      .join(' ')
+                : '';
+            const descriptionTextForStructural = [
+                typeof initial_image_description === 'string' ? initial_image_description : '',
+                typeof textQuery === 'string' ? textQuery : '',
+                historyTextForStructural,
+            ]
+                .map((s) => s.trim())
+                .filter(Boolean)
+                .join(' ');
+            const structuralClassificationView = {
+                ...classification,
+                trade: String(finalJson.trade ?? classification.trade),
+                subcategory_id: String(finalJson.subcategory_id ?? classification.subcategory_id),
+                rejected: Boolean(finalJson.rejected),
+                unserviced: Boolean(finalJson.unserviced),
+                requires_clarification: Boolean(finalJson.requires_clarification),
+                failed_component:
+                    typeof finalJson.failed_component === 'string'
+                        ? finalJson.failed_component
+                        : classification.failed_component,
+            };
+            const structural = computeStructuralConfidence({
+                classification: structuralClassificationView,
+                imageCount: structuralImageCount,
+                descriptionText: descriptionTextForStructural,
+                failedComponent: structuralClassificationView.failed_component,
+            });
+            finalJson = {
+                ...finalJson,
+                structural_confidence: {
+                    score: structural.score,
+                    signals: structural.signals,
+                },
+            };
+
             return `<thought>${ensuredThought}</thought>\n<json>${JSON.stringify(finalJson)}</json>`;
         }
 
@@ -1346,6 +1444,10 @@ export async function POST(req: NextRequest) {
                             }),
                         });
                         logDiagnoseTimings('ok', timings);
+
+                        // TODO(email): wire homeowner email once homeowner accounts are linked.
+                        // See non-streaming path comment below for details.
+
                         controller.close();
                     },
                 }),
@@ -1399,6 +1501,12 @@ export async function POST(req: NextRequest) {
                 }),
             });
             logDiagnoseTimings('ok', timings);
+
+            // TODO(email): wire homeowner email once homeowner accounts are linked.
+            // The diagnose route is a stateless inference endpoint — it does not persist
+            // a diagnosis record or capture homeowner email. Once homeowner auth is added
+            // and diagnoses are saved to the DB (with an email address on the session),
+            // fire DiagnosisReadyEmail here as a non-blocking void sendMendrEmail(...) call.
 
             return new Response(full, {
                 headers: {

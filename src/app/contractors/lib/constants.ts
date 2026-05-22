@@ -6,7 +6,7 @@ export const SCANDIO_CATEGORY_ROWS = [
     { key: 'quote_accuracy' as const, label: 'Quote Accuracy' },
 ];
 
-/** Initial batch size and each "View more" load for Menda-native reviews. */
+/** Initial batch size and each "View more" load for Mendr-native reviews. */
 export const REVIEWS_PAGE_SIZE = 5;
 
 /** Google reviews shown on the pro profile (Places API only returns a few per sync). */

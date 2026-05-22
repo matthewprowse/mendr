@@ -6,7 +6,7 @@ import { trackEvent } from '@/lib/analytics';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { toWhatsAppPhone } from '@/lib/utils';
-import { setLastConversationIdForWhatsApp } from '@/lib/whatsapp-prefill';
+import { setLastConversationIdForWhatsApp, resolveWhatsAppPrefill } from '@/lib/whatsapp-prefill';
 import { INK } from '@/lib/design-tokens';
 import { CircleNotch, Crosshair, FunnelSimple } from '@phosphor-icons/react';
 import { toast } from 'sonner';
@@ -208,7 +208,7 @@ function providerPriorityScore(provider: MatchProvider): number {
         (Array.isArray(provider.specialisations) && provider.specialisations.length > 0) ||
         (provider.profileCompleteness ?? 0) >= 2;
 
-    // Prioritise quality and confidence signals for "top recommendations".
+    // Prioritise quality and confidence signals for "top recommendrtions".
     let score = 0;
     score += Math.min(5, rating) * 20;
     score += Math.min(200, ratingCount) * 0.35;
@@ -325,14 +325,18 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
 
     /** Specialisation chips for the filter sheet — deduped + alphabetical, drawn from loaded providers. */
     const availableSpecialisations = useMemo(() => {
-        const set = new Set<string>();
+        const toTitleCase = (s: string) =>
+            s.replace(/\w\S*/g, (w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
+        const map = new Map<string, string>(); // normalized key → display label
         sortedProviders.forEach((p) => {
             (p.specialisations ?? []).forEach((s) => {
                 const t = String(s || '').trim();
-                if (t) set.add(t);
+                if (!t) return;
+                const key = t.toLowerCase();
+                if (!map.has(key)) map.set(key, toTitleCase(t));
             });
         });
-        return Array.from(set).sort((a, b) => a.localeCompare(b));
+        return Array.from(map.values()).sort((a, b) => a.localeCompare(b));
     }, [sortedProviders]);
     const totalCompanies = Math.max(sheetProviders.length, 1);
     const selectedProvider = useMemo(() => {
@@ -924,6 +928,7 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
                 router.push(`/diagnosis/${encodeURIComponent(conversationId)}`);
             }}
             expandRequestId={mapExpandRequestId}
+            expandToMode="full"
             peekProviderCount={filteredProviders.length}
             onSheetModeChange={(next, prev) => {
                 trackEvent('match_sheet_snap', {
@@ -1029,7 +1034,7 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
 
                 {showBottomSkeleton ? (
                     <>
-                        <h3 className="text-lg font-semibold leading-snug" style={{ color: INK }}>Top Recommendations</h3>
+                        <h3 className="text-lg font-semibold leading-snug" style={{ color: INK }}>Top Recommendrtions</h3>
                         <div className="flex flex-col gap-4">
                             {Array.from({ length: 3 }).map((_, i) => (
                                 <div
@@ -1085,7 +1090,7 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
                                             className="text-lg font-semibold leading-snug"
                                             style={{ color: INK }}
                                         >
-                                            Top Recommendations
+                                            Top Recommendrtions
                                         </h3>
                                     ) : null}
                                     <ProviderCard
@@ -1143,14 +1148,29 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
                                                         <Button
                                                             variant="secondary"
                                                             className="w-full"
-                                                            onClick={() => {
+                                                            onClick={async () => {
                                                                 const phone = toWhatsAppPhone(
                                                                     provider.phone
                                                                 );
                                                                 if (phone) {
                                                                     trackContactIntent('whatsapp');
+                                                                    const profileUrl = provider.providerId
+                                                                        ? `${window.location.origin}/contractors/${provider.providerId}`
+                                                                        : window.location.href;
+                                                                    const prefill = await resolveWhatsAppPrefill(profileUrl);
+                                                                    const parts: string[] = [
+                                                                        `Hi! I found you on Mendr.`,
+                                                                        prefill.diagnosis && prefill.diagnosis !== 'Home repair or maintenance'
+                                                                            ? `I have a ${prefill.trade ? prefill.trade.toLowerCase() + ' issue' : 'home repair issue'}: ${prefill.diagnosis}.`
+                                                                            : `I have a home repair issue I'd like your help with.`,
+                                                                        prefill.report_url
+                                                                            ? `Here's my Mendr report: ${prefill.report_url}`
+                                                                            : '',
+                                                                        `Are you available to assist?`,
+                                                                    ].filter(Boolean);
+                                                                    const text = parts.join(' ');
                                                                     window.open(
-                                                                        `https://wa.me/${phone}`,
+                                                                        `https://wa.me/${phone}?text=${encodeURIComponent(text)}`,
                                                                         '_blank',
                                                                         'noopener,noreferrer'
                                                                     );

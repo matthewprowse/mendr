@@ -188,7 +188,7 @@ export function ContactPopover({
                                 <>
                                     We&apos;ll draft a short message for{' '}
                                     <span className="font-medium">{displayName}</span> using your latest
-                                    Menda scan when available, then open WhatsApp for you to send it.
+                                    Mendr scan when available, then open WhatsApp for you to send it.
                                 </>
                             ) : (
                                 <>

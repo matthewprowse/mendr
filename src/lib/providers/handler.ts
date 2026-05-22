@@ -3,6 +3,7 @@ import { logAiEvent } from '@/lib/ai/ai-logging';
 import { checkRateLimit } from '@/lib/rate-limit-config';
 import { createSupabaseServerClient, createSupabaseAdminClient } from '@/lib/auth/supabase-server';
 import { sanitizeCustomerSummary } from '@/lib/providers/review-summary';
+import { formatBusinessName } from '@/lib/utils';
 import { formatWeekdayDescriptionsTo24h } from '@/lib/providers/format-weekday-descriptions';
 import { isOpenNowFromWeekdayDescriptions } from '@/lib/providers/open-status';
 import { buildProviderQuery } from '@/lib/providers/query-builder';
@@ -46,17 +47,16 @@ function greatCircleDistanceKm(
 }
 
 function getProviderResultLimitByRadius(radiusMeters: number): number {
-    if (radiusMeters >= 50_000) return 50;
-    if (radiusMeters >= 20_000) return 20;
-    if (radiusMeters >= 10_000) return 10;
-    return 5;
+    if (radiusMeters >= 50_000) return 100;
+    if (radiusMeters >= 20_000) return 40;
+    if (radiusMeters >= 10_000) return 20;
+    return 10;
 }
 
 function getTargetPlacesCountByRadius(radiusMeters: number): number {
     const providerLimit = getProviderResultLimitByRadius(radiusMeters);
-    // Keep enough headroom for filtering/relevance, but avoid always pulling ~55 places
-    // on small-radius searches where only 5-10 final providers are needed.
-    return Math.min(55, Math.max(20, providerLimit + 10));
+    // Pull enough places to give ranking headroom; cap at 120 to keep API costs bounded.
+    return Math.min(120, Math.max(20, providerLimit + 20));
 }
 
 const PLACES_SEARCH_TEXT_URL = 'https://places.googleapis.com/v1/places:searchText';
@@ -395,7 +395,7 @@ export async function POST(req: NextRequest) {
                                 if (googlePlaceIds.length > 0) {
                                     const { data: providerRowsForIds } = await supabase
                                         .from('providers')
-                                        .select('id, google_place_id, name, summary')
+                                        .select('id, google_place_id, name, summary, certifications')
                                         .in('google_place_id', googlePlaceIds);
                                     const idByGoogle = new Map(
                                         (providerRowsForIds || []).map((r: any) => [
@@ -426,6 +426,20 @@ export async function POST(req: NextRequest) {
                                                 String(r.summary).trim(),
                                             ])
                                     );
+                                    // Build certifications map from providers.certifications column
+                                    const certsByGoogle = new Map<string, Array<{ slug: string; label: string }>>(
+                                        (providerRowsForIds || [])
+                                            .filter((r: any) => Array.isArray(r.certifications) && r.certifications.length > 0)
+                                            .map((r: any) => [
+                                                String(r.google_place_id),
+                                                (r.certifications as string[])
+                                                    .filter((c) => typeof c === 'string' && c.trim())
+                                                    .map((c: string) => ({
+                                                        slug: c.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, ''),
+                                                        label: c.trim(),
+                                                    })),
+                                            ])
+                                    );
                                     providersWithIds = (normalizedCached || []).map((p: any) => {
                                         const pid = p?.placeId || p?.place_id;
                                         if (!pid || typeof pid !== 'string') return p;
@@ -434,6 +448,7 @@ export async function POST(req: NextRequest) {
                                         const dbSummary = summaryByGoogle.get(gId);
                                         const hasCachedSummary =
                                             typeof p?.summary === 'string' && p.summary.trim().length > 0;
+                                        const certs = certsByGoogle.get(gId);
                                         return {
                                             ...p,
                                             providerId: idByGoogle.get(gId) || p.providerId,
@@ -441,6 +456,7 @@ export async function POST(req: NextRequest) {
                                             ...(!hasCachedSummary && dbSummary
                                                 ? { summary: dbSummary }
                                                 : {}),
+                                            ...(certs && certs.length > 0 ? { certifications: certs } : {}),
                                         };
                                     });
                                 }
@@ -463,6 +479,48 @@ export async function POST(req: NextRequest) {
                                 getProviderResultLimitByRadius(radius),
                                 { tradeDetail: tradeDetailRaw, trade: tradeNorm }
                             );
+
+                            // Attach provider_images to cache-hit results so the match card carousel works.
+                            // This is a fast targeted query — only runs for ranked providers with a providerId.
+                            try {
+                                const rankedProviderIds = reRankedCached
+                                    .map((p: any) => p.providerId)
+                                    .filter((id: unknown): id is string => typeof id === 'string' && id.length > 0);
+                                if (rankedProviderIds.length > 0 && supabase) {
+                                    const supabasePublicBase = String(process.env.NEXT_PUBLIC_SUPABASE_URL || '').replace(/\/+$/, '');
+                                    const { data: imgRows } = await supabase
+                                        .from('provider_images')
+                                        .select('provider_id, bucket, path, caption, sort_order')
+                                        .in('provider_id', rankedProviderIds)
+                                        .eq('status', 'approved')
+                                        .order('sort_order', { ascending: true });
+                                    if (Array.isArray(imgRows) && imgRows.length > 0) {
+                                        const galleryById = new Map<string, Array<{ url: string; caption?: string }>>();
+                                        for (const row of imgRows as Array<{ provider_id: string; bucket?: string | null; path?: string | null; caption?: string | null }>) {
+                                            if (!row.provider_id || !row.path) continue;
+                                            const bucket = typeof row.bucket === 'string' ? row.bucket.trim() : '';
+                                            const path = row.path.trim().replace(/^\/+/, '');
+                                            if (!bucket || !path || !supabasePublicBase) continue;
+                                            const url = `${supabasePublicBase}/storage/v1/object/public/${bucket}/${path}`;
+                                            const item = typeof row.caption === 'string' && row.caption.trim()
+                                                ? { url, caption: row.caption.trim() }
+                                                : { url };
+                                            const arr = galleryById.get(row.provider_id) ?? [];
+                                            if (arr.length < 5) arr.push(item);
+                                            galleryById.set(row.provider_id, arr);
+                                        }
+                                        reRankedCached.forEach((p: any) => {
+                                            const imgs = p.providerId ? galleryById.get(p.providerId) : undefined;
+                                            if (Array.isArray(imgs) && imgs.length > 0) {
+                                                p.images = imgs;
+                                                p.hasWorkPhotos = true;
+                                            }
+                                        });
+                                    }
+                                }
+                            } catch {
+                                // Non-fatal — cache path still returns without images
+                            }
 
                             logAiEvent({
                                 endpoint: 'providers',
@@ -787,7 +845,7 @@ export async function POST(req: NextRequest) {
                 const weekdayDescriptionsRaw = (place.regularOpeningHours as any)?.weekdayDescriptions;
                 const weekdayDescriptionsFormatted = formatWeekdayDescriptionsTo24h(weekdayDescriptionsRaw) ?? [];
                 const isOpen = isOpenNowFromWeekdayDescriptions(weekdayDescriptionsFormatted, new Date());
-                // "Menda Summary" comes from our AI review summariser.
+                // "Mendr Summary" comes from our AI review summariser.
                 // Fallback: if the AI summary is missing (e.g. summarisation timeout/failure),
                 // show Google's editorial/review summary so the UI doesn't stay as a skeleton.
                 const finalSummary =
@@ -879,8 +937,7 @@ export async function POST(req: NextRequest) {
                   id: string;
                   google_place_id: string;
                   name?: string | null;
-                  company_size?: string | null;
-                  years_in_business?: number | null;
+                  certifications?: string[] | null;
               }[]
             | null = null;
         const dbReader = adminSupabase || supabase;
@@ -893,13 +950,15 @@ export async function POST(req: NextRequest) {
                 const [cacheResult, provResult] = await Promise.all([
                     dbReader
                         .from('provider_cache')
-                        .select('google_place_id, profile_completeness, specialisations, has_work_photos, images')
+                        // has_work_photos and images are NOT columns in provider_cache.
+                        // Images come from the provider_images table via providerGalleryByProviderId.
+                        .select('google_place_id, profile_completeness, specialisations')
                         .in('google_place_id', placeIds),
                     dbReader
                         .from('providers')
-                        .select(
-                            'id, google_place_id, name, company_size, years_in_business'
-                        )
+                        // company_size and years_in_business are NOT in providers —
+                        // they live in provider_cache. Only select columns that exist.
+                        .select('id, google_place_id, name, certifications')
                         .eq('is_active', true)
                         .in('google_place_id', placeIds),
                 ]);
@@ -909,8 +968,7 @@ export async function POST(req: NextRequest) {
                         id: string;
                         google_place_id: string;
                         name?: string | null;
-                        company_size?: string | null;
-                        years_in_business?: number | null;
+                        certifications?: string[] | null;
                     }>) ?? null;
                 const nameByGoogleId = new Map<string, string>(
                     (prefetchedProvRows || [])
@@ -920,22 +978,14 @@ export async function POST(req: NextRequest) {
                                 typeof r.name === 'string' &&
                                 r.name.trim().length > 0
                         )
-                        .map((r) => [String(r.google_place_id), String(r.name).trim()])
+                        .map((r) => {
+                            const raw = String(r.name).trim();
+                            return [String(r.google_place_id), formatBusinessName(raw) || raw];
+                        })
                 );
-                const companySizeByGoogleId = new Map<string, string>(
-                    (prefetchedProvRows || [])
-                        .filter((r) => typeof r.company_size === 'string' && r.company_size)
-                        .map((r) => [String(r.google_place_id), String(r.company_size)])
-                );
-                const yearsInBusinessByGoogleId = new Map<string, number>(
-                    (prefetchedProvRows || [])
-                        .filter(
-                            (r) =>
-                                typeof r.years_in_business === 'number' &&
-                                Number.isFinite(r.years_in_business)
-                        )
-                        .map((r) => [String(r.google_place_id), Number(r.years_in_business)])
-                );
+                // company_size and years_in_business are not in providers table.
+                const companySizeByGoogleId = new Map<string, string>();
+                const yearsInBusinessByGoogleId = new Map<string, number>();
                 const completenessByGoogleId = new Map<string, number>(
                     (cacheRows || []).map((r: any) => [
                         String(r.google_place_id),
@@ -948,39 +998,31 @@ export async function POST(req: NextRequest) {
                         .filter((r: any) => Array.isArray(r.specialisations) && r.specialisations.length > 0)
                         .map((r: any) => [String(r.google_place_id), r.specialisations as string[]])
                 );
-                const hasWorkPhotosByGoogleId = new Map<string, boolean>(
-                    (cacheRows || [])
-                        .filter((r: any) => typeof r.has_work_photos === 'boolean')
-                        .map((r: any) => [String(r.google_place_id), Boolean(r.has_work_photos)])
-                );
-                // Match-card image carousel: pick up to 5 work photos from the enrichment cache.
-                const imagesByGoogleId = new Map<string, Array<{ url: string; caption?: string }>>(
-                    (cacheRows || [])
-                        .filter((r: any) => Array.isArray(r.images) && r.images.length > 0)
-                        .map((r: any) => {
-                            const list = (r.images as any[])
-                                .map((img) => {
-                                    const url =
-                                        typeof img?.url === 'string'
-                                            ? img.url.trim()
-                                            : typeof img?.src === 'string'
-                                              ? img.src.trim()
-                                              : '';
-                                    if (!url) return null;
-                                    const caption =
-                                        typeof img?.caption === 'string' ? img.caption.trim() : undefined;
-                                    return caption ? { url, caption } : { url };
-                                })
-                                .filter(Boolean) as Array<{ url: string; caption?: string }>;
-                            return [String(r.google_place_id), list.slice(0, 5)];
-                        })
-                );
+                // has_work_photos and images are not in provider_cache — hasWorkPhotos is
+                // set from provider_images rows below, and imagesByGoogleId is always empty.
+                // The providerGalleryByProviderId fallback (provider_images table) is the
+                // authoritative source of match-card carousel images.
+                const hasWorkPhotosByGoogleId = new Map<string, boolean>();
+                const imagesByGoogleId = new Map<string, Array<{ url: string; caption?: string }>>();
 
-                // Pull structured certifications for the candidate providers (optional join).
-                let certificationsByProviderId = new Map<
+                // Build certifications from providers.certifications column (array of label strings).
+                // provider_certifications is a separate table that doesn't exist in this schema.
+                const certificationsByProviderId = new Map<
                     string,
                     Array<{ slug: string; label: string }>
-                >();
+                >(
+                    (prefetchedProvRows || [])
+                        .filter((r) => Array.isArray(r.certifications) && r.certifications!.length > 0)
+                        .map((r) => [
+                            r.id,
+                            r.certifications!
+                                .filter((c): c is string => typeof c === 'string' && c.trim().length > 0)
+                                .map((c) => ({
+                                    slug: c.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, ''),
+                                    label: c.trim(),
+                                })),
+                        ])
+                );
                 let providerGalleryByProviderId = new Map<string, Array<{ url: string; caption?: string }>>();
                 const candidateProviderIds = (prefetchedProvRows || [])
                     .map((r) => r.id)
@@ -996,32 +1038,13 @@ export async function POST(req: NextRequest) {
                         if (!bucket || !path || !supabasePublicBase) return '';
                         return `${supabasePublicBase}/storage/v1/object/public/${bucket}/${path}`;
                     };
-                    const [certResult, galleryResult] = await Promise.all([
-                        dbReader
-                            .from('provider_certifications')
-                            .select('provider_id, slug, label')
-                            .in('provider_id', candidateProviderIds),
-                        dbReader
-                            .from('provider_images')
-                            .select('provider_id, bucket, path, caption, sort_order, status')
-                            .in('provider_id', candidateProviderIds)
-                            .order('sort_order', { ascending: true }),
-                    ]);
-                    const certRows = certResult.data;
+                    const galleryResult = await dbReader
+                        .from('provider_images')
+                        .select('provider_id, bucket, path, caption, sort_order')
+                        .in('provider_id', candidateProviderIds)
+                        .eq('status', 'approved')
+                        .order('sort_order', { ascending: true });
                     const galleryRows = galleryResult.data;
-                    if (Array.isArray(certRows)) {
-                        certificationsByProviderId = new Map();
-                        for (const row of certRows as Array<{
-                            provider_id: string;
-                            slug: string;
-                            label: string;
-                        }>) {
-                            if (!row?.provider_id || !row?.slug || !row?.label) continue;
-                            const existing = certificationsByProviderId.get(row.provider_id) ?? [];
-                            existing.push({ slug: row.slug, label: row.label });
-                            certificationsByProviderId.set(row.provider_id, existing);
-                        }
-                    }
                     if (Array.isArray(galleryRows)) {
                         providerGalleryByProviderId = new Map();
                         for (const row of galleryRows as Array<{
@@ -1029,7 +1052,6 @@ export async function POST(req: NextRequest) {
                             bucket?: string | null;
                             path?: string | null;
                             caption?: string | null;
-                            status?: string | null;
                         }>) {
                             if (!row?.provider_id) continue;
                             const url = toPublicGalleryUrl(row.bucket, row.path);
@@ -1069,13 +1091,11 @@ export async function POST(req: NextRequest) {
                     if (typeof yib === 'number') (p as any).yearsInBusiness = yib;
                     const hasPhotos = hasWorkPhotosByGoogleId.get(gid);
                     if (typeof hasPhotos === 'boolean') (p as any).hasWorkPhotos = hasPhotos;
-                    const images = imagesByGoogleId.get(gid);
-                    if (Array.isArray(images) && images.length > 0) (p as any).images = images;
                     const provId = providerIdByGoogleIdEarly.get(gid);
                     if (provId) {
                         (p as any).providerId = provId;
                         if (!Array.isArray((p as any).images) || (p as any).images.length === 0) {
-                            const fallbackGallery = providerGalleryByProviderId.get(provId);
+                            const fallbackGallery = providerGalleryByProviderId?.get(provId);
                             if (Array.isArray(fallbackGallery) && fallbackGallery.length > 0) {
                                 (p as any).images = fallbackGallery;
                                 (p as any).hasWorkPhotos = true;
@@ -1174,14 +1194,14 @@ export async function POST(req: NextRequest) {
                         .map((p) => p.providerId)
                         .filter(Boolean) as string[];
 
-                    // 2.1: Parallelise Menda review count + rotation tokens fetch — both need
+                    // 2.1: Parallelise Mendr review count + rotation tokens fetch — both need
                     // providerIds but are independent of each other.
-                    const [scandioData, tokenRows] = await Promise.all([
+                    const [mendrData, tokenRows] = await Promise.all([
                         providerIdList.length > 0
                             ? dbReader
                                 .from('reviews')
                                 .select('provider_id')
-                                .eq('source', 'scandio')
+                                .eq('source', 'mendr')
                                 .eq('status', 'approved')
                                 .in('provider_id', providerIdList)
                                 .then((r) => r.data ?? null, () => null as null)
@@ -1196,23 +1216,23 @@ export async function POST(req: NextRequest) {
                             : Promise.resolve(null as null),
                     ]);
 
-                    // Attach Menda review counts
-                    const scandioReviewCountByProviderId = new Map<string, number>();
-                    if (Array.isArray(scandioData)) {
-                        for (const r of scandioData) {
+                    // Attach Mendr review counts
+                    const mendrReviewCountByProviderId = new Map<string, number>();
+                    if (Array.isArray(mendrData)) {
+                        for (const r of mendrData) {
                             const pid = typeof (r as any)?.provider_id === 'string' ? (r as any).provider_id : null;
                             if (!pid) continue;
-                            scandioReviewCountByProviderId.set(
+                            mendrReviewCountByProviderId.set(
                                 pid,
-                                (scandioReviewCountByProviderId.get(pid) ?? 0) + 1
+                                (mendrReviewCountByProviderId.get(pid) ?? 0) + 1
                             );
                         }
                     }
                     // Attach to every provider in the response so the frontend can show:
-                    // (Google total reviews) + (all Menda reviews stored in backend).
+                    // (Google total reviews) + (all Mendr reviews stored in backend).
                     (limitedProviders as any[]).forEach((p: any) => {
                         const pid = typeof p?.providerId === 'string' ? p.providerId : null;
-                        p.scandioReviewCount = pid ? scandioReviewCountByProviderId.get(pid) ?? 0 : 0;
+                        p.scandioReviewCount = pid ? mendrReviewCountByProviderId.get(pid) ?? 0 : 0;
                     });
 
                     // ── Soft rotation (token bucket) ──────────────────────────────────────
@@ -1384,7 +1404,7 @@ export async function POST(req: NextRequest) {
                         return {
                             source: 'google',
                             google_place_id: googlePlaceId,
-                            name: p.name,
+                            name: formatBusinessName(p.name) || p.name,
                             address: p.address,
                             rating: p.rating,
                             rating_count: p.ratingCount ?? 0,

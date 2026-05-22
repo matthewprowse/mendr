@@ -23,7 +23,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
         const admin = await createSupabaseAdminClient();
 
-        // Only pull from Google when this provider has no Google-sourced rows yet (pending Menda uploads don't block this).
+        // Only pull from Google when this provider has no Google-sourced rows yet (pending Mendr uploads don't block this).
         const { count, error: countErr } = await admin
             .from('provider_images')
             .select('id', { count: 'exact', head: true })

@@ -3,7 +3,7 @@
 /**
  * Match provider card (post-redesign):
  *  - Airbnb-style top banner image carousel (paginated dots, swipe-friendly).
- *  - Header row: name + "verified on Menda" shield when `provider.providerId` is set.
+ *  - Header row: name + "verified on Mendr" shield when `provider.providerId` is set.
  *  - Stats row: rating (filled star + N reviews), distance, drive time, open/closed pill.
  *  - Chip row: certifications + specialisations (truncated to 4 visible + "+N").
  *  - Clamped summary (3 lines) — defers to skeleton/long-wait copy supplied by parent.
@@ -23,6 +23,7 @@ import {
     Car,
     Image as ImageIcon,
     MapPinLine,
+    ShieldCheck,
     Star,
 } from '@phosphor-icons/react';
 import { Badge } from '@/components/ui/badge';
@@ -31,6 +32,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { cn, formatBusinessName } from '@/lib/utils';
 import { INK } from '@/lib/design-tokens';
 import type { MatchProvider } from '@/features/match/contracts';
+import { getOpenStatusTextFromWeekdayDescriptions } from '@/lib/providers/open-status';
 
 const VISIBLE_CHIP_LIMIT = 4;
 const SUPABASE_PUBLIC_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
@@ -245,6 +247,25 @@ export function ProviderCard({
     const distanceLabel = formatDistanceKm(provider.distanceKm);
     const driveLabel = provider.durationText ? formatDuration(provider.durationText) : null;
     const hasOpenStatus = typeof provider.isOpen === 'boolean';
+
+    const openHoursText = useMemo(() => {
+        if (!provider.weekdayDescriptions || typeof provider.isOpen !== 'boolean') return null;
+        if (provider.isOpen) {
+            const now = new Date();
+            const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+            const todayName = days[now.getDay()];
+            const todayLine = (provider.weekdayDescriptions as unknown[]).find(
+                (l): l is string => typeof l === 'string' && l.toLowerCase().startsWith(todayName.toLowerCase())
+            );
+            if (!todayLine) return null;
+            if (/open\s*24\s*hours/i.test(todayLine)) return '24 hrs';
+            const rangeMatch = todayLine.match(/(\d{1,2}:\d{2})\s*[-–—]\s*(\d{1,2}:\d{2})/);
+            return rangeMatch ? `until ${rangeMatch[2]}` : null;
+        } else {
+            const result = getOpenStatusTextFromWeekdayDescriptions(provider.weekdayDescriptions, new Date());
+            return result.nextOpensAt ? `opens ${result.nextOpensAt}` : null;
+        }
+    }, [provider.weekdayDescriptions, provider.isOpen]);
     const carouselImages = useMemo(() => {
         const raw = Array.isArray(provider.images) ? provider.images : [];
         return raw
@@ -262,27 +283,24 @@ export function ProviderCard({
             .filter((img): img is { url: string; caption?: string } => Boolean(img));
     }, [provider.images]);
     const address = formatProviderAddress(provider.address);
-    const directionsHref = useMemo(() => {
-        if (typeof provider.latitude === 'number' && typeof provider.longitude === 'number') {
-            return `https://www.google.com/maps/dir/?api=1&destination=${provider.latitude},${provider.longitude}`;
-        }
-        const fallback = formatProviderAddress(provider.address);
-        if (!fallback) return null;
-        return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(fallback)}`;
-    }, [provider.address, provider.latitude, provider.longitude]);
 
-    /** Combine certification short labels + first specialisations, truncated. */
     const chips = useMemo(() => {
-        const certs = (certifications ?? [])
-            .slice(0, VISIBLE_CHIP_LIMIT)
-            .map((c) => ({ key: `cert:${c.slug}`, label: c.short || c.label, kind: 'cert' as const }));
-        const specs = (provider.specialisations ?? [])
+        const certList = (certifications ?? []).map((c) => ({
+            key: `cert:${c.slug}`,
+            label: c.short || c.label,
+        }));
+        const certVisible = certList.slice(0, VISIBLE_CHIP_LIMIT);
+        const certOverflow = Math.max(0, certList.length - certVisible.length);
+
+        const toTitleCase = (s: string) =>
+            s.replace(/\w\S*/g, (w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
+        const specList = (provider.specialisations ?? [])
             .filter(Boolean)
-            .map((s) => ({ key: `spec:${s}`, label: s, kind: 'spec' as const }));
-        const merged = [...certs, ...specs];
-        const visible = merged.slice(0, VISIBLE_CHIP_LIMIT);
-        const overflow = Math.max(0, merged.length - visible.length);
-        return { visible, overflow };
+            .map((s) => ({ key: `spec:${s}`, label: toTitleCase(s) }));
+        const specVisible = specList.slice(0, VISIBLE_CHIP_LIMIT);
+        const specOverflow = Math.max(0, specList.length - specVisible.length);
+
+        return { certVisible, certOverflow, specVisible, specOverflow };
     }, [certifications, provider.specialisations]);
 
     return (
@@ -325,9 +343,24 @@ export function ProviderCard({
                         {formatBusinessName(provider.name)}
                     </h3>
                     {hasOpenStatus ? (
-                        <Badge variant="secondary" className="h-5 rounded-full px-2 text-[11px] font-medium">
-                            {provider.isOpen ? 'open' : 'closed'}
-                        </Badge>
+                        <div className="flex shrink-0 flex-col items-end gap-0.5">
+                            <Badge
+                                variant="secondary"
+                                className={cn(
+                                    'h-5 rounded-full px-2 text-[11px] font-medium',
+                                    provider.isOpen
+                                        ? 'border-green-200 bg-green-50 text-green-700'
+                                        : 'border-red-200 bg-red-50 text-red-600'
+                                )}
+                            >
+                                {provider.isOpen ? 'Open' : 'Closed'}
+                            </Badge>
+                            {openHoursText ? (
+                                <span className="whitespace-nowrap text-[10px] text-muted-foreground">
+                                    {openHoursText}
+                                </span>
+                            ) : null}
+                        </div>
                     ) : null}
                 </div>
 
@@ -343,24 +376,38 @@ export function ProviderCard({
                     </span>
                 </div>
 
-                {chips.visible.length > 0 ? (
+                {chips.certVisible.length > 0 ? (
                     <div className="flex flex-wrap gap-1.5">
-                        {chips.visible.map((chip) => (
+                        {chips.certVisible.map((chip) => (
                             <span
                                 key={chip.key}
-                                className={cn(
-                                    'inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium',
-                                    chip.kind === 'cert'
-                                        ? 'border-border bg-foreground/[0.04] text-foreground'
-                                        : 'border-border bg-background text-muted-foreground'
-                                )}
+                                className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700"
+                            >
+                                <ShieldCheck size={10} weight="fill" aria-hidden />
+                                {chip.label}
+                            </span>
+                        ))}
+                        {chips.certOverflow > 0 ? (
+                            <span className="inline-flex items-center rounded-full border border-border bg-background px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+                                +{chips.certOverflow}
+                            </span>
+                        ) : null}
+                    </div>
+                ) : null}
+
+                {chips.specVisible.length > 0 ? (
+                    <div className="flex flex-wrap gap-1.5">
+                        {chips.specVisible.map((chip) => (
+                            <span
+                                key={chip.key}
+                                className="inline-flex items-center rounded-full border border-border bg-background px-2 py-0.5 text-[11px] font-medium text-muted-foreground"
                             >
                                 {chip.label}
                             </span>
                         ))}
-                        {chips.overflow > 0 ? (
+                        {chips.specOverflow > 0 ? (
                             <span className="inline-flex items-center rounded-full border border-border bg-background px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
-                                +{chips.overflow}
+                                +{chips.specOverflow}
                             </span>
                         ) : null}
                     </div>
@@ -391,25 +438,11 @@ export function ProviderCard({
                     </div>
                 ) : null}
 
-                <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
-                    <span className="inline-flex min-w-0 items-center gap-1">
-                        <MapPinLine size={14} className="shrink-0" aria-hidden="true" />
-                        <span className="truncate">
-                            {[address, distanceLabel].filter(Boolean).join(' • ') || 'Distance unavailable'}
-                        </span>
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <MapPinLine size={14} className="shrink-0" aria-hidden="true" />
+                    <span className="truncate">
+                        {[address, distanceLabel].filter(Boolean).join(' • ') || 'Distance unavailable'}
                     </span>
-                    {directionsHref ? (
-                        <a
-                            href={directionsHref}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 rounded-full px-2 py-1 font-medium text-foreground underline underline-offset-2"
-                            onClick={(event) => event.stopPropagation()}
-                        >
-                            <MapPinLine size={14} aria-hidden="true" />
-                            Get Directions
-                        </a>
-                    ) : null}
                 </div>
 
                 <div className="mt-1 flex items-center gap-2" onClick={(e) => e.stopPropagation()}>

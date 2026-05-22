@@ -59,7 +59,7 @@ export function parseFastReviewSummaryModelJson(raw: string): string | null {
         const parsed = obj as { review_summary?: unknown };
         const s = typeof parsed.review_summary === 'string' ? parsed.review_summary.trim() : '';
         if (!s) return null;
-        const out = sanitizeCustomerSummary(s).slice(0, 200);
+        const out = sanitizeCustomerSummary(s);
         return out.length > 0 ? out : null;
     };
 
@@ -94,7 +94,7 @@ export function parseFastReviewSummaryModelJson(raw: string): string | null {
     );
     if (keyMatch?.[1]) {
         const s = sanitizeCustomerSummary(keyMatch[1].trim());
-        return s.length > 0 ? s.slice(0, 200) : null;
+        return s.length > 0 ? s : null;
     }
 
     return null;

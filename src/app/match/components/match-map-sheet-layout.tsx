@@ -188,8 +188,8 @@ export const MatchMapSheetLayout = forwardRef<HTMLDivElement, MatchMapSheetLayou
 
             window.setTimeout(() => {
                 const el = getScrollTarget?.() ?? null;
-                el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            }, 150);
+                el?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }, 420);
         }, [scrollToKey, getScrollTarget]);
 
         /**

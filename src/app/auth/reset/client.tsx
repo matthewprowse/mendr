@@ -58,7 +58,7 @@ export default function ResetPasswordPage() {
                                 className="self-start text-sm text-foreground font-medium hover:underline"
                                 onClick={() => router.push('/')}
                             >
-                                Go to Menda →
+                                Go to Mendr →
                             </button>
                         </div>
                     ) : (

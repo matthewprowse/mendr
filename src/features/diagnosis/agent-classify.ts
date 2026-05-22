@@ -33,6 +33,8 @@ export interface ClassificationResult {
     unserviced: boolean;
     refetch_providers: boolean;
     unsupported_reason: string;
+    failed_component: string;
+    cascading_damage: string;
 }
 
 const CLASSIFICATION_SCHEMA = {
@@ -80,6 +82,16 @@ const CLASSIFICATION_SCHEMA = {
             type: SchemaType.STRING,
             description: 'One sentence explaining why trade is N/A. Empty string when trade is valid.',
         },
+        failed_component: {
+            type: SchemaType.STRING,
+            description:
+                'The single specific component that has failed (e.g. "torsion spring", "thermostat", "pressure relief valve", "PCB board", "stop valve"). Empty string only when no component can be identified.',
+        },
+        cascading_damage: {
+            type: SchemaType.STRING,
+            description:
+                'Secondary mechanical or electrical damage caused by the primary failure (e.g. "bent connecting rod from spring loss", "warped frame from sustained leak", "tripped earth leakage from short to chassis"). Empty string when none.',
+        },
     },
     required: [
         'subcategory_id',
@@ -91,6 +103,8 @@ const CLASSIFICATION_SCHEMA = {
         'unserviced',
         'refetch_providers',
         'unsupported_reason',
+        'failed_component',
+        'cascading_damage',
     ],
 };
 
@@ -104,6 +118,8 @@ const SCHEMA_PROPERTY_ORDER = [
     'unserviced',
     'refetch_providers',
     'unsupported_reason',
+    'failed_component',
+    'cascading_damage',
 ] as const;
 
 const ORDERED_SCHEMA = {
@@ -114,7 +130,7 @@ const ORDERED_SCHEMA = {
 
 function buildClassificationSystemPrompt(serviceListText: string): string {
     const taxonomyBlock = formatTaxonomyForClassificationPrompt();
-    return `You are a home maintenance classifier for Menda, a South African home services app. Cape Town context.
+    return `You are a home maintenance classifier for Mendr, a South African home services app. Cape Town context.
 
 YOUR ONLY JOB: examine the image and/or description and return a JSON classification object. Do not write any prose, narrative, or explanation.
 
@@ -211,6 +227,10 @@ export function finalizeClassificationAgainstCatalogAndTaxonomy(
         refetch_providers: Boolean(parsed.refetch_providers),
         unsupported_reason:
             typeof parsed.unsupported_reason === 'string' ? parsed.unsupported_reason : '',
+        failed_component:
+            typeof parsed.failed_component === 'string' ? parsed.failed_component : '',
+        cascading_damage:
+            typeof parsed.cascading_damage === 'string' ? parsed.cascading_damage : '',
     };
 }
 
@@ -224,6 +244,8 @@ const FALLBACK_CLASSIFICATION: ClassificationResult = {
     unserviced: false,
     refetch_providers: false,
     unsupported_reason: '',
+    failed_component: '',
+    cascading_damage: '',
 };
 
 export async function runClassification(

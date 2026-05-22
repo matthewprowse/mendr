@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import { getSiteUrl } from "@/lib/site-url";
 import { BRAND_NAME } from "@/lib/brand-system";
 
-export const OG_IMAGE_DEFAULT = "/og-menda.jpg";
-export const OG_IMAGE_PRO = "/og-menda-pro.jpg";
+export const OG_IMAGE_DEFAULT = "/og-mendr.jpg";
+export const OG_IMAGE_PRO = "/og-mendr-pro.jpg";
 
 export const OG_IMAGE_DIM = { width: 1200, height: 630 } as const;
 

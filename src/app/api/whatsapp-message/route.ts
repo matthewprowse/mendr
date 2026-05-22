@@ -22,7 +22,7 @@ function buildFallbackMessage(input: {
     profile_url: string;
 }): string {
     const lines: string[] = [];
-    lines.push(`Hi, I'm messaging about work I need help with on Menda.`);
+    lines.push(`Hi, I'm messaging about work I need help with on Mendr.`);
     lines.push('');
     lines.push(`Business: ${input.provider_name}`);
     if (input.trade) lines.push(`Trade: ${input.trade}`);
@@ -33,9 +33,9 @@ function buildFallbackMessage(input: {
     if (input.action_required) lines.push(`Action: ${input.action_required.slice(0, 200)}`);
     lines.push('');
     if (input.report_url) {
-        lines.push(`My Menda report: ${input.report_url}`);
+        lines.push(`My Mendr report: ${input.report_url}`);
     } else if (input.profile_url) {
-        lines.push(`I found you on Menda: ${input.profile_url}`);
+        lines.push(`I found you on Mendr: ${input.profile_url}`);
     }
     lines.push('');
     lines.push(`Could you help with a quote or next steps?`);
@@ -86,8 +86,8 @@ Context:
 - What they need / diagnosis: ${diagnosis}
 ${trade ? `- Trade: ${trade}` : ''}
 ${action_required ? `- Action: ${action_required}` : ''}
-${report_url ? `- Their Menda report URL (include exactly): ${report_url}` : ''}
-${!report_url && profile_url ? `- Menda profile URL (include exactly): ${profile_url}` : ''}
+${report_url ? `- Their Mendr report URL (include exactly): ${report_url}` : ''}
+${!report_url && profile_url ? `- Mendr profile URL (include exactly): ${profile_url}` : ''}
 
 Reply with only the message text, nothing else.`;
 

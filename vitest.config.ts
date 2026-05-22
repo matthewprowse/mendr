@@ -18,14 +18,19 @@ export default defineConfig({
                 'node_modules',
                 '.next',
             ],
-            // Phase 0 baseline thresholds — pinned just below current actuals
-            // measured after widening the coverage scope to `src/**/*`. Phase 1
-            // ratchets these upward as pure-function tests are added.
+            // Phase 1 thresholds — locked just below current actuals after
+            // adding pure-function unit tests for providers/relevance,
+            // providers/open-status, rate-limit, diagnosis/start-description-quality,
+            // whatsapp-message-validate, providers/review-normalization,
+            // providers/review-ingestion, and email/utils. Note: lines/statements
+            // remain low because the coverage scope was widened to `src/**/*`
+            // in Phase 0 and most route handlers / client components are still
+            // untested; later phases will lift these to the planned 35/30/35/35.
             thresholds: {
-                lines: 3,
-                branches: 15,
-                functions: 14,
-                statements: 3,
+                lines: 5,
+                branches: 30,
+                functions: 19,
+                statements: 5,
             },
         },
     },

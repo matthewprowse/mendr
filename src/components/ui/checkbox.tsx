@@ -20,7 +20,7 @@ function Checkbox({ className, ...props }: React.ComponentProps<typeof CheckboxP
                 data-slot="checkbox-indicator"
                 className="grid place-content-center text-current transition-none"
             >
-                <Check className="size-3.5" />
+                <Check className="size-3" />
             </CheckboxPrimitive.Indicator>
         </CheckboxPrimitive.Root>
     );

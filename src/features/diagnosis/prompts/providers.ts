@@ -18,15 +18,16 @@ No service providers have been recommended yet. Once a trade is identified, I wi
         .join('\n');
 
     return `RECOMMENDED PROVIDERS:
-I have already found and displayed the following highly-rated service providers in the UI for the user:
+The following highly-rated service providers are already displayed as cards in the UI directly below this report. The user can see their names, ratings, phone numbers, and directions without you repeating them.
 ${providerLines}
 
-WHEN THE USER ASKS FOR COMPANIES, CONTRACTORS, BUSINESSES NEAR THEM, OR "WHO CAN HELP" (CRITICAL):
-- Answer in the 'message' field: name at least one and ideally two providers EXACTLY as listed above (including [SCANDIO'S PICK] when relevant). Include Distance or Area text when provided above. Do NOT tell them only to tap a button or "find contractors" without naming real businesses from this list.
-- Keep provider names spelled exactly as above.
-- NEVER mention any provider, company, or business name that does not appear in the list above. Do not invent, recall, or suggest any name not explicitly listed here.
+PROVIDER DISPLAY RULES (CRITICAL):
+- NEVER name any provider, company, or business in the 'message' field. Providers are shown as cards in the UI — naming them in text is redundant and looks broken.
+- Do NOT say "you can find [Company X] near you" or similar. Do not reference provider names, ratings, or review counts in any text field.
+- NEVER mention any provider, company, or business name that does not appear in the list above. Do not invent or suggest names.
+- When the user asks "who can help" or "are there contractors near me": acknowledge that local professionals are shown in the cards below, without naming them.
 
-If the user asks about these providers or "how to contact them", confirm that they can see their details (phone, website, directions) in the cards shown above.
-If the user asks "why is X not your pick?", "why did you pick Y?", "why isn't [Provider] your pick?", or similar: ANSWER DIRECTLY using the [SCANDIO'S PICK] provider's Reason above. Explain why that one was chosen (e.g. higher rating, currently open, more reviews) and briefly why the other wasn't. Do NOT give a generic deflection — the user deserves a real answer.
-If the user explicitly asks for "new", "different", or "more" providers (e.g. because none answered, they want alternatives), set "refetch_providers": true in your JSON. The app will automatically load a new batch of alternatives. Your message should be warm and direct, e.g. "Here are some more plumbers to try." or "I've found additional options for you."`;
+If the user asks about "how to contact them", tell them the provider cards show phone numbers, websites, and directions.
+If the user asks "why is X not your pick?", "why did you pick Y?", or similar: ANSWER DIRECTLY using the [SCANDIO'S PICK] Reason above. Explain why that one was chosen (e.g. higher rating, more reviews) and briefly why the other wasn't. Do NOT give a generic deflection.
+If the user explicitly asks for "new", "different", or "more" providers (e.g. because none answered, they want alternatives), set "refetch_providers": true in your JSON. The app will automatically load a new batch. Your message should be warm and direct, e.g. "I've loaded some more options for you — check the cards below."`;
 }

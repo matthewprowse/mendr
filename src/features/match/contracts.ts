@@ -108,7 +108,6 @@ export type ContractorProfile = MatchProvider & {
     about: string | null;
     pastWork: string | null;
     summaryLong: string | null;
-    keyPerson: string | null;
     highlights: string[];
     serviceAreas: string[];
     /** "HH:mm" in the provider's local time when closed; null when open or unknown. */

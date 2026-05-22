@@ -1,31 +1,13 @@
+import { SERVICE_LABELS } from '@/lib/services';
+
 let clientCatalogCache: { labels: string[]; expiresAt: number } | null = null;
 let clientCatalogInFlight: Promise<string[]> | null = null;
 
 const CLIENT_CATALOG_TTL_MS = 5 * 60 * 1000;
 
-function normalizeLabels(rows: unknown): string[] {
-    if (!Array.isArray(rows)) return [];
-    return rows
-        .map((row) => {
-            if (!row || typeof row !== 'object') return '';
-            return String((row as { label?: unknown }).label ?? '').trim();
-        })
-        .filter((label) => label.length > 0);
-}
-
 export async function fetchActiveServiceCatalogClient(
-    supabase: {
-        from: (table: string) => {
-            select: (columns: string) => {
-                eq: (column: string, value: unknown) => {
-                    order: (
-                        column: string,
-                        options: { ascending: boolean }
-                    ) => Promise<{ data: unknown }>;
-                };
-            };
-        };
-    }
+    // supabase param kept for call-site compatibility — no longer used
+    _supabase?: unknown
 ): Promise<string[]> {
     const now = Date.now();
     if (clientCatalogCache && now < clientCatalogCache.expiresAt) {
@@ -34,6 +16,7 @@ export async function fetchActiveServiceCatalogClient(
     if (clientCatalogInFlight) return clientCatalogInFlight;
 
     clientCatalogInFlight = (async () => {
+        // Try the API route first (backed by Redis + in-memory cache server-side).
         if (typeof window !== 'undefined') {
             try {
                 const res = await fetch('/api/service-catalog', { credentials: 'same-origin' });
@@ -45,31 +28,20 @@ export async function fetchActiveServiceCatalogClient(
                             .map((x) => (typeof x === 'string' ? x.trim() : ''))
                             .filter((s) => s.length > 0);
                         if (labels.length > 0) {
-                            clientCatalogCache = {
-                                labels,
-                                expiresAt: Date.now() + CLIENT_CATALOG_TTL_MS,
-                            };
+                            clientCatalogCache = { labels, expiresAt: Date.now() + CLIENT_CATALOG_TTL_MS };
                             return labels;
                         }
                     }
                 }
             } catch {
-                // Fall back to Supabase (RLS allows public read of services).
+                // Fall through to static fallback.
             }
         }
 
-        const { data } = await supabase
-            .from('services')
-            .select('label')
-            .eq('active', true)
-            .order('sort_order', { ascending: true });
-        const labels = normalizeLabels(data);
-        if (labels.length > 0) {
-            clientCatalogCache = {
-                labels,
-                expiresAt: Date.now() + CLIENT_CATALOG_TTL_MS,
-            };
-        }
+        // Final fallback: use the canonical TypeScript constant.
+        // The `services` DB table was removed — SERVICE_LABELS is the source of truth.
+        const labels = [...SERVICE_LABELS];
+        clientCatalogCache = { labels, expiresAt: Date.now() + CLIENT_CATALOG_TTL_MS };
         return labels;
     })();
 

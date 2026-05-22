@@ -12,7 +12,7 @@ export async function fetchConversationDiagnosisAdmin(
         const { data, error } = await admin
             .from('diagnoses')
             .select(
-                'id,image_url,diagnosis,initial_image_description,customer_lat,customer_lng,customer_address'
+                'id,image_url,image_urls,diagnosis,initial_image_description,customer_lat,customer_lng,customer_address'
             )
             .eq('id', conversationId)
             .maybeSingle();
@@ -20,7 +20,25 @@ export async function fetchConversationDiagnosisAdmin(
         if (error) {
             return null;
         }
-        return (data ?? null) as ConversationDiagnosisRow | null;
+        if (!data) return null;
+
+        const row = data as Record<string, unknown>;
+        const rawArr = row.image_urls;
+        let imageUrls: string[] = [];
+        if (Array.isArray(rawArr)) {
+            imageUrls = (rawArr as unknown[])
+                .filter((u): u is string => typeof u === 'string' && u.trim().length > 0)
+                .map((u) => u.trim());
+        }
+        if (imageUrls.length === 0 && typeof row.image_url === 'string' && row.image_url.trim()) {
+            imageUrls = [row.image_url.trim()];
+        }
+
+        return {
+            ...(row as ConversationDiagnosisRow),
+            imageUrls,
+            imageUrl: imageUrls[0] ?? null,
+        };
     } catch {
         return null;
     }

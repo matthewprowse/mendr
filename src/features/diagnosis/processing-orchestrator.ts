@@ -3,6 +3,7 @@ import { fetchProvidersApi } from '@/features/match/api/client';
 import { saveMatchPageCache } from '@/features/match/cache/match-page-cache';
 import { fetchConversationDiagnosis, patchConversation, type ConversationDiagnosisRow } from '@/lib/diagnosis/diagnoses-api';
 import { parseDiagnosisFromModelResponse } from '@/lib/diagnosis/parse-diagnosis-from-model-response';
+import { shouldShowProvidersForDiagnosis } from '@/lib/diagnosis/diagnosis-confidence';
 
 
 export type ProcessingStepKey =
@@ -45,6 +46,11 @@ export function buildDiagnosisVersion(diagnosis: DiagnosisData): string {
         typeof diagnosis.confidence === 'number' && Number.isFinite(diagnosis.confidence)
             ? String(Math.round(diagnosis.confidence))
             : '';
+    const structuralScore =
+        typeof diagnosis.structural_confidence?.score === 'number' &&
+        Number.isFinite(diagnosis.structural_confidence.score)
+            ? String(Math.round(diagnosis.structural_confidence.score))
+            : '';
     return [
         (diagnosis.trade ?? '').trim().toLowerCase(),
         (diagnosis.trade_detail ?? '').trim().toLowerCase(),
@@ -52,6 +58,7 @@ export function buildDiagnosisVersion(diagnosis: DiagnosisData): string {
         String(Boolean(diagnosis.rejected)),
         String(Boolean(diagnosis.unserviced)),
         confidence,
+        structuralScore,
     ].join('|');
 }
 
@@ -64,7 +71,9 @@ export function isDiagnosisAccurateForPrefetch(diagnosis: DiagnosisData): {
     if (diagnosis.requires_clarification) return { eligible: false, reason: 'requires_clarification' };
     if (diagnosis.rejected) return { eligible: false, reason: 'rejected' };
     if (diagnosis.unserviced) return { eligible: false, reason: 'unserviced' };
-    if (typeof diagnosis.confidence === 'number' && Number.isFinite(diagnosis.confidence) && diagnosis.confidence < 85) {
+    // Single source of truth — structural confidence first, with self-reported
+    // confidence as fallback for pre-Phase 4 rows.
+    if (!shouldShowProvidersForDiagnosis(diagnosis)) {
         return { eligible: false, reason: 'low_confidence' };
     }
     return { eligible: true };
@@ -91,8 +100,9 @@ export async function runDiagnosisProcessingPipeline({
 }: RunProcessingArgs): Promise<DiagnosisData> {
     const normalizedPrompt = prompt.trim();
     const normalizedSelectedService = selectedService?.trim() ?? '';
-    if (normalizedPrompt.length < 25 && !normalizedSelectedService) {
-        throw new Error('Please provide at least 25 characters or select a service.');
+    const hasImages = imageUrls.length > 0 || Boolean(imageUrl?.trim());
+    if (!hasImages && normalizedPrompt.length < 25 && !normalizedSelectedService) {
+        throw new Error('Please add a photo or provide more detail about the issue.');
     }
 
     onStep({ key: 'uploadConfirmed', status: 'running' });
@@ -120,22 +130,31 @@ export async function runDiagnosisProcessingPipeline({
         throw new Error('Could not load service catalog.');
     }
 
-    // Optional lightweight thought call — does not gate the full diagnosis request.
+    // Build a flat, deduplicated image list — all images carry equal weight.
+    // The first entry is kept as the DB thumbnail (image_url); no other
+    // distinction is made between "primary" and "attachment".
     onStep({ key: 'imageThoughtComplete', status: 'running' });
-    const normalizedImageUrls = Array.isArray(imageUrls)
-        ? imageUrls.filter((x) => typeof x === 'string' && x.trim().length > 0)
-        : [];
-    const primaryImage = imageUrl?.trim() || normalizedImageUrls[0] || null;
-    const additionalAttachments = normalizedImageUrls
-        .filter((x) => x !== primaryImage)
-        .slice(0, 3);
-    if (primaryImage) {
+    const normalizedImageUrls: string[] = (() => {
+        const fromUrls = Array.isArray(imageUrls)
+            ? imageUrls.filter((x): x is string => typeof x === 'string' && x.trim().length > 0).map((x) => x.trim())
+            : [];
+        const fromUrl = typeof imageUrl === 'string' && imageUrl.trim() ? imageUrl.trim() : null;
+        // Merge: prefer the explicit list; prepend imageUrl if it's not already first.
+        if (fromUrls.length > 0) {
+            return fromUrl && fromUrls[0] !== fromUrl ? [fromUrl, ...fromUrls].slice(0, 10) : fromUrls.slice(0, 10);
+        }
+        return fromUrl ? [fromUrl] : [];
+    })();
+
+    // First image used only for the DB thumbnail — model sees all equally.
+    const thumbnailImageUrl = normalizedImageUrls[0] ?? null;
+
+    if (normalizedImageUrls.length > 0) {
         void fetch('/api/diagnose', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                image: primaryImage,
-                ...(additionalAttachments.length > 0 ? { attachments: additionalAttachments } : {}),
+                images: normalizedImageUrls,
                 analysisPhase: 'image_thought_only',
                 serviceCatalog,
                 textQuery:
@@ -161,8 +180,7 @@ export async function runDiagnosisProcessingPipeline({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-            ...(primaryImage ? { image: primaryImage } : {}),
-            ...(additionalAttachments.length > 0 ? { attachments: additionalAttachments } : {}),
+            ...(normalizedImageUrls.length > 0 ? { images: normalizedImageUrls } : {}),
             serviceCatalog,
             ...(normalizedPrompt
                 ? { textQuery: normalizedPrompt }
@@ -192,7 +210,8 @@ export async function runDiagnosisProcessingPipeline({
 
     const saveResult = await patchConversation(conversationId, {
         title: result.diagnosis || 'New Diagnosis',
-        image_url: primaryImage,
+        image_url: thumbnailImageUrl,
+        image_urls: normalizedImageUrls,
         diagnosis: result,
         initial_image_description: normalizedPrompt || (normalizedSelectedService ? `${normalizedSelectedService} services` : null),
         device: typeof navigator !== 'undefined' && /Mobi|Android/i.test(navigator.userAgent) ? 'mobile' : 'desktop',

@@ -18,7 +18,7 @@ export function FlowStepHeader({
     step,
     onBack,
     backHref,
-    centerLabel = 'Menda',
+    centerLabel = 'Mendr',
     rightSlot,
     /** Renders the same 3-dot progress row as `/start` (highlights `step`). */
     showScanProgress = false,

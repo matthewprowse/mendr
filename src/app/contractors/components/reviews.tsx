@@ -164,7 +164,7 @@ export function ProReviewsTab(props: {
                 ) : providerSummary?.trim() ? (
                     <p className="text-sm text-foreground">{providerSummary.trim()}</p>
                 ) : (
-                    <p className="text-sm text-muted-foreground">No Menda summary yet.</p>
+                    <p className="text-sm text-muted-foreground">No Mendr summary yet.</p>
                 )}
             </div>
 
@@ -193,7 +193,7 @@ export function ProReviewsTab(props: {
             <div className="flex flex-col gap-6">
                 <div className="flex flex-col gap-3">
                     <div className="flex flex-row items-center justify-between gap-3">
-                        <h6 className="text-md text-foreground font-bold">Menda Reviews</h6>
+                        <h6 className="text-md text-foreground font-bold">Mendr Reviews</h6>
                         {isReviewsLoading || isOperatingHoursLoading ? (
                             <Skeleton className="h-6 w-9 rounded-full" />
                         ) : (
@@ -340,14 +340,14 @@ export function ProReviewsTab(props: {
                         <ReviewsPaginationFooter
                             showingCount={scandioReviewsVisibleCount}
                             total={scandioReviewCardsLength}
-                            categoryLabel="Menda Reviews"
+                            categoryLabel="Mendr Reviews"
                             onViewMore={() =>
                                 setScandioReviewsVisibleCount((prev) => Math.min(prev + REVIEWS_PAGE_SIZE, scandioReviewCardsLength))
                             }
                         />
                     </>
                 ) : (
-                    <p className="text-sm text-muted-foreground">No Menda Reviews</p>
+                    <p className="text-sm text-muted-foreground">No Mendr Reviews</p>
                 )}
             </div>
 

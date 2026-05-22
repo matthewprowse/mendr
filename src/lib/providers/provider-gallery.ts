@@ -9,17 +9,17 @@
 export function galleryImageSourceLabel(
     source: string | null | undefined,
     storagePath: string | null | undefined,
-): 'Google' | 'Menda' {
+): 'Google' | 'Mendr' {
     const s = String(source ?? '')
         .trim()
         .toLowerCase();
     if (s === 'google' || s === 'website') return 'Google';
-    if (s === 'user') return 'Menda';
+    if (s === 'user') return 'Mendr';
 
     const path = String(storagePath ?? '')
         .replace(/\\/g, '/')
         .toLowerCase();
-    if (path.includes('/user/')) return 'Menda';
+    if (path.includes('/user/')) return 'Mendr';
     if (path.length > 0) return 'Google';
-    return 'Menda';
+    return 'Mendr';
 }

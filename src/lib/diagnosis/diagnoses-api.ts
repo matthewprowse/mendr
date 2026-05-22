@@ -9,6 +9,12 @@
 export type ConversationDiagnosisRow = {
     id: string;
     image_url: string | null;
+    /** JSONB array of image URLs in user-supplied order. First entry is the primary view. */
+    image_urls?: string[] | null;
+    /** Canonical multi-image field surfaced by GET /api/diagnoses/[id]. Equals image_urls or wraps legacy image_url. */
+    imageUrls?: string[];
+    /** Mirror of legacy image_url for callers that already prefer camelCase. Equals imageUrls[0] when present. */
+    imageUrl?: string | null;
     diagnosis: unknown | null;
     initial_image_description: string | null;
     customer_lat?: number | null;
@@ -19,6 +25,7 @@ export type ConversationDiagnosisRow = {
 export type ConversationPatchBody = {
     title?: string | null;
     image_url?: string | null;
+    image_urls?: string[] | null;
     diagnosis?: unknown | null;
     initial_image_description?: string | null;
     customer_address?: string | null;

@@ -1,9 +1,9 @@
-export const BRAND_NAME = 'Menda' as const;
+export const BRAND_NAME = 'Mendr' as const;
 export const BRAND_LEGACY_NAME = 'Scandio' as const;
 
 export const BRAND_TAGLINE = 'Clarity first home diagnostics' as const;
 
-export const mendaCopyGuidelines = {
+export const mendrCopyGuidelines = {
     voice: [
         'Warm, calm, and practical',
         'Write like you are helping a neighbour',
@@ -29,7 +29,7 @@ export type MigrationSurface = {
     reason: string;
 };
 
-export const mendaMigrationSurfaces: MigrationSurface[] = [
+export const mendrMigrationSurfaces: MigrationSurface[] = [
     {
         label: 'User-facing copy and labels',
         examples: ['Landing headers', 'Page titles', 'CTA text'],
@@ -44,7 +44,7 @@ export const mendaMigrationSurfaces: MigrationSurface[] = [
     },
     {
         label: 'Preview/design assets',
-        examples: ['New Menda OG image references', 'Design route components'],
+        examples: ['New Mendr OG image references', 'Design route components'],
         status: 'safe_now',
         reason: 'Isolated from runtime data behavior.',
     },

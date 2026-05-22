@@ -58,9 +58,9 @@ function providerHydrateSessionKey(id: string): string {
 }
 
 /** Single UX for unsupported trade and unrelated / non-maintenance photos (see `isServiceBlocked`). */
-const DIAGNOSIS_REJECT_HEADLINE = "We Can't Match This Job on Menda Yet";
+const DIAGNOSIS_REJECT_HEADLINE = "We Can't Match This Job on Mendr Yet";
 const DIAGNOSIS_REJECT_DETAIL =
-    "Either this does not look like a home repair or maintenance issue we can assess from your photo, or it is not a service on Menda's list yet. Add a clearer photo or a few words about the job below, then tap Re-Scan Report. If we still cannot match you, you will need to reach a specialist outside Menda.";
+    "Either this does not look like a home repair or maintenance issue we can assess from your photo, or it is not a service on Mendr's list yet. Add a clearer photo or a few words about the job below, then tap Re-Scan Report. If we still cannot match you, you will need to reach a specialist outside Mendr.";
 
 function isLikelyRenderableImageSource(value: string | null | undefined): boolean {
     const src = (value ?? '').trim();
@@ -278,7 +278,7 @@ export default function DiagnosisPageClient({
         }
         if (catalog.length === 0) {
             setDiagnosisFailureMessage(
-                'We could not load the service list for your Menda Report. Please retry now.'
+                'We could not load the service list for your Mendr Report. Please retry now.'
             );
             return null;
         }
@@ -371,16 +371,16 @@ export default function DiagnosisPageClient({
                 if (list.length === 0) return;
 
                 providersForDiagnoseRef.current = list;
-                const hydrationAttachments = uploadedImageSourcesRef.current
-                    .filter((src) => src !== img)
-                    .slice(0, 4);
+                // All uploaded images sent with equal weight for provider hydration.
+                const hydrationImages = uploadedImageSourcesRef.current.length > 0
+                    ? uploadedImageSourcesRef.current
+                    : [img];
 
                 const res = await fetch('/api/diagnose', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        image: img,
-                        ...(hydrationAttachments.length > 0 ? { attachments: hydrationAttachments } : {}),
+                        imageUrls: hydrationImages,
                         serviceCatalog: catalog,
                         providerHydration: true,
                         providers: list,
@@ -434,9 +434,14 @@ export default function DiagnosisPageClient({
                     typeof navigator !== 'undefined' && /Mobi|Android/i.test(navigator.userAgent)
                         ? 'mobile'
                         : 'desktop';
+                const persistImageUrls =
+                    uploadedImageSourcesRef.current.length > 0
+                        ? uploadedImageSourcesRef.current.slice(0, 4)
+                        : [img];
                 const saveResult = await patchConversation(cid, {
                     title: toSave.diagnosis || 'New Diagnosis',
-                    image_url: img,
+                    image_url: persistImageUrls[0] ?? img,
+                    image_urls: persistImageUrls,
                     diagnosis: toSave as unknown,
                     device: deviceType,
                     user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : '',
@@ -531,11 +536,11 @@ export default function DiagnosisPageClient({
                                   : String(
                                         parsed?.message ||
                                             parsed?.error ||
-                                            'Menda is busy right now. Please try again shortly.'
+                                            'Mendr is busy right now. Please try again shortly.'
                                     )
                         );
                     } catch {
-                        setDiagnosisFailureMessage('Menda is busy right now. Please try again shortly.');
+                        setDiagnosisFailureMessage('Mendr is busy right now. Please try again shortly.');
                     }
                 };
 
@@ -559,8 +564,7 @@ export default function DiagnosisPageClient({
                         )
                     );
                     if (analysisSources.length === 0) analysisSources.push(img);
-                    const primaryImageSrc = analysisSources[0]!;
-                    const additionalAttachments = analysisSources.slice(1, 5);
+                    // All images are sent with equal weight — no primary/attachment distinction.
                     thoughtStreamGenRef.current += 1;
                     const genFull = thoughtStreamGenRef.current;
                     let text: string;
@@ -583,10 +587,7 @@ export default function DiagnosisPageClient({
                             : null;
                         text = await fetchDiagnoseScan(
                             {
-                                image: primaryImageSrc,
-                                ...(additionalAttachments.length > 0
-                                    ? { attachments: additionalAttachments }
-                                    : {}),
+                                imageUrls: analysisSources,
                                 serviceCatalog: catalog,
                                 ...(buildPromptWithContext(prompt).trim()
                                     ? { textQuery: buildPromptWithContext(prompt).trim() }
@@ -623,7 +624,7 @@ export default function DiagnosisPageClient({
                                 continue;
                             }
                             setDiagnosisFailureMessage(
-                                'We could not finish your Menda Report automatically. Please retry now.'
+                                'We could not finish your Mendr Report automatically. Please retry now.'
                             );
                             return null;
                         }
@@ -701,9 +702,14 @@ export default function DiagnosisPageClient({
                         typeof navigator !== 'undefined' && /Mobi|Android/i.test(navigator.userAgent)
                             ? 'mobile'
                             : 'desktop';
+                    const persistImageUrls =
+                        uploadedImageSourcesRef.current.length > 0
+                            ? uploadedImageSourcesRef.current.slice(0, 4)
+                            : [img];
                     const saveResult = await patchConversation(cid, {
                         title: toSave.diagnosis || 'New Diagnosis',
-                        image_url: img,
+                        image_url: persistImageUrls[0] ?? img,
+                        image_urls: persistImageUrls,
                         diagnosis: toSave as unknown,
                         initial_image_description: (prompt ?? '').trim() || null,
                         device: deviceType,
@@ -713,7 +719,7 @@ export default function DiagnosisPageClient({
                     if (!saveResult.ok) {
                         setDiagnosisFailureMessage(
                             saveResult.error ||
-                                'We could not save your Menda Report. Please check your connection and try again.'
+                                'We could not save your Mendr Report. Please check your connection and try again.'
                         );
                         return null;
                     }
@@ -752,7 +758,7 @@ export default function DiagnosisPageClient({
                     return toSave;
                 }
                 setDiagnosisFailureMessage(
-                    'We could not complete your Menda Report right now. Please retry now.'
+                    'We could not complete your Mendr Report right now. Please retry now.'
                 );
                 return null;
             } finally {
@@ -855,8 +861,24 @@ export default function DiagnosisPageClient({
                 savedCustomerCoordsRef.current = null;
             }
 
+            // Prefer the persisted `imageUrls` array (multi-image migration) and fall back
+            // to the legacy single `image_url` for older rows.
+            const persistedImageUrlsRaw = (() => {
+                const a = (data as any)?.imageUrls;
+                if (Array.isArray(a)) return a as unknown[];
+                const b = (data as any)?.image_urls;
+                if (Array.isArray(b)) return b as unknown[];
+                return [];
+            })();
+            const persistedImageUrls = persistedImageUrlsRaw
+                .filter((u): u is string => typeof u === 'string' && u.trim().length > 0)
+                .map((u) => u.trim());
             const img = (data as any)?.image_url as string | null;
-            const candidateImageUrl = (img && String(img).trim()) || pendingImageUrl || null;
+            const candidateImageUrl =
+                (persistedImageUrls[0] && persistedImageUrls[0]) ||
+                (img && String(img).trim()) ||
+                pendingImageUrl ||
+                null;
             const normalizedImageUrl = await ensureRenderableImageSource(candidateImageUrl);
             const imageUrlForDiagnosis = isLikelyRenderableImageSource(normalizedImageUrl)
                 ? normalizedImageUrl
@@ -865,12 +887,20 @@ export default function DiagnosisPageClient({
             const normalizedPendingImageUrls = (
                 await Promise.all(pendingImageUrls.map((src) => ensureRenderableImageSource(src)))
             ).filter((src): src is string => isLikelyRenderableImageSource(src));
+            const normalizedPersistedImageUrls = (
+                await Promise.all(persistedImageUrls.map((src) => ensureRenderableImageSource(src)))
+            ).filter((src): src is string => isLikelyRenderableImageSource(src));
+            // Preference order: persisted JSONB array > pending session storage > legacy single image_url.
+            const baseSources =
+                normalizedPersistedImageUrls.length > 0
+                    ? normalizedPersistedImageUrls
+                    : normalizedPendingImageUrls;
             const imageSourcesForDisplay = [
-                ...normalizedPendingImageUrls,
-                ...(imageUrlForDiagnosis && !normalizedPendingImageUrls.includes(imageUrlForDiagnosis)
+                ...baseSources,
+                ...(imageUrlForDiagnosis && !baseSources.includes(imageUrlForDiagnosis)
                     ? [imageUrlForDiagnosis]
                     : []),
-            ];
+            ].slice(0, 4);
             setUploadedImageSources(imageSourcesForDisplay);
             const promptFromDb = ((data as any)?.initial_image_description as string | null) ?? '';
             const prompt = promptFromDb.trim() || (pendingPromptFromWelcome ?? '').trim();
@@ -984,7 +1014,7 @@ export default function DiagnosisPageClient({
     const isUnsupportedDiagnosis =
         tradeLabel.trim().toLowerCase() === 'n/a' ||
         diagnosisTitle.toLowerCase().includes('not currently supported') ||
-        diagnosisTitle.toLowerCase().includes('not on menda');
+        diagnosisTitle.toLowerCase().includes('not on mendr');
     const isServiceBlocked = isUnsupportedDiagnosis || isUnrelatedDiagnosis;
 
     const scanForMatchEligibility = `${diagnosisTitle}\n${thoughtText}\n${diagnosisDetailText}\n${hazardText}`.toLowerCase();
@@ -1039,7 +1069,7 @@ export default function DiagnosisPageClient({
           ? 'Need More Information'
           : diagnosisTitle;
 
-    const pageTitle = 'Your Menda Report';
+    const pageTitle = 'Your Mendr Report';
     const pageSubtitle =
         'Here is what your photos suggest and sensible next steps for booking a contractor.';
     const stickyHeaderTitle =
@@ -1182,10 +1212,10 @@ export default function DiagnosisPageClient({
             url.searchParams.set('location', customerAddress);
         }
         const shareData = {
-            title: 'Menda Report',
+            title: 'Mendr Report',
             text: customerAddress
-                ? `Menda report for ${customerAddress}`
-                : 'Menda report',
+                ? `Mendr report for ${customerAddress}`
+                : 'Mendr report',
             url: url.toString(),
         };
         try {
@@ -1433,16 +1463,31 @@ export default function DiagnosisPageClient({
                         <p className="text-sm text-foreground">{diagnosisFailureMessage}</p>
                     ) : (
                         <>
-                            <p className="text-sm text-foreground">{resolvedDetailText}</p>
+                            <div className="flex flex-col gap-3">
+                                {(resolvedDetailText || '')
+                                    .split(/\n{2,}/)
+                                    .map((para) => para.trim())
+                                    .filter((para) => para.length > 0)
+                                    .map((para, i) => (
+                                        <p
+                                            key={i}
+                                            className="text-sm text-foreground leading-relaxed whitespace-pre-wrap"
+                                        >
+                                            {para}
+                                        </p>
+                                    ))}
+                            </div>
                             {hazardText && !isServiceBlocked ? (
-                                <p className="text-sm text-foreground">{hazardText}</p>
+                                <p className="text-sm text-foreground leading-relaxed border-l-2 border-destructive/50 pl-3">
+                                    {hazardText}
+                                </p>
                             ) : null}
 
                         </>
                     )}
                     {isServiceBlocked && serviceCatalog.length > 0 ? (
                         <p className="text-sm text-muted-foreground">
-                            Trades Menda can match today: {serviceCatalog.join(', ')}.
+                            Trades Mendr can match today: {serviceCatalog.join(', ')}.
                         </p>
                     ) : null}
                 </>

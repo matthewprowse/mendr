@@ -1,7 +1,7 @@
 import * as React from 'react';
 import { Resend } from 'resend';
 import { render } from '@react-email/render';
-import { MendaAuthEmail, type MendaAuthEmailProps } from '@/lib/scandio-auth-email';
+import { MendrAuthEmail, type MendrAuthEmailProps } from '@/lib/scandio-auth-email';
 import { buildSupabaseVerifyUrl } from '@/lib/auth/supabase-verify-url';
 
 export interface AuthHookUser {
@@ -55,8 +55,8 @@ async function sendHtml(
     if (error) throw new Error(error.message);
 }
 
-async function renderAuthEmail(props: MendaAuthEmailProps) {
-    return render(<MendaAuthEmail {...props} />);
+async function renderAuthEmail(props: MendrAuthEmailProps) {
+    return render(<MendrAuthEmail {...props} />);
 }
 
 export async function dispatchAuthEmails(
@@ -70,7 +70,7 @@ export async function dispatchAuthEmails(
     const firstName =
         typeof user.user_metadata?.first_name === 'string' ? user.user_metadata.first_name.trim() : '';
 
-    async function sendOne(to: string, subject: string, content: Omit<MendaAuthEmailProps, 'assetOrigin'>) {
+    async function sendOne(to: string, subject: string, content: Omit<MendrAuthEmailProps, 'assetOrigin'>) {
         const html = await renderAuthEmail({
             assetOrigin: origin,
             ...content,
@@ -88,10 +88,10 @@ export async function dispatchAuthEmails(
     switch (type) {
         case 'signup': {
             const url = buildSupabaseVerifyUrl(supabaseUrl, d.token_hash, 'signup', d.redirect_to);
-            await sendOne(user.email, 'Confirm your Menda account', {
+            await sendOne(user.email, 'Confirm your Mendr account', {
                 preview: 'Confirm your email to finish signing up.',
                 heading: 'Confirm your email',
-                body: `${greet}\n\nUse the button below to confirm your account and start using Menda.`,
+                body: `${greet}\n\nUse the button below to confirm your account and start using Mendr.`,
                 ctaUrl: url,
                 ctaLabel: 'Confirm email',
                 otp: d.token || undefined,
@@ -100,9 +100,9 @@ export async function dispatchAuthEmails(
         }
         case 'magiclink': {
             const url = buildSupabaseVerifyUrl(supabaseUrl, d.token_hash, 'magiclink', d.redirect_to);
-            await sendOne(user.email, 'Your Menda sign-in link', {
-                preview: 'Sign in to Menda with one click.',
-                heading: 'Sign in to Menda',
+            await sendOne(user.email, 'Your Mendr sign-in link', {
+                preview: 'Sign in to Mendr with one click.',
+                heading: 'Sign in to Mendr',
                 body: `${greet}\n\nClick the button below to sign in. This link expires soon for your security.`,
                 ctaUrl: url,
                 ctaLabel: 'Sign in',
@@ -112,8 +112,8 @@ export async function dispatchAuthEmails(
         }
         case 'recovery': {
             const url = buildSupabaseVerifyUrl(supabaseUrl, d.token_hash, 'recovery', d.redirect_to);
-            await sendOne(user.email, 'Reset your Menda password', {
-                preview: 'Reset your Menda password.',
+            await sendOne(user.email, 'Reset your Mendr password', {
+                preview: 'Reset your Mendr password.',
                 heading: 'Password reset',
                 body: `${greet}\n\nWe received a request to reset your password. Choose a new password using the link below.`,
                 ctaUrl: url,
@@ -124,10 +124,10 @@ export async function dispatchAuthEmails(
         }
         case 'invite': {
             const url = buildSupabaseVerifyUrl(supabaseUrl, d.token_hash, 'invite', d.redirect_to);
-            await sendOne(user.email, "You're invited to Menda", {
-                preview: 'Accept your invitation to Menda.',
+            await sendOne(user.email, "You're invited to Mendr", {
+                preview: 'Accept your invitation to Mendr.',
                 heading: 'You’re invited',
-                body: `${greet}\n\nYou’ve been invited to join Menda. Accept the invitation to create your account.`,
+                body: `${greet}\n\nYou’ve been invited to join Mendr. Accept the invitation to create your account.`,
                 ctaUrl: url,
                 ctaLabel: 'Accept invitation',
                 otp: d.token || undefined,
@@ -144,10 +144,10 @@ export async function dispatchAuthEmails(
                     'email_change',
                     d.redirect_to
                 );
-                await sendOne(user.email, 'Confirm your email change on Menda', {
-                    preview: 'Confirm changing your Menda email.',
+                await sendOne(user.email, 'Confirm your email change on Mendr', {
+                    preview: 'Confirm changing your Mendr email.',
                     heading: 'Confirm on your current email',
-                    body: `${greet}\n\nYou asked to change the email on your Menda account. Confirm from this address first using the button below.`,
+                    body: `${greet}\n\nYou asked to change the email on your Mendr account. Confirm from this address first using the button below.`,
                     ctaUrl: urlCurrent,
                     ctaLabel: 'Confirm email change',
                     otp: d.token || undefined,
@@ -159,10 +159,10 @@ export async function dispatchAuthEmails(
                     'email_change',
                     d.redirect_to
                 );
-                await sendOne(newEmail, 'Confirm your new Menda email', {
-                    preview: 'Confirm your new Menda email address.',
+                await sendOne(newEmail, 'Confirm your new Mendr email', {
+                    preview: 'Confirm your new Mendr email address.',
                     heading: 'Confirm your new email',
-                    body: 'Hi,\n\nConfirm this address to complete the email change on your Menda account.',
+                    body: 'Hi,\n\nConfirm this address to complete the email change on your Mendr account.',
                     ctaUrl: urlNew,
                     ctaLabel: 'Confirm new email',
                     otp: d.token_new || undefined,
@@ -174,10 +174,10 @@ export async function dispatchAuthEmails(
             const hash = d.token_hash || d.token_hash_new;
             const otp = d.token_new || d.token;
             const url = buildSupabaseVerifyUrl(supabaseUrl, hash, 'email_change', d.redirect_to);
-            await sendOne(target, 'Confirm your Menda email change', {
-                preview: 'Confirm your new Menda email.',
+            await sendOne(target, 'Confirm your Mendr email change', {
+                preview: 'Confirm your new Mendr email.',
                 heading: 'Confirm email change',
-                body: `${greet}\n\nConfirm your updated email for Menda using the link below.`,
+                body: `${greet}\n\nConfirm your updated email for Mendr using the link below.`,
                 ctaUrl: url,
                 ctaLabel: 'Confirm email',
                 otp: otp || undefined,
@@ -185,10 +185,10 @@ export async function dispatchAuthEmails(
             return;
         }
         case 'reauthentication': {
-            await sendOne(user.email, 'Your Menda verification code', {
-                preview: 'Your verification code for Menda.',
+            await sendOne(user.email, 'Your Mendr verification code', {
+                preview: 'Your verification code for Mendr.',
                 heading: 'Verify it’s you',
-                body: `${greet}\n\nUse this code to continue with a sensitive action in Menda.`,
+                body: `${greet}\n\nUse this code to continue with a sensitive action in Mendr.`,
                 otp: d.token || undefined,
                 footer: 'If you did not attempt this, secure your account by changing your password.',
             });
@@ -196,10 +196,10 @@ export async function dispatchAuthEmails(
         }
         case 'email': {
             const url = buildSupabaseVerifyUrl(supabaseUrl, d.token_hash, 'email', d.redirect_to);
-            await sendOne(user.email, 'Confirm your Menda email', {
-                preview: 'Menda email verification.',
+            await sendOne(user.email, 'Confirm your Mendr email', {
+                preview: 'Mendr email verification.',
                 heading: 'Verify your email',
-                body: `${greet}\n\nComplete email verification for your Menda account.`,
+                body: `${greet}\n\nComplete email verification for your Mendr account.`,
                 ctaUrl: url,
                 ctaLabel: 'Verify email',
                 otp: d.token || undefined,
@@ -207,58 +207,58 @@ export async function dispatchAuthEmails(
             return;
         }
         case 'password_changed_notification':
-            await sendOne(user.email, 'Your Menda password was changed', {
+            await sendOne(user.email, 'Your Mendr password was changed', {
                 preview: 'Password updated.',
                 heading: 'Password changed',
-                body: `${greet}\n\nYour Menda password was just changed. If this wasn’t you, reset your password and contact support immediately.`,
+                body: `${greet}\n\nYour Mendr password was just changed. If this wasn’t you, reset your password and contact support immediately.`,
                 footer: '',
             });
             return;
         case 'email_changed_notification':
-            await sendOne(user.email, 'Your Menda email was changed', {
+            await sendOne(user.email, 'Your Mendr email was changed', {
                 preview: 'Email updated.',
                 heading: 'Email address changed',
-                body: `${greet}\n\nThe email on your Menda account was updated. If this wasn’t you, contact support right away.`,
+                body: `${greet}\n\nThe email on your Mendr account was updated. If this wasn’t you, contact support right away.`,
                 footer: '',
             });
             return;
         case 'phone_changed_notification':
-            await sendOne(user.email, 'Your Menda phone number was changed', {
+            await sendOne(user.email, 'Your Mendr phone number was changed', {
                 preview: 'Phone updated.',
                 heading: 'Phone number changed',
-                body: `${greet}\n\nThe phone number on your Menda account was updated.`,
+                body: `${greet}\n\nThe phone number on your Mendr account was updated.`,
                 footer: '',
             });
             return;
         case 'identity_linked_notification':
-            await sendOne(user.email, 'A sign-in method was linked to Menda', {
+            await sendOne(user.email, 'A sign-in method was linked to Mendr', {
                 preview: 'New sign-in method.',
                 heading: 'New sign-in provider linked',
-                body: `${greet}\n\nA new sign-in method was linked to your Menda account.`,
+                body: `${greet}\n\nA new sign-in method was linked to your Mendr account.`,
                 footer: '',
             });
             return;
         case 'identity_unlinked_notification':
-            await sendOne(user.email, 'A sign-in method was removed from Menda', {
+            await sendOne(user.email, 'A sign-in method was removed from Mendr', {
                 preview: 'Sign-in method removed.',
                 heading: 'Sign-in provider removed',
-                body: `${greet}\n\nA sign-in method was removed from your Menda account.`,
+                body: `${greet}\n\nA sign-in method was removed from your Mendr account.`,
                 footer: '',
             });
             return;
         case 'mfa_factor_enrolled_notification':
-            await sendOne(user.email, 'Two-step verification enabled on Menda', {
+            await sendOne(user.email, 'Two-step verification enabled on Mendr', {
                 preview: 'MFA enabled.',
                 heading: 'Extra security turned on',
-                body: `${greet}\n\nTwo-step verification was enabled on your Menda account.`,
+                body: `${greet}\n\nTwo-step verification was enabled on your Mendr account.`,
                 footer: '',
             });
             return;
         case 'mfa_factor_unenrolled_notification':
-            await sendOne(user.email, 'Two-step verification updated on Menda', {
+            await sendOne(user.email, 'Two-step verification updated on Mendr', {
                 preview: 'MFA updated.',
                 heading: 'Extra security updated',
-                body: `${greet}\n\nTwo-step verification on your Menda account was changed.`,
+                body: `${greet}\n\nTwo-step verification on your Mendr account was changed.`,
                 footer: '',
             });
             return;
@@ -266,10 +266,10 @@ export async function dispatchAuthEmails(
             const url =
                 d.token_hash &&
                 buildSupabaseVerifyUrl(supabaseUrl, d.token_hash, type, d.redirect_to);
-            await sendOne(user.email, 'Menda account notification', {
-                preview: 'Menda account activity.',
+            await sendOne(user.email, 'Mendr account notification', {
+                preview: 'Mendr account activity.',
                 heading: 'Account notification',
-                body: `${greet}\n\nThere is an update related to your Menda account (${type}).`,
+                body: `${greet}\n\nThere is an update related to your Mendr account (${type}).`,
                 ctaUrl: url || undefined,
                 ctaLabel: url ? 'Continue' : undefined,
                 otp: d.token || undefined,

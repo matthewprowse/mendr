@@ -2,7 +2,10 @@ import { createSupabaseAdminClient } from '@/lib/auth/supabase-server';
 
 export type ReportDetailServerPayload = {
     diagnosis: Record<string, unknown> | null;
+    /** Legacy single-image URL. Kept for backward compat; equals imageUrls[0] when populated. */
     image_url: string | null;
+    /** Canonical ordered list of image URLs. First entry is the primary view. */
+    imageUrls: string[];
     customer_address: string | null;
     customer_lat: number | null;
     customer_lng: number | null;
@@ -32,7 +35,7 @@ export async function fetchReportDetailOnServer(id: string): Promise<ReportDetai
         const { data: d1, error: e1 } = await supabase
             .from('diagnoses')
             .select(
-                'diagnosis, image_url, customer_address, customer_lat, customer_lng, initial_image_description'
+                'diagnosis, image_url, image_urls, customer_address, customer_lat, customer_lng, initial_image_description'
             )
             .eq('id', id)
             .maybeSingle();
@@ -50,7 +53,7 @@ export async function fetchReportDetailOnServer(id: string): Promise<ReportDetai
                 const { data: d2, error: e2 } = await supabase
                     .from('diagnoses')
                     .select(
-                        'diagnosis_json, image_url, customer_address, customer_lat, customer_lng, initial_image_description'
+                        'diagnosis_json, image_url, image_urls, customer_address, customer_lat, customer_lng, initial_image_description'
                     )
                     .eq('id', id)
                     .maybeSingle();
@@ -74,11 +77,26 @@ export async function fetchReportDetailOnServer(id: string): Promise<ReportDetai
 
         const resolvedDiagnosis = conv.diagnosis as Record<string, unknown> | null;
 
+        // Prefer JSONB `image_urls`; fall back to legacy `image_url` for older rows.
+        const rawArr = (conv as { image_urls?: unknown }).image_urls;
+        let imageUrls: string[] = [];
+        if (Array.isArray(rawArr)) {
+            imageUrls = (rawArr as unknown[])
+                .filter((u): u is string => typeof u === 'string' && u.trim().length > 0)
+                .map((u) => u.trim());
+        }
+        const legacyImageUrl =
+            typeof conv.image_url === 'string' && conv.image_url.trim() ? conv.image_url.trim() : null;
+        if (imageUrls.length === 0 && legacyImageUrl) {
+            imageUrls = [legacyImageUrl];
+        }
+
         return {
             status: 'ok',
             data: {
                 diagnosis: resolvedDiagnosis,
-                image_url: conv.image_url as string | null,
+                image_url: legacyImageUrl ?? imageUrls[0] ?? null,
+                imageUrls,
                 customer_address: conv.customer_address as string | null,
                 customer_lat: conv.customer_lat as number | null,
                 customer_lng: conv.customer_lng as number | null,

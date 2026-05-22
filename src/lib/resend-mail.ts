@@ -48,7 +48,7 @@ export async function sendScandioEmail(options: SendScandioEmailOptions): Promis
         html,
         headers: {
             'List-Unsubscribe': `<mailto:${replyTo ?? from}?subject=unsubscribe>`,
-            'X-Mailer':         'Menda',
+            'X-Mailer':         'Mendr',
         },
     });
 
@@ -109,7 +109,7 @@ export function buildEmailHtml({ body, ctaLabel, ctaUrl }: {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Menda</title>
+  <title>Mendr</title>
 </head>
 <body style="margin:0;padding:0;background:#f9fafb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
   <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="background:#f9fafb;">
@@ -119,7 +119,7 @@ export function buildEmailHtml({ body, ctaLabel, ctaUrl }: {
           <!-- Header -->
           <tr>
             <td style="padding:28px 32px 20px;border-bottom:1px solid #f3f4f6;">
-              <span style="font-size:18px;font-weight:700;color:#111827;letter-spacing:-0.3px;">Menda</span>
+              <span style="font-size:18px;font-weight:700;color:#111827;letter-spacing:-0.3px;">Mendr</span>
             </td>
           </tr>
           <!-- Body -->
@@ -133,9 +133,9 @@ export function buildEmailHtml({ body, ctaLabel, ctaUrl }: {
           <tr>
             <td style="padding:20px 32px;border-top:1px solid #f3f4f6;background:#f9fafb;">
               <p style="margin:0;font-size:12px;color:#9ca3af;line-height:1.5;">
-                Menda · Cape Town, South Africa<br>
+                Mendr · Cape Town, South Africa<br>
                 This is a transactional email related to your application.
-                You received it because you submitted an application at menda.co.za. <!-- TODO(menda-domain): update to real domain once menda.co.za is live --><br>
+                You received it because you submitted an application at mendr.co.za. <!-- TODO(mendr-domain): update to real domain once mendr.co.za is live --><br>
                 To unsubscribe from future emails, reply with "unsubscribe" in the subject.
               </p>
             </td>
@@ -166,7 +166,7 @@ export function confirmationEmail(firstName: string, businessName: string): { te
     const text = [
         `Hi ${firstName},`,
         '',
-        `Thanks for applying to join the Menda contractor network${businessName ? ` on behalf of ${businessName}` : ''}.`,
+        `Thanks for applying to join the Mendr contractor network${businessName ? ` on behalf of ${businessName}` : ''}.`,
         '',
         'We have received your application and will be in touch within a couple of business days once we have reviewed your details.',
         '',
@@ -179,7 +179,7 @@ export function confirmationEmail(firstName: string, businessName: string): { te
         '',
         'Kind regards,',
         'Matthew',
-        'Menda',
+        'Mendr',
     ].join('\n');
 
     const html = buildEmailHtml({ body: text });
@@ -206,7 +206,7 @@ export function invitationEmail(
     const text = [
         `Hi ${firstName},`,
         '',
-        'Great news — your application has been reviewed and your Menda profile is ready.',
+        'Great news — your application has been reviewed and your Mendr profile is ready.',
         '',
         'Here is a draft summary we put together based on your application:',
         '',
@@ -225,7 +225,7 @@ export function invitationEmail(
         '',
         'Kind regards,',
         'Matthew',
-        'Menda',
+        'Mendr',
     ].join('\n');
 
     const html = buildEmailHtml({
@@ -249,6 +249,61 @@ export function invitationEmailBody(
 }
 
 /**
+ * Post-job rating request email sent to homeowners ~48 h after they contact a contractor.
+ * Each star links directly to /api/job-outcome?token=<uuid>&rating=N for one-click submission.
+ */
+export function jobRatingRequestEmail(params: {
+    providerName: string;
+    ratingBaseUrl: string; // e.g. https://mendr.co.za/api/job-outcome?token=<uuid>&rating=
+}): { text: string; html: string } {
+    const { providerName, ratingBaseUrl } = params;
+
+    const stars = [1, 2, 3, 4, 5];
+    const starLabels = ['Poor', 'Below average', 'Okay', 'Good', 'Excellent'];
+
+    const text = [
+        `Hi there,`,
+        ``,
+        `You recently contacted ${providerName} through Mendr. Did they help you sort out your home fault?`,
+        ``,
+        `Rate your experience:`,
+        ...stars.map((n) => `  ${n} star${n > 1 ? 's' : ''} (${starLabels[n - 1]}): ${ratingBaseUrl}${n}`),
+        ``,
+        `This takes one click and helps other homeowners find great contractors.`,
+        ``,
+        `Thanks,`,
+        `The Mendr team`,
+    ].join('\n');
+
+    const starButtonsHtml = stars
+        .map((n) => {
+            const emoji = '★'.repeat(n) + '☆'.repeat(5 - n);
+            return `<a href="${ratingBaseUrl}${n}"
+  style="display:inline-block;margin:0 4px;padding:10px 16px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;font-size:22px;text-decoration:none;color:#111827;"
+  title="${starLabels[n - 1]}">${emoji}</a>`;
+        })
+        .join('\n');
+
+    const html = buildEmailHtml({
+        body: [
+            `Hi there,`,
+            ``,
+            `You recently contacted <strong>${escHtml(providerName)}</strong> through Mendr. Did they help you sort out your home fault?`,
+            ``,
+            `Rate your experience — it only takes one click:`,
+        ].join('\n'),
+    }).replace(
+        '</td>',
+        `<div style="margin:20px 0;text-align:center;">${starButtonsHtml}</div>
+<p style="margin:16px 0 0;font-size:13px;color:#6b7280;line-height:1.5;">
+  Your rating helps other homeowners find great contractors on Mendr.
+</p></td>`,
+    );
+
+    return { text, html };
+}
+
+/**
  * Monthly lead digest email for providers.
  * Sent once per month to providers who received homeowner contact events.
  */
@@ -265,17 +320,17 @@ export function leadDigestEmail(params: {
     const contactWord = contactCount === 1 ? 'homeowner' : 'homeowners';
     const contactVerb = contactCount === 1 ? 'tried' : 'tried';
     const tradeList = tradeTypes.filter(Boolean).join(', ') || 'general home services';
-    const siteUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://menda.co.za'; // TODO(menda-domain): update once live
+    const siteUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://mendr.co.za'; // TODO(mendr-domain): update once live
 
     const body = isRegistered
         ? [
               `Hi ${businessName},`,
               '',
-              `You received ${contactCount} homeowner contact${contactCount === 1 ? '' : 's'} last month via Menda during ${month}.`,
+              `You received ${contactCount} homeowner contact${contactCount === 1 ? '' : 's'} last month via Mendr during ${month}.`,
               '',
               `Service types enquired about: ${tradeList}`,
               '',
-              'Sign in to your Menda account to view your application status and profile.',
+              'Sign in to your Mendr account to view your application status and profile.',
               '',
               `${siteUrl}/contractors/account`,
               '',
@@ -286,11 +341,11 @@ export function leadDigestEmail(params: {
         : [
               `Hi ${businessName},`,
               '',
-              `${contactCount} ${contactWord} in your area ${contactVerb} to contact you through Menda during ${month}.`,
+              `${contactCount} ${contactWord} in your area ${contactVerb} to contact you through Mendr during ${month}.`,
               '',
               `Service types enquired about: ${tradeList}`,
               '',
-              'Menda connects homeowners with trusted local contractors. Claim your free profile to respond to future leads and grow your business.',
+              'Mendr connects homeowners with trusted local contractors. Claim your free profile to respond to future leads and grow your business.',
               '',
               `${siteUrl}/contractors/network`,
               '',

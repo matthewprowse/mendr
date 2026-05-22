@@ -31,6 +31,7 @@ import { createSupabaseAdminClient } from '@/lib/auth/supabase-server';
 import { getGeminiModel } from '@/lib/ai/ai-client';
 import { aiConfig } from '@/lib/ai/ai-config';
 import { sanitizeCustomerSummary } from '@/lib/providers/review-summary';
+import { formatBusinessName } from '@/lib/utils';
 import {
     FAST_SUMMARY_MIN_CORPUS_CHARS,
     FAST_SUMMARY_MIN_REVIEWS,
@@ -138,9 +139,46 @@ function canonicalServiceKey(value: string): string {
         .toLowerCase()
         .replace(/&/g, 'and')
         .replace(/[^a-z0-9\s]/g, ' ')
+        // Strip generic suffixes that don't differentiate services
         .replace(/\bservices?\b/g, ' ')
+        .replace(/\brepairs?\b/g, 'repair')
+        .replace(/\binstallations?\b/g, 'installation')
+        .replace(/\bmaintenances?\b/g, 'maintenance')
+        .replace(/\bsolutions?\b/g, ' ')
+        .replace(/\bsystems?\b/g, ' ')
         .replace(/\s+/g, ' ')
         .trim();
+}
+
+/**
+ * Synonym groups: terms that mean the same thing get mapped to the first entry (canonical).
+ * Key = canonical display label (Title Case). Values = alternative phrasings to collapse into it.
+ */
+const SPECIALISATION_SYNONYMS: Record<string, string[]> = {
+    'Drain Cleaning': ['drain unblocking', 'drain jetting', 'drain clearing', 'drain system cleaning', 'blocked drain'],
+    'Leak Detection': ['leak finding', 'leak location', 'water leak detection'],
+    'Leak Repair': ['leak fixing', 'pipe leak repair'],
+    'Pipe Repair': ['pipe fixing', 'pipe replacement', 'piping repair'],
+    'Geyser Repair': ['hot water heater repair', 'water heater repair', 'geyser fixing'],
+    'Geyser Installation': ['hot water heater installation', 'water heater installation'],
+    'Toilet Repair': ['toilet fixing', 'toilet unblocking', 'blocked toilet'],
+    'Tap Repair': ['tap fixing', 'tap replacement', 'faucet repair'],
+    'Electrical Installations': ['electrical installation', 'electrical fitting'],
+    'Fault Finding': ['electrical fault finding', 'electrical fault detection', 'fault detection'],
+    'Painting': ['interior painting', 'exterior painting', 'house painting'],
+    'Waterproofing': ['damp proofing', 'dampproofing', 'water proofing'],
+    'Plastering': ['plaster repair', 'skim coat'],
+    'Tiling': ['tile installation', 'tile laying', 'tile repair'],
+    'Gate Motor Repair': ['gate automation repair', 'gate motor installation', 'automated gate repair'],
+    'Garage Door Repair': ['garage door installation', 'garage door motor repair'],
+    '24/7 Emergency': ['24 hour service', '24/7 service', 'emergency callout', 'after hours service', 'emergency service', '24 hours'],
+};
+
+const synonymLookup = new Map<string, string>();
+for (const [canonical, alts] of Object.entries(SPECIALISATION_SYNONYMS)) {
+    for (const alt of alts) {
+        synonymLookup.set(canonicalServiceKey(alt), canonical);
+    }
 }
 
 function normalizeSpecialisations(input: unknown): string[] {
@@ -162,12 +200,15 @@ function normalizeSpecialisations(input: unknown): string[] {
         if (typeof raw !== 'string') continue;
         const cleaned = raw.trim().replace(/\s+/g, ' ').replace(/[.,;:]+$/g, '');
         if (!cleaned) continue;
-        const title = toTitleCase(cleaned);
-        const key = canonicalServiceKey(title);
+        const key = canonicalServiceKey(cleaned);
         if (!key || generic.has(key) || key.length < 4 || key.length > 60) continue;
-        if (seen.has(key)) continue;
-        seen.add(key);
-        out.push(title);
+        // Check synonym map first — collapse similar terms to a canonical label
+        const canonical = synonymLookup.get(key);
+        const display = canonical ?? toTitleCase(cleaned);
+        const dedupeKey = canonicalServiceKey(display);
+        if (seen.has(dedupeKey)) continue;
+        seen.add(dedupeKey);
+        out.push(display);
         if (out.length >= 8) break;
     }
     return out;
@@ -255,7 +296,7 @@ const COMBINED_ENRICHMENT_SCHEMA = {
     properties: {
         bio: {
             type: SchemaType.STRING,
-            description: '2–3 factual sentences: what they do, where, what sets them apart. British English. Max 300 chars. No hollow phrases.',
+            description: '2–3 factual sentences: what they do, where, what sets them apart. British English. Max 300 chars. No hollow phrases. Never use the business name — refer to them as "The team" or "They" instead.',
         },
         specialisations: {
             type: SchemaType.ARRAY,
@@ -277,7 +318,7 @@ const COMBINED_ENRICHMENT_SCHEMA = {
         },
         narrative: {
             type: SchemaType.STRING,
-            description: '3–5 sentences: what the business does, concrete job types, standout qualities. British English plain prose. No business name repetition.',
+            description: '3–5 sentences about what the business does, concrete job types, and standout qualities. British English plain prose. Never refer to the business by name — use "The team", "They", or "The business" instead. Separate distinct ideas with \\n\\n to create paragraph breaks.',
         },
     },
     required: ['bio', 'specialisations', 'website_quality', 'highlights', 'review_summary', 'narrative'],
@@ -295,7 +336,7 @@ async function runCombinedEnrichment(params: {
     googleGenerativeSummary?: string | null;
     strictSuffix?: string;
 }): Promise<CombinedEnrichmentOutput | null> {
-    const prompt = `You are Menda's provider enrichment engine. Extract everything useful about this South African home services business. Be aggressive — specific beats vague, concrete beats generic. Do not invent facts.
+    const prompt = `You are Mendr's provider enrichment engine. Extract everything useful about this South African home services business. Be aggressive — specific beats vague, concrete beats generic. Do not invent facts.
 
 Provider: ${params.providerName}
 ${params.trade ? `Trade: ${params.trade}` : ''}
@@ -313,7 +354,7 @@ Return ONLY valid JSON with these fields: bio, specialisations, website_quality,
 Rules (British English throughout):
 - specialisations: strict noun phrases only; Title Case; remove near-duplicate wording.
 - highlights: scan for emergency callouts, pricing, qualifications, guarantees, turnaround times. Never hollow phrases.
-- review_summary: hard cap 140 chars; trim to a sentence boundary if needed.
+- review_summary: 2–3 complete sentences, max 350 chars; always end on a full stop.
 - narrative: combine context from both website and reviews. Don't echo bio word-for-word.${params.strictSuffix ? `\n\n${params.strictSuffix}` : ''}`.trim();
 
     try {
@@ -688,8 +729,8 @@ export async function enrichProvider(
         .select('rating, body, source')
         .eq('provider_id', providerId)
         .eq('status', 'approved')
-        // TODO(menda-migration): 'scandio' source literal kept until DB migration
-        // renames existing rows. Add 'menda' here when that migration runs.
+        // TODO(mendr-migration): 'scandio' source literal kept until DB migration
+        // renames existing rows. Add 'mendr' here when that migration runs.
         .in('source', ['google', 'scandio', 'dataforseo'])
         .order('published_at', { ascending: false })
         .limit(25);
@@ -700,7 +741,7 @@ export async function enrichProvider(
                 fetch(website, {
                     method: 'GET',
                     headers: {
-                        'User-Agent': 'MendaBot/1.0 (+https://menda.co.za)', // TODO(menda-domain): update User-Agent once menda.co.za is confirmed
+                        'User-Agent': 'MendrBot/1.0 (+https://mendr.co.za)', // TODO(mendr-domain): update User-Agent once mendr.co.za is confirmed
                         Accept: 'text/html,application/xhtml+xml',
                     },
                 }),
@@ -902,22 +943,34 @@ export async function enrichProvider(
 
     // ── Stage 5: Update provider profile copy ─────────────────────────────────
     try {
-        if (enrichmentQuality !== 'ok') {
+        const narrative = combined?.narrative?.trim() ?? '';
+
+        // Write profile copy if:
+        //   a) enrichment quality passed the full gate ('ok'), OR
+        //   b) quality is 'low' but we at least have a usable narrative (>80 chars) —
+        //      this covers providers with thin websites / few reviews whose bio is short
+        //      but whose narrative is still coherent enough to show.
+        const narrativeUsable = narrative.length >= 80;
+        if (enrichmentQuality !== 'ok' && !narrativeUsable) {
             return { ok: true };
         }
 
-        const narrative = combined?.narrative?.trim() ?? '';
+        const cleanedName = typeof provider.name === 'string' && provider.name.trim()
+            ? formatBusinessName(provider.name.trim()) || provider.name.trim()
+            : null;
         const patch: Record<string, unknown> = {
             about: narrative || null,
             past_work: null,
             summary_long: narrative || null,
             specialisations: enrichment?.specialisations ?? [],
             highlights: normalizedHighlights.length ? normalizedHighlights : null,
+            key_person: null,
             updated_at: now,
+            ...(cleanedName ? { name: cleanedName } : {}),
         };
 
-        const existingSummary = typeof provider.summary === 'string' ? provider.summary.trim() : '';
-        if (!existingSummary && reviewSummary) {
+        // Always refresh summary from the latest review enrichment — don't preserve stale copy.
+        if (reviewSummary) {
             patch.summary = sanitizeCustomerSummary(reviewSummary);
         }
 
@@ -1046,7 +1099,7 @@ export async function enrichProviderReviewSummaryFast(
         .select('*')
         .eq('provider_id', providerId)
         .eq('status', 'approved')
-        // TODO(menda-migration): 'scandio' source literal kept until DB migration renames rows.
+        // TODO(mendr-migration): 'scandio' source literal kept until DB migration renames rows.
         .in('source', ['google', 'scandio', 'dataforseo'])
         .order('published_at', { ascending: false })
         .limit(25);
@@ -1085,7 +1138,7 @@ export async function enrichProviderReviewSummaryFast(
     const prompt = `Summarise what customers say in these reviews about a South African home-services business.
 
 Rules:
-- British English. Exactly two short sentences in \`review_summary\`, max 140 characters total for that string.
+- British English. 2–3 complete sentences in \`review_summary\`, max 350 characters total. Always end on a full stop — never cut mid-sentence.
 - Do not name the business, address, ratings, or review counts.
 - No audience words: homeowners, users, customers, clients, residents.
 ${tradeHint ? `- Trade context: ${tradeHint}\n` : ''}
@@ -1104,14 +1157,14 @@ ${reviewsText}`.trim();
                     temperature: 0.2,
                     topK: 15,
                     topP: 0.7,
-                    maxOutputTokens: 512,
+                    maxOutputTokens: 768,
                     responseMimeType: 'application/json',
                     responseSchema: {
                         type: SchemaType.OBJECT,
                         properties: {
                             review_summary: {
                                 type: SchemaType.STRING,
-                                description: 'Exactly 2 complete sentences, max 140 characters total. British English. Warm and direct. No business name, no ratings, no audience nouns (homeowners/customers/clients/residents).',
+                                description: '2–3 complete sentences, max 350 characters total. British English. Warm and direct. Always end on a full stop. No business name, no ratings, no audience nouns (homeowners/customers/clients/residents).',
                             },
                         },
                         required: ['review_summary'],

@@ -152,7 +152,7 @@ export function useProReviews(placeId: string) {
                 const fullName =
                     typeof r?.reviewer_name === 'string' && r.reviewer_name.trim()
                         ? r.reviewer_name.trim()
-                        : 'Menda review';
+                        : 'Mendr review';
                 return {
                     id: String(r.id),
                     fullName,

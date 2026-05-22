@@ -72,6 +72,8 @@ export async function POST(req: NextRequest) {
 
     // Minimal JSONB diagnosis object — the match page reads trade + trade_detail
     // from this to filter contractors. No AI fields are populated.
+    // structural_confidence is fixed at 100 because the trade was hand-picked by
+    // the user — no model uncertainty to gate on.
     const diagnosisJsonb = {
         trade,
         trade_detail: `Direct Match — ${trade}`,
@@ -81,6 +83,20 @@ export async function POST(req: NextRequest) {
         action_required: '',
         confidence: 100,
         is_direct_match: true,
+        structural_confidence: {
+            score: 100,
+            signals: {
+                hasImage: false,
+                imageCount: 0,
+                descriptionWordCount: rawDescription
+                    ? rawDescription.trim().split(/\s+/).filter(Boolean).length
+                    : 0,
+                subcategoryMatched: false,
+                failedComponentNamed: false,
+                isCatchAllWithNoVisual: false,
+                isRejectedOrUnserviced: false,
+            },
+        },
     };
 
     try {

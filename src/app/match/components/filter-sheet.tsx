@@ -166,6 +166,11 @@ export function FilterSheet({
                                 onCheckedChange={(v) => setDraftField('onlyOpenNow', v)}
                             />
                             <ToggleRow
+                                label="Open 24/7"
+                                checked={draft.is247}
+                                onCheckedChange={(v) => setDraftField('is247', v)}
+                            />
+                            <ToggleRow
                                 label="Has Website"
                                 checked={draft.hasWebsite}
                                 onCheckedChange={(v) => setDraftField('hasWebsite', v)}
@@ -178,20 +183,7 @@ export function FilterSheet({
                         </div>
                     </Section>
 
-                    <Section
-                        title="Company Size"
-                        subtitle="Alarm Ipsum"
-                    >
-                        <ChipGroup
-                            options={(['solo', 'small', 'mid', 'large'] as const).map((size) => ({
-                                value: size,
-                                label: COMPANY_SIZE_LABELS[size],
-                            }))}
-                            selectedValues={draft.companySizes}
-                            onChange={(next) => setDraftField('companySizes', next as MatchFilterState['companySizes'])}
-                            multi
-                        />
-                    </Section>
+                    {/* Company Size filter hidden — company_size not yet in DB schema */}
 
                     {availableSpecialisations.length > 0 ? (
                         <Section title="Specialisations" subtitle="Alarm Ipsum">

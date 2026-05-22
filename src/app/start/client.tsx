@@ -2,7 +2,7 @@
 
 /**
  * Route: /start
- * 3-step onboarding flow: describe → photo → location → /processing/[id] → /diagnosis/[id]
+ * Unified flow: photos + description → location → diagnose or skip
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -18,8 +18,16 @@ import { ensureGoogleMapsLoaderOptions } from '@/lib/google-maps-js-loader';
 import {
     CircleNotch,
     MapPin,
-    MagnifyingGlass,
+    Camera,
+    DotsThree,
+    DotsSixVertical,
 } from '@phosphor-icons/react';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -28,14 +36,8 @@ import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
 import { FlowTopBar, StepHeading } from '@/components/match/flow-shell';
 import { INK } from '@/lib/design-tokens';
-import { START_DESCRIPTION_MIN_CHARS } from '@/lib/diagnosis/start-description-quality';
-import { SERVICE_LABELS } from '@/lib/services';
 
-const ACCENT = 'hsl(var(--foreground))';
-const WESTERN_CAPE_ERROR = 'Please use a location in the Western Cape, South Africa.';
-const LOCATION_GENERIC_ERROR = 'Could not verify your location. Please try again or enter your address manually.';
-type StepNumber = 1 | 2 | 3;
-type FlowStep = StepNumber;
+type FlowStep = 1 | 2;
 type LocationMode = 'choose' | 'gps-loading' | 'gps-done' | 'manual';
 type SelectedPhotoStatus = 'pending' | 'ready' | 'error';
 type SelectedPhoto = {
@@ -47,19 +49,18 @@ type SelectedPhoto = {
     errorMessage?: string;
 };
 
+const WESTERN_CAPE_ERROR = 'Please use a location in the Western Cape, South Africa.';
+const LOCATION_GENERIC_ERROR = 'Could not verify your location. Please try again or enter your address manually.';
+
 function toUserFriendlyLocationError(input: string | null | undefined): string {
     const msg = (input ?? '').trim();
     if (!msg) return LOCATION_GENERIC_ERROR;
     const lower = msg.toLowerCase();
-
     if (lower.includes('outside the western cape') || lower.includes('western cape')) {
         return 'This location looks outside the Western Cape. Please use an address in Western Cape, South Africa.';
     }
     if (lower.includes('request_denied') || lower.includes('api key') || lower.includes('not authorized')) {
-        return 'Location services are temporarily unavailable (map key configuration issue). Please enter your address manually for now.';
-    }
-    if (lower.includes('billing') || lower.includes('payment') || lower.includes('account')) {
-        return 'Location services are temporarily unavailable due to account billing setup. Please enter your address manually for now.';
+        return 'Location services are temporarily unavailable. Please enter your address manually for now.';
     }
     if (lower.includes('over_query_limit') || lower.includes('quota') || lower.includes('rate limit')) {
         return 'Location services are busy right now. Please try again in a minute or enter your address manually.';
@@ -73,7 +74,6 @@ function toUserFriendlyLocationError(input: string | null | undefined): string {
     if (lower.includes('network')) {
         return 'Network issue while checking your location. Please try again or enter your address manually.';
     }
-
     return LOCATION_GENERIC_ERROR;
 }
 
@@ -92,10 +92,7 @@ function readFileAsDataUrl(file: File): Promise<string> {
         const reader = new FileReader();
         reader.onload = () => {
             const result = reader.result;
-            if (typeof result === 'string') {
-                resolve(result);
-                return;
-            }
+            if (typeof result === 'string') { resolve(result); return; }
             reject(new Error('Could not read the selected image.'));
         };
         reader.onerror = () => reject(reader.error ?? new Error('Could not read the selected image.'));
@@ -116,33 +113,12 @@ function dataUrlToFile(dataUrl: string, fallbackName = 'upload.jpg'): File {
     return new File([bytes], `${baseName}.${ext}`, { type: mime });
 }
 
-/** Same compress + read fallback as on start; safe to run in parallel per photo. */
-async function preparePhotoDataUrlForHandoff(
-    photo: SelectedPhoto & { diagnosisSrc: string },
-): Promise<string | null> {
-    try {
-        const raw = photo.diagnosisSrc.startsWith('data:image/')
-            ? photo.diagnosisSrc
-            : await readFileAsDataUrl(photo.file);
-        return await compressImage(raw);
-    } catch {
-        try {
-            return await readFileAsDataUrl(photo.file);
-        } catch {
-            return null;
-        }
-    }
-}
-
 async function normalizeSelectedPhoto(file: File): Promise<SelectedPhoto> {
     let raw = await readFileAsDataUrl(file);
     if (isHeicLike(file)) {
         const form = new FormData();
         form.set('file', file);
-        const res = await fetch('/api/convert-heic', {
-            method: 'POST',
-            body: form,
-        });
+        const res = await fetch('/api/convert-heic', { method: 'POST', body: form });
         const json = (await res.json().catch(() => ({}))) as { dataUrl?: string };
         if (!res.ok || typeof json.dataUrl !== 'string' || !json.dataUrl.startsWith('data:image/')) {
             throw new Error('Could not convert HEIC image.');
@@ -160,135 +136,52 @@ async function normalizeSelectedPhoto(file: File): Promise<SelectedPhoto> {
     };
 }
 
-// ── Step 1 — Describe ──────────────────────────────────────────────────────────
-
-function Step1({
-    infoText,
-    setInfoText,
-    selectedService,
-    isValidatingContinue,
-    onContinue,
-    onSkipToDirect,
-}: {
-    infoText: string;
-    setInfoText: (v: string) => void;
-    selectedService: string | null;
-    isValidatingContinue: boolean;
-    onContinue: () => void | Promise<void>;
-    onSkipToDirect: () => void;
-}) {
-    const ref = useRef<HTMLTextAreaElement>(null);
-
-    useEffect(() => {
-        const t = setTimeout(() => ref.current?.focus(), 80);
-        return () => clearTimeout(t);
-    }, []);
-
-    const trimmedLen = infoText.trim().length;
-    const canContinue = trimmedLen >= START_DESCRIPTION_MIN_CHARS || Boolean(selectedService);
-    // Show the direct-match shortcut whenever a trade is selected — description is optional.
-    const canSkipToDirect = Boolean(selectedService);
-
-    return (
-        <div className="h-full overflow-y-auto">
-            <div className="flex min-h-full flex-col">
-                <div className="flex-1 flex flex-col items-center justify-center p-6 min-h-0">
-                    <div className="flex flex-col gap-6 w-full max-w-sm mx-auto items-center">
-                        <StepHeading
-                            title="What's Happening"
-                            sub="Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nunc quis arcu at velit cursus mollis."
-                        />
-
-                        <div className="flex flex-col gap-3 w-full">
-                            <div className="relative w-full">
-                                <Textarea
-                                    ref={ref}
-                                    className="h-28 w-full resize-none"
-                                    value={infoText}
-                                    onChange={(e) => setInfoText(e.target.value)}
-                                    disabled={isValidatingContinue}
-                                />
-                            </div>
-
-                            <div className="text-xs text-muted-foreground text-center">
-                                {canContinue ? (
-                                    <span>You have entered {trimmedLen} characters, you can continue.</span>
-                                ) : (
-                                    <span>
-                                        We require at least {START_DESCRIPTION_MIN_CHARS - trimmedLen} more characters to continue.
-                                    </span>
-                                )}
-                            </div>
-
-                        </div>
-                    </div>
-                </div>
-                <div className="sticky bottom-0 shrink-0 bg-background px-6 py-3">
-                    <div className="w-full max-w-sm mx-auto flex flex-col gap-2">
-                        <Button
-                            type="button"
-                            className="h-10 w-full gap-2"
-                            onClick={() => void onContinue()}
-                            disabled={!canContinue || isValidatingContinue}
-                        >
-                            {isValidatingContinue ? (
-                                <>
-                                    <CircleNotch className="size-4 animate-spin shrink-0" aria-hidden />
-                                    Processing
-                                </>
-                            ) : (
-                                'Scan & Diagnose My Issue'
-                            )}
-                        </Button>
-
-                        {canSkipToDirect && (
-                            <>
-                                <div className="flex items-center gap-2 py-0.5">
-                                    <div className="h-px flex-1 bg-border" />
-                                    <span className="text-xs text-muted-foreground">or</span>
-                                    <div className="h-px flex-1 bg-border" />
-                                </div>
-                                <Button
-                                    type="button"
-                                    variant="outline"
-                                    className="h-10 w-full gap-2 text-sm"
-                                    onClick={onSkipToDirect}
-                                    disabled={isValidatingContinue}
-                                >
-                                    Find {selectedService} Contractors Directly
-                                </Button>
-                            </>
-                        )}
-                    </div>
-                </div>
-            </div>
-        </div>
-    );
+async function uploadPhotoToStorage(file: File, conversationId: string): Promise<string | null> {
+    try {
+        const form = new FormData();
+        form.set('conversationId', conversationId);
+        form.set('file', file);
+        const res = await fetch('/api/upload-image', { method: 'POST', body: form });
+        if (!res.ok) return null;
+        const json = (await res.json().catch(() => null)) as { imageUrl?: string } | null;
+        return typeof json?.imageUrl === 'string' && json.imageUrl.startsWith('http')
+            ? json.imageUrl
+            : null;
+    } catch {
+        return null;
+    }
 }
 
-// ── Step 2 — Photo ─────────────────────────────────────────────────────────────
+// ── Step 1 — Photos + Description ─────────────────────────────────────────────
 
-function Step2({
+function Step1({
     selectedPhotos,
     setSelectedPhotos,
-    onNext,
+    description,
+    setDescription,
+    onContinue,
 }: {
     selectedPhotos: SelectedPhoto[];
     setSelectedPhotos: React.Dispatch<React.SetStateAction<SelectedPhoto[]>>;
-    onNext: () => void;
+    description: string;
+    setDescription: (v: string) => void;
+    onContinue: () => void;
 }) {
-    const MAX_PHOTOS = 10;
+    // Hard cap. Gemini 2.5 Flash processes images with parallel attention —
+    // past four photos the attention dilutes faster than the diagnostic value
+    // of additional photos.
+    const MAX_PHOTOS = 4;
     const uploadInputRef = useRef<HTMLInputElement>(null);
-    const hasPendingPhotos = selectedPhotos.some((photo) => photo.status === 'pending');
+    const hasPendingPhotos = selectedPhotos.some((p) => p.status === 'pending');
+    const hasReadyPhoto = selectedPhotos.some((p) => p.status === 'ready');
+    const canContinue = hasReadyPhoto && !hasPendingPhotos;
 
-    const handleSelectPhotos = () => {
-        uploadInputRef.current?.click();
-    };
+    const handleSelectPhotos = () => uploadInputRef.current?.click();
 
     const handlePhotosSelected = async (incoming: FileList | null) => {
         if (!incoming || incoming.length === 0) return;
         const files = Array.from(incoming).filter(
-            (file) => file.type.startsWith('image/') || isHeicLike(file),
+            (f) => f.type.startsWith('image/') || isHeicLike(f),
         );
         if (files.length === 0) return;
         const remainingSlots = Math.max(0, MAX_PHOTOS - selectedPhotos.length);
@@ -301,7 +194,7 @@ function Step2({
             previewSrc: null,
             diagnosisSrc: null,
         }));
-        const pendingIdsByFile = new Map(queuedPlaceholders.map((photo) => [photo.file, photo.id]));
+        const pendingIdsByFile = new Map(queuedPlaceholders.map((p) => [p.file, p.id]));
         setSelectedPhotos((prev) => {
             const safeRemaining = Math.max(0, MAX_PHOTOS - prev.length);
             if (safeRemaining === 0) return prev;
@@ -314,28 +207,15 @@ function Step2({
             try {
                 const normalized = await normalizeSelectedPhoto(file);
                 setSelectedPhotos((prev) =>
-                    prev.map((photo) =>
-                        photo.id === id
-                            ? {
-                                  ...normalized,
-                                  id,
-                              }
-                            : photo,
-                    ),
+                    prev.map((p) => (p.id === id ? { ...normalized, id } : p)),
                 );
             } catch {
                 if (isHeicLike(file)) {
                     setSelectedPhotos((prev) =>
-                        prev.map((photo) =>
-                            photo.id === id
-                                ? {
-                                      ...photo,
-                                      status: 'error',
-                                      previewSrc: null,
-                                      diagnosisSrc: null,
-                                      errorMessage: 'Could not convert this HEIC image.',
-                                  }
-                                : photo,
+                        prev.map((p) =>
+                            p.id === id
+                                ? { ...p, status: 'error', previewSrc: null, diagnosisSrc: null, errorMessage: 'Could not convert this HEIC image.' }
+                                : p,
                         ),
                     );
                     continue;
@@ -343,30 +223,18 @@ function Step2({
                 try {
                     const fallbackSrc = await readFileAsDataUrl(file);
                     setSelectedPhotos((prev) =>
-                        prev.map((photo) =>
-                            photo.id === id
-                                ? {
-                                      ...photo,
-                                      status: 'ready',
-                                      previewSrc: fallbackSrc,
-                                      diagnosisSrc: fallbackSrc,
-                                      errorMessage: undefined,
-                                  }
-                                : photo,
+                        prev.map((p) =>
+                            p.id === id
+                                ? { ...p, status: 'ready', previewSrc: fallbackSrc, diagnosisSrc: fallbackSrc, errorMessage: undefined }
+                                : p,
                         ),
                     );
                 } catch {
                     setSelectedPhotos((prev) =>
-                        prev.map((photo) =>
-                            photo.id === id
-                                ? {
-                                      ...photo,
-                                      status: 'error',
-                                      previewSrc: null,
-                                      diagnosisSrc: null,
-                                      errorMessage: 'Could not process this image.',
-                                  }
-                                : photo,
+                        prev.map((p) =>
+                            p.id === id
+                                ? { ...p, status: 'error', previewSrc: null, diagnosisSrc: null, errorMessage: 'Could not process this image.' }
+                                : p,
                         ),
                     );
                 }
@@ -376,56 +244,115 @@ function Step2({
 
     const handleRemovePhoto = (photoId: string) => {
         setSelectedPhotos((prev) => {
-            const target = prev.find((photo) => photo.id === photoId);
-            if (target?.previewSrc?.startsWith('blob:')) {
-                URL.revokeObjectURL(target.previewSrc);
-            }
-            return prev.filter((photo) => photo.id !== photoId);
+            const target = prev.find((p) => p.id === photoId);
+            if (target?.previewSrc?.startsWith('blob:')) URL.revokeObjectURL(target.previewSrc);
+            return prev.filter((p) => p.id !== photoId);
         });
     };
 
+    const movePhoto = (photoId: string, direction: -1 | 1) => {
+        setSelectedPhotos((prev) => {
+            const idx = prev.findIndex((p) => p.id === photoId);
+            if (idx < 0) return prev;
+            const nextIdx = idx + direction;
+            if (nextIdx < 0 || nextIdx >= prev.length) return prev;
+            const copy = [...prev];
+            const [moved] = copy.splice(idx, 1);
+            copy.splice(nextIdx, 0, moved);
+            return copy;
+        });
+    };
+
+    const movePhotoToPrimary = (photoId: string) => {
+        setSelectedPhotos((prev) => {
+            const idx = prev.findIndex((p) => p.id === photoId);
+            if (idx <= 0) return prev;
+            const copy = [...prev];
+            const [moved] = copy.splice(idx, 1);
+            copy.unshift(moved);
+            return copy;
+        });
+    };
+
+    const swapPhotos = (sourceId: string, targetId: string) => {
+        if (sourceId === targetId) return;
+        setSelectedPhotos((prev) => {
+            const sourceIdx = prev.findIndex((p) => p.id === sourceId);
+            const targetIdx = prev.findIndex((p) => p.id === targetId);
+            if (sourceIdx < 0 || targetIdx < 0) return prev;
+            const copy = [...prev];
+            [copy[sourceIdx], copy[targetIdx]] = [copy[targetIdx], copy[sourceIdx]];
+            return copy;
+        });
+    };
+
+    const [draggedPhotoId, setDraggedPhotoId] = useState<string | null>(null);
+    const [dropTargetId, setDropTargetId] = useState<string | null>(null);
+
+    const handleDragStart = (photoId: string) => (e: React.DragEvent<HTMLDivElement>) => {
+        setDraggedPhotoId(photoId);
+        // Required for Firefox to start the drag.
+        try {
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/plain', photoId);
+        } catch {
+            // ignore
+        }
+    };
+
+    const handleDragOver = (photoId: string) => (e: React.DragEvent<HTMLDivElement>) => {
+        if (!draggedPhotoId || draggedPhotoId === photoId) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        if (dropTargetId !== photoId) setDropTargetId(photoId);
+    };
+
+    const handleDragLeave = (photoId: string) => () => {
+        if (dropTargetId === photoId) setDropTargetId(null);
+    };
+
+    const handleDrop = (photoId: string) => (e: React.DragEvent<HTMLDivElement>) => {
+        e.preventDefault();
+        const sourceId = draggedPhotoId ?? e.dataTransfer.getData('text/plain');
+        if (sourceId && sourceId !== photoId) swapPhotos(sourceId, photoId);
+        setDraggedPhotoId(null);
+        setDropTargetId(null);
+    };
+
+    const handleDragEnd = () => {
+        setDraggedPhotoId(null);
+        setDropTargetId(null);
+    };
+
     const handleRetryPhoto = async (photoId: string) => {
-        const target = selectedPhotos.find((photo) => photo.id === photoId);
+        const target = selectedPhotos.find((p) => p.id === photoId);
         if (!target) return;
         setSelectedPhotos((prev) =>
-            prev.map((photo) =>
-                photo.id === photoId
-                    ? {
-                          ...photo,
-                          status: 'pending',
-                          previewSrc: null,
-                          diagnosisSrc: null,
-                          errorMessage: undefined,
-                      }
-                    : photo,
+            prev.map((p) =>
+                p.id === photoId
+                    ? { ...p, status: 'pending', previewSrc: null, diagnosisSrc: null, errorMessage: undefined }
+                    : p,
             ),
         );
         try {
             const normalized = await normalizeSelectedPhoto(target.file);
             setSelectedPhotos((prev) =>
-                prev.map((photo) =>
-                    photo.id === photoId
-                        ? {
-                              ...normalized,
-                              id: photoId,
-                          }
-                        : photo,
-                ),
+                prev.map((p) => (p.id === photoId ? { ...normalized, id: photoId } : p)),
             );
         } catch {
             setSelectedPhotos((prev) =>
-                prev.map((photo) =>
-                    photo.id === photoId
+                prev.map((p) =>
+                    p.id === photoId
                         ? {
-                              ...photo,
+                              ...p,
                               status: 'error',
                               previewSrc: null,
                               diagnosisSrc: null,
-                              errorMessage: isHeicLike(photo.file)
+                              errorMessage: isHeicLike(p.file)
                                   ? 'Could not convert this HEIC image.'
                                   : 'Could not process this image.',
                           }
-                        : photo,
+                        : p,
                 ),
             );
         }
@@ -434,8 +361,8 @@ function Step2({
     return (
         <div className="h-full overflow-y-auto">
             <div className="flex min-h-full flex-col">
-                <div className="flex-1 flex flex-col items-center justify-center p-6 min-h-0">
-                    <div className="flex flex-col gap-6 w-full max-w-sm mx-auto">
+                <div className="flex-1 flex flex-col p-6 gap-6">
+                    <div className="flex flex-col gap-6 w-full max-w-sm mx-auto pt-4">
                         <input
                             ref={uploadInputRef}
                             type="file"
@@ -443,113 +370,203 @@ function Step2({
                             multiple
                             className="sr-only"
                             onChange={(e) => {
-                                handlePhotosSelected(e.target.files);
+                                void handlePhotosSelected(e.target.files);
                                 e.currentTarget.value = '';
                             }}
                         />
-                    <StepHeading
+
+                        <StepHeading
                             title="Add Photos"
-                            sub="Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nunc quis arcu at velit cursus mollis."
-                    />
+                            sub="Show us what needs fixing — a clear photo helps us diagnose accurately."
+                        />
 
-                        <div className="flex flex-col gap-3">
-                            <Button
-                                type="button"
-                                variant="secondary"
-                                className="h-10 w-full"
-                                onClick={handleSelectPhotos}
-                                disabled={selectedPhotos.length >= MAX_PHOTOS}
-                            >
-                                Select Photos
-                            </Button>
-                            <p className="text-xs text-muted-foreground text-center">
-                                Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nunc quis arcu at velit cursus mollis.
-                            </p>
-                        </div>
-
-                        {selectedPhotos.length > 0 ? (
-                            <div className="-mx-6">
-                                <div className="flex gap-3 overflow-x-auto px-6 pb-1">
-                                    {selectedPhotos.map((photo) => (
-                                        <div
-                                            key={photo.id}
-                                            className="relative w-36 shrink-0 overflow-hidden rounded-lg border border-border bg-background"
-                                    >
-                                            {photo.status === 'ready' && photo.previewSrc ? (
-                                                <>
-                                                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                                                    <img
-                                                        src={photo.previewSrc}
-                                                        alt={photo.file.name || ''}
-                                                        className="h-36 w-full object-cover"
-                                                    />
-                                                    <Badge
-                                                        onClick={() => handleRemovePhoto(photo.id)}
-                                                        className="absolute top-2 right-2 bg-background text-foreground"
-                                                    >
-                                                        Remove
-                                                    </Badge>
-                                                </>
-                                            ) : photo.status === 'pending' ? (
-                                                <div className="flex h-36 w-full flex-col items-center justify-center bg-secondary px-3 text-center">
-                                                    <CircleNotch className="mb-2 size-5 animate-spin text-muted-foreground" />
-                                                    <p className="line-clamp-2 text-xs text-muted-foreground">
-                                                        {photo.file.name}
-                                                    </p>
-                                                </div>
-                                            ) : (
-                                                <div className="flex h-36 w-full flex-col items-center justify-center gap-2 bg-secondary px-3 text-center">
-                                                    <p className="line-clamp-2 text-xs text-muted-foreground">
-                                                        {photo.errorMessage ?? 'Could not process this image.'}
-                                                    </p>
-                                                    <div className="flex gap-2">
-                                                        <Button
+                        {/* Photo upload area */}
+                        {selectedPhotos.length === 0 ? (
+                            <>
+                                <button
+                                    type="button"
+                                    onClick={handleSelectPhotos}
+                                    className="flex flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-border bg-secondary/40 py-12 px-6 text-center transition-colors hover:border-foreground/30 hover:bg-secondary/60 active:bg-secondary"
+                                >
+                                    <Camera className="size-8 text-muted-foreground" aria-hidden />
+                                    <span className="text-sm font-medium text-foreground">Tap to add photos</span>
+                                    <span className="text-xs text-muted-foreground">JPEG, PNG, HEIC supported</span>
+                                </button>
+                                <p className="text-center text-xs text-muted-foreground">
+                                    Up to {MAX_PHOTOS} photos. Put your clearest fault photo first.
+                                </p>
+                            </>
+                        ) : (
+                            <div className="flex flex-col gap-3">
+                                <div className="grid grid-cols-2 gap-3">
+                                    {selectedPhotos.map((photo, idx) => {
+                                        const isPrimary = idx === 0;
+                                        const isLast = idx === selectedPhotos.length - 1;
+                                        const isDragged = draggedPhotoId === photo.id;
+                                        const isDropTarget = dropTargetId === photo.id && draggedPhotoId !== photo.id;
+                                        const isDraggable = photo.status === 'ready' && selectedPhotos.length > 1;
+                                        return (
+                                            <div
+                                                key={photo.id}
+                                                role="button"
+                                                aria-label={`Photo ${idx + 1} of ${selectedPhotos.length}. Drag to reorder, or tap menu to move.`}
+                                                aria-grabbed={isDragged ? true : undefined}
+                                                draggable={isDraggable}
+                                                onDragStart={isDraggable ? handleDragStart(photo.id) : undefined}
+                                                onDragOver={isDraggable ? handleDragOver(photo.id) : undefined}
+                                                onDragLeave={isDraggable ? handleDragLeave(photo.id) : undefined}
+                                                onDrop={isDraggable ? handleDrop(photo.id) : undefined}
+                                                onDragEnd={isDraggable ? handleDragEnd : undefined}
+                                                className={[
+                                                    'relative aspect-square overflow-hidden rounded-lg border border-border bg-background transition-all duration-150',
+                                                    isDragged ? 'opacity-50 scale-95' : '',
+                                                    isDropTarget ? 'ring-2 ring-primary' : '',
+                                                ].join(' ').trim()}
+                                            >
+                                                {photo.status === 'ready' && photo.previewSrc ? (
+                                                    <>
+                                                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                                                        <img
+                                                            src={photo.previewSrc}
+                                                            alt={photo.file.name || ''}
+                                                            className="h-full w-full object-cover"
+                                                            draggable={false}
+                                                        />
+                                                        {isPrimary ? (
+                                                            <Badge className="absolute top-2 left-2 bg-foreground text-background">
+                                                                Primary
+                                                            </Badge>
+                                                        ) : null}
+                                                        <button
                                                             type="button"
-                                                            variant="secondary"
-                                                            size="sm"
-                                                            onClick={() => void handleRetryPhoto(photo.id)}
-                                                        >
-                                                            Retry
-                                                        </Button>
-                                                        <Button
-                                                            type="button"
-                                                            variant="ghost"
-                                                            size="sm"
                                                             onClick={() => handleRemovePhoto(photo.id)}
+                                                            aria-label="Remove photo"
+                                                            className="absolute top-2 right-2 flex h-6 w-6 items-center justify-center rounded-full bg-background/90 text-xs font-semibold text-foreground shadow-sm hover:bg-background"
                                                         >
-                                                            Remove
-                                                        </Button>
+                                                            ✕
+                                                        </button>
+                                                        {selectedPhotos.length > 1 ? (
+                                                            <>
+                                                                {/* Drag handle — only visible on devices with a fine pointer (mouse). */}
+                                                                <div
+                                                                    aria-hidden
+                                                                    className="pointer-events-none absolute bottom-2 left-2 hidden h-6 w-6 items-center justify-center rounded-full bg-background/90 text-foreground shadow-sm [@media(pointer:fine)]:flex"
+                                                                >
+                                                                    <DotsSixVertical className="size-3.5" />
+                                                                </div>
+                                                                {/* Overflow menu — touch-friendly reorder fallback. */}
+                                                                <DropdownMenu>
+                                                                    <DropdownMenuTrigger asChild>
+                                                                        <button
+                                                                            type="button"
+                                                                            aria-label="Reorder photo"
+                                                                            className="absolute bottom-2 right-2 flex h-6 w-6 items-center justify-center rounded-full bg-background/90 text-foreground shadow-sm hover:bg-background"
+                                                                        >
+                                                                            <DotsThree weight="bold" className="size-4" />
+                                                                        </button>
+                                                                    </DropdownMenuTrigger>
+                                                                    <DropdownMenuContent align="end" side="top">
+                                                                        <DropdownMenuItem
+                                                                            disabled={isPrimary}
+                                                                            onSelect={() => movePhotoToPrimary(photo.id)}
+                                                                        >
+                                                                            Move to position 1 (Primary)
+                                                                        </DropdownMenuItem>
+                                                                        <DropdownMenuItem
+                                                                            disabled={isPrimary}
+                                                                            onSelect={() => movePhoto(photo.id, -1)}
+                                                                        >
+                                                                            Move forward
+                                                                        </DropdownMenuItem>
+                                                                        <DropdownMenuItem
+                                                                            disabled={isLast}
+                                                                            onSelect={() => movePhoto(photo.id, 1)}
+                                                                        >
+                                                                            Move backward
+                                                                        </DropdownMenuItem>
+                                                                    </DropdownMenuContent>
+                                                                </DropdownMenu>
+                                                            </>
+                                                        ) : null}
+                                                    </>
+                                                ) : photo.status === 'pending' ? (
+                                                    <div className="flex h-full w-full flex-col items-center justify-center bg-secondary px-3 text-center">
+                                                        <CircleNotch className="mb-2 size-5 animate-spin text-muted-foreground" />
+                                                        <p className="line-clamp-2 text-xs text-muted-foreground">{photo.file.name}</p>
                                                     </div>
-                                                </div>
-                                            )}
-                                    </div>
-                                ))}
+                                                ) : (
+                                                    <div className="flex h-full w-full flex-col items-center justify-center gap-2 bg-secondary px-3 text-center">
+                                                        <p className="line-clamp-2 text-xs text-muted-foreground">
+                                                            {photo.errorMessage ?? 'Could not process this image.'}
+                                                        </p>
+                                                        <div className="flex gap-2">
+                                                            <Button type="button" variant="secondary" size="sm" onClick={() => void handleRetryPhoto(photo.id)}>
+                                                                Retry
+                                                            </Button>
+                                                            <Button type="button" variant="ghost" size="sm" onClick={() => handleRemovePhoto(photo.id)}>
+                                                                Remove
+                                                            </Button>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
+                                    {selectedPhotos.length < MAX_PHOTOS ? (
+                                        <button
+                                            type="button"
+                                            onClick={handleSelectPhotos}
+                                            aria-label="Add more photos"
+                                            className="flex aspect-square flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-border bg-secondary/40 text-center transition-colors hover:border-foreground/30 hover:bg-secondary/60 active:bg-secondary"
+                                        >
+                                            <Camera className="size-6 text-muted-foreground" aria-hidden />
+                                            <span className="text-xs font-medium text-foreground">Add photo</span>
+                                            <span className="text-[10px] text-muted-foreground">
+                                                {selectedPhotos.length} / {MAX_PHOTOS}
+                                            </span>
+                                        </button>
+                                    ) : null}
+                                </div>
+                                <p className="text-center text-xs text-muted-foreground">
+                                    Up to {MAX_PHOTOS} photos. Put your clearest fault photo first.
+                                </p>
                             </div>
+                        )}
+
+                        {/* Description */}
+                        <div className="flex flex-col gap-2">
+                            <label className="text-sm font-medium text-foreground">
+                                Describe the problem <span className="text-muted-foreground font-normal">(optional)</span>
+                            </label>
+                            <Textarea
+                                className="h-24 w-full resize-none"
+                                placeholder="e.g. My garage door won't open — the spring on the left side looks broken…"
+                                value={description}
+                                onChange={(e) => setDescription(e.target.value)}
+                            />
                         </div>
-                        ) : null}
                     </div>
                 </div>
-                <div className="sticky bottom-0 shrink-0 bg-background px-6 py-3">
+
+                <div className="sticky bottom-0 shrink-0 bg-background px-6 py-3 border-t border-border/50">
                     <div className="w-full max-w-sm mx-auto">
-                        {selectedPhotos.length > 0 ? (
-                            <Button
-                                type="button"
-                                className="h-10 w-full"
-                                onClick={onNext}
-                                disabled={hasPendingPhotos}
-                            >
-                                Continue
-                            </Button>
-                    ) : (
-                            <Button
-                                type="button"
-                                variant="ghost"
-                                className="h-10 w-full text-muted-foreground"
-                                onClick={onNext}
-                            >
-                                No, Continue Without Photos
+                        <Button
+                            type="button"
+                            className="h-10 w-full"
+                            onClick={onContinue}
+                            disabled={!canContinue}
+                        >
+                            {hasPendingPhotos ? (
+                                <>
+                                    <CircleNotch className="size-4 animate-spin shrink-0" aria-hidden />
+                                    Processing photos…
+                                </>
+                            ) : canContinue ? (
+                                'Continue'
+                            ) : (
+                                'Add at least one photo'
+                            )}
                         </Button>
-                    )}
                     </div>
                 </div>
             </div>
@@ -557,11 +574,11 @@ function Step2({
     );
 }
 
-// ── Step 3 — Location ──────────────────────────────────────────────────────────
+// ── Step 2 — Location + CTA ────────────────────────────────────────────────────
 
 type SavedAddress = { id: string; label: string; address: string };
 
-function Step3({
+function Step2({
     locationMode,
     setLocationMode,
     locationValue,
@@ -569,10 +586,10 @@ function Step3({
     isGettingLocation,
     locationInputRef,
     onGetCurrentLocation,
-    onStart,
-    isStarting,
+    onDiagnose,
+    onSkip,
+    isSubmitting,
     savedAddresses,
-    isDirectMatch,
 }: {
     locationMode: LocationMode;
     setLocationMode: (m: LocationMode) => void;
@@ -581,10 +598,10 @@ function Step3({
     isGettingLocation: boolean;
     locationInputRef: React.RefObject<HTMLInputElement | null>;
     onGetCurrentLocation: () => Promise<void>;
-    onStart: () => Promise<void>;
-    isStarting: boolean;
+    onDiagnose: () => Promise<void>;
+    onSkip: () => Promise<void>;
+    isSubmitting: boolean;
     savedAddresses: SavedAddress[];
-    isDirectMatch?: boolean;
 }) {
     const manualRef = useRef<HTMLInputElement>(null);
 
@@ -597,129 +614,135 @@ function Step3({
 
     useEffect(() => {
         if (locationInputRef && 'current' in locationInputRef) {
-            (locationInputRef as React.MutableRefObject<HTMLInputElement | null>).current =
-                manualRef.current;
+            (locationInputRef as React.MutableRefObject<HTMLInputElement | null>).current = manualRef.current;
         }
     }, [locationMode, locationInputRef]);
 
-    const canStart =
-        !isStarting &&
-        (locationMode === 'gps-done' ||
-            (locationMode === 'manual' && locationValue.trim().length > 0));
+    const hasLocation =
+        locationMode === 'gps-done' ||
+        (locationMode === 'manual' && locationValue.trim().length > 0);
 
     return (
         <div className="h-full overflow-y-auto">
             <div className="flex min-h-full flex-col">
                 <div className="flex-1 flex flex-col items-center justify-center px-6 py-4 min-h-0">
                     <div className="flex flex-col gap-6 w-full max-w-sm mx-auto">
-                    {locationMode === 'manual' ? (
-                        <>
-                            <StepHeading
-                                title="Where's the Property?"
-                                sub="Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nunc quis arcu at velit cursus mollis."
-                            />
-                            <input
-                                ref={manualRef}
-                                type="text"
-                                className="w-full bg-transparent border-none focus:outline-none text-[22px] font-medium text-center leading-relaxed placeholder:text-stone-400/50 focus:placeholder-transparent"
-                                style={{ color: INK }}
-                                placeholder="Your Address"
-                                value={locationValue}
-                                onChange={(e) => setLocationValue(e.target.value)}
-                                autoComplete="off"
-                            />
-                            <button
-                                type="button"
-                                className="mt-6 cursor-pointer text-sm text-muted-foreground underline-offset-2 hover:underline"
-                                onClick={() => {
-                                    setLocationValue('');
-                                    setLocationMode('choose');
-                                }}
-                            >
-                                Use GPS Instead
-                            </button>
-                        </>
-                    ) : (
-                        <>
-                            <StepHeading
-                                title="Get Nearby Contractors"
-                                sub="Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nunc quis arcu at velit cursus mollis."
-                            />
+                        {locationMode === 'manual' ? (
+                            <>
+                                <StepHeading
+                                    title="Where's the Property?"
+                                    sub="We use your location to find contractors nearby."
+                                />
+                                <input
+                                    ref={manualRef}
+                                    type="text"
+                                    className="w-full bg-transparent border-none focus:outline-none text-[22px] font-medium text-center leading-relaxed placeholder:text-stone-400/50 focus:placeholder-transparent"
+                                    style={{ color: INK }}
+                                    placeholder="Your Address"
+                                    value={locationValue}
+                                    onChange={(e) => setLocationValue(e.target.value)}
+                                    autoComplete="off"
+                                />
+                                <button
+                                    type="button"
+                                    className="mt-2 cursor-pointer text-sm text-muted-foreground underline-offset-2 hover:underline"
+                                    onClick={() => {
+                                        setLocationValue('');
+                                        setLocationMode('choose');
+                                    }}
+                                >
+                                    Use GPS Instead
+                                </button>
+                            </>
+                        ) : (
+                            <>
+                                <StepHeading
+                                    title="Get Nearby Contractors"
+                                    sub="We use your location to find vetted local professionals."
+                                />
 
-                            {savedAddresses.length > 0 && (
-                                <div className="flex flex-col gap-2">
-                                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                        Saved Addresses
-                                    </p>
-                                    {savedAddresses.map((addr) => (
-                                        <button
-                                            key={addr.id}
-                                            type="button"
-                                            className="flex w-full flex-col items-start rounded-lg border bg-secondary px-4 py-3 text-left hover:bg-secondary/80"
-                                            onClick={() => {
-                                                setLocationValue(addr.address);
-                                                setLocationMode('gps-done');
-                                            }}
-                                        >
-                                            <span className="text-sm font-medium text-foreground">
-                                                {addr.label}
-                                            </span>
-                                            <span className="truncate text-xs text-muted-foreground">
-                                                {addr.address}
-                                            </span>
-                                        </button>
-                                    ))}
-                                    <Separator />
-                                </div>
-                            )}
+                                {savedAddresses.length > 0 && (
+                                    <div className="flex flex-col gap-2">
+                                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                            Saved Addresses
+                                        </p>
+                                        {savedAddresses.map((addr) => (
+                                            <button
+                                                key={addr.id}
+                                                type="button"
+                                                className="flex w-full flex-col items-start rounded-lg border bg-secondary px-4 py-3 text-left hover:bg-secondary/80"
+                                                onClick={() => {
+                                                    setLocationValue(addr.address);
+                                                    setLocationMode('gps-done');
+                                                }}
+                                            >
+                                                <span className="text-sm font-medium text-foreground">{addr.label}</span>
+                                                <span className="truncate text-xs text-muted-foreground">{addr.address}</span>
+                                            </button>
+                                        ))}
+                                        <Separator />
+                                    </div>
+                                )}
 
-                            <Button
-                                variant="secondary"
-                                className="h-10 w-full"
+                                <Button
+                                    variant="secondary"
+                                    className="h-10 w-full"
                                     disabled={isGettingLocation}
                                     onClick={async () => {
                                         setLocationMode('gps-loading');
                                         await onGetCurrentLocation();
                                     }}
-                            >
-                                {isGettingLocation ? 'Getting Location...' : 'Get Current Location'}
-                            </Button>
+                                >
+                                    <MapPin className="size-4 shrink-0" aria-hidden />
+                                    {isGettingLocation ? 'Getting Location…' : 'Use Current Location'}
+                                </Button>
 
-                            <Separator />
+                                <Separator />
 
-                            <div className="flex flex-col gap-3">
-                                <Label>Search Locations</Label>
-                                <Input
-                                    ref={locationInputRef}
-                                    className="h-10 w-full"
-                                    value={locationValue}
-                                    onChange={(e) => setLocationValue(e.target.value)}
-                                />
-                                <p className="text-xs text-muted-foreground">
-                                    Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nunc quis arcu at velit cursus mollis.
-                                </p>
-                            </div>
-                        </>
-                    )}
+                                <div className="flex flex-col gap-3">
+                                    <Label>Search Address</Label>
+                                    <Input
+                                        ref={locationInputRef}
+                                        className="h-10 w-full"
+                                        placeholder="e.g. 12 Oak Street, Stellenbosch"
+                                        value={locationValue}
+                                        onChange={(e) => setLocationValue(e.target.value)}
+                                    />
+                                </div>
+                            </>
+                        )}
+                    </div>
                 </div>
-            </div>
-                <div className="sticky bottom-0 shrink-0 bg-background px-6 py-3">
-                <div className="w-full max-w-sm mx-auto">
-                        {canStart ? (
-                            <Button
-                                className="h-10 w-full"
-                                disabled={isStarting}
-                        onClick={() => void onStart()}
-                    >
-                        {isStarting
-                            ? (isDirectMatch ? 'Finding contractors…' : 'Starting…')
-                            : (isDirectMatch ? 'Find Contractors' : 'Start Diagnosis')
-                        }
-                            </Button>
-                        ) : (
-                            <Button type="button" variant="ghost" className="h-10 w-full text-muted-foreground">
-                                No, Continue Without Contractors
-                            </Button>
+
+                <div className="sticky bottom-0 shrink-0 bg-background border-t border-border/50 px-6 py-4">
+                    <div className="w-full max-w-sm mx-auto flex flex-col gap-2">
+                        <Button
+                            className="h-11 w-full"
+                            disabled={!hasLocation || isSubmitting}
+                            onClick={() => void onDiagnose()}
+                        >
+                            {isSubmitting ? (
+                                <>
+                                    <CircleNotch className="size-4 animate-spin shrink-0" aria-hidden />
+                                    Starting…
+                                </>
+                            ) : (
+                                'Get Diagnosis & Find Contractors'
+                            )}
+                        </Button>
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            className="h-10 w-full text-muted-foreground"
+                            disabled={!hasLocation || isSubmitting}
+                            onClick={() => void onSkip()}
+                        >
+                            Find Contractors Now
+                        </Button>
+                        {!hasLocation && (
+                            <p className="text-center text-xs text-muted-foreground">
+                                Add your location to find contractors nearby.
+                            </p>
                         )}
                     </div>
                 </div>
@@ -732,16 +755,14 @@ function Step3({
 
 export function StartPageClient() {
     const router = useRouter();
-
     const [step, setStep] = useState<FlowStep>(1);
     const [selectedPhotos, setSelectedPhotos] = useState<SelectedPhoto[]>([]);
+    const [description, setDescription] = useState('');
 
-    const [infoText, setInfoText] = useState('');
-    const [selectedService, setSelectedService] = useState<string | null>(null);
-    const [serviceOptions, setServiceOptions] = useState<string[]>(() => [...SERVICE_LABELS]);
-    // When true the Step 3 location handler creates a direct-match record and goes
-    // straight to /match instead of /processing — no AI diagnosis pipeline.
-    const [isDirectMatch, setIsDirectMatch] = useState(false);
+    // Conversation ID created at mount so background uploads can start immediately.
+    const [conversationId] = useState(() => createClientId());
+    const [photoStorageUrls, setPhotoStorageUrls] = useState<Record<string, string>>({});
+    const [uploadingPhotoIds, setUploadingPhotoIds] = useState<Set<string>>(new Set());
 
     const [locationValue, setLocationValue] = useState('');
     const [locationMode, setLocationMode] = useState<LocationMode>('choose');
@@ -749,8 +770,7 @@ export function StartPageClient() {
     const locationInputRef = useRef<HTMLInputElement | null>(null);
     const autocompleteRef = useRef<{ remove: () => void } | null>(null);
 
-    const [isStarting, setIsStarting] = useState(false);
-    const [isStep1Validating, setIsStep1Validating] = useState(false);
+    const [isSubmitting, setIsSubmitting] = useState(false);
     const [savedAddresses, setSavedAddresses] = useState<SavedAddress[]>([]);
 
     // Load saved addresses if the user is authenticated
@@ -767,7 +787,7 @@ export function StartPageClient() {
                 const locs = Array.isArray(json?.locations) ? json!.locations as SavedAddress[] : [];
                 if (!cancelled && locs.length > 0) setSavedAddresses(locs);
             } catch {
-                // Non-fatal — just no saved addresses shown
+                // Non-fatal
             }
         })();
         return () => { cancelled = true; };
@@ -782,86 +802,31 @@ export function StartPageClient() {
         };
     }, []);
 
+    // Background photo upload — fires as each photo turns 'ready'.
     useEffect(() => {
-        let cancelled = false;
-        void (async () => {
-            try {
-                const res = await fetch('/api/service-catalog', { credentials: 'same-origin' });
-                const body = (await res.json().catch(() => null)) as { labels?: unknown } | null;
-                const labels = Array.isArray(body?.labels)
-                    ? body!.labels
-                          .map((x) => (typeof x === 'string' ? x.trim() : ''))
-                          .filter((x) => x.length > 0)
-                    : [];
-                if (!cancelled && labels.length > 0) {
-                    setServiceOptions(labels);
-                }
-            } catch {
-                // Keep static fallback labels if catalog fetch fails.
+        for (const photo of selectedPhotos) {
+            if (
+                photo.status === 'ready' &&
+                !photoStorageUrls[photo.id] &&
+                !uploadingPhotoIds.has(photo.id)
+            ) {
+                setUploadingPhotoIds((prev) => new Set(prev).add(photo.id));
+                void uploadPhotoToStorage(photo.file, conversationId).then((url) => {
+                    if (url) setPhotoStorageUrls((prev) => ({ ...prev, [photo.id]: url }));
+                    setUploadingPhotoIds((prev) => {
+                        const next = new Set(prev);
+                        next.delete(photo.id);
+                        return next;
+                    });
+                });
             }
-        })();
-        return () => {
-            cancelled = true;
-        };
-    }, []);
-
-    const handleStep1Continue = useCallback(async () => {
-        const trimmed = infoText.trim();
-        const selected = (selectedService ?? '').trim();
-        if (trimmed.length < START_DESCRIPTION_MIN_CHARS && !selected) return;
-        if (selected) {
-            setStep(2);
-            return;
         }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [selectedPhotos, conversationId]);
 
-        setIsStep1Validating(true);
-        try {
-            const res = await fetch('/api/validate-start-description', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ text: trimmed }),
-            });
-            const json = (await res.json().catch(() => null)) as
-                | { ok?: boolean; message?: string; error?: string }
-                | null;
-
-            if (!res.ok) {
-                toast.error(
-                    typeof json?.message === 'string'
-                        ? json.message
-                        : typeof json?.error === 'string'
-                          ? json.error
-                          : 'Could not validate your description. Try again shortly.',
-                );
-                return;
-            }
-
-            if (json?.ok !== true) {
-                toast.error(
-                    typeof json?.message === 'string'
-                        ? json.message
-                        : 'Describe the problem more clearly — we cannot use that text yet.',
-                );
-                return;
-            }
-
-            setStep(2);
-        } catch {
-            toast.error('Network error while checking your description. Please try again.');
-        } finally {
-            setIsStep1Validating(false);
-        }
-    }, [infoText, selectedService]);
-
-    // Skip the diagnosis pipeline — go straight to location step, then /match.
-    const handleSkipToDirect = useCallback(() => {
-        if (!(selectedService ?? '').trim()) return;
-        setIsDirectMatch(true);
-        setStep(3);
-    }, [selectedService]);
-
+    // Google Places autocomplete on location input
     useEffect(() => {
-        if (step !== 3 || locationMode !== 'manual') return;
+        if (step !== 2 || locationMode !== 'manual') return;
         const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? '';
         if (!apiKey || typeof window === 'undefined') return;
         let cancelled = false;
@@ -888,33 +853,21 @@ export function StartPageClient() {
                 /* silent */
             }
         })();
-        return () => {
-            cancelled = true;
-        };
+        return () => { cancelled = true; };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [step, locationMode]);
 
-    const geocodeInWesternCape = async (payload: {
-        address?: string;
-        lat?: number;
-        lng?: number;
-    }) => {
+    const geocodeInWesternCape = async (payload: { address?: string; lat?: number; lng?: number }) => {
         try {
             const res = await fetch('/api/geocode', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ ...payload, westernCapeOnly: true }),
             });
-            const data = (await res.json().catch(() => null)) as {
-                address?: string;
-                error?: string;
-            } | null;
+            const data = (await res.json().catch(() => null)) as { address?: string; error?: string } | null;
             if (!res.ok) return { address: null, error: data?.error || WESTERN_CAPE_ERROR };
             return {
-                address:
-                    typeof data?.address === 'string' && data.address.trim()
-                        ? data.address.trim()
-                        : null,
+                address: typeof data?.address === 'string' && data.address.trim() ? data.address.trim() : null,
                 error: null,
             };
         } catch {
@@ -938,16 +891,9 @@ export function StartPageClient() {
             try {
                 pos = await getPos({ enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 });
             } catch {
-                pos = await getPos({
-                    enableHighAccuracy: false,
-                    timeout: 20000,
-                    maximumAge: 300000,
-                });
+                pos = await getPos({ enableHighAccuracy: false, timeout: 20000, maximumAge: 300000 });
             }
-            const result = await geocodeInWesternCape({
-                lat: pos.coords.latitude,
-                lng: pos.coords.longitude,
-            });
+            const result = await geocodeInWesternCape({ lat: pos.coords.latitude, lng: pos.coords.longitude });
             if (!result.address) {
                 toast.error(toUserFriendlyLocationError(result.error || WESTERN_CAPE_ERROR));
                 setLocationMode('choose');
@@ -970,178 +916,50 @@ export function StartPageClient() {
         }
     };
 
-    const handleStartDiagnosis = useCallback(async () => {
+    const buildAndNavigate = useCallback(async (skipReport: boolean) => {
         if (!locationValue.trim()) return;
-
-        // ── Direct-match path: no AI, go straight to /match ────────────────────
-        if (isDirectMatch) {
-            const trade = (selectedService ?? '').trim();
-            if (!trade) {
-                toast.error('Please select a service category first.');
-                setStep(1);
-                return;
-            }
-            setIsStarting(true);
-            try {
-                const conversationId = createClientId();
-
-                // Resolve lat/lng from the address the user entered.
-                let lat: number | null = null;
-                let lng: number | null = null;
-                try {
-                    const geoRes = await fetch('/api/geocode', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ address: locationValue.trim(), westernCapeOnly: true }),
-                    });
-                    if (geoRes.ok) {
-                        const geo = (await geoRes.json()) as { lat?: number; lng?: number };
-                        if (typeof geo.lat === 'number' && typeof geo.lng === 'number') {
-                            lat = geo.lat;
-                            lng = geo.lng;
-                        }
-                    }
-                } catch {
-                    // Non-fatal — proceed without coordinates, match page will ask again.
-                }
-
-                const res = await fetch('/api/diagnoses/direct', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        conversationId,
-                        trade,
-                        description: infoText.trim() || undefined,
-                        address: locationValue.trim() || undefined,
-                        lat: lat ?? undefined,
-                        lng: lng ?? undefined,
-                    }),
-                });
-
-                if (!res.ok) {
-                    const err = (await res.json().catch(() => null)) as { error?: string } | null;
-                    toast.error(err?.error ?? 'Could not find contractors. Please try again.');
-                    return;
-                }
-
-                const { id } = (await res.json()) as { id: string };
-                const qp = new URLSearchParams();
-                qp.set('conversationId', id);
-                if (lat !== null && lng !== null) {
-                    qp.set('lat', String(lat));
-                    qp.set('lng', String(lng));
-                }
-                router.push(`/match?${qp.toString()}`);
-            } catch {
-                toast.error('Could not find contractors. Please try again.');
-            } finally {
-                setIsStarting(false);
-            }
-            return;
-        }
-
-        // ── Standard diagnosis path ─────────────────────────────────────────────
-        if (infoText.trim().length < START_DESCRIPTION_MIN_CHARS && !(selectedService ?? '').trim()) {
-            toast.error(
-                `Either add at least ${START_DESCRIPTION_MIN_CHARS} characters about the issue or select a service.`
-            );
-            setStep(1);
-            return;
-        }
-        setIsStarting(true);
+        setIsSubmitting(true);
         try {
-            const conversationId = createClientId();
             const readyPhotos = selectedPhotos.filter(
-                (photo): photo is SelectedPhoto & { diagnosisSrc: string } =>
-                    photo.status === 'ready' && typeof photo.diagnosisSrc === 'string',
+                (p): p is SelectedPhoto & { diagnosisSrc: string } =>
+                    p.status === 'ready' && typeof p.diagnosisSrc === 'string',
             );
-            const preparedPairs =
-                readyPhotos.length > 0
-                    ? (
-                          await Promise.all(
-                              readyPhotos.map(async (photo) => ({
-                                  photo,
-                                  dataUrl: await preparePhotoDataUrlForHandoff(photo),
-                              })),
-                          )
-                      ).filter(
-                          (x): x is { photo: (typeof readyPhotos)[0]; dataUrl: string } =>
-                              x.dataUrl !== null && x.dataUrl.trim().length > 0,
-                      )
-                    : [];
-            if (readyPhotos.length > 0 && preparedPairs.length === 0) {
-                toast.error('Could not process the selected image. Please reselect the photo.');
-            }
-            const primaryPair = preparedPairs[0];
-            if (primaryPair) {
-                setImageData(conversationId, primaryPair.dataUrl, primaryPair.photo.file.name);
-            }
-            // Keep handoff bounded so session storage quota is less likely to fail.
-            const uploadedImageSources = preparedPairs.map((p) => p.dataUrl).slice(0, 5);
-            setPendingDiagnosisImages(conversationId, uploadedImageSources);
 
-            if (uploadedImageSources[0]) {
-                try {
-                    sessionStorage.setItem(
-                        `pending_diagnosis_image_url:${conversationId}`,
-                        uploadedImageSources[0],
-                    );
-                } catch {
-                }
-            }
+            const firstPhoto = readyPhotos[0];
+            if (firstPhoto) setImageData(conversationId, firstPhoto.diagnosisSrc, firstPhoto.file.name);
 
-            let listToPersist = [...uploadedImageSources];
-            while (listToPersist.length > 0) {
-                try {
-                    sessionStorage.setItem(
-                        `pending_diagnosis_image_urls:${conversationId}`,
-                        JSON.stringify(listToPersist),
-                    );
-                    break;
-                } catch {
-                    listToPersist = listToPersist.slice(0, -1);
-                }
-            }
-            if (listToPersist.length === 0 && uploadedImageSources.length > 0) {
-            }
+            const imageSources: string[] = readyPhotos
+                .map((p) => photoStorageUrls[p.id] ?? p.diagnosisSrc)
+                .filter((src): src is string => Boolean(src))
+                // Cap matches the server-side and Gemini-attention budget.
+                .slice(0, 4);
 
-            try {
-                const trimmed = infoText.trim();
-                if (trimmed) {
-                    sessionStorage.setItem(
-                        `pending_diagnosis_prompt:${conversationId}`,
-                        trimmed,
-                    );
-                }
-                const selected = (selectedService ?? '').trim();
-                if (selected && serviceOptions.some((label) => label.toLowerCase() === selected.toLowerCase())) {
-                    sessionStorage.setItem(
-                        `pending_diagnosis_trade:${conversationId}`,
-                        selected,
-                    );
-                }
-            } catch {
-                // Continue — processing page will surface missing prompt if needed.
-            }
+            setPendingDiagnosisImages(conversationId, imageSources);
 
-            try {
-                sessionStorage.setItem(
-                    `pending_diagnosis_location:${conversationId}`,
-                    locationValue.trim(),
-                );
-            } catch {
-                // Location may be missing; processing page can still run diagnosis flow.
+            if (imageSources[0]) {
+                try { sessionStorage.setItem(`pending_diagnosis_image_url:${conversationId}`, imageSources[0]); } catch { /* ignore */ }
             }
+            try { sessionStorage.setItem(`pending_diagnosis_image_urls:${conversationId}`, JSON.stringify(imageSources)); } catch { /* ignore */ }
+
+            const trimmedDesc = description.trim();
+            if (trimmedDesc) {
+                try { sessionStorage.setItem(`pending_diagnosis_prompt:${conversationId}`, trimmedDesc); } catch { /* ignore */ }
+            }
+            try { sessionStorage.setItem(`pending_diagnosis_location:${conversationId}`, locationValue.trim()); } catch { /* ignore */ }
+
             const qp = new URLSearchParams();
             qp.set('location', locationValue.trim());
-            const suffix = qp.toString() ? `?${qp.toString()}` : '';
-            router.push(`/processing/${encodeURIComponent(conversationId)}${suffix}`);
+            if (skipReport) qp.set('skipReport', 'true');
+            router.push(`/processing/${encodeURIComponent(conversationId)}?${qp.toString()}`);
         } catch {
-            toast.error('Could not start diagnosis. Please try again.');
+            toast.error('Could not start. Please try again.');
         } finally {
-            setIsStarting(false);
+            setIsSubmitting(false);
         }
-    }, [locationValue, infoText, router, selectedPhotos, selectedService, serviceOptions, isDirectMatch]);
+    }, [locationValue, selectedPhotos, description, conversationId, photoStorageUrls, router]);
+
+    const handleDiagnose = useCallback(() => buildAndNavigate(false), [buildAndNavigate]);
+    const handleSkip = useCallback(() => buildAndNavigate(true), [buildAndNavigate]);
 
     return (
         <div className="fixed inset-0 z-0 flex flex-col overflow-hidden bg-background">
@@ -1155,27 +973,18 @@ export function StartPageClient() {
                 }}
             />
 
-            {/* step wrapper — overflow-hidden stops inner content escaping the viewport */}
             <div className="flex-1 overflow-hidden">
                 {step === 1 && (
                     <Step1
-                        infoText={infoText}
-                        setInfoText={setInfoText}
-                        selectedService={selectedService}
-                        isValidatingContinue={isStep1Validating}
-                        onContinue={handleStep1Continue}
-                        onSkipToDirect={handleSkipToDirect}
+                        selectedPhotos={selectedPhotos}
+                        setSelectedPhotos={setSelectedPhotos}
+                        description={description}
+                        setDescription={setDescription}
+                        onContinue={() => setStep(2)}
                     />
                 )}
                 {step === 2 && (
                     <Step2
-                        selectedPhotos={selectedPhotos}
-                        setSelectedPhotos={setSelectedPhotos}
-                        onNext={() => setStep(3)}
-                    />
-                )}
-                {step === 3 && (
-                    <Step3
                         locationMode={locationMode}
                         setLocationMode={setLocationMode}
                         locationValue={locationValue}
@@ -1183,10 +992,10 @@ export function StartPageClient() {
                         isGettingLocation={isGettingLocation}
                         locationInputRef={locationInputRef}
                         onGetCurrentLocation={handleGetCurrentLocation}
-                        onStart={handleStartDiagnosis}
-                        isStarting={isStarting}
+                        onDiagnose={handleDiagnose}
+                        onSkip={handleSkip}
+                        isSubmitting={isSubmitting}
                         savedAddresses={savedAddresses}
-                        isDirectMatch={isDirectMatch}
                     />
                 )}
             </div>

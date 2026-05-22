@@ -1,4 +1,4 @@
-export const mendaTokens = {
+export const mendrTokens = {
     colors: {
         ink: '#131312',
         inkSecondary: '#6B6B6B',
@@ -58,7 +58,7 @@ export const mendaTokens = {
     },
 } as const;
 
-export const designTokens = mendaTokens;
-export const INK = mendaTokens.colors.ink;
-export const PRIMARY = mendaTokens.colors.primary;
+export const designTokens = mendrTokens;
+export const INK = mendrTokens.colors.ink;
+export const PRIMARY = mendrTokens.colors.primary;
 export type DesignTokenKey = keyof typeof designTokens;

@@ -25,6 +25,15 @@ export const RATE_LIMITS = {
         max: 10,
     },
 
+    // Diagnosis refinement — re-runs the two-agent pipeline with appended text
+    // and/or additional photos. Cheaper per call than a fresh diagnosis (no quota
+    // increment, smaller payloads on average) but still calls Gemini twice, so
+    // keep a moderate-tight cap to prevent abuse.
+    refineDiagnosis: {
+        windowMs: 60 * 1000, // 1 minute
+        max: 10,
+    },
+
     // Gemini call to build a WhatsApp message summary. Lighter than diagnosis.
     whatsappMessage: {
         windowMs: 10 * 60 * 1000, // 10 minutes
@@ -237,6 +246,19 @@ export const RATE_LIMITS = {
     directMatch: {
         windowMs: 60 * 60 * 1000, // 1 hour
         max: 10,
+    },
+
+    // Homeowner saves/unsaves a contractor profile.
+    savedProviders: {
+        windowMs: 60 * 1000, // 1 minute
+        max: 60,
+    },
+
+    // One-click job outcome rating from email link.
+    // Very generous — each homeowner gets one email per contact event.
+    jobOutcome: {
+        windowMs: 60 * 60 * 1000, // 1 hour
+        max: 20,
     },
 
 } as const satisfies Record<string, RateLimitConfig>;

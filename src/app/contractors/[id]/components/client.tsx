@@ -24,14 +24,16 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { ArrowLeft, ImageSquare, Star } from '@phosphor-icons/react';
+import { ArrowLeft, Heart, ImageSquare, Star, User } from '@phosphor-icons/react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ContactPopover } from '@/components/contact-popover';
 import { FlowTopBar } from '@/components/match/flow-shell';
+import { HomeownerAuthDialog } from '@/components/homeowner-auth-dialog';
 import { INK } from '@/lib/design-tokens';
 import { normalizeWebsiteUrl } from '@/lib/utils';
 import { trackEvent } from '@/lib/analytics';
+import { useAuth } from '@/context/auth-context';
 import { ProviderCardCarousel } from '@/app/match/components/provider-card';
 import { ProReviewsTab } from '@/app/contractors/components/reviews';
 import { ProGalleryTab } from '@/app/contractors/components/gallery';
@@ -42,6 +44,7 @@ import {
 } from '@/app/contractors/hooks/use-contractor';
 import { useProReviews } from '@/app/contractors/hooks/use-reviews';
 import { useProGallery } from '@/app/contractors/hooks/use-gallery';
+import { useSavedProvider } from '@/app/contractors/hooks/use-saved-provider';
 import type { CategoryKey } from '@/app/contractors/lib/types';
 import type { MatchProviderImage } from '@/features/match/contracts';
 import { IdentityCard } from './identity-card';
@@ -115,6 +118,32 @@ function ContractorClient({
         },
         [providerId]
     );
+
+    const { user } = useAuth();
+    const isAuthenticated = Boolean(user);
+
+    const saveId = profile?.providerId ?? profile?.googlePlaceId ?? null;
+    const { saved, loading: saveLoading, toggle: toggleSave } = useSavedProvider(
+        saveId,
+        isAuthenticated,
+    );
+    const [authDialogOpen, setAuthDialogOpen] = useState(false);
+    const [authDialogReason, setAuthDialogReason] = useState<string | undefined>(undefined);
+
+    const handleSaveClick = useCallback(async () => {
+        if (!isAuthenticated) {
+            setAuthDialogReason(`Save ${profile?.name ?? 'this provider'} to your account so you can find them again easily.`);
+            setAuthDialogOpen(true);
+            return;
+        }
+        const next = await toggleSave();
+        if (next !== null) {
+            trackEvent('contractor_save_toggle', {
+                provider_id: providerId ?? undefined,
+                saved: next,
+            });
+        }
+    }, [isAuthenticated, toggleSave, profile?.name, providerId]);
 
     const reviewsState = useProReviews(idForFetch);
     const galleryState = useProGallery({
@@ -244,6 +273,12 @@ function ContractorClient({
 
     return (
         <main className="flex min-h-screen flex-col bg-background">
+            <HomeownerAuthDialog
+                open={authDialogOpen}
+                onOpenChange={setAuthDialogOpen}
+                reason={authDialogReason}
+                returnTo={typeof window !== 'undefined' ? window.location.pathname + window.location.search : undefined}
+            />
             <FlowTopBar
                 onBack={handleBack}
                 leftSlot={
@@ -257,6 +292,34 @@ function ContractorClient({
                     >
                         <ArrowLeft size={18} weight="bold" aria-hidden />
                     </Button>
+                }
+                rightSlot={
+                    isAuthenticated ? (
+                        <Button
+                            type="button"
+                            variant="secondary"
+                            size="icon"
+                            className="size-10"
+                            asChild
+                            aria-label="My account"
+                        >
+                            <a href="/account">
+                                <User size={18} aria-hidden />
+                            </a>
+                        </Button>
+                    ) : (
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            className="h-10 px-3 text-sm font-medium"
+                            onClick={() => {
+                                setAuthDialogReason(undefined);
+                                setAuthDialogOpen(true);
+                            }}
+                        >
+                            Sign in
+                        </Button>
+                    )
                 }
             />
 
@@ -283,7 +346,6 @@ function ContractorClient({
                     companySize={profile?.companySize ?? null}
                     yearsInBusiness={profile?.yearsInBusiness ?? null}
                     scandioReviewCount={profile?.scandioReviewCount ?? null}
-                    keyPerson={profile?.keyPerson ?? null}
                 />
 
                 {!isLoading && profile ? (
@@ -428,6 +490,23 @@ function ContractorClient({
 
             <div className="fixed inset-x-0 bottom-0 z-50 border-t border-black/[0.06] bg-white/95 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur">
                 <div className="mx-auto flex w-full max-w-xl flex-row gap-2 px-4 sm:px-6 lg:max-w-4xl lg:gap-3 lg:px-8 xl:max-w-5xl 2xl:max-w-6xl">
+                    <Button
+                        type="button"
+                        variant="secondary"
+                        size="icon"
+                        className="size-10 shrink-0"
+                        onClick={() => void handleSaveClick()}
+                        disabled={saveLoading}
+                        aria-label={saved ? 'Remove from saved' : 'Save provider'}
+                        aria-pressed={saved}
+                    >
+                        <Heart
+                            size={18}
+                            weight={saved ? 'fill' : 'regular'}
+                            className={saved ? 'text-rose-500' : undefined}
+                            aria-hidden
+                        />
+                    </Button>
                     {websiteHref ? (
                         <Button variant="ghost" className="flex h-10 flex-1" asChild>
                             <a
@@ -516,7 +595,14 @@ function AboutCard({
 }) {
     const longText = (summaryLong ?? '').trim();
     const shortText = summary.trim();
-    const hasContent = Boolean(longText || shortText);
+    const rawText = longText || shortText;
+    const hasContent = Boolean(rawText);
+
+    // Split on blank lines (model uses \n\n) or single newlines so paragraphs render
+    // distinctly rather than running together as one dense block.
+    const paragraphs = rawText
+        ? rawText.split(/\n+/).map((p) => p.trim()).filter(Boolean)
+        : [];
 
     return (
         <section
@@ -532,31 +618,33 @@ function AboutCard({
                     <Skeleton className="h-4 w-11/12" />
                     <Skeleton className="h-4 w-3/4" />
                 </div>
-            ) : !hasContent ? (
+            ) : !hasContent && !customerSays ? (
                 <p className="text-sm text-muted-foreground">
                     A short profile summary will appear here once enrichment completes.
                 </p>
             ) : (
                 <>
-                    <p
-                        className={`whitespace-pre-wrap text-sm leading-relaxed text-muted-foreground ${
-                            expanded ? '' : 'line-clamp-6'
-                        }`}
-                    >
-                        {longText || shortText}
-                    </p>
-                    {longText.length > 320 ? (
-                        <button
-                            type="button"
-                            onClick={() => onToggleExpand(!expanded)}
-                            className="mt-2 text-xs font-medium underline-offset-2 hover:underline"
-                            style={{ color: INK }}
-                        >
-                            {expanded ? 'Show less' : 'Read more'}
-                        </button>
+                    {hasContent ? (
+                        <>
+                            <div className={`flex flex-col gap-3 text-sm leading-relaxed text-muted-foreground ${expanded ? '' : 'line-clamp-6'}`}>
+                                {paragraphs.map((para, i) => (
+                                    <p key={i}>{para}</p>
+                                ))}
+                            </div>
+                            {rawText.length > 320 ? (
+                                <button
+                                    type="button"
+                                    onClick={() => onToggleExpand(!expanded)}
+                                    className="mt-2 text-xs font-medium underline-offset-2 hover:underline"
+                                    style={{ color: INK }}
+                                >
+                                    {expanded ? 'Show less' : 'Read more'}
+                                </button>
+                            ) : null}
+                        </>
                     ) : null}
                     {customerSays ? (
-                        <p className="mt-3 flex items-start gap-2 rounded-2xl bg-black/[0.03] px-3 py-2 text-sm italic text-muted-foreground">
+                        <p className={`flex items-start gap-2 rounded-2xl bg-black/[0.03] px-3 py-2 text-sm italic text-muted-foreground ${hasContent ? 'mt-3' : ''}`}>
                             <Star size={14} weight="fill" className="mt-0.5 text-yellow-500 shrink-0" aria-hidden />
                             <span>{customerSays}</span>
                         </p>

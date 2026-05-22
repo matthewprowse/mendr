@@ -24,7 +24,7 @@ export default function ContactPageClient() {
                         </h1>
                         <p className="text-base text-muted-foreground">
                             Whether you are a homeowner, a contractor, or just curious about how
-                            Menda works — we would love to hear from you.
+                            Mendr works — we would love to hear from you.
                         </p>
                     </div>
 
@@ -38,7 +38,7 @@ export default function ContactPageClient() {
                 <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
                     <div className="flex flex-col items-center gap-4 sm:flex-row sm:justify-between">
                         <p className="text-xs text-muted-foreground">
-                            &copy; {new Date().getFullYear()} Menda. All Rights Reserved.
+                            &copy; {new Date().getFullYear()} Mendr. All Rights Reserved.
                         </p>
                         <nav className="flex gap-4">
                             <Link

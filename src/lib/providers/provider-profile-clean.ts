@@ -50,10 +50,18 @@ export function sanitizeProfileText(input: string | null | undefined): string {
 export function isLowSignalProfileText(text: string): boolean {
     if (!text) return true;
     const lowered = text.toLowerCase();
-    const markerMatches = lowered.match(/\b(div|li|ul|ol|h[1-6]|cookie|privacy overview)\b/g) ?? [];
+
+    // Catch tag-name artefacts from the scraper converting <div> → "div", <li> → "li" etc.
+    // A single "div" or "li" at a line boundary is a reliable signal of contaminated scrape output.
+    if (/(?:^|\n)div(?:\n|$)/.test(lowered)) return true;
+    if (/(?:^|\n)li(?:\n|$)/.test(lowered)) return true;
+    if (/div\n.*div\n/.test(lowered)) return true;
+
+    const markerMatches = lowered.match(/\b(div|li|ul|ol|h[1-6]|nav|footer|header|span|cookie|privacy overview)\b/g) ?? [];
     const words = lowered.split(/\s+/).filter(Boolean);
     const markerRatio = words.length > 0 ? markerMatches.length / words.length : 1;
-    return markerMatches.length >= 10 || markerRatio > 0.12;
+    // Lower threshold: 5+ tag-name hits, or >8% ratio, flags the text as low-signal.
+    return markerMatches.length >= 5 || markerRatio > 0.08;
 }
 
 export function normalizeProfileTextForStorage(input: string | null | undefined): string | null {

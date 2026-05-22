@@ -170,7 +170,7 @@ export function ProvidersMap({
         [onActiveIndexChange, total]
     );
 
-    // Indices for "Closest", "Best Rated", "Most Reviewed", "Menda's Pick"
+    // Indices for "Closest", "Best Rated", "Most Reviewed", "Mendr's Pick"
     const tagIndices = useMemo(() => {
         if (validProviders.length === 0) {
             return { closest: 0, bestRated: 0, mostReviewed: 0, ourPick: 0 };
@@ -562,7 +562,7 @@ export function ProvidersMap({
         { key: 'bestRated' as const, label: 'Best Rated', index: tagIndices.bestRated },
         { key: 'mostReviewed' as const, label: 'Most Reviewed', index: tagIndices.mostReviewed },
         ...(hasOurPick
-            ? [{ key: 'ourPick' as const, label: "Menda's Pick", index: tagIndices.ourPick }]
+            ? [{ key: 'ourPick' as const, label: "Mendr's Pick", index: tagIndices.ourPick }]
             : []),
     ];
 

@@ -10,7 +10,7 @@ export function getTotalReviewCount(input: ConsolidatedRatingInput): number {
 }
 
 /**
- * Weighted combined rating across Google + Menda sources.
+ * Weighted combined rating across Google + Mendr sources.
  * Falls back to whichever source has a valid rating when only one exists.
  */
 export function getConsolidatedRating(input: ConsolidatedRatingInput): number | null {

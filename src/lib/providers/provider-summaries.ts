@@ -31,7 +31,7 @@ const PROVIDER_SUMMARIES_SCHEMA = {
         },
         aboutBusiness: {
             type: SchemaType.STRING,
-            description: '2–3 sentences: what work they do, who they serve, implied history or focus. Base on website content primarily; reviews as weak secondary signal.',
+            description: '2–3 sentences: what work they do, who they serve, implied history or focus. Base on website content primarily; reviews as weak secondary signal. Never mention the business name — use "The team", "They", or "The business" instead.',
         },
         pastWork: {
             type: SchemaType.STRING,

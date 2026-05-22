@@ -88,7 +88,7 @@ export async function summarizeReviews(params: {
         .map((r) => `Review ${r.i} (rating: ${r.rating == null ? 'N/A' : r.rating}): ${r.text}`)
         .join('\n\n');
 
-    const prompt = `You are Menda's review summariser. Write a short summary of a South African home-services provider based only on what customers have said.
+    const prompt = `You are Mendr's review summariser. Write a short summary of a South African home-services provider based only on what customers have said.
 
 Rules:
 1. Exactly 2 complete sentences, each ending with a full stop. Combined length under 130 characters.

@@ -6,7 +6,7 @@ export const HOW_IT_WORKS = [
     },
     {
         title: 'Receive a written diagnosis',
-        body: 'Menda analyses your photo and description, then generates a written report: what the issue likely is, how serious it may be, and what typically needs to happen next. It does not replace an on-site inspection — it gives you a clear starting point before one happens.',
+        body: 'Mendr analyses your photo and description, then generates a written report: what the issue likely is, how serious it may be, and what typically needs to happen next. It does not replace an on-site inspection — it gives you a clear starting point before one happens.',
         label: 'Diagnosis report screen',
     },
     {
@@ -29,12 +29,12 @@ export const BENTO_POINTS = [
 
 export const FAQS = [
     {
-        q: 'Is the Menda report really free?',
-        a: 'Yes. Menda report generation is currently free for homeowners. You only pay a provider if you decide to proceed with work.',
+        q: 'Is the Mendr report really free?',
+        a: 'Yes. Mendr report generation is currently free for homeowners. You only pay a provider if you decide to proceed with work.',
     },
     {
         q: 'How accurate is the diagnosis?',
-        a: 'Menda provides a strong starting point from your photo and context. It does not replace an on-site inspection, but it improves pre-visit clarity.',
+        a: 'Mendr provides a strong starting point from your photo and context. It does not replace an on-site inspection, but it improves pre-visit clarity.',
     },
     {
         q: 'Can I share the report with multiple providers?',
@@ -42,22 +42,22 @@ export const FAQS = [
     },
     {
         q: 'How are providers recommended?',
-        a: 'Providers are matched on three factors: relevance to your specific fault type, proximity to your address, and the completeness of their Menda profile. You see nearby providers who work in your category first.',
+        a: 'Providers are matched on three factors: relevance to your specific fault type, proximity to your address, and the completeness of their Mendr profile. You see nearby providers who work in your category first.',
     },
     {
         q: 'Do you guarantee provider work quality?',
-        a: 'No. Menda is a decision-support platform and does not guarantee third-party workmanship.',
+        a: 'No. Mendr is a decision-support platform and does not guarantee third-party workmanship.',
     },
     {
-        q: 'What services does Menda support?',
-        a: 'Menda currently supports plumbing, electrical, damp and waterproofing, roofing, structural, and general home maintenance faults. The service list expands as coverage grows across the Western Cape.',
+        q: 'What services does Mendr support?',
+        a: 'Mendr currently supports plumbing, electrical, damp and waterproofing, roofing, structural, and general home maintenance faults. The service list expands as coverage grows across the Western Cape.',
     },
     {
         q: 'Is my report private?',
         a: 'Yes. Reports are private by default and are only shared when you explicitly choose to share them.',
     },
     {
-        q: 'Can I contact Menda directly?',
+        q: 'Can I contact Mendr directly?',
         a: 'Yes. You can message us from the contact form for homeowner, provider, or partnership questions.',
     },
 ] as const;

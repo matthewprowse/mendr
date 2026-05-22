@@ -31,7 +31,7 @@ export function LandingHeader({
     rightSlot,
     logoBadge,
     mobileCtaHref = '/start',
-    mobileCtaLabel = 'Generate Free Menda Report',
+    mobileCtaLabel = 'Generate Free Mendr Report',
 }: LandingHeaderProps) {
     const pathname = usePathname();
     const { user, isLoading: authLoading } = useAuth();
@@ -76,7 +76,7 @@ export function LandingHeader({
                         className="flex items-center gap-2 text-lg font-semibold text-foreground"
                         onClick={() => setMobileOpen(false)}
                     >
-                        <span>Menda</span>
+                        <span>Mendr</span>
                         {logoBadge}
                     </Link>
 

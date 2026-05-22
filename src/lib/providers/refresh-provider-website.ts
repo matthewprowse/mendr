@@ -86,7 +86,7 @@ export async function refreshProviderWebsiteById(id: string): Promise<RefreshPro
     const res = await fetch(website, {
         method: 'GET',
         headers: {
-            'User-Agent': 'MendaBot/1.0 (+https://menda.co.za)', // TODO(menda-domain): update User-Agent once menda.co.za is confirmed
+            'User-Agent': 'MendrBot/1.0 (+https://mendr.co.za)', // TODO(mendr-domain): update User-Agent once mendr.co.za is confirmed
             Accept: 'text/html,application/xhtml+xml',
         },
     });

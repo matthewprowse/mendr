@@ -107,7 +107,9 @@ describe('buildDiagnosisVersion', () => {
             confidence: 92,
         });
         const version = buildDiagnosisVersion(d);
-        expect(version).toBe('plumbing|rising damp|false|false|false|92');
+        // Trailing empty slot is the structural_confidence score, absent on this
+        // legacy fixture — preserved for cache-busting consistency.
+        expect(version).toBe('plumbing|rising damp|false|false|false|92|');
     });
 
     it('rounds confidence to nearest integer', () => {
@@ -153,12 +155,59 @@ describe('isDiagnosisAccurateForPrefetch', () => {
         expect(isDiagnosisAccurateForPrefetch(makeDiagnosis({ confidence: 85 })).eligible).toBe(true);
     });
 
-    it('returns eligible:true when confidence is undefined (treated as not low)', () => {
-        expect(isDiagnosisAccurateForPrefetch(makeDiagnosis({ confidence: undefined })).eligible).toBe(true);
+    it('returns ineligible when confidence is undefined and no structural_confidence is present', () => {
+        // Phase 4: with no structural_confidence and no self-reported confidence,
+        // there is no evidence at all — fail closed and require clarification.
+        const result = isDiagnosisAccurateForPrefetch(makeDiagnosis({ confidence: undefined }));
+        expect(result.eligible).toBe(false);
+        expect(result.reason).toBe('low_confidence');
     });
 
-    it('returns ineligible with reason low_confidence when confidence < 85', () => {
+    it('returns ineligible with reason low_confidence when confidence < 85 (legacy fallback)', () => {
         const result = isDiagnosisAccurateForPrefetch(makeDiagnosis({ confidence: 84 }));
+        expect(result.eligible).toBe(false);
+        expect(result.reason).toBe('low_confidence');
+    });
+
+    it('returns eligible:true when structural_confidence.score >= 70 (Phase 4 path)', () => {
+        const result = isDiagnosisAccurateForPrefetch(
+            makeDiagnosis({
+                confidence: 50, // below legacy threshold — would have failed fallback
+                structural_confidence: {
+                    score: 75,
+                    signals: {
+                        hasImage: true,
+                        imageCount: 1,
+                        descriptionWordCount: 40,
+                        subcategoryMatched: true,
+                        failedComponentNamed: true,
+                        isCatchAllWithNoVisual: false,
+                        isRejectedOrUnserviced: false,
+                    },
+                },
+            })
+        );
+        expect(result.eligible).toBe(true);
+    });
+
+    it('returns ineligible when structural_confidence.score < 70 even if self-reported is high', () => {
+        const result = isDiagnosisAccurateForPrefetch(
+            makeDiagnosis({
+                confidence: 95,
+                structural_confidence: {
+                    score: 55,
+                    signals: {
+                        hasImage: false,
+                        imageCount: 0,
+                        descriptionWordCount: 5,
+                        subcategoryMatched: false,
+                        failedComponentNamed: false,
+                        isCatchAllWithNoVisual: true,
+                        isRejectedOrUnserviced: false,
+                    },
+                },
+            })
+        );
         expect(result.eligible).toBe(false);
         expect(result.reason).toBe('low_confidence');
     });

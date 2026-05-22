@@ -30,8 +30,8 @@ const VALUE_BENTO = [
     { title: 'Higher Intent Enquiries', body: 'Homeowners come in after diagnosis, not cold browsing.', span: 'lg:col-span-2' },
     { title: 'Less Wasted Quoting', body: 'Report-first conversations reduce repetitive clarifications.', span: 'lg:col-span-2' },
     { title: 'Better First Visits', body: 'Teams can prepare with stronger context before arriving.', span: 'lg:col-span-1' },
-    { title: 'Zero Commission Model', body: 'Menda does not take a cut of completed jobs.', span: 'lg:col-span-1' },
-    { title: 'Visibility In Your Area', body: 'Recommendations factor service fit and geographic relevance.', span: 'lg:col-span-1' },
+    { title: 'Zero Commission Model', body: 'Mendr does not take a cut of completed jobs.', span: 'lg:col-span-1' },
+    { title: 'Visibility In Your Area', body: 'Recommendrtions factor service fit and geographic relevance.', span: 'lg:col-span-1' },
     { title: 'Profile-Led Trust', body: 'Structured profiles help homeowners choose with confidence.', span: 'lg:col-span-1' },
     { title: 'Sustainable Growth', body: 'As diagnosis volume grows, qualified lead volume compounds.', span: 'lg:col-span-2' },
     { title: 'Built For Long-Term Quality', body: 'Matching and ranking logic is continuously refined from real usage feedback.', span: 'lg:col-span-2' },
@@ -40,27 +40,27 @@ const VALUE_BENTO = [
 const FAQS = [
     {
         q: 'Is it free to join right now?',
-        a: 'Yes. Joining during the founding phase is completely free. There is no application fee, no monthly subscription cost during onboarding, and Menda does not take commission on any jobs you complete through the platform. This founding period is how we build a high-quality provider network before rolling out paid plans. Providers who join now lock in favourable terms and are given advance notice before any pricing changes take effect, with no automatic billing surprises.',
+        a: 'Yes. Joining during the founding phase is completely free. There is no application fee, no monthly subscription cost during onboarding, and Mendr does not take commission on any jobs you complete through the platform. This founding period is how we build a high-quality provider network before rolling out paid plans. Providers who join now lock in favourable terms and are given advance notice before any pricing changes take effect, with no automatic billing surprises.',
     },
     {
         q: 'What kind of enquiries will we actually receive?',
-        a: 'Enquiries through Menda come from homeowners who have already been through a structured AI diagnosis of their problem. That means when a homeowner contacts you, they can typically tell you what the likely fault is, roughly how urgent it is, and what they have already observed — rather than just saying "something is broken." In practice this reduces the back-and-forth that usually happens before a site visit. You spend less time clarifying the problem and more time quoting and doing the work. The enquiry quality is meaningfully different from a generic directory listing or cold lead.',
+        a: 'Enquiries through Mendr come from homeowners who have already been through a structured AI diagnosis of their problem. That means when a homeowner contacts you, they can typically tell you what the likely fault is, roughly how urgent it is, and what they have already observed — rather than just saying "something is broken." In practice this reduces the back-and-forth that usually happens before a site visit. You spend less time clarifying the problem and more time quoting and doing the work. The enquiry quality is meaningfully different from a generic directory listing or cold lead.',
     },
     {
-        q: 'How does Menda decide which providers to recommend?',
-        a: 'Recommendations are produced by a composite ranking algorithm that weighs four signals: service relevance (how closely your trade and specialisation match the diagnosed problem), your Bayesian-smoothed rating (which prevents a handful of five-star reviews from inflating a sparse profile), geographic proximity to the homeowner, and recent activity. No single signal dominates. A highly-rated provider who is 12 km away may rank above a closer provider with fewer reviews and a weaker specialisation match. Profile completeness also adds a small but meaningful boost — providers with photos, a detailed bio, and listed specialisations consistently perform better in matching.',
+        q: 'How does Mendr decide which providers to recommend?',
+        a: 'Recommendrtions are produced by a composite ranking algorithm that weighs four signals: service relevance (how closely your trade and specialisation match the diagnosed problem), your Bayesian-smoothed rating (which prevents a handful of five-star reviews from inflating a sparse profile), geographic proximity to the homeowner, and recent activity. No single signal dominates. A highly-rated provider who is 12 km away may rank above a closer provider with fewer reviews and a weaker specialisation match. Profile completeness also adds a small but meaningful boost — providers with photos, a detailed bio, and listed specialisations consistently perform better in matching.',
     },
     {
         q: 'Can we control which areas and trades we appear in?',
-        a: 'Yes, and this is one of the most important parts of your profile to get right. Your operating area and service categories are the primary inputs to how matching calculates relevance. If you set your radius to cover Cape Town\'s southern suburbs, you will not appear in recommendations for homeowners in the northern suburbs. If your trade is set to Electrical with a specialisation in DB board upgrades, a homeowner diagnosed with a gate motor fault is unlikely to see you — which is the intended behaviour. Setting these accurately means the enquiries you receive are genuinely within your operational scope, which reduces wasted call-outs.',
+        a: 'Yes, and this is one of the most important parts of your profile to get right. Your operating area and service categories are the primary inputs to how matching calculates relevance. If you set your radius to cover Cape Town\'s southern suburbs, you will not appear in recommendrtions for homeowners in the northern suburbs. If your trade is set to Electrical with a specialisation in DB board upgrades, a homeowner diagnosed with a gate motor fault is unlikely to see you — which is the intended behaviour. Setting these accurately means the enquiries you receive are genuinely within your operational scope, which reduces wasted call-outs.',
     },
     {
-        q: 'Do we need to use Menda\'s pricing or quoting tools?',
-        a: 'No. Menda does not have a built-in quoting tool and has no interest in sitting between you and your pricing process. The platform is focused entirely on diagnosis context and qualified matching. Once a homeowner contacts you through Menda, everything from that point — how you quote, how you invoice, how you communicate — is handled entirely through your own existing process. You keep full commercial control over every job.',
+        q: 'Do we need to use Mendr\'s pricing or quoting tools?',
+        a: 'No. Mendr does not have a built-in quoting tool and has no interest in sitting between you and your pricing process. The platform is focused entirely on diagnosis context and qualified matching. Once a homeowner contacts you through Mendr, everything from that point — how you quote, how you invoice, how you communicate — is handled entirely through your own existing process. You keep full commercial control over every job.',
     },
     {
         q: 'What happens if a homeowner\'s diagnosis turns out to be wrong?',
-        a: 'Menda\'s AI diagnosis is an informed starting point, not a guaranteed assessment. Homeowners are shown a confidence score alongside every diagnosis, and are reminded that a site assessment is needed before any work is confirmed. In practice, this means your team arrives with a reasonable hypothesis about the fault rather than a blank slate — but you still do the professional assessment on-site. If the actual problem differs from the diagnosis, that is a normal part of the trade and is fully expected. The diagnosis is there to improve the quality of the first conversation, not to replace your expertise.',
+        a: 'Mendr\'s AI diagnosis is an informed starting point, not a guaranteed assessment. Homeowners are shown a confidence score alongside every diagnosis, and are reminded that a site assessment is needed before any work is confirmed. In practice, this means your team arrives with a reasonable hypothesis about the fault rather than a blank slate — but you still do the professional assessment on-site. If the actual problem differs from the diagnosis, that is a normal part of the trade and is fully expected. The diagnosis is there to improve the quality of the first conversation, not to replace your expertise.',
     },
     {
         q: 'How does profile quality affect how often we are shown?',
@@ -71,12 +71,12 @@ const FAQS = [
         a: 'Paid plans are planned for later in 2025, once the platform has a stable homeowner base and consistent enquiry volume. Founding providers will receive a minimum of 30 days\' written notice before any billing begins, and will be given the option to select a plan or opt out before any charges are made. There will be no automatic upgrade from the free founding tier to a paid plan — it will always require your explicit confirmation. The plan tiers and pricing are shown below so you know exactly what to expect.',
     },
     {
-        q: 'Is Menda available outside Cape Town?',
-        a: 'Cape Town is where Menda launched and where the founding provider network is being built. Geographic expansion is planned but will follow homeowner demand — the platform will open new areas once there is enough volume in a region to make provider matching meaningful. If your business operates in another South African city or region, you are welcome to apply now and we will notify you as coverage expands to your area.',
+        q: 'Is Mendr available outside Cape Town?',
+        a: 'Cape Town is where Mendr launched and where the founding provider network is being built. Geographic expansion is planned but will follow homeowner demand — the platform will open new areas once there is enough volume in a region to make provider matching meaningful. If your business operates in another South African city or region, you are welcome to apply now and we will notify you as coverage expands to your area.',
     },
     {
         q: 'How do we get started?',
-        a: 'Click the "Apply To Join The Network" button on this page. The application takes around five minutes and covers your business details, trade categories, and operating area. Once reviewed and approved — typically within a few business days — you will receive a link to complete your full profile setup, including photos, specialisations, and credentials. After that, you are live in the matching system and will begin appearing in relevant homeowner recommendations.',
+        a: 'Click the "Apply To Join The Network" button on this page. The application takes around five minutes and covers your business details, trade categories, and operating area. Once reviewed and approved — typically within a few business days — you will receive a link to complete your full profile setup, including photos, specialisations, and credentials. After that, you are live in the matching system and will begin appearing in relevant homeowner recommendrtions.',
     },
 ];
 
@@ -90,7 +90,7 @@ const PRICING_TIERS = [
         ctaHref: '/contractors/network',
         highlighted: false,
         features: [
-            { label: 'Profile listing in Menda matching', included: true },
+            { label: 'Profile listing in Mendr matching', included: true },
             { label: 'Service category and area matching', included: true },
             { label: 'Up to 30 homeowner enquiries per month', included: true },
             { label: 'AI-generated bio from your profile data', included: true },
@@ -144,7 +144,7 @@ const PRICING_TIERS = [
             { label: 'Unlimited work photo gallery', included: true },
             { label: 'Multi-trade profile support', included: true },
             { label: 'Full enquiry history and conversion analytics', included: true },
-            { label: 'Early access to new Menda features', included: true },
+            { label: 'Early access to new Mendr features', included: true },
             { label: 'Dedicated account support and onboarding', included: true },
             { label: 'Custom profile highlights and positioning', included: true },
             { label: 'Priority review verification', included: true },
@@ -196,7 +196,7 @@ export default function ProJoinPage() {
                                         <Link href="/contractors/network">Apply To Join The Network</Link>
                                     </Button>
                                     <Button variant="ghost" className="h-10 text-sm" asChild>
-                                        <Link href="#how-it-works">How Menda Works</Link>
+                                        <Link href="#how-it-works">How Mendr Works</Link>
                                     </Button>
                                 </div>
                                 <p className="text-sm text-muted-foreground">Free To Join · No Commission · Founding Network</p>
@@ -214,7 +214,7 @@ export default function ProJoinPage() {
                             Most providers waste time on enquiries with poor context.
                         </p>
                         <p className="mt-3 text-base text-background/80 sm:text-lg">
-                            Menda improves enquiry quality by moving diagnosis clarity earlier in the workflow.
+                            Mendr improves enquiry quality by moving diagnosis clarity earlier in the workflow.
                         </p>
                         <p className="mt-3 text-base text-background sm:text-lg">
                             Better homeowner context means better provider efficiency.
@@ -225,7 +225,7 @@ export default function ProJoinPage() {
                 <section id="how-it-works" className="scroll-mt-16 py-16 sm:py-20">
                     <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
                         <div className="mx-auto mb-12 max-w-3xl text-center sm:mb-16">
-                            <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">How Menda Works For Providers</h2>
+                            <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">How Mendr Works For Providers</h2>
                             <p className="mt-3 text-base text-muted-foreground">
                                 A cleaner workflow from application to informed enquiry.
                             </p>
@@ -249,9 +249,9 @@ export default function ProJoinPage() {
                 <section id="value" className="scroll-mt-16 bg-muted/30 py-16 sm:py-20">
                     <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
                         <div className="mx-auto mb-10 max-w-3xl text-center sm:mb-12">
-                            <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">Why Providers Join Menda</h2>
+                            <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">Why Providers Join Mendr</h2>
                             <p className="mt-3 text-base text-muted-foreground">
-                                Menda is built to improve lead quality, reduce friction, and help providers convert more efficiently.
+                                Mendr is built to improve lead quality, reduce friction, and help providers convert more efficiently.
                             </p>
                         </div>
                         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-6">
@@ -387,7 +387,7 @@ export default function ProJoinPage() {
                 <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
                     <div className="grid gap-10 lg:grid-cols-[2fr_1fr_1fr]">
                         <div>
-                            <p className="text-base font-semibold text-foreground">Menda</p>
+                            <p className="text-base font-semibold text-foreground">Mendr</p>
                             <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
                                 Provider-focused matching and diagnosis context to reduce wasted quoting and improve conversion quality.
                             </p>
@@ -421,7 +421,7 @@ export default function ProJoinPage() {
                         </div>
                     </div>
                     <div className="mt-10 border-t border-border/50 pt-6">
-                        <p className="text-sm text-muted-foreground">&copy; {new Date().getFullYear()} Menda. All Rights Reserved.</p>
+                        <p className="text-sm text-muted-foreground">&copy; {new Date().getFullYear()} Mendr. All Rights Reserved.</p>
                     </div>
                 </div>
             </footer>

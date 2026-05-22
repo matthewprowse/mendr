@@ -23,6 +23,27 @@ The user already has a diagnosis: "${previousDiagnosis.diagnosis}" (trade: ${pre
 - If the current diagnosis is still vague (e.g. "Plumbing", "Electrical"): ask a targeted follow-up to get a specific diagnosis (e.g. "Is it a leak, no hot water, or a blockage?").`;
 }
 
+/**
+ * Emitted on `/api/diagnoses/[id]/refine` when the user has just attached one
+ * or more NEW photos to an existing diagnosis. The new images are positioned
+ * FIRST in the input — Gemini's attention weight will favour them, and that
+ * positioning is the homeowner's signal: "look at THIS first".
+ *
+ * Conditions for emission (handled by the caller, not this builder):
+ *   - refinement is in progress
+ *   - additionalImageUrls.length > 0
+ */
+export function buildRefinementWithNewImagesPrompt(emit: boolean): string {
+    if (!emit) return '';
+    return `REFINEMENT MODE — NEW IMAGES ADDED
+- New images added in this refinement have been positioned FIRST in the input. The homeowner is drawing your attention to them. Weight them most heavily.
+- If the new images reveal a fault that contradicts your prior diagnosis, UPDATE the diagnosis. Explicitly note the change in \`thought\` ("Earlier I suggested X based on Y; the new image of Z shows W, so the diagnosis is now …").
+- If the new images CORROBORATE the prior diagnosis, say so clearly in \`thought\` and increase confidence appropriately.
+- If the new images are NEUTRAL (no clear new information), keep the prior diagnosis and acknowledge that no new fault evidence is visible.
+- Do NOT invent additional faults the new images do not support.
+- The \`photo_request\` field on the prior diagnosis (if any) is the reason for this refinement — try to answer the question it asked.`;
+}
+
 export function buildDiagnosisRejectedPrompt(diagnosisRejected?: boolean): string {
     if (!diagnosisRejected) return '';
     return `DIAGNOSIS REJECTED: The user has indicated the diagnosis is incorrect. You must:

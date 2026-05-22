@@ -1,5 +1,9 @@
 import { buildBasePrompt, IDENTITY_AND_META_PROMPT_BLOCK } from './base';
-import { buildDiagnosisRejectedPrompt, buildFollowUpPrompt } from './followup';
+import {
+    buildDiagnosisRejectedPrompt,
+    buildFollowUpPrompt,
+    buildRefinementWithNewImagesPrompt,
+} from './followup';
 import { OUTPUT_FORMAT_PROMPT_BLOCK, RESPONSE_BEHAVIOUR_PROMPT_BLOCK } from './output-format';
 import { buildProvidersPrompt } from './providers';
 import type { PromptContext } from './types';
@@ -26,6 +30,7 @@ export function buildSystemInstruction(context: PromptContext): string {
         buildProvidersPrompt(context.providers),
         buildFollowUpPrompt(context.previousDiagnosis),
         buildDiagnosisRejectedPrompt(Boolean(context.diagnosisRejected)),
+        buildRefinementWithNewImagesPrompt(Boolean(context.isRefinementWithNewImages)),
         RESPONSE_BEHAVIOUR_PROMPT_BLOCK,
         OUTPUT_FORMAT_PROMPT_BLOCK
     );
@@ -61,6 +66,7 @@ export function buildProseBaseInstruction(context: PromptContext): string {
         buildProvidersPrompt(context.providers),
         buildFollowUpPrompt(context.previousDiagnosis),
         buildDiagnosisRejectedPrompt(Boolean(context.diagnosisRejected)),
+        buildRefinementWithNewImagesPrompt(Boolean(context.isRefinementWithNewImages)),
     );
 
     return sections.filter((s) => s && s.trim()).join('\n\n');

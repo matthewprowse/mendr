@@ -39,8 +39,8 @@ import {
     Search, ShieldCheck, Star, Upload, Wind, Wrench, X, Zap,
 } from 'lucide-react';
 
-import { BRAND_NAME, BRAND_TAGLINE, mendaCopyGuidelines } from '@/lib/brand-system';
-import { mendaTokens } from '@/lib/design-tokens';
+import { BRAND_NAME, BRAND_TAGLINE, mendrCopyGuidelines } from '@/lib/brand-system';
+import { mendrTokens } from '@/lib/design-tokens';
 
 // ─── Card style constants (div-level, not button) ────────────────────────────
 
@@ -134,14 +134,14 @@ const copyExamples = [
 // ─── Type scale ───────────────────────────────────────────────────────────────
 
 const typeScale = [
-    { label: 'Display',    className: mendaTokens.typography.classes.display, text: 'Confident Decisions Start with Clear Diagnosis' },
-    { label: 'Heading 1',  className: mendaTokens.typography.classes.h1,      text: 'Menda Diagnosis Summary' },
-    { label: 'Heading 2',  className: mendaTokens.typography.classes.h2,      text: 'Trusted Local Provider Options' },
-    { label: 'Heading 3',  className: mendaTokens.typography.classes.h3,      text: 'Recommended Next Step' },
-    { label: 'Body Large', className: mendaTokens.typography.classes.bodyLg,  text: 'Use clear language and practical next actions to help homeowners choose confidently.' },
-    { label: 'Body',       className: mendaTokens.typography.classes.body,    text: 'Use clear language and practical next actions to help homeowners choose confidently.' },
-    { label: 'Label',      className: mendaTokens.typography.classes.label,   text: 'Issue Summary' },
-    { label: 'Micro',      className: mendaTokens.typography.classes.micro,   text: 'Trust Signal' },
+    { label: 'Display',    className: mendrTokens.typography.classes.display, text: 'Confident Decisions Start with Clear Diagnosis' },
+    { label: 'Heading 1',  className: mendrTokens.typography.classes.h1,      text: 'Mendr Diagnosis Summary' },
+    { label: 'Heading 2',  className: mendrTokens.typography.classes.h2,      text: 'Trusted Local Provider Options' },
+    { label: 'Heading 3',  className: mendrTokens.typography.classes.h3,      text: 'Recommended Next Step' },
+    { label: 'Body Large', className: mendrTokens.typography.classes.bodyLg,  text: 'Use clear language and practical next actions to help homeowners choose confidently.' },
+    { label: 'Body',       className: mendrTokens.typography.classes.body,    text: 'Use clear language and practical next actions to help homeowners choose confidently.' },
+    { label: 'Label',      className: mendrTokens.typography.classes.label,   text: 'Issue Summary' },
+    { label: 'Micro',      className: mendrTokens.typography.classes.micro,   text: 'Trust Signal' },
 ] as const;
 
 // ─── Section wrapper ──────────────────────────────────────────────────────────
@@ -153,7 +153,7 @@ function Section({ title, description, children }: {
         <section className="border-b border-[#EBEBEB] py-14">
             <div className="mx-auto w-full max-w-6xl px-6">
                 <div className="mb-8 space-y-1.5">
-                    <h2 className={mendaTokens.typography.classes.h2}>{title}</h2>
+                    <h2 className={mendrTokens.typography.classes.h2}>{title}</h2>
                     <p className="text-sm text-[#6B6B6B] max-w-2xl">{description}</p>
                 </div>
                 {children}
@@ -305,9 +305,9 @@ export function DesignPreviewClient() {
                     </div>
                     <div className="space-y-3">
                         <p className="text-xs font-medium uppercase tracking-wider text-[#6B6B6B]">{BRAND_TAGLINE}</p>
-                        <h1 className={mendaTokens.typography.classes.display}>Brand Direction</h1>
+                        <h1 className={mendrTokens.typography.classes.display}>Brand Direction</h1>
                         <p className="max-w-xl text-base leading-relaxed text-[#6B6B6B]">
-                            The canonical reference for typography, colour, components, and copy. Use this as the source of truth when building Menda interfaces.
+                            The canonical reference for typography, colour, components, and copy. Use this as the source of truth when building Mendr interfaces.
                         </p>
                     </div>
                 </div>
@@ -325,7 +325,7 @@ export function DesignPreviewClient() {
                     <div className={`${cardMuted} px-5 py-4`}>
                         <p className="mb-3 text-xs font-medium text-[#6B6B6B]">Weight Scale</p>
                         <div className="flex flex-wrap gap-8">
-                            {(Object.entries(mendaTokens.typography.weights) as [string, number][]).map(([name, weight]) => (
+                            {(Object.entries(mendrTokens.typography.weights) as [string, number][]).map(([name, weight]) => (
                                 <div key={name} className="flex flex-col items-center gap-1">
                                     <span className="text-xl text-[#131312]" style={{ fontWeight: weight }}>Ag</span>
                                     <span className="text-xs capitalize text-[#6B6B6B]">{name}</span>
@@ -507,7 +507,7 @@ export function DesignPreviewClient() {
             </Section>
 
             {/* ── Buttons ── */}
-            <Section title="Buttons" description="shadcn Button with Menda variants. 5 sizes (xs → xl), all rounded-md. Focus ring is always lime.">
+            <Section title="Buttons" description="shadcn Button with Mendr variants. 5 sizes (xs → xl), all rounded-md. Focus ring is always lime.">
                 <div className="grid gap-6 lg:grid-cols-2">
 
                     {/* Size scale per variant */}
@@ -962,7 +962,7 @@ export function DesignPreviewClient() {
                         <Accordion type="single" collapsible>
                             <AccordionItem value="a">
                                 <AccordionTrigger className="text-sm">How the Diagnosis Works</AccordionTrigger>
-                                <AccordionContent className="text-sm text-[#6B6B6B]">Upload a photo and Menda's AI analyses it to identify the likely issue and recommend a trade.</AccordionContent>
+                                <AccordionContent className="text-sm text-[#6B6B6B]">Upload a photo and Mendr's AI analyses it to identify the likely issue and recommend a trade.</AccordionContent>
                             </AccordionItem>
                             <AccordionItem value="b">
                                 <AccordionTrigger className="text-sm">How Providers Are Selected</AccordionTrigger>
@@ -1110,7 +1110,7 @@ export function DesignPreviewClient() {
                     <div className={`${card} p-5`}>
                         <p className="mb-4 text-sm font-semibold text-[#131312]">Voice</p>
                         <div className="flex flex-col gap-3">
-                            {mendaCopyGuidelines.voice.map((item) => (
+                            {mendrCopyGuidelines.voice.map((item) => (
                                 <p key={item} className="rounded-md bg-[#F2F2F0] px-3 py-2 text-sm text-[#131312]">{item}</p>
                             ))}
                             <p className="rounded-md bg-[#F2F2F0] px-3 py-2 text-sm text-[#131312]">No em dashes. Use commas, colons, or full stops instead.</p>
@@ -1120,19 +1120,19 @@ export function DesignPreviewClient() {
                         </div>
                         <p className="mt-4 text-sm text-[#6B6B6B]">
                             <span className="font-medium text-[#131312]">Headline formula: </span>
-                            {mendaCopyGuidelines.headlineFormula}
+                            {mendrCopyGuidelines.headlineFormula}
                         </p>
                     </div>
                     <div className={`${card} p-5`}>
                         <p className="mb-4 text-sm font-semibold text-[#131312]">CTA Rules</p>
                         <div className="flex flex-col gap-3 mb-5">
-                            {mendaCopyGuidelines.ctaRules.map((rule) => (
+                            {mendrCopyGuidelines.ctaRules.map((rule) => (
                                 <p key={rule} className="rounded-md bg-[#DCFCE7] px-3 py-2 text-sm text-[#166634]">{rule}</p>
                             ))}
                         </div>
                         <p className="mb-3 text-sm font-semibold text-[#131312]">Banned Phrases</p>
                         <div className="flex flex-col gap-3">
-                            {mendaCopyGuidelines.bannedPhrases.map((phrase) => (
+                            {mendrCopyGuidelines.bannedPhrases.map((phrase) => (
                                 <p key={phrase} className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">Avoid: {phrase}</p>
                             ))}
                         </div>

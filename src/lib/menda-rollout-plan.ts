@@ -4,11 +4,11 @@ export type RolloutStep = {
     doneWhen: string;
 };
 
-export const mendaRolloutPlan: RolloutStep[] = [
+export const mendrRolloutPlan: RolloutStep[] = [
     {
         phase: 'Phase 2 - Marketing shell',
         scope: 'Apply approved tokens and copy to header, homepage hero, and public metadata surfaces.',
-        doneWhen: 'Primary marketing pages use Menda naming and tokenized components with no hardcoded colors.',
+        doneWhen: 'Primary marketing pages use Mendr naming and tokenized components with no hardcoded colors.',
     },
     {
         phase: 'Phase 3 - Product flow',

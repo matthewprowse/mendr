@@ -25,7 +25,8 @@ describe('finalizeClassificationAgainstCatalogAndTaxonomy', () => {
                 unserviced: false,
                 refetch_providers: false,
                 unsupported_reason: '',
-                urgency_key: 'soon',
+                failed_component: '',
+                cascading_damage: '',
             },
             ALLOWED
         );
@@ -46,7 +47,8 @@ describe('finalizeClassificationAgainstCatalogAndTaxonomy', () => {
                 unserviced: false,
                 refetch_providers: false,
                 unsupported_reason: '',
-                urgency_key: 'soon',
+                failed_component: '',
+                cascading_damage: '',
             },
             ALLOWED
         );
@@ -65,7 +67,8 @@ describe('finalizeClassificationAgainstCatalogAndTaxonomy', () => {
                 unserviced: false,
                 refetch_providers: false,
                 unsupported_reason: '',
-                urgency_key: 'soon',
+                failed_component: '',
+                cascading_damage: '',
             },
             ALLOWED
         );

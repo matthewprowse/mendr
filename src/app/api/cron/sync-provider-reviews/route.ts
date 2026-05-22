@@ -66,7 +66,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     // `reviews_synced_at IS NULL` catches providers that have never been synced.
     const { data: candidates, error: fetchErr } = await admin
         .from('providers')
-        .select('id, name, google_place_id')
+        .select('id, name, google_place_id, rating_count')
         .eq('is_active', true)
         .not('google_place_id', 'is', null)
         .or(`reviews_synced_at.is.null,reviews_synced_at.lt.${syncCutoff}`)
@@ -78,7 +78,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         return NextResponse.json({ error: fetchErr.message }, { status: 500 });
     }
 
-    const providers = (candidates ?? []) as Array<{ id: string; name: string; google_place_id: string }>;
+    const providers = (candidates ?? []) as Array<{ id: string; name: string; google_place_id: string; rating_count?: number | null }>;
 
     if (providers.length === 0) {
         return NextResponse.json({ ok: true, processed: 0, message: 'All providers synced recently' });
@@ -87,7 +87,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     const outcomes: SyncOutcome[] = [];
 
     for (const provider of providers) {
-        const { id: providerId, name, google_place_id: placeId } = provider;
+        const { id: providerId, name, google_place_id: placeId, rating_count: storedRatingCount } = provider;
 
         try {
             const result = await fetchDataForSEOReviews(placeId);
@@ -95,6 +95,24 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
             if (!result) {
                 outcomes.push({ providerId, name, ok: false, added: 0, unchanged: 0, skipped: false, reason: 'DataForSEO fetch failed' });
                 // Brief pause even on failure to avoid hammering the API
+                await new Promise((r) => setTimeout(r, BETWEEN_MS));
+                continue;
+            }
+
+            // Skip ingestion if Google's total count hasn't grown since our last sync.
+            // This prevents wasting DB writes when DataForSEO returns the same reviews we already have.
+            if (
+                result.rating_count !== null &&
+                typeof storedRatingCount === 'number' &&
+                result.rating_count <= storedRatingCount
+            ) {
+                if (!dryRun) {
+                    void admin
+                        .from('providers')
+                        .update({ reviews_synced_at: now.toISOString(), updated_at: now.toISOString() })
+                        .eq('id', providerId);
+                }
+                outcomes.push({ providerId, name, ok: true, added: 0, unchanged: 0, skipped: true, reason: 'No new reviews (rating_count unchanged)' });
                 await new Promise((r) => setTimeout(r, BETWEEN_MS));
                 continue;
             }

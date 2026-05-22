@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import { ReportPageContent } from './components/report-page-content';
 
 export const metadata: Metadata = {
-    title: 'Report a Provider | Menda',
+    title: 'Report a Provider | Mendr',
     description: 'Search for and report a provider to help us keep our platform safe.',
 };
 

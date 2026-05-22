@@ -6,7 +6,7 @@ export function ReportPageContent() {
             <div className="space-y-2">
                 <h1 className="text-2xl font-bold tracking-tight">Report a Provider</h1>
                 <p className="text-sm text-muted-foreground">
-                    Help us keep the Menda marketplace safe. This page is currently a placeholder.
+                    Help us keep the Mendr marketplace safe. This page is currently a placeholder.
                 </p>
             </div>
 

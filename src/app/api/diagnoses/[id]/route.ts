@@ -10,6 +10,7 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 const PATCH_KEYS = new Set([
     'title',
     'image_url',
+    'image_urls',
     'diagnosis',
     'initial_image_description',
     'customer_address',
@@ -17,6 +18,8 @@ const PATCH_KEYS = new Set([
     'user_agent',
     'user_id',
 ]);
+
+const MAX_PERSISTED_IMAGE_URLS = 4;
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -35,7 +38,7 @@ export async function GET(_req: NextRequest, context: RouteContext) {
         const { data, error } = await admin
             .from('diagnoses')
             .select(
-                'id,image_url,diagnosis,initial_image_description,customer_lat,customer_lng,customer_address'
+                'id,image_url,image_urls,diagnosis,initial_image_description,customer_lat,customer_lng,customer_address'
             )
             .eq('id', conversationId)
             .maybeSingle();
@@ -43,7 +46,34 @@ export async function GET(_req: NextRequest, context: RouteContext) {
         if (error) {
             return NextResponse.json({ error: error.message }, { status: 500 });
         }
-        return NextResponse.json({ data: data ?? null });
+
+        // Normalise to a canonical `imageUrls: string[]` field. Prefer the
+        // JSONB array; fall back to the legacy single-string `image_url` for
+        // rows created before the multi-image migration.
+        const enriched = data
+            ? (() => {
+                  const raw = (data as Record<string, unknown>).image_urls;
+                  let imageUrls: string[] = [];
+                  if (Array.isArray(raw)) {
+                      imageUrls = (raw as unknown[])
+                          .filter((u): u is string => typeof u === 'string' && u.trim().length > 0)
+                          .map((u) => u.trim());
+                  }
+                  if (imageUrls.length === 0) {
+                      const legacy = (data as Record<string, unknown>).image_url;
+                      if (typeof legacy === 'string' && legacy.trim()) {
+                          imageUrls = [legacy.trim()];
+                      }
+                  }
+                  return {
+                      ...data,
+                      imageUrls,
+                      imageUrl: imageUrls[0] ?? null,
+                  };
+              })()
+            : null;
+
+        return NextResponse.json({ data: enriched });
     } catch (e) {
         const message = e instanceof Error ? e.message : 'Server error';
         if (message.includes('SUPABASE_SERVICE_ROLE_KEY')) {
@@ -79,6 +109,24 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
         const v = body[key];
         if (key === 'user_id') {
             patch[key] = typeof v === 'string' && v.trim() ? v.trim() : null;
+            continue;
+        }
+        if (key === 'image_urls') {
+            // Normalise to a clean string[]; cap at MAX_PERSISTED_IMAGE_URLS.
+            if (Array.isArray(v)) {
+                const cleaned = (v as unknown[])
+                    .filter((u): u is string => typeof u === 'string' && u.trim().length > 0)
+                    .map((u) => u.trim())
+                    .slice(0, MAX_PERSISTED_IMAGE_URLS);
+                patch.image_urls = cleaned;
+                // Always keep legacy `image_url` aligned with the first entry for
+                // backward-compat with readers that haven't migrated.
+                if (cleaned.length > 0 && !Object.prototype.hasOwnProperty.call(body, 'image_url')) {
+                    patch.image_url = cleaned[0];
+                }
+            } else if (v == null) {
+                patch.image_urls = null;
+            }
             continue;
         }
         if (key === 'diagnosis' || key === 'image_url' || key === 'title') {
@@ -126,6 +174,7 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
             id: conversationId,
             title,
             image_url: patch.image_url ?? null,
+            image_urls: patch.image_urls ?? null,
             diagnosis: patch.diagnosis ?? null,
             initial_image_description: patch.initial_image_description ?? null,
             customer_address: patch.customer_address ?? null,

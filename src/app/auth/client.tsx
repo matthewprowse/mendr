@@ -110,7 +110,7 @@ export default function LoginPage() {
                                 <p className="text-sm text-muted-foreground">
                                     {mode === 'magic'
                                         ? "We'll email you a sign-in link — no password needed."
-                                        : 'Sign in to your Menda account.'}
+                                        : 'Sign in to your Mendr account.'}
                                 </p>
                             </div>
 

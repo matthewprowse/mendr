@@ -210,7 +210,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
         const emailResult = await sendScandioEmail({
             to:      { email: emailRaw, name: contactPerson },
-            subject: 'We received your Menda application',
+            subject: 'We received your Mendr application',
             text:    emailText,
             html:    emailHtml,
         });

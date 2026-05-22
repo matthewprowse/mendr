@@ -35,4 +35,11 @@ export interface PromptContext {
     providers?: PromptProvider[];
     previousDiagnosis?: PromptPreviousDiagnosis | null;
     diagnosisRejected?: boolean;
+    /**
+     * Set on the `/api/diagnoses/[id]/refine` path when the user has just added
+     * one or more NEW photos to an existing diagnosis. Those new images are
+     * positioned FIRST in the parts array so Gemini weights them most heavily.
+     * The model must update or corroborate the prior diagnosis accordingly.
+     */
+    isRefinementWithNewImages?: boolean;
 }

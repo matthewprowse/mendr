@@ -23,7 +23,7 @@ const palette = {
     buttonText: '#fafafa',
 };
 
-/** @deprecated Renamed to MendaAuthEmailProps */
+/** @deprecated Renamed to MendrAuthEmailProps */
 export interface ScandioAuthEmailProps {
     /** Public site origin for self-hosted `/fonts/Soehne*.otf` (+ Signifier if added to emails later), e.g. https://example.com */
     assetOrigin: string;
@@ -239,6 +239,6 @@ const styles = {
 };
 
 // ── Brand-renamed aliases — import these in new code ──────────────────────────
-export type MendaAuthEmailProps = ScandioAuthEmailProps;
-export const MendaAuthEmail = ScandioAuthEmail;
+export type MendrAuthEmailProps = ScandioAuthEmailProps;
+export const MendrAuthEmail = ScandioAuthEmail;
 

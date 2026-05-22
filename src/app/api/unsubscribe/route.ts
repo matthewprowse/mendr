@@ -43,7 +43,7 @@ function htmlResponse(heading: string, message: string, siteUrl: string): Respon
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>${heading} | Menda</title>
+  <title>${heading} | Mendr</title>
   <style>
     body { margin: 0; padding: 0; background: #f9fafb; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
     .wrap { max-width: 480px; margin: 80px auto; background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 40px 32px; }
@@ -56,7 +56,7 @@ function htmlResponse(heading: string, message: string, siteUrl: string): Respon
   <div class="wrap">
     <h1>${heading}</h1>
     <p>${message}</p>
-    <a href="${siteUrl}">Return to Menda</a>
+    <a href="${siteUrl}">Return to Mendr</a>
   </div>
 </body>
 </html>`;
@@ -99,7 +99,7 @@ export async function GET(req: NextRequest): Promise<Response> {
 
     return htmlResponse(
         "You've been unsubscribed",
-        `We've removed ${email} from our mailing list. You will no longer receive digest emails from Menda.`,
+        `We've removed ${email} from our mailing list. You will no longer receive digest emails from Mendr.`,
         siteUrl
     );
 }

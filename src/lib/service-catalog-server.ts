@@ -20,8 +20,13 @@ function loadLabelsFromConstant(): string[] {
 function redisClient(): Redis | null {
     const url = process.env.UPSTASH_REDIS_REST_URL;
     const token = process.env.UPSTASH_REDIS_REST_TOKEN;
-    if (!url || !token) return null;
-    return new Redis({ url, token });
+    // Reject placeholder values that would cause the constructor to throw.
+    if (!url || !token || url.startsWith('your_') || token.startsWith('your_')) return null;
+    try {
+        return new Redis({ url, token });
+    } catch {
+        return null;
+    }
 }
 
 /**

@@ -23,6 +23,12 @@ export interface ReviewIngestionResult {
 /** Threshold: trigger re-enrichment when this many new reviews are added. */
 export const NEEDS_ENRICHMENT_THRESHOLD = 3;
 
+/** Reviews older than this are not ingested — businesses can change significantly over 3 years. */
+const REVIEW_MAX_AGE_YEARS = 3;
+
+/** Maximum DataForSEO reviews stored per provider. Oldest are pruned when this is exceeded. */
+export const MAX_REVIEWS_PER_PROVIDER = 100;
+
 function makeContentHash(providerId: string, reviewText: string, reviewerName: string | null): string {
     const payload = `${providerId}::${(reviewerName ?? '').trim()}::${reviewText.trim()}`;
     return crypto.createHash('sha256').update(payload).digest('hex').slice(0, 64);
@@ -55,7 +61,19 @@ export async function ingestDataForSEOReviews(
         return { added: 0, unchanged: 0, reviewCountBefore, reviewCountAfter: reviewCountBefore };
     }
 
-    const rows = reviews.map((r) => {
+    // Drop reviews older than REVIEW_MAX_AGE_YEARS — stale opinions misrepresent current quality.
+    const cutoffMs = Date.now() - REVIEW_MAX_AGE_YEARS * 365.25 * 24 * 60 * 60 * 1000;
+    const freshReviews = reviews.filter((r) => {
+        if (!r.timestamp) return true; // keep if no timestamp (can't judge age)
+        const ts = new Date(r.timestamp).getTime();
+        return Number.isFinite(ts) && ts >= cutoffMs;
+    });
+
+    if (freshReviews.length === 0) {
+        return { added: 0, unchanged: 0, reviewCountBefore, reviewCountAfter: reviewCountBefore };
+    }
+
+    const rows = freshReviews.map((r) => {
         const sourceRef = r.review_url?.trim()
             ? r.review_url.trim().slice(0, 512)
             : makeContentHash(providerId, r.review_text ?? '', r.reviewer_name);
@@ -101,6 +119,23 @@ export async function ingestDataForSEOReviews(
         .eq('provider_id', providerId);
 
     const reviewCountAfter = countAfter ?? reviewCountBefore + added;
+
+    // Prune oldest DataForSEO reviews if the provider is over the cap.
+    // We only prune the 'dataforseo' source — mendr (in-app) reviews are never auto-deleted.
+    if (reviewCountAfter > MAX_REVIEWS_PER_PROVIDER) {
+        const excess = reviewCountAfter - MAX_REVIEWS_PER_PROVIDER;
+        const { data: oldest } = await admin
+            .from('reviews')
+            .select('id')
+            .eq('provider_id', providerId)
+            .eq('source', 'dataforseo')
+            .order('published_at', { ascending: true })
+            .limit(excess);
+        if (Array.isArray(oldest) && oldest.length > 0) {
+            const idsToDelete = oldest.map((r) => r.id);
+            await admin.from('reviews').delete().in('id', idsToDelete);
+        }
+    }
 
     // Update provider_cache tracking columns
     const cacheUpdate: Record<string, unknown> = {

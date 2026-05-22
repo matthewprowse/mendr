@@ -112,7 +112,7 @@ export default function RegisterPage() {
                             <div className="flex flex-col gap-2">
                                 <h1 className="text-2xl font-bold text-foreground">Create your account.</h1>
                                 <p className="text-sm text-muted-foreground">
-                                    Get started with Menda — free forever.
+                                    Get started with Mendr — free forever.
                                 </p>
                             </div>
 

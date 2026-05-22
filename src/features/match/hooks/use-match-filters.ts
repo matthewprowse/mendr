@@ -25,7 +25,7 @@ export const SORT_OPTIONS = [
     { value: 'rating_desc', label: 'Rating (high → low)' },
     { value: 'distance_asc', label: 'Distance (closest)' },
     { value: 'reviews_desc', label: 'Most reviewed' },
-    { value: 'newest', label: 'Newest on Menda' },
+    { value: 'newest', label: 'Newest on Mendr' },
 ] as const;
 
 export type MatchSortKey = (typeof SORT_OPTIONS)[number]['value'];
@@ -37,6 +37,7 @@ export type MatchFilterState = {
     minRating: number; // 0 = no filter
     maxRating: number; // 0 = no cap
     onlyOpenNow: boolean;
+    is247: boolean;
     hasWebsite: boolean;
     hasWorkPhotos: boolean;
     companySizes: Array<NonNullable<MatchProvider['companySize']>>;
@@ -51,6 +52,7 @@ export const DEFAULT_FILTER_STATE: MatchFilterState = {
     minRating: 0,
     maxRating: 0,
     onlyOpenNow: false,
+    is247: false,
     hasWebsite: false,
     hasWorkPhotos: false,
     companySizes: [],
@@ -65,6 +67,7 @@ const URL_KEYS = {
     minRating: 'f.rmin',
     maxRating: 'f.rmax',
     open: 'f.open',
+    is247: 'f.247',
     web: 'f.web',
     photos: 'f.ph',
     sizes: 'f.sz',
@@ -112,10 +115,18 @@ function parseStateFromParams(
         out.sort = sortRaw as MatchSortKey;
     }
 
-    const dmin = Number(params.get(URL_KEYS.dmin) ?? '');
-    if (Number.isFinite(dmin)) out.distanceMinKm = clampNumber(dmin, 0, 100);
-    const dmax = Number(params.get(URL_KEYS.dmax) ?? '');
-    if (Number.isFinite(dmax)) out.distanceMaxKm = clampNumber(dmax, 1, 50);
+    // Use null-check before Number() — Number('') === 0 which is finite,
+    // causing a missing param to silently clamp distanceMaxKm to 1km.
+    const dminRaw = params.get(URL_KEYS.dmin);
+    if (dminRaw !== null) {
+        const dmin = Number(dminRaw);
+        if (Number.isFinite(dmin)) out.distanceMinKm = clampNumber(dmin, 0, 100);
+    }
+    const dmaxRaw = params.get(URL_KEYS.dmax);
+    if (dmaxRaw !== null) {
+        const dmax = Number(dmaxRaw);
+        if (Number.isFinite(dmax) && dmax > 0) out.distanceMaxKm = clampNumber(dmax, 1, 50);
+    }
 
     const minR = Number(params.get(URL_KEYS.minRating) ?? '');
     if (Number.isFinite(minR)) out.minRating = clampNumber(minR, 0, 5);
@@ -123,6 +134,7 @@ function parseStateFromParams(
     if (Number.isFinite(maxR)) out.maxRating = clampNumber(maxR, 0, 5);
 
     if (params.has(URL_KEYS.open)) out.onlyOpenNow = readBool(params.get(URL_KEYS.open));
+    if (params.has(URL_KEYS.is247)) out.is247 = readBool(params.get(URL_KEYS.is247));
     if (params.has(URL_KEYS.web)) out.hasWebsite = readBool(params.get(URL_KEYS.web));
     if (params.has(URL_KEYS.photos)) out.hasWorkPhotos = readBool(params.get(URL_KEYS.photos));
 
@@ -159,6 +171,8 @@ export function buildSearchParamsForFilters(
         params.set(URL_KEYS.maxRating, String(state.maxRating));
     const open = writeBool(state.onlyOpenNow);
     if (open) params.set(URL_KEYS.open, open);
+    const f247 = writeBool(state.is247);
+    if (f247) params.set(URL_KEYS.is247, f247);
     const web = writeBool(state.hasWebsite);
     if (web) params.set(URL_KEYS.web, web);
     const ph = writeBool(state.hasWorkPhotos);
@@ -197,7 +211,19 @@ export function applyFilters(
         if (ratingCeil > 0) {
             if (typeof p.rating !== 'number' || p.rating > ratingCeil + 0.0001) return false;
         }
-        if (state.onlyOpenNow && p.isOpen !== true) return false;
+        if (state.is247) {
+            // Must have 24/7 in their opening hours OR a 24/7-style specialisation
+            const has247Hours = p.weekdayDescriptions?.some((d) => /open\s*24\s*hours/i.test(d));
+            const has247Spec = (p.specialisations ?? []).some((s) =>
+                /24.?7|24\s*hours|always\s*open/i.test(s)
+            );
+            if (!has247Hours && !has247Spec) return false;
+        }
+        if (state.onlyOpenNow) {
+            // Exempt providers verified to be open 24/7 — they are always open
+            const is247 = p.weekdayDescriptions?.some((d) => /open\s*24\s*hours/i.test(d));
+            if (!is247 && p.isOpen !== true) return false;
+        }
         if (state.hasWebsite && !(p.website && p.website.trim())) return false;
         if (state.hasWorkPhotos && !(p.hasWorkPhotos || (p.images && p.images.length > 0))) return false;
         if (sizeSet.size > 0) {
@@ -257,6 +283,7 @@ export function countActiveFilters(state: MatchFilterState): number {
     if (state.minRating > 0) n += 1;
     if (state.maxRating > 0) n += 1;
     if (state.onlyOpenNow) n += 1;
+    if (state.is247) n += 1;
     if (state.hasWebsite) n += 1;
     if (state.hasWorkPhotos) n += 1;
     if (state.companySizes.length > 0) n += 1;

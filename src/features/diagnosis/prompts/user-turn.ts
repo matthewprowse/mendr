@@ -23,8 +23,9 @@ export function buildQuickThoughtPrompt(imageCount: number): string {
  */
 export function buildStreamingQuickThoughtPrompt(): string {
     return (
-        'Analyse all provided images. For each image note specific components visible, their condition, and — critically — any component that is MISSING, detached, disconnected, or absent (compare left vs right, upper vs lower where relevant). ' +
-        'Return ONLY a short <thought> block (2 sentences): sentence 1 combines specific visible and absent clues across images; sentence 2 states the likely fault pattern from that combined evidence. No JSON.'
+        'Analyse every image provided. For each: name the specific components visible, their position and condition. ' +
+        'Critically — compare left vs right, near vs far, upper vs lower. A component present on one side but ABSENT or detached on the other is the PRIMARY fault signal — name it explicitly (e.g. "left torsion spring is missing", "right cable is detached"). Missing components take priority over cosmetic or secondary cues. ' +
+        'Return ONLY a <thought> block (2 sentences): sentence 1 states the specific missing/damaged component and which image(s) show it; sentence 2 gives the likely fault pattern. No JSON.'
     );
 }
 
@@ -70,9 +71,11 @@ export function buildImageFirstMessagePrompt(params: {
     return (
         params.instructionPrefix +
         params.userWordsPriority +
-        `Analyse ${params.imageCount > 1 ? 'these images' : 'this image'}.\n\n` +
-        `For multi-image input, first use each image to capture unique evidence, then merge it into one combined diagnosis thought.\n\n` +
-        `Output <thought> FIRST (2–3 short sentences about the likely problem only in plain language). Never skip the thought block; the user sees it in real time.`
+        `Analyse ${params.imageCount > 1 ? `all ${params.imageCount} images` : 'this image'}.\n\n` +
+        (params.imageCount > 1
+            ? `For each image: name the specific components visible, their position, and their condition. Then look for asymmetry — compare left vs right, near side vs far side, upper vs lower. A component that is PRESENT on one side but ABSENT or detached on the other is the primary fault signal (e.g. a torsion spring bracket missing on one side, a cable hanging loose, a roller off its track). Missing components outweigh secondary cosmetic cues — name them explicitly.\n\nMerge the per-image evidence into one combined thought.\n\n`
+            : '') +
+        `Output <thought> FIRST (2–3 short sentences in plain language naming the most likely fault and the specific evidence you saw). Never skip the thought block; the user sees it in real time.`
     );
 }
 
@@ -100,7 +103,7 @@ export function buildProviderHydrationImagePrompt(params: {
     return (
         params.instructionPrefix +
         params.userWordsPriority +
-        `PROVIDER HYDRATION PASS: Re-read ${params.imageCount > 1 ? 'these images' : 'this image'} and output a full Menda response. ` +
+        `PROVIDER HYDRATION PASS: Re-read ${params.imageCount > 1 ? 'these images' : 'this image'} and output a full Mendr response. ` +
         `Follow PROVIDER HYDRATION TURN in your instructions; keep established diagnosis fields stable unless clearly wrong.\n\n` +
         `Output <thought> FIRST (2–3 short sentences), then </thought>, then <json>. Never skip the thought block.`
     );

@@ -29,9 +29,9 @@ export function HomeMarketingHeroClient() {
                             anyone.
                         </p>
                         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                            <StartDiagnosisButton size="lg">Generate Free Menda Report</StartDiagnosisButton>
+                            <StartDiagnosisButton size="lg">Generate Free Mendr Report</StartDiagnosisButton>
                             <Button variant="ghost" className="h-10 text-sm" asChild>
-                                <Link href="#how-it-works">How Menda works</Link>
+                                <Link href="#how-it-works">How Mendr works</Link>
                             </Button>
                         </div>
                         <p className="text-sm text-muted-foreground">Free report · No account required</p>
