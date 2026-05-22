@@ -96,6 +96,8 @@ The A4 sub-agent clarified disposition of these — your job is just to confirm 
 
 - **A6 originally claimed `.env` is committed to git — this is FALSE.** Verified during the run: `git ls-files --error-unmatch .env` returned "did not match any file" and `.env` is properly listed in `.gitignore`. Finding #14 in the A6 report has been patched in-place to reflect this. No secrets are leaking in the repo.
 - The pre-audit drift list expected `src/app/processing/[conversationId]/client 2.tsx` to exist — it doesn't on the audit branch. It was destroyed by the `git reset --hard` that I killed mid-baseline, or by the user's Cursor revert. Net result: one less OS-duplicate to remove. (A4)
+- **There is a fourth broken git ref** that A6 missed: `refs/remotes/origin/main 2` (a remote-tracking ref, on top of the three local `refs/heads/main 2|3|4`). When applying the A6 #1 deletion, include this one too: `rm "app/.git/refs/remotes/origin/main 2"`.
+- **One commit landed on `audit/2026-05-22` mid-run that did not originate from this audit:** `f0d3092 test(phase-1): cover pure-function libs for providers, rate-limit, content guard, email`. It is additive (new tests only) and does not affect the reports — but if you do a `git log` and see an extra commit, that's why. It's between `f4371a7` (the pre-audit stray-file commit) and `f8ea45c` (this summary). If you didn't make that commit yourself, the testing-build agent in `.claude/agents/testing-build.md` is the likely author.
 
 ---
 
