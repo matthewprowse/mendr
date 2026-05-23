@@ -36,26 +36,31 @@ export default defineConfig({
                 'node_modules',
                 '.next',
             ],
-            // Phase 4 thresholds — ratcheted to current actuals minus a small
-            // margin after adding Testing Library + MSW component tests for
-            // contact-form, auth-card, homeowner-auth-dialog, the
-            // coming-soon contact/beta-access forms, the match filter-sheet,
-            // and the contractor application's first-two-step navigation.
-            // Phase 4 actuals (post-add):
-            //   lines:      19.76
-            //   branches:   66.28
-            //   functions:  47.48
-            //   statements: 19.76
-            // (Lines/statements lift slowly because most src/* is server-side
-            // libs and routes — component tests primarily move *functions*.
-            // The contractor onboarding page is 2285 lines and only Steps 1-2
-            // are exercised here; the rest is gated behind file uploads and
-            // Google Maps and is deferred to Phase 6 E2E.)
+            // Phase 7 thresholds — ratcheted to current actuals minus ~1pp,
+            // floored at the previous Phase 4 thresholds so we never lower
+            // the bar in CI.
+            //
+            // Phase 7 actuals (1108 tests across 122 files):
+            //   lines:      20.02
+            //   branches:   65.94
+            //   functions:  47.95
+            //   statements: 20.02
+            //
+            // Applied thresholds (max(prev-threshold, actuals-1pp)):
+            //   lines:      19   (max(18, 19.02))
+            //   branches:   65   (max(65, 64.94) → floored)
+            //   functions:  46   (max(46, 46.95))
+            //   statements: 19   (max(18, 19.02))
+            //
+            // Phase 5 (Supabase integration tests) was deferred — Docker is
+            // not installed locally. Once it ships, lines/statements should
+            // jump materially (most uncovered code is server route handlers
+            // currently exercised only via mocked contract tests).
             thresholds: {
-                lines: 18,
+                lines: 19,
                 branches: 65,
                 functions: 46,
-                statements: 18,
+                statements: 19,
             },
         },
     },
