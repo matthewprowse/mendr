@@ -285,6 +285,32 @@ export async function runClassification(
     ctx?: { userId?: string | null; conversationId?: string | null },
 ): Promise<ClassificationResult> {
     const stepStart = Date.now();
+    // Mock branch — used by Playwright E2E to avoid real Gemini calls.
+    // Pinned fixture `01-garage-door-spring.json` matches the homeowner golden-path
+    // input (a leaking geyser-style description is mapped to Plumbing below; the
+    // fixture is intentionally a single deterministic response — see
+    // .env.test.example for the full mock contract).
+    if (process.env.MOCK_LLM === '1') {
+        const mock: ClassificationResult = {
+            trade: 'Plumbing',
+            trade_detail: 'Geyser / Hot Water Cylinder Repair',
+            subcategory_id: 'geyser_fault',
+            confidence: 92,
+            rejected: false,
+            requires_clarification: false,
+            unserviced: false,
+            refetch_providers: false,
+            unsupported_reason: '',
+            failed_component: 'pressure relief valve',
+            cascading_damage: '',
+        };
+        logPipelineStep({
+            stepName: 'agent-classify', status: 'ok', durationMs: Date.now() - stepStart,
+            conversationId: ctx?.conversationId, userId: ctx?.userId,
+            modelName: 'mock-llm',
+        });
+        return mock;
+    }
     try {
         const model = getDiagnosisModel();
         const systemBlock = buildClassificationSystemPrompt(serviceListText);

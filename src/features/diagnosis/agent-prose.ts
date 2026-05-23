@@ -434,6 +434,43 @@ export async function runProseGeneration(params: {
     ctx?: { userId?: string | null; conversationId?: string | null };
 }): Promise<ProseResult> {
     const stepStart = Date.now();
+    // Mock branch — used by Playwright E2E to avoid real Gemini calls.
+    // Returns a deterministic, schema-valid prose payload aligned with the mocked
+    // Plumbing/geyser classification used by the homeowner golden-path spec.
+    if (process.env.MOCK_LLM === '1') {
+        const mock: ProseResult = {
+            thought:
+                'The description reports the geyser is leaking from the pressure relief valve. This is a classic sign that the safety valve is venting either because the cylinder is over-pressurised or the valve itself has perished. Either way, water is escaping where it should not. The fault is mechanical and well within standard plumbing scope.',
+            diagnosis: 'Geyser Pressure Relief Valve Leak',
+            estimated_diagnosis_sentence:
+                'A leaking geyser pressure relief valve, typically caused by valve wear or excess cylinder pressure.',
+            message:
+                'Your geyser pressure relief valve is leaking, which usually means the valve has perished or the cylinder is over-pressurised. A licensed plumber can replace the valve and confirm the cylinder is operating within safe pressure.\n\nIf water is pooling, switch off the geyser at the DB board and shut the cold-water inlet until a plumber arrives.',
+            action_required: '',
+            contractor_checklist: [
+                'Replace the pressure relief (T&P) valve.',
+                'Test cylinder operating pressure against rated spec.',
+                'Inspect the expansion vessel if fitted.',
+                'Check the geyser drip tray and overflow run for damage.',
+            ],
+            homeowner_prep:
+                'Switch the geyser off at the DB board and close the cold inlet stop-cock if you can reach it safely.',
+            image_descriptions: [],
+            image_observations: [],
+            diy_verification: '',
+            photo_request: '',
+            confidence_drivers: [
+                'Classic relief-valve leak symptom',
+                'No alternative cause indicated in description',
+            ],
+        };
+        logPipelineStep({
+            stepName: 'agent-prose', status: 'ok', durationMs: Date.now() - stepStart,
+            conversationId: params.ctx?.conversationId, userId: params.ctx?.userId,
+            modelName: 'mock-llm',
+        });
+        return mock;
+    }
     try {
         const model = getDiagnosisModel();
 

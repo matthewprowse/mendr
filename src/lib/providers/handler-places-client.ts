@@ -28,6 +28,16 @@ export async function fetchPlacesSearchText(
     bodyObj: Record<string, unknown>,
     fetchImpl: PlacesFetchImpl = fetch,
 ): Promise<Response> {
+    // Mock branch — used by Playwright E2E to avoid real Google Places calls.
+    // Returns a deterministic set of three plumbers in Cape Town, schema-aligned
+    // with the Places New `searchText` field mask above.
+    if (process.env.MOCK_PLACES === '1') {
+        const payload = buildMockPlacesSearchTextResponse();
+        return new Response(JSON.stringify(payload), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+        });
+    }
     const init: RequestInit = {
         method: 'POST',
         headers: {
@@ -43,6 +53,54 @@ export async function fetchPlacesSearchText(
         res = await fetchImpl(PLACES_SEARCH_TEXT_URL, init);
     }
     return res;
+}
+
+/**
+ * Build a deterministic Places searchText response for mock/E2E mode. Exported
+ * so the mock branch above and unit tests share one source of truth.
+ *
+ * The shape mirrors the Places New API (`places: [...]`) and provides three
+ * hand-crafted plumbers in Cape Town — each with a stable place_id, displayName,
+ * formattedAddress, rating, userRatingCount, and location.
+ */
+export function buildMockPlacesSearchTextResponse(): Record<string, unknown> {
+    return {
+        places: [
+            {
+                id: 'mock_plumber_capetown_001',
+                displayName: { text: 'CapeFix Plumbing', languageCode: 'en' },
+                formattedAddress: '12 Bree Street, Cape Town, 8001, South Africa',
+                rating: 4.7,
+                userRatingCount: 184,
+                nationalPhoneNumber: '021 555 0101',
+                websiteUri: 'https://example.com/capefix-plumbing',
+                location: { latitude: -33.9213, longitude: 18.4189 },
+                types: ['plumber', 'point_of_interest'],
+            },
+            {
+                id: 'mock_plumber_capetown_002',
+                displayName: { text: 'Table Mountain Plumbers', languageCode: 'en' },
+                formattedAddress: '45 Long Street, Cape Town, 8001, South Africa',
+                rating: 4.4,
+                userRatingCount: 96,
+                nationalPhoneNumber: '021 555 0202',
+                websiteUri: 'https://example.com/table-mountain-plumbers',
+                location: { latitude: -33.9249, longitude: 18.4241 },
+                types: ['plumber', 'point_of_interest'],
+            },
+            {
+                id: 'mock_plumber_capetown_003',
+                displayName: { text: 'Atlantic Geyser Repairs', languageCode: 'en' },
+                formattedAddress: '8 Main Road, Sea Point, Cape Town, 8005, South Africa',
+                rating: 4.9,
+                userRatingCount: 312,
+                nationalPhoneNumber: '021 555 0303',
+                websiteUri: 'https://example.com/atlantic-geyser',
+                location: { latitude: -33.9151, longitude: 18.3845 },
+                types: ['plumber', 'point_of_interest'],
+            },
+        ],
+    };
 }
 
 /**

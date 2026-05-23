@@ -4,6 +4,7 @@
  */
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import {
+    buildMockPlacesSearchTextResponse,
     fetchPlacesSearchText,
     isTransientPlacesHttpStatus,
     resolvePlacesApiKey,
@@ -126,5 +127,67 @@ describe('fetchPlacesSearchText', () => {
         );
         expect(fetchImpl).toHaveBeenCalledTimes(1);
         expect(res.status).toBe(403);
+    });
+
+    describe('MOCK_PLACES branch', () => {
+        const original = process.env.MOCK_PLACES;
+        afterEach(() => {
+            if (original === undefined) delete process.env.MOCK_PLACES;
+            else process.env.MOCK_PLACES = original;
+        });
+
+        it('returns the canned response without invoking fetch', async () => {
+            process.env.MOCK_PLACES = '1';
+            const fetchImpl = vi.fn();
+            const res = await fetchPlacesSearchText(
+                'k',
+                { textQuery: 'plumber' },
+                fetchImpl as unknown as typeof fetch,
+            );
+            expect(fetchImpl).not.toHaveBeenCalled();
+            expect(res.status).toBe(200);
+            const body = (await res.json()) as { places: unknown[] };
+            expect(Array.isArray(body.places)).toBe(true);
+            expect(body.places).toHaveLength(3);
+        });
+
+        it('does NOT short-circuit when MOCK_PLACES is unset', async () => {
+            delete process.env.MOCK_PLACES;
+            const fetchImpl = vi.fn(async () => new Response('{}', { status: 200 }));
+            await fetchPlacesSearchText(
+                'k',
+                { textQuery: 'plumber' },
+                fetchImpl as unknown as typeof fetch,
+            );
+            expect(fetchImpl).toHaveBeenCalledTimes(1);
+        });
+    });
+});
+
+describe('buildMockPlacesSearchTextResponse', () => {
+    it('returns 3 Cape Town plumbers with the expected fields', () => {
+        const payload = buildMockPlacesSearchTextResponse();
+        const places = (payload as { places: Array<Record<string, unknown>> }).places;
+        expect(places).toHaveLength(3);
+        for (const p of places) {
+            expect(typeof p.id).toBe('string');
+            expect((p.id as string).startsWith('mock_plumber_capetown_')).toBe(true);
+            expect((p.displayName as { text: string }).text).toBeTruthy();
+            expect(typeof p.rating).toBe('number');
+            expect(typeof p.userRatingCount).toBe('number');
+            const loc = p.location as { latitude: number; longitude: number };
+            expect(loc.latitude).toBeGreaterThan(-34.5);
+            expect(loc.latitude).toBeLessThan(-33);
+            expect(loc.longitude).toBeGreaterThan(18);
+            expect(loc.longitude).toBeLessThan(19);
+            expect(Array.isArray(p.types)).toBe(true);
+            expect((p.types as string[]).includes('plumber')).toBe(true);
+        }
+    });
+
+    it('is stable across calls (deterministic fixture)', () => {
+        const a = JSON.stringify(buildMockPlacesSearchTextResponse());
+        const b = JSON.stringify(buildMockPlacesSearchTextResponse());
+        expect(a).toBe(b);
     });
 });

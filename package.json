@@ -18,7 +18,9 @@
     "check:diagnoses-table": "sh -c 'if grep -rE \"from\\(['\"'\"']conversations['\"'\"']\\)\" src scripts --include=\"*.ts\" --include=\"*.tsx\" -q; then echo \"Use diagnoses table, not conversations\"; exit 1; fi'",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui"
   },
   "dependencies": {
     "@google-cloud/speech": "^7.3.0",
@@ -71,6 +73,7 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@playwright/test": "^1.60.0",
     "@tailwindcss/postcss": "^4",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
@@ -85,7 +88,7 @@
     "eslint-config-next": "16.1.6",
     "jsdom": "^29.1.1",
     "msw": "^2.14.6",
-    "playwright": "^1.58.2",
+    "playwright": "^1.60.0",
     "prettier": "^3.8.1",
     "shadcn": "^3.8.4",
     "tailwindcss": "^4",
