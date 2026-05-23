@@ -18,19 +18,24 @@ export default defineConfig({
                 'node_modules',
                 '.next',
             ],
-            // Phase 2 thresholds — locked just below the actuals after extracting
-            // sibling modules from `app/api/diagnose/route.ts` and
-            // `lib/providers/handler.ts` and adding parser fixtures + unit tests
-            // for `agent-classify` + `agent-prose`. Phase 2 actuals:
-            //   lines:      9.09
-            //   branches:   64.43
-            //   functions:  28.83
-            //   statements: 9.09
+            // Phase 3 thresholds — locked just below the actuals after adding
+            // contract tests for every `src/app/api/**/route.ts`, a shared
+            // Zod validation helper (`src/lib/api/validation.ts`), and a
+            // route-test toolkit (`src/__tests__/helpers/route-test.ts`).
+            // Phase 3 actuals (post-add):
+            //   lines:      16.61
+            //   branches:   65.56
+            //   functions:  45.74
+            //   statements: 16.61
+            // (Lines/statements grow more slowly than functions because route
+            // handlers exercise wide call graphs into provider/enrichment libs
+            // that are mocked at the module boundary — those libs remain
+            // uncovered until Phase 5 brings real DB integration tests.)
             thresholds: {
-                lines: 8,
-                branches: 63,
-                functions: 28,
-                statements: 8,
+                lines: 15,
+                branches: 64,
+                functions: 44,
+                statements: 15,
             },
         },
     },
