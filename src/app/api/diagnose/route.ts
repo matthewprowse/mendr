@@ -144,16 +144,23 @@ export async function POST(req: NextRequest) {
             hasUserContext: Boolean(hasUserContext),
             userSelectedTrade: hasUserContext
                 ? {
-                      diagnosis: String(userSelectedTrade.diagnosis),
-                      trade: String(userSelectedTrade.trade),
+                      diagnosis: String(
+                          (userSelectedTrade as { diagnosis?: unknown })?.diagnosis ?? '',
+                      ),
+                      trade: String(
+                          (userSelectedTrade as { trade?: unknown })?.trade ?? '',
+                      ),
                   }
                 : null,
             isTextOnlyNoAttachments: isTextOnly && !hasAttachments,
             serviceListText,
-            feedback,
+            feedback: typeof feedback === 'string' ? feedback : undefined,
             providers: providersForPrompt,
-            previousDiagnosis: prevDiagForHydration ?? previousDiagnosis,
-            diagnosisRejected,
+            previousDiagnosis: (prevDiagForHydration ?? previousDiagnosis) as
+                | { diagnosis?: string; trade?: string; trade_detail?: string }
+                | null
+                | undefined,
+            diagnosisRejected: Boolean(diagnosisRejected),
         };
         const systemInstruction = buildSystemInstruction(promptContext);
         const proseBaseInstruction = buildProseBaseInstruction(promptContext);
@@ -177,7 +184,16 @@ export async function POST(req: NextRequest) {
             isTextOnly,
             isProviderHydration,
             hasUserContext: Boolean(hasUserContext),
-            userSelectedTrade,
+            userSelectedTrade: hasUserContext
+                ? {
+                      diagnosis: String(
+                          (userSelectedTrade as { diagnosis?: unknown })?.diagnosis ?? '',
+                      ),
+                      trade: String(
+                          (userSelectedTrade as { trade?: unknown })?.trade ?? '',
+                      ),
+                  }
+                : null,
         });
 
         const tieringLogMeta: Record<string, unknown> = {

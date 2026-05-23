@@ -46,7 +46,7 @@ export interface BuildContentsParams {
     isTextOnly: boolean;
     isProviderHydration: boolean;
     hasUserContext: boolean;
-    userSelectedTrade: unknown;
+    userSelectedTrade: { diagnosis: string; trade: string } | null | undefined;
 }
 
 export interface BuildContentsResult {
