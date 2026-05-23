@@ -1,137 +1,237 @@
 import Link from 'next/link';
-import { CheckCircle, MapPin, Clock, ShieldCheck, Star } from 'lucide-react';
+import { MapPin, Star, Droplet, Zap, Home, Hammer, Building2, Paintbrush } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
-/* ─── Trust Bar ─────────────────────────────────────────────────────────── */
+/* ─── Section 1.2 — Problem Framing ──────────────────────────────────────── */
 
-export function Land1TrustBar() {
-    const signals = [
-        { icon: ShieldCheck, label: 'All contractors manually vetted' },
-        { icon: Star, label: '52+ homeowners helped' },
-        { icon: Clock, label: 'Avg. diagnosis: 58 seconds' },
-        { icon: MapPin, label: 'Western Cape only' },
-    ];
+const SCENARIOS = [
+    {
+        title: 'A damp patch appeared on your wall.',
+        body: 'Is it rising damp, penetrating damp, or just a leaky pipe behind the plaster?',
+        href: '/start?trade=damp',
+    },
+    {
+        title: 'Your geyser is making a noise — or leaking.',
+        body: 'Is it the thermostat, the element, the tank, or just a seal?',
+        href: '/start?trade=plumbing',
+    },
+    {
+        title: 'Your DB board keeps tripping.',
+        body: 'Is it the geyser circuit, an appliance, or something more serious?',
+        href: '/start?trade=electrical',
+    },
+];
+
+export function Land1ProblemFraming() {
     return (
-        <div className="bg-[#1C2B3A] py-5">
-            <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-                <div className="flex flex-wrap items-center justify-center gap-x-10 gap-y-3">
-                    {signals.map(({ icon: Icon, label }) => (
-                        <div key={label} className="flex items-center gap-2">
-                            <Icon className="h-4 w-4 text-[#6B8F71]" strokeWidth={1.5} />
-                            <span className="text-sm text-white/70">{label}</span>
-                        </div>
-                    ))}
-                </div>
-            </div>
-        </div>
-    );
-}
-
-/* ─── How It Works ──────────────────────────────────────────────────────── */
-
-const STEPS = [
-    {
-        num: '01',
-        icon: '📷',
-        title: 'Photograph the problem',
-        body: 'Take a photo on your phone — no preparation needed. Bad lighting, messy rooms, the middle of the night. Mendr works with what you\'ve got.',
-    },
-    {
-        num: '02',
-        icon: '📋',
-        title: 'Get your free diagnosis',
-        body: 'Mendr analyses your photo and generates a plain-English fault report in under 60 seconds. You\'ll know the fault type, urgency, likely cause, and a realistic cost range before you speak to anyone.',
-    },
-    {
-        num: '03',
-        icon: '✓',
-        title: 'Choose a vetted contractor',
-        body: 'Browse contractors who\'ve been verified by Mendr and work in your area. No auctions. No bidding wars. Contact whoever you like, directly. Zero commission — for you or them.',
-    },
-] as const;
-
-export function Land1HowItWorks() {
-    return (
-        <section id="how-it-works" className="scroll-mt-20 bg-[#FAFAF8] py-20 sm:py-24">
-            <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-                <div className="mx-auto mb-14 max-w-2xl text-center">
-                    <p className="text-sm font-medium uppercase tracking-widest text-[#C45C3A]">How it works</p>
-                    <h2 className="mt-3 font-[family-name:var(--font-playfair)] text-3xl font-bold text-[#1C2B3A] sm:text-4xl">
-                        Three steps. Under two minutes.
+        <section className="bg-[#F4EFE6] py-20 sm:py-24">
+            <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8">
+                <div className="text-center">
+                    <h2 className="font-[family-name:var(--font-playfair)] text-3xl font-bold text-[#1C2B3A] sm:text-4xl">
+                        Most People Pay For Repairs Without Knowing What&rsquo;s Actually Wrong
                     </h2>
-                    <p className="mt-4 text-base text-[#2F3E4E]/70">
-                        From photo to diagnosis to vetted contractor — entirely on your terms.
+                    <p className="mx-auto mt-6 max-w-2xl text-base leading-relaxed text-[#2F3E4E]/75">
+                        You spot a damp patch on the wall. You hear a noise from the geyser. You smell something
+                        funny from a plug. So you Google &ldquo;plumber near me,&rdquo; call three numbers, and
+                        explain the same vague story three times. You get three very different quotes — and no
+                        real way to compare them, because you don&rsquo;t know what the problem is.
+                    </p>
+                    <p className="mx-auto mt-4 max-w-2xl text-base leading-relaxed text-[#2F3E4E]/75">
+                        That&rsquo;s how most people end up paying too much. Not because tradespeople are
+                        dishonest — because you walked into the conversation without context. Mendr fixes that
+                        part first.
+                    </p>
+                    <p className="mx-auto mt-5 max-w-2xl text-sm italic text-[#2F3E4E]/55">
+                        South African consumer guidance recommends getting itemised quotes for jobs over R2,000.
+                        Itemised quotes only help if you know what the line items should be.
                     </p>
                 </div>
-                <div className="grid gap-6 sm:grid-cols-3">
-                    {STEPS.map((step) => (
-                        <div
-                            key={step.num}
-                            className="rounded-2xl border border-[#E8E4DD] bg-white p-6 shadow-sm"
+
+                <div className="mt-14 grid gap-4 sm:grid-cols-3">
+                    {SCENARIOS.map((s) => (
+                        <Link
+                            key={s.title}
+                            href={s.href}
+                            className="group flex flex-col rounded-2xl border border-[#E8E4DD] bg-white p-6 shadow-sm transition-shadow hover:shadow-md"
                         >
-                            <span className="text-4xl font-bold text-[#E8E4DD]">{step.num}</span>
-                            <div className="mt-4 text-2xl">{step.icon}</div>
-                            <h3 className="mt-3 text-lg font-semibold text-[#1C2B3A]">{step.title}</h3>
-                            <p className="mt-2 text-sm leading-relaxed text-[#2F3E4E]/70">{step.body}</p>
-                        </div>
+                            <h3 className="text-base font-semibold text-[#1C2B3A]">{s.title}</h3>
+                            <p className="mt-3 flex-1 text-sm leading-relaxed text-[#2F3E4E]/70">
+                                {s.body}
+                            </p>
+                            <span className="mt-4 text-sm font-medium text-[#C45C3A]">
+                                Find out &rarr;
+                            </span>
+                        </Link>
                     ))}
                 </div>
-                <p className="mt-8 text-center text-sm text-[#2F3E4E]/50">
-                    Prefer to describe it in words? You can type instead of uploading a photo.
-                </p>
             </div>
         </section>
     );
 }
 
-/* ─── Bento Grid ────────────────────────────────────────────────────────── */
+/* ─── Section 1.4 — Trade Rails ──────────────────────────────────────────── */
+
+const TRADES = [
+    {
+        slug: 'plumbing',
+        name: 'Plumbing',
+        icon: Droplet,
+        descriptor: 'Leaks, low water pressure, geyser problems, blocked drains.',
+        examples: 'Geyser leaking · Low pressure on hot taps · A drain that won’t drain',
+        href: '/diagnose/plumbing',
+    },
+    {
+        slug: 'electrical',
+        name: 'Electrical',
+        icon: Zap,
+        descriptor: 'Tripping circuits, DB board faults, post-load-shedding damage.',
+        examples: 'DB board keeps tripping · Burnt smell from a plug · Geyser circuit not working',
+        href: '/diagnose/electrical',
+    },
+    {
+        slug: 'damp',
+        name: 'Damp & Waterproofing',
+        icon: Paintbrush,
+        descriptor: 'Tell rising damp from penetrating damp from condensation.',
+        examples: 'Damp patch on an internal wall · Mould around the ceiling · Paint bubbling near the floor',
+        href: '/diagnose/damp',
+    },
+    {
+        slug: 'roofing',
+        name: 'Roofing',
+        icon: Home,
+        descriptor: 'Tile damage, leaking ridges, broken gutters, post-storm problems.',
+        examples: 'Ceiling leaking after rain · A cracked or missing tile · A gutter pulling away',
+        href: '/diagnose/roofing',
+    },
+    {
+        slug: 'structural',
+        name: 'Structural',
+        icon: Building2,
+        descriptor: 'Cracks, settlement, sagging — cosmetic or something to worry about?',
+        examples: 'A new crack in the wall · A floor that feels uneven · A door that suddenly won’t close',
+        href: '/diagnose/structural',
+    },
+    {
+        slug: 'maintenance',
+        name: 'General Maintenance',
+        icon: Hammer,
+        descriptor: 'Anything else — fixtures, fittings, finishes, handyman-scope.',
+        examples: 'A sticking door · A loose tile · A hinge that’s pulled out of the wood',
+        href: '/diagnose/maintenance',
+    },
+];
+
+export function Land1TradeRails() {
+    return (
+        <section id="trades" className="scroll-mt-20 bg-white py-20 sm:py-24">
+            <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+                <div className="mx-auto mb-14 max-w-2xl text-center">
+                    <p className="text-sm font-medium uppercase tracking-widest text-[#C45C3A]">
+                        Trades supported
+                    </p>
+                    <h2 className="mt-3 font-[family-name:var(--font-playfair)] text-3xl font-bold text-[#1C2B3A] sm:text-4xl">
+                        What Can Mendr Help With?
+                    </h2>
+                    <p className="mt-4 text-base text-[#2F3E4E]/70">
+                        Six categories of home fault. If yours spans more than one, the report will tell you.
+                    </p>
+                </div>
+
+                <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                    {TRADES.map((trade) => {
+                        const Icon = trade.icon;
+                        return (
+                            <Link
+                                key={trade.slug}
+                                href={trade.href}
+                                className="group flex flex-col rounded-2xl border border-[#E8E4DD] bg-[#FAFAF8] p-6 shadow-sm transition-all hover:border-[#C45C3A]/30 hover:shadow-md"
+                            >
+                                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#C45C3A]/10">
+                                    <Icon className="h-5 w-5 text-[#C45C3A]" strokeWidth={1.75} />
+                                </div>
+                                <h3 className="mt-5 text-lg font-semibold text-[#1C2B3A]">
+                                    {trade.name}
+                                </h3>
+                                <p className="mt-2 text-sm text-[#2F3E4E]/70">{trade.descriptor}</p>
+                                <p className="mt-3 text-xs leading-relaxed text-[#2F3E4E]/55">
+                                    {trade.examples}
+                                </p>
+                                <span className="mt-5 text-sm font-medium text-[#C45C3A]">
+                                    Diagnose a {trade.name.toLowerCase()} issue &rarr;
+                                </span>
+                            </Link>
+                        );
+                    })}
+                </div>
+            </div>
+        </section>
+    );
+}
+
+/* ─── Section 1.5 — Why Mendr (Bento) ────────────────────────────────────── */
 
 type BentoItem = { title: string; body: string; span: string; dark?: boolean; accent?: boolean };
 
 const BENTO: BentoItem[] = [
     {
-        title: 'Every contractor is manually vetted',
-        body: "Not an algorithm. A person checks each contractor's registration, insurance, and references before they appear on Mendr. We'd rather have 50 contractors you can trust than 5,000 you can't.",
+        title: 'Know what’s wrong before you call.',
+        body: 'Walk into every conversation with the same context the tradesperson would have to pull out of you on the phone. Useful for first calls, second opinions, and comparing quotes.',
         span: 'sm:col-span-2',
         dark: true,
     },
     {
-        title: 'Zero commission. For anyone.',
-        body: "Mendr doesn't take a cut of your job. The contractor you hire gets paid exactly what they quoted.",
+        title: 'Stop guessing.',
+        body: 'Get a structured report with likely cause, severity, confidence, and recommended next steps. Not a guess — a starting point built from your photo and what you told us.',
+        span: 'sm:col-span-2',
+    },
+    {
+        title: 'Comparable quotes.',
+        body: 'Send the same report to three providers. Compare scope and price, not who understood you best.',
         span: 'sm:col-span-1',
     },
     {
-        title: 'Structured quotes by default',
-        body: 'Contractors on Mendr send quotes in a consistent format. No more comparing apples with tractor tyres.',
+        title: 'No account. No commission.',
+        body: 'Get a report without signing up. We never sell your details. You decide who sees the report.',
         span: 'sm:col-span-1',
     },
     {
-        title: 'Know before you call',
-        body: "Mendr's diagnosis means you arrive at every contractor conversation already knowing what the problem is, what it should cost, and what questions to ask. Information is the best negotiating tool you have.",
+        title: 'Built for here.',
+        body: 'Coastal damp. Load-shedding damage. Winter roof storms. The context national platforms miss.',
+        span: 'sm:col-span-1',
+    },
+    {
+        title: 'Your report stays private.',
+        body: 'Reports are private by default. Sharing is always a choice you make — never automatic.',
+        span: 'sm:col-span-1',
+    },
+    {
+        title: 'Better information up front.',
+        body: 'A clearer starting point usually leads to fairer quotes, smaller scope creep, and fewer surprises during the job. Mendr is the pre-work step everyone else skips.',
         span: 'sm:col-span-2',
         accent: true,
     },
     {
-        title: 'Only works in the Western Cape',
-        body: "Deliberately. We're building something properly, not scaling fast and thin. Every contractor in our network is local.",
-        span: 'sm:col-span-1',
-    },
-    {
-        title: 'Describe it your way',
-        body: 'Photo, text, or both. Mendr understands context, not just images. "It only leaks when it rains" is useful information.',
-        span: 'sm:col-span-1',
+        title: 'Designed for everyone — not just tech people.',
+        body: 'Built so a 19-year-old with a leaky tap and an 85-year-old with a damp wall can both use it. Take a photo. Tell us what you see. That’s all you need to do.',
+        span: 'sm:col-span-2',
     },
 ];
 
 export function Land1BentoGrid() {
     return (
-        <section id="value" className="scroll-mt-20 bg-[#F4EFE6] py-20 sm:py-24">
+        <section id="why" className="scroll-mt-20 bg-[#F4EFE6] py-20 sm:py-24">
             <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
                 <div className="mx-auto mb-14 max-w-2xl text-center">
-                    <p className="text-sm font-medium uppercase tracking-widest text-[#C45C3A]">Why Mendr</p>
+                    <p className="text-sm font-medium uppercase tracking-widest text-[#C45C3A]">
+                        Why Mendr
+                    </p>
                     <h2 className="mt-3 font-[family-name:var(--font-playfair)] text-3xl font-bold text-[#1C2B3A] sm:text-4xl">
-                        Built differently. On purpose.
+                        Why People Use Mendr
                     </h2>
+                    <p className="mt-4 text-base text-[#2F3E4E]/70">
+                        Built for homeowners, not for the platform.
+                    </p>
                 </div>
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
                     {BENTO.map((item) => (
@@ -158,7 +258,11 @@ export function Land1BentoGrid() {
                             <p
                                 className={[
                                     'mt-2 text-sm leading-relaxed',
-                                    item.dark ? 'text-white/70' : item.accent ? 'text-white/80' : 'text-[#2F3E4E]/70',
+                                    item.dark
+                                        ? 'text-white/70'
+                                        : item.accent
+                                          ? 'text-white/80'
+                                          : 'text-[#2F3E4E]/70',
                                 ].join(' ')}
                             >
                                 {item.body}
@@ -171,259 +275,231 @@ export function Land1BentoGrid() {
     );
 }
 
-/* ─── Testimonials ──────────────────────────────────────────────────────── */
+/* ─── Section 1.6 — Trust Band ───────────────────────────────────────────── */
+
+const STATS = [
+    { value: '700+', label: 'reports generated' },
+    { value: '6', label: 'trade categories' },
+    { value: '40+', label: 'Western Cape suburbs covered' },
+    { value: '~45s', label: 'average diagnosis time' },
+];
 
 const TESTIMONIALS = [
     {
-        initials: 'TK',
-        name: 'Thandi K.',
-        suburb: 'Newlands',
-        fault: 'Roof leak',
-        quote: "I had a damp mark on my lounge ceiling for two years. Mendr told me exactly what it was in less than a minute — turned out it was a failed flashing, not a pipe like I thought. The contractor we found quoted me R3,200 and had it sorted in a day. I wish this existed years ago.",
+        quote:
+            'I was about to pay R8,500 to “waterproof the whole bathroom.” Mendr told me it was a single failed silicone seal. The plumber came, confirmed it, charged me R600.',
+        name: 'Sarah',
+        suburb: 'Tokai',
+        initials: 'S',
     },
     {
-        initials: 'GP',
-        name: 'Greg P.',
-        suburb: 'Hout Bay',
-        fault: 'Electrical',
-        quote: "I was convinced I needed to rewire my entire kitchen. Mendr's diagnosis said it was probably just a tripped RCBO and I should check the DB board first. Saved me calling an electrician immediately and panicking. Turned out the diagnosis was right.",
+        quote:
+            'I sent the same Mendr report to three electricians instead of explaining the problem three times. The quotes were finally comparable. Easier decision than I expected.',
+        name: 'Marius',
+        suburb: 'Stellenbosch',
+        initials: 'M',
     },
     {
-        initials: 'NV',
-        name: 'Nadia V.',
-        suburb: 'Somerset West',
-        fault: 'Geyser diagnosis',
-        quote: "The contractor I found through Mendr didn't just fix the problem — he explained everything. I think the diagnostic report sets the tone. He came knowing what the issue was, and so did I.",
+        quote:
+            'Used it for damp. The report said penetrating damp, not rising damp. Saved me from booking the wrong kind of specialist.',
+        name: 'Naledi',
+        suburb: 'Sea Point',
+        initials: 'N',
     },
-] as const;
+];
 
-export function Land1Testimonials() {
+export function Land1TrustBand() {
     return (
         <section className="bg-[#FAFAF8] py-20 sm:py-24">
             <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
                 <div className="mx-auto mb-12 max-w-2xl text-center">
-                    <p className="text-sm font-medium uppercase tracking-widest text-[#C45C3A]">What homeowners say</p>
-                    <h2 className="mt-3 font-[family-name:var(--font-playfair)] text-3xl font-bold text-[#1C2B3A] sm:text-4xl">
-                        Real diagnoses. Real relief.
+                    <h2 className="font-[family-name:var(--font-playfair)] text-3xl font-bold text-[#1C2B3A] sm:text-4xl">
+                        Honest About What This Is — And Isn&rsquo;t
                     </h2>
                 </div>
+
+                {/* Stat ribbon */}
+                <div className="mb-12 grid grid-cols-2 gap-4 rounded-2xl border border-[#E8E4DD] bg-white px-6 py-6 sm:grid-cols-4">
+                    {STATS.map((s) => (
+                        <div key={s.label} className="text-center">
+                            <p className="font-[family-name:var(--font-playfair)] text-2xl font-bold text-[#1C2B3A] sm:text-3xl">
+                                {s.value}
+                            </p>
+                            <p className="mt-1 text-xs text-[#2F3E4E]/60 sm:text-sm">{s.label}</p>
+                        </div>
+                    ))}
+                </div>
+
+                {/* Testimonials */}
                 <div className="grid gap-6 sm:grid-cols-3">
                     {TESTIMONIALS.map((t) => (
                         <div
                             key={t.name}
                             className="flex flex-col rounded-2xl border border-[#E8E4DD] bg-white p-6 shadow-sm"
                         >
-                            <div className="flex items-center gap-3">
-                                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#C45C3A] text-sm font-semibold text-white">
+                            <div className="flex gap-0.5">
+                                {[...Array(5)].map((_, i) => (
+                                    <Star
+                                        key={i}
+                                        className="h-3.5 w-3.5 fill-[#C8973A] text-[#C8973A]"
+                                    />
+                                ))}
+                            </div>
+                            <p className="mt-3 flex-1 text-sm leading-relaxed text-[#2F3E4E]/75">
+                                &ldquo;{t.quote}&rdquo;
+                            </p>
+                            <div className="mt-4 flex items-center gap-3">
+                                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#C45C3A] text-sm font-semibold text-white">
                                     {t.initials}
                                 </div>
                                 <div>
                                     <p className="text-sm font-semibold text-[#1C2B3A]">{t.name}</p>
                                     <p className="text-xs text-[#2F3E4E]/50">{t.suburb}</p>
                                 </div>
-                                <span className="ml-auto rounded-full bg-[#F4EFE6] px-2.5 py-1 text-xs font-medium text-[#C45C3A]">
-                                    {t.fault}
-                                </span>
                             </div>
-                            <div className="mt-3 flex gap-0.5">
-                                {[...Array(5)].map((_, i) => (
-                                    <Star key={i} className="h-3.5 w-3.5 fill-[#C8973A] text-[#C8973A]" />
-                                ))}
-                            </div>
-                            <p className="mt-3 flex-1 text-sm leading-relaxed text-[#2F3E4E]/70">&ldquo;{t.quote}&rdquo;</p>
                         </div>
                     ))}
                 </div>
+
+                <p className="mx-auto mt-10 max-w-3xl text-center text-sm italic leading-relaxed text-[#2F3E4E]/55">
+                    Mendr&rsquo;s diagnosis is a strong starting point — it&rsquo;s not a final verdict. Every
+                    report comes with a confidence score so you know how sure it is. A tradesperson still needs
+                    to come look. We&rsquo;d rather be useful and honest than confident and wrong.
+                </p>
             </div>
         </section>
     );
 }
 
-/* ─── Cape Town Section ─────────────────────────────────────────────────── */
-
-export function Land1CapeTown() {
-    return (
-        <section className="bg-[#E8E4DD] py-20 sm:py-24">
-            <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-                <div className="grid items-center gap-12 lg:grid-cols-2">
-                    {/* Visual panel */}
-                    <div className="order-2 lg:order-1 rounded-2xl bg-[#1C2B3A] p-8 text-white">
-                        <p className="text-xs font-medium uppercase tracking-widest text-[#6B8F71]">
-                            Cape Town specifics
-                        </p>
-                        <div className="mt-6 space-y-4">
-                            {[
-                                {
-                                    label: 'Penetrating damp',
-                                    detail: 'South-facing walls, winter rain. Very common in Cape Dutch and Victorian homes.',
-                                },
-                                {
-                                    label: 'Geyser pressure issues',
-                                    detail: 'Cape Town altitude and aging infrastructure mean geysers behave differently here.',
-                                },
-                                {
-                                    label: 'South Easter damage',
-                                    detail: 'Roof tiles, shade sails, garden walls — the Cape Doctor causes specific fault patterns.',
-                                },
-                                {
-                                    label: 'Coastal corrosion',
-                                    detail: 'Salt air accelerates metal degradation — gutters, roofs, metalwork all degrade faster.',
-                                },
-                            ].map((item) => (
-                                <div key={item.label} className="flex gap-3">
-                                    <CheckCircle className="mt-0.5 h-4 w-4 shrink-0 text-[#6B8F71]" strokeWidth={1.5} />
-                                    <div>
-                                        <p className="text-sm font-semibold text-white">{item.label}</p>
-                                        <p className="text-xs text-white/60">{item.detail}</p>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                        <div className="mt-8 border-t border-white/10 pt-6 grid grid-cols-3 gap-4 text-center">
-                            {[
-                                { v: 'Cape Dutch', l: 'Architecture' },
-                                { v: 'Victorian', l: 'Architecture' },
-                                { v: '1970s brick', l: 'Construction' },
-                            ].map((s) => (
-                                <div key={s.v}>
-                                    <p className="text-xs font-semibold text-white">{s.v}</p>
-                                    <p className="text-xs text-white/50">{s.l}</p>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                    {/* Copy panel */}
-                    <div className="order-1 lg:order-2">
-                        <p className="text-sm font-medium uppercase tracking-widest text-[#C45C3A]">Why local matters</p>
-                        <h2 className="mt-3 font-[family-name:var(--font-playfair)] text-3xl font-bold text-[#1C2B3A] sm:text-4xl">
-                            Cape Town has a unique set of home problems.
-                        </h2>
-                        <p className="mt-5 text-base leading-relaxed text-[#2F3E4E]/80">
-                            Penetrating damp from south-facing walls. Geyser pressure systems that behave differently at
-                            altitude. Termites in the Winelands corridor. Rising damp in older Woodstock builds.
-                        </p>
-                        <p className="mt-4 text-base leading-relaxed text-[#2F3E4E]/80">
-                            Cape Town&apos;s stock of Victorian and Cape Dutch homes needs contractors who understand Cape Town
-                            materials, Cape Town weather, and Cape Town construction methods. Mendr&apos;s diagnosis engine is
-                            trained on South African fault data — not UK leaks or American HVAC problems.
-                        </p>
-                        <p className="mt-4 text-base font-medium text-[#1C2B3A]">
-                            We&apos;re not a national platform that happens to serve Cape Town. We&apos;re a Cape Town platform,
-                            full stop.
-                        </p>
-                        <div className="mt-8 flex flex-wrap gap-2">
-                            {['Cape Town Metro', 'Winelands', 'Helderberg', 'Overberg'].map((area) => (
-                                <span
-                                    key={area}
-                                    className="rounded-full border border-[#C45C3A]/20 bg-white px-3 py-1 text-xs font-medium text-[#C45C3A]"
-                                >
-                                    {area}
-                                </span>
-                            ))}
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </section>
-    );
-}
-
-/* ─── Coverage ──────────────────────────────────────────────────────────── */
+/* ─── Section 1.7 — Coverage ─────────────────────────────────────────────── */
 
 const SUBURBS = [
+    'Cape Town · City Bowl',
+    'Gardens',
+    'Sea Point',
+    'Green Point',
+    'Camps Bay',
     'Atlantic Seaboard',
-    'Southern Suburbs',
-    'Northern Suburbs',
-    'Winelands',
-    'Helderberg',
+    'Observatory',
+    'Woodstock',
+    'Salt River',
+    'Pinelands',
+    'Rondebosch',
+    'Newlands',
+    'Claremont',
+    'Kenilworth',
+    'Wynberg',
+    'Tokai',
+    'Constantia',
     'Hout Bay',
-    'Cape Flats',
-    'Overberg',
+    'Fish Hoek',
+    'Bellville',
+    'Durbanville',
+    'Stellenbosch',
+    'Somerset West',
+    'Paarl',
 ];
 
 export function Land1Coverage() {
     return (
-        <section id="coverage" className="scroll-mt-20 bg-white py-20 sm:py-24">
+        <section id="coverage" className="scroll-mt-20 bg-[#E8E4DD] py-20 sm:py-24">
             <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-                <div className="grid items-center gap-12 lg:grid-cols-2">
+                <div className="grid items-start gap-12 lg:grid-cols-2">
+                    {/* Left: copy + map */}
                     <div>
-                        <p className="text-sm font-medium uppercase tracking-widest text-[#C45C3A]">Where we operate</p>
+                        <p className="text-sm font-medium uppercase tracking-widest text-[#C45C3A]">
+                            Coverage
+                        </p>
                         <h2 className="mt-3 font-[family-name:var(--font-playfair)] text-3xl font-bold text-[#1C2B3A] sm:text-4xl">
-                            Currently serving the Western Cape.
+                            Built For The Western Cape
                         </h2>
-                        <p className="mt-4 text-base leading-relaxed text-[#2F3E4E]/70">
-                            Mendr launched in the Western Cape because we wanted to get it right before we scaled. Our
-                            contractor network covers the full Cape Town metro and the Winelands corridor.
+                        <p className="mt-5 text-base leading-relaxed text-[#2F3E4E]/75">
+                            Mendr works for homeowners across the Western Cape — from the City Bowl and Atlantic
+                            Seaboard through the Southern Suburbs, the Northern Suburbs, the Helderberg, and out
+                            into the Winelands. If you can take a photo and describe what you&rsquo;re seeing, we
+                            can produce a report. Provider matching is most active in the metro and expanding as
+                            the network grows.
                         </p>
-                        <div className="mt-6 flex flex-wrap gap-2">
-                            {SUBURBS.map((s) => (
-                                <span
-                                    key={s}
-                                    className="flex items-center gap-1.5 rounded-full bg-[#F4EFE6] px-3 py-1.5 text-sm text-[#1C2B3A]"
-                                >
-                                    <MapPin className="h-3 w-3 text-[#C45C3A]" />
-                                    {s}
-                                </span>
-                            ))}
-                        </div>
-                        <p className="mt-6 text-sm text-[#2F3E4E]/50">
-                            Expanding to Knysna and George corridor: Q3 2025. Nationwide when we&apos;re ready.
-                        </p>
-                        <div className="mt-6 rounded-xl border border-[#E8E4DD] bg-[#F4EFE6] p-4">
-                            <p className="text-sm font-medium text-[#1C2B3A]">Not in your area yet?</p>
-                            <p className="mt-1 text-sm text-[#2F3E4E]/60">
-                                Join the waitlist and we&apos;ll let you know the week we cover your suburb.
-                            </p>
-                            <div className="mt-3 flex gap-2">
-                                <input
-                                    type="email"
-                                    placeholder="your@email.com"
-                                    className="flex-1 rounded-lg border border-[#E8E4DD] bg-white px-3 py-2 text-sm text-[#1C2B3A] placeholder:text-[#2F3E4E]/30 focus:outline-none focus:ring-2 focus:ring-[#C45C3A]/20"
+
+                        <div
+                            className="relative mt-8 overflow-hidden rounded-2xl bg-[#1C2B3A] p-6"
+                            aria-label="Map of the Western Cape showing Mendr service zones across Cape Town, the Helderberg, and the Cape Winelands."
+                        >
+                            <svg
+                                viewBox="0 0 240 180"
+                                className="mx-auto h-44 w-full opacity-80"
+                                fill="none"
+                                aria-hidden
+                            >
+                                <path
+                                    d="M40,30 C70,20 130,15 180,40 C210,55 220,85 215,115 C205,145 175,165 140,170 C100,175 60,160 35,135 C15,110 18,75 30,55 C35,45 40,38 40,30 Z"
+                                    fill="#C45C3A"
+                                    opacity="0.25"
                                 />
-                                <Button
-                                    size="sm"
-                                    className="shrink-0 bg-[#1C2B3A] text-white hover:bg-[#1C2B3A]/90"
-                                >
-                                    Notify me
-                                </Button>
-                            </div>
+                                <path
+                                    d="M40,30 C70,20 130,15 180,40 C210,55 220,85 215,115 C205,145 175,165 140,170 C100,175 60,160 35,135 C15,110 18,75 30,55 C35,45 40,38 40,30 Z"
+                                    stroke="#C45C3A"
+                                    strokeWidth="1.5"
+                                />
+                                {[
+                                    [90, 90],
+                                    [110, 80],
+                                    [130, 95],
+                                    [100, 110],
+                                    [140, 85],
+                                    [85, 110],
+                                    [115, 115],
+                                    [155, 100],
+                                    [125, 70],
+                                    [70, 95],
+                                ].map(([cx, cy], i) => (
+                                    <circle
+                                        key={i}
+                                        cx={cx}
+                                        cy={cy}
+                                        r="3.5"
+                                        fill="#6B8F71"
+                                        opacity="0.9"
+                                    />
+                                ))}
+                            </svg>
+                            <p className="mt-4 text-center text-xs text-white/50">
+                                Western Cape · Cape Town Metro · Helderberg · Winelands
+                            </p>
                         </div>
                     </div>
-                    {/* Stylised map placeholder */}
-                    <div className="relative overflow-hidden rounded-2xl bg-[#1C2B3A] p-1">
-                        <div className="rounded-xl bg-[#243547] p-8 text-center">
-                            <div className="mx-auto flex h-48 w-48 items-center justify-center">
-                                {/* Western Cape silhouette approximation */}
-                                <svg viewBox="0 0 200 200" className="h-full w-full opacity-60" fill="none">
-                                    <path
-                                        d="M60,20 C80,15 120,10 150,30 C170,45 180,70 175,100 C168,130 145,155 120,165 C95,175 65,170 45,150 C25,130 20,100 30,75 C40,50 45,25 60,20 Z"
-                                        fill="#C45C3A"
-                                        opacity="0.4"
-                                    />
-                                    <path
-                                        d="M60,20 C80,15 120,10 150,30 C170,45 180,70 175,100 C168,130 145,155 120,165 C95,175 65,170 45,150 C25,130 20,100 30,75 C40,50 45,25 60,20 Z"
-                                        stroke="#C45C3A"
-                                        strokeWidth="2"
-                                        fill="none"
-                                    />
-                                    {/* Dots for coverage areas */}
-                                    {[
-                                        [100, 100],
-                                        [80, 90],
-                                        [120, 85],
-                                        [90, 115],
-                                        [130, 110],
-                                        [70, 105],
-                                        [110, 130],
-                                        [95, 75],
-                                    ].map(([cx, cy], i) => (
-                                        <circle key={i} cx={cx} cy={cy} r="5" fill="#6B8F71" opacity="0.9" />
-                                    ))}
-                                </svg>
-                            </div>
-                            <p className="mt-4 text-sm font-medium text-white/80">Western Cape</p>
-                            <p className="text-xs text-white/40">8 areas covered · Expanding Q3 2025</p>
+
+                    {/* Right: suburb grid */}
+                    <div>
+                        <p className="text-sm font-medium uppercase tracking-widest text-[#1C2B3A]/50">
+                            Suburbs covered
+                        </p>
+                        <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3">
+                            {SUBURBS.map((s) => {
+                                const slug = s
+                                    .toLowerCase()
+                                    .replace(/[·]/g, '')
+                                    .replace(/\s+/g, '-')
+                                    .replace(/[^a-z0-9-]/g, '');
+                                return (
+                                    <Link
+                                        key={s}
+                                        href={`/find-a-pro/${slug}`}
+                                        className="flex items-center gap-2 text-sm text-[#1C2B3A] transition-colors hover:text-[#C45C3A]"
+                                    >
+                                        <MapPin
+                                            className="h-3 w-3 text-[#C45C3A]"
+                                            strokeWidth={1.75}
+                                        />
+                                        <span className="truncate">{s}</span>
+                                    </Link>
+                                );
+                            })}
                         </div>
+                        <p className="mt-6 text-sm text-[#2F3E4E]/55">
+                            Don&rsquo;t see your suburb? Mendr&rsquo;s diagnosis still works anywhere in the
+                            Western Cape — provider matching is expanding outward from the metro.
+                        </p>
                     </div>
                 </div>
             </div>
@@ -431,53 +507,91 @@ export function Land1Coverage() {
     );
 }
 
-/* ─── Final CTA ─────────────────────────────────────────────────────────── */
+/* ─── Section 1.9 — Final CTA ────────────────────────────────────────────── */
 
 export function Land1FinalCta() {
     return (
         <section className="bg-[#C45C3A] py-20 sm:py-24">
             <div className="mx-auto max-w-2xl px-4 text-center sm:px-6">
                 <h2 className="font-[family-name:var(--font-playfair)] text-3xl font-bold text-white sm:text-4xl">
-                    What&apos;s that mark on your ceiling?
+                    Find Out What&rsquo;s Likely Wrong — Before You Pay For A Call-Out
                 </h2>
-                <p className="mt-4 text-lg text-white/80">Find out in 60 seconds. Free.</p>
+                <p className="mt-4 text-lg text-white/80">
+                    Free for Western Cape homeowners. No account, no payment details. Your report stays yours.
+                </p>
                 <Button
                     asChild
                     size="lg"
-                    className="mt-8 bg-white font-semibold text-[#C45C3A] hover:bg-white/90 shadow-lg"
+                    className="mt-8 bg-white font-semibold text-[#C45C3A] shadow-lg hover:bg-white/90"
                 >
-                    <Link href="/start">Upload a photo and start →</Link>
+                    <Link href="/start">Generate Free Mendr Report</Link>
                 </Button>
-                <p className="mt-4 text-sm text-white/60">No account. No payment. Just an answer.</p>
+                <p className="mt-4 text-sm text-white/60">Under 60 seconds · Works on any phone</p>
             </div>
         </section>
     );
 }
 
-/* ─── Footer ────────────────────────────────────────────────────────────── */
+/* ─── Section 1.10 — Footer ──────────────────────────────────────────────── */
 
 export function Land1Footer() {
+    const year = new Date().getFullYear();
     return (
         <footer className="bg-[#1C2B3A] py-14">
             <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-                <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-4">
-                    <div className="sm:col-span-2 lg:col-span-1">
+                <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-3">
+                    {/* Column 1 — wordmark + tagline + socials */}
+                    <div>
                         <p className="text-base font-semibold text-white">
                             mend<span className="text-[#C45C3A]">r</span>
                         </p>
                         <p className="mt-3 text-sm leading-relaxed text-white/50">
-                            Free AI-powered home fault diagnosis for Western Cape homeowners. Know what&apos;s wrong before
-                            you call anyone.
+                            Built in Cape Town. For the Western Cape.
                         </p>
+                        <div className="mt-5 flex gap-3 text-xs uppercase tracking-wider text-white/30">
+                            <a
+                                href="https://x.com/"
+                                className="transition-colors hover:text-white"
+                                aria-label="Mendr on X"
+                            >
+                                X
+                            </a>
+                            <a
+                                href="https://linkedin.com/"
+                                className="transition-colors hover:text-white"
+                                aria-label="Mendr on LinkedIn"
+                            >
+                                LinkedIn
+                            </a>
+                            <a
+                                href="https://instagram.com/"
+                                className="transition-colors hover:text-white"
+                                aria-label="Mendr on Instagram"
+                            >
+                                Instagram
+                            </a>
+                            <a
+                                href="https://facebook.com/"
+                                className="transition-colors hover:text-white"
+                                aria-label="Mendr on Facebook"
+                            >
+                                Facebook
+                            </a>
+                        </div>
                     </div>
+
+                    {/* Column 2 — Explore */}
                     <div>
-                        <p className="text-xs font-semibold uppercase tracking-wider text-white/30">Product</p>
+                        <p className="text-xs font-semibold uppercase tracking-wider text-white/30">
+                            Explore
+                        </p>
                         <nav className="mt-4 flex flex-col gap-2.5">
                             {[
-                                ['How it works', '#how-it-works'],
+                                ['How It Works', '#how-it-works'],
+                                ['Why Mendr', '#why'],
+                                ['Trades', '#trades'],
                                 ['Coverage', '#coverage'],
                                 ['FAQ', '#faq'],
-                                ['Get a diagnosis', '/start'],
                             ].map(([label, href]) => (
                                 <Link
                                     key={label}
@@ -489,10 +603,16 @@ export function Land1Footer() {
                             ))}
                         </nav>
                     </div>
+
+                    {/* Column 3 — Mendr */}
                     <div>
-                        <p className="text-xs font-semibold uppercase tracking-wider text-white/30">Company</p>
+                        <p className="text-xs font-semibold uppercase tracking-wider text-white/30">
+                            Mendr
+                        </p>
                         <nav className="mt-4 flex flex-col gap-2.5">
                             {[
+                                ['About', '/about'],
+                                ['For Providers', '/landing2'],
                                 ['Contact', '/contact'],
                                 ['Privacy Policy', '/privacy'],
                                 ['Terms of Service', '/terms'],
@@ -507,29 +627,11 @@ export function Land1Footer() {
                             ))}
                         </nav>
                     </div>
-                    <div>
-                        <p className="text-xs font-semibold uppercase tracking-wider text-white/30">Contractors</p>
-                        <nav className="mt-4 flex flex-col gap-2.5">
-                            {[
-                                ['How it works for pros', '/landing2#how-it-works'],
-                                ['Pricing', '/landing2#pricing'],
-                                ['Apply now', '/contractors/network'],
-                                ['FAQ for contractors', '/landing2#faq'],
-                            ].map(([label, href]) => (
-                                <Link
-                                    key={label}
-                                    href={href}
-                                    className="text-sm text-white/50 transition-colors hover:text-white"
-                                >
-                                    {label}
-                                </Link>
-                            ))}
-                        </nav>
-                    </div>
                 </div>
-                <div className="mt-12 border-t border-white/10 pt-8 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                    <p className="text-xs text-white/30">© {new Date().getFullYear()} Mendr Technologies (Pty) Ltd, Cape Town.</p>
-                    <p className="text-xs text-white/20">Built in the Western Cape.</p>
+
+                <div className="mt-12 flex flex-col gap-2 border-t border-white/10 pt-8 sm:flex-row sm:items-center sm:justify-between">
+                    <p className="text-xs text-white/30">© {year} Mendr. Built in Cape Town.</p>
+                    <p className="text-xs text-white/30">Diagnose. Decide. Done.</p>
                 </div>
             </div>
         </footer>
