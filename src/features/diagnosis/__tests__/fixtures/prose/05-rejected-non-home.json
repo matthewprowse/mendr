@@ -1,0 +1,10 @@
+{
+    "name": "rejected prose - warm helpful redirect, no checklist",
+    "raw": "{\"thought\":\"The image shows what appears to be a household pet rather than a home maintenance issue. There are no visible components, fittings, fixtures, or structural elements that would warrant a diagnosis. I cannot identify any fault to investigate because nothing in the frame is a maintenance subject. The most helpful response is to gently redirect the user to upload an image of the actual issue or describe it in text.\",\"diagnosis\":\"Photo Not Related To Home Maintenance\",\"message\":\"The photo you uploaded does not appear to show a home maintenance issue. Mendr helps Western Cape homeowners diagnose problems with plumbing, electrical, security, building, and similar trades.\\n\\nIf you do have a home issue you would like help with, upload a photo of the affected area or describe the problem in a few words.\",\"action_required\":\"\",\"contractor_checklist\":[],\"homeowner_prep\":\"\",\"image_descriptions\":[\"Image shows a household subject that is not a home maintenance issue.\"],\"image_observations\":[],\"clarification_questions\":[],\"diy_verification\":\"\",\"photo_request\":\"A photo of the home maintenance issue you would like diagnosed, such as a leak, a fitting, or a damaged area, would let me help.\",\"confidence_drivers\":[\"No home maintenance subject visible\"]}",
+    "expected": {
+        "diagnosis": "Photo Not Related To Home Maintenance",
+        "contractor_checklist_count": 0,
+        "homeowner_prep_empty": true,
+        "image_observations_count": 0
+    }
+}

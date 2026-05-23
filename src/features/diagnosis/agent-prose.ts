@@ -324,9 +324,82 @@ export function normaliseImageObservations(raw: unknown): ImageObservation[] {
         });
 }
 
+/**
+ * Parse + validate a raw Gemini JSON response into a ProseResult.
+ *
+ * The parser/validator boundary used by `runProseGeneration`. Pulled out as a
+ * pure function so it can be fixture-tested against well-formed, malformed,
+ * empty, and refusal model outputs without mocking the Gemini SDK.
+ *
+ * Behaviour:
+ *   - Empty/whitespace input → null (caller treats as requestFailed)
+ *   - Invalid JSON → null
+ *   - Non-object JSON (e.g. an array, a string literal) → null
+ *   - Valid object → coerces all expected fields (arrays defaulted to []
+ *     when missing, strings defaulted to ''), normalises image_observations,
+ *     derives image_descriptions when missing, and enforces the minimum
+ *     thought length by substituting the fallback when too short.
+ */
+export function parseProseResponse(raw: string): ProseResult | null {
+    const trimmed = typeof raw === 'string' ? raw.trim() : '';
+    if (!trimmed) return null;
+    let parsed: ProseResult;
+    try {
+        parsed = JSON.parse(trimmed) as ProseResult;
+    } catch {
+        return null;
+    }
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+        return null;
+    }
+
+    // Guarantee thought meets minimum length
+    if (!parsed.thought || parsed.thought.trim().length < 200) {
+        parsed.thought = FALLBACK_PROSE.thought;
+    }
+
+    // Guarantee array fields
+    if (!Array.isArray(parsed.image_descriptions)) {
+        parsed.image_descriptions = [];
+    }
+    if (!Array.isArray(parsed.clarification_questions)) {
+        parsed.clarification_questions = [];
+    }
+    if (!Array.isArray(parsed.contractor_checklist)) {
+        parsed.contractor_checklist = [];
+    }
+    if (typeof parsed.homeowner_prep !== 'string') {
+        parsed.homeowner_prep = '';
+    }
+    if (typeof parsed.diy_verification !== 'string') {
+        parsed.diy_verification = '';
+    }
+    if (typeof parsed.photo_request !== 'string') {
+        parsed.photo_request = '';
+    }
+    if (!Array.isArray(parsed.confidence_drivers)) {
+        parsed.confidence_drivers = [];
+    }
+
+    // Validate image_observations and derive image_descriptions when missing.
+    parsed.image_observations = normaliseImageObservations(
+        (parsed as { image_observations?: unknown }).image_observations,
+    );
+    if (
+        (!parsed.image_descriptions || parsed.image_descriptions.length === 0) &&
+        parsed.image_observations.length > 0
+    ) {
+        parsed.image_descriptions = parsed.image_observations
+            .map((o) => o.primary_observation)
+            .filter((s) => typeof s === 'string' && s.trim().length > 0);
+    }
+
+    return parsed;
+}
+
 // ── Public API ─────────────────────────────────────────────────────────────────
 
-const FALLBACK_PROSE: ProseResult = {
+export const FALLBACK_PROSE: ProseResult = {
     thought:
         'Something about this image is not clear enough for a confident diagnosis. Uploading a sharper or closer photo of the problem area will help.',
     diagnosis: 'Unclear - More Detail Needed',
@@ -438,72 +511,19 @@ export async function runProseGeneration(params: {
             return { ...FALLBACK_PROSE, requestFailed: true };
         }
 
-        if (!raw) {
-            console.error('[agent-prose] empty model text', {
+        const parsed = parseProseResponse(raw);
+        if (!parsed) {
+            const reason = raw ? 'JSON parse failed' : 'empty model text';
+            console.error(`[agent-prose] ${reason}`, raw ? raw.slice(0, 600) : {
                 cand: result.response.candidates?.length ?? 0,
             });
             logPipelineStep({
                 stepName: 'agent-prose', status: 'error', durationMs: Date.now() - stepStart,
                 conversationId: params.ctx?.conversationId, userId: params.ctx?.userId,
-                modelName: GEMINI_MODEL_NAME, errorMessage: 'empty model text',
+                modelName: GEMINI_MODEL_NAME, errorMessage: reason,
                 promptTokens: usage?.promptTokenCount, completionTokens: usage?.candidatesTokenCount,
             });
             return { ...FALLBACK_PROSE, requestFailed: true };
-        }
-
-        let parsed: ProseResult;
-        try {
-            parsed = JSON.parse(raw) as ProseResult;
-        } catch {
-            console.error('[agent-prose] JSON.parse failed', raw.slice(0, 600));
-            logPipelineStep({
-                stepName: 'agent-prose', status: 'error', durationMs: Date.now() - stepStart,
-                conversationId: params.ctx?.conversationId, userId: params.ctx?.userId,
-                modelName: GEMINI_MODEL_NAME, errorMessage: 'JSON parse failed',
-                promptTokens: usage?.promptTokenCount, completionTokens: usage?.candidatesTokenCount,
-            });
-            return { ...FALLBACK_PROSE, requestFailed: true };
-        }
-
-        // Guarantee thought meets minimum length
-        if (!parsed.thought || parsed.thought.trim().length < 200) {
-            parsed.thought = FALLBACK_PROSE.thought;
-        }
-
-        // Guarantee array fields
-        if (!Array.isArray(parsed.image_descriptions)) {
-            parsed.image_descriptions = [];
-        }
-        if (!Array.isArray(parsed.clarification_questions)) {
-            parsed.clarification_questions = [];
-        }
-        if (!Array.isArray(parsed.contractor_checklist)) {
-            parsed.contractor_checklist = [];
-        }
-        if (typeof parsed.homeowner_prep !== 'string') {
-            parsed.homeowner_prep = '';
-        }
-        if (typeof parsed.diy_verification !== 'string') {
-            parsed.diy_verification = '';
-        }
-        if (typeof parsed.photo_request !== 'string') {
-            parsed.photo_request = '';
-        }
-        if (!Array.isArray(parsed.confidence_drivers)) {
-            parsed.confidence_drivers = [];
-        }
-
-        // Validate image_observations and derive image_descriptions when missing.
-        parsed.image_observations = normaliseImageObservations(
-            (parsed as { image_observations?: unknown }).image_observations,
-        );
-        if (
-            (!parsed.image_descriptions || parsed.image_descriptions.length === 0) &&
-            parsed.image_observations.length > 0
-        ) {
-            parsed.image_descriptions = parsed.image_observations
-                .map((o) => o.primary_observation)
-                .filter((s) => typeof s === 'string' && s.trim().length > 0);
         }
 
         logPipelineStep({

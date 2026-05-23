@@ -8,84 +8,26 @@ import { formatWeekdayDescriptionsTo24h } from '@/lib/providers/format-weekday-d
 import { isOpenNowFromWeekdayDescriptions } from '@/lib/providers/open-status';
 import { buildProviderQuery } from '@/lib/providers/query-builder';
 import { rankProviders, getISOWeekKey, compositeScore } from '@/lib/providers/ranking';
-import type { ProviderItem, ProvidersRequestBody, ProvidersResponseBody } from '@/lib/providers/contracts';
+import type { ProviderItem, ProvidersResponseBody } from '@/lib/providers/contracts';
 import { buildSearchCacheKey } from '@/lib/providers/cache';
-import { withTimeout } from '@/lib/providers/review-enrichment';
 import { toGooglePlaceId } from '@/lib/providers/persistence';
-import { isProviderRelevantForTrade } from '@/lib/providers/relevance';
 import { normalizePlaceId } from '@/lib/providers/place-id';
-import { normalizeProviderName } from '@/lib/providers/provider-display-name';
-import { getPlaceServices } from '@/lib/providers/place-services';
-import {
-    fetchPlaceReviewsFromGoogle,
-    mapGoogleReviewsToInput,
-} from '@/lib/providers/google-place-reviews';
 import {
     SEARCH_CACHE_TTL_MS,
-    TWENTY_FOUR_MONTHS_MS,
-    TEXT_SEARCH_MAX_EXTRA_PAGES,
-    RETAIL_TYPES,
-    REVIEW_SYNC_TTL_MS,
 } from '@/lib/providers/constants';
-
-/** Straight-line distance in km. Enforces the search radius when Places routing legs are missing (locationBias can still return far-away matches). */
-function greatCircleDistanceKm(
-    lat1: number,
-    lng1: number,
-    lat2: number,
-    lng2: number
-): number {
-    const R = 6371;
-    const toRad = (d: number) => (d * Math.PI) / 180;
-    const dLat = toRad(lat2 - lat1);
-    const dLon = toRad(lng2 - lng1);
-    const a =
-        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-        Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    return R * c;
-}
-
-function getProviderResultLimitByRadius(radiusMeters: number): number {
-    if (radiusMeters >= 50_000) return 100;
-    if (radiusMeters >= 20_000) return 40;
-    if (radiusMeters >= 10_000) return 20;
-    return 10;
-}
-
-function getTargetPlacesCountByRadius(radiusMeters: number): number {
-    const providerLimit = getProviderResultLimitByRadius(radiusMeters);
-    // Pull enough places to give ranking headroom; cap at 120 to keep API costs bounded.
-    return Math.min(120, Math.max(20, providerLimit + 20));
-}
-
-const PLACES_SEARCH_TEXT_URL = 'https://places.googleapis.com/v1/places:searchText';
-
-const PLACES_SEARCH_TEXT_FIELD_MASK =
-    'places.id,places.displayName,places.formattedAddress,places.rating,places.userRatingCount,places.nationalPhoneNumber,places.websiteUri,places.location,places.types,places.reviews,places.editorialSummary,places.reviewSummary,places.regularOpeningHours,places.currentOpeningHours,routingSummaries,nextPageToken';
-
-function isTransientPlacesHttpStatus(status: number): boolean {
-    return status === 503 || status === 502 || status === 429;
-}
-
-/** Single retry on 503 for transient Google outages. */
-async function fetchPlacesSearchText(apiKey: string, bodyObj: Record<string, unknown>): Promise<Response> {
-    const init: RequestInit = {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'X-Goog-Api-Key': apiKey,
-            'X-Goog-FieldMask': PLACES_SEARCH_TEXT_FIELD_MASK,
-        },
-        body: JSON.stringify(bodyObj),
-    };
-    let res = await fetch(PLACES_SEARCH_TEXT_URL, init);
-    if (res.status === 503) {
-        await new Promise((r) => setTimeout(r, 400));
-        res = await fetch(PLACES_SEARCH_TEXT_URL, init);
-    }
-    return res;
-}
+import {
+    greatCircleDistanceKm,
+    getProviderResultLimitByRadius,
+} from './handler-distance';
+import {
+    fetchPlacesSearchText,
+    isTransientPlacesHttpStatus,
+    resolvePlacesApiKey,
+} from './handler-places-client';
+import { selectFastProviders } from './handler-fast-map';
+import { parseProvidersRequest } from './handler-request';
+import { performPlacesSearch } from './handler-places-fetch';
+import { scheduleProvidersBackgroundSync } from './handler-background-sync';
 
 export async function POST(req: NextRequest) {
     // ── Rate limit ─────────────────────────────────────────────────────────────
@@ -100,15 +42,10 @@ export async function POST(req: NextRequest) {
             if (stageKey) stageTimings[stageKey] = elapsed;
         };
         const raw = await req.text();
-        if (!raw.trim()) {
-            return NextResponse.json({ error: 'Request body required' }, { status: 400 });
-        }
-        let body: ProvidersRequestBody;
-        try {
-            body = JSON.parse(raw) as ProvidersRequestBody;
-        } catch {
-            return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
-        }
+        const parseResult = await parseProvidersRequest(raw);
+        if (parseResult.kind === 'response') return parseResult.response;
+        const body = parseResult.parsed;
+        const { quickMode, radius } = parseResult;
 
         const startedAt = Date.now();
         let searchCacheHit = false;
@@ -118,14 +55,10 @@ export async function POST(req: NextRequest) {
             lat,
             lng,
             trade,
-            radius: customRadius,  // capped below
             pageToken,
             searchQuery: providedSearchQuery,
-            /** Optional specialty line from AI diagnosis (same as `conversations.diagnosis.trade_detail`). Refines Google text search. */
             tradeDetail,
-            quick,
         } = body;
-        const quickMode = quick === true;
         logStage('body parsed', 'body_parsed');
         let supabase: Awaited<ReturnType<typeof createSupabaseServerClient>> | null = null;
         let adminSupabase: Awaited<ReturnType<typeof createSupabaseAdminClient>> | null = null;
@@ -143,53 +76,23 @@ export async function POST(req: NextRequest) {
             // Non-fatal; we can still serve providers without DB caching.
         }
 
-        if (!lat || !lng || !trade) {
-            return NextResponse.json(
-                { error: 'Missing required parameters (lat, lng, trade)' },
-                { status: 400 }
-            );
-        }
-        if (pageToken && !providedSearchQuery) {
-            return NextResponse.json(
-                { error: 'searchQuery is required when using pageToken for pagination' },
-                { status: 400 }
-            );
-        }
-
-        // Prefer a server-only env var, but fall back to the NEXT_PUBLIC key so
-        // local/dev setups that only define NEXT_PUBLIC_* don't hard-fail.
-        const apiKey =
-            process.env.GOOGLE_PLACES_API_KEY ||
-            process.env.NEXT_PUBLIC_GOOGLE_PLACES_API_KEY ||
-            process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
-        const apiKeySource = process.env.GOOGLE_PLACES_API_KEY
-            ? 'GOOGLE_PLACES_API_KEY'
-            : process.env.NEXT_PUBLIC_GOOGLE_PLACES_API_KEY
-              ? 'NEXT_PUBLIC_GOOGLE_PLACES_API_KEY'
-              : process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
-                ? 'NEXT_PUBLIC_GOOGLE_MAPS_API_KEY'
-                : 'none';
-
+        const { apiKey, source: apiKeySource } = resolvePlacesApiKey();
         if (!apiKey) {
-            // eslint-disable-next-line no-console
             console.error(
-                'Google Places API key is missing. Set `GOOGLE_PLACES_API_KEY` (preferred) or `NEXT_PUBLIC_GOOGLE_PLACES_API_KEY`.'
+                'Google Places API key is missing. Set `GOOGLE_PLACES_API_KEY` (preferred) or `NEXT_PUBLIC_GOOGLE_PLACES_API_KEY`.',
             );
             return NextResponse.json(
                 {
                     error:
                         'Google Places API key is not configured (expected `GOOGLE_PLACES_API_KEY` or `NEXT_PUBLIC_GOOGLE_PLACES_API_KEY`)',
                 },
-                { status: 500 }
+                { status: 500 },
             );
         }
 
         console.warn(
             JSON.stringify({ type: 'providers_api_key_source', source: apiKeySource, keyLength: apiKey.length })
         );
-
-        // Cap at 50 km (50,000 m) — callers cannot request unbounded searches.
-        const radius = Math.min(Number(customRadius) || 50_000, 50_000);
 
         // 1. Trade → Places search query (used for API call and response; set once so cache path has it)
         const {
@@ -626,112 +529,44 @@ export async function POST(req: NextRequest) {
         );
 
         if (places.length === 0) {
-            // 2. Fetch providers from Google Places API
-            const response = await fetchPlacesSearchText(apiKey, {
-                textQuery: searchQuery,
-                ...(pageToken && { pageToken }),
-                routingParameters: {
-                    origin: {
-                        latitude: lat,
-                        longitude: lng,
-                    },
-                },
-                locationBias: {
-                    circle: {
-                        center: { latitude: lat, longitude: lng },
-                        radius: radius,
-                    },
-                },
-                pageSize: 20,
+            const searchResult = await performPlacesSearch({
+                apiKey,
+                lat: Number(lat),
+                lng: Number(lng),
+                radius,
+                searchQuery,
+                pageToken,
             });
 
-            if (!response.ok) {
-                const errorText = await response.text();
-                console.error(`Google Places API Error Details: ${errorText}`);
-                if (isTransientPlacesHttpStatus(response.status)) {
-                    logAiEvent({
-                        endpoint: 'providers',
-                        status: 'error',
-                        durationMs: Date.now() - startedAt,
-                        meta: {
-                            error: errorText.slice(0, 500),
-                            placesHttpStatus: response.status,
-                        },
-                    });
-                    const message =
-                        response.status === 429
-                            ? 'Google Places is rate-limiting requests. Try again in a moment.'
-                            : 'Google Places is temporarily unavailable. Try again shortly.';
-                    return NextResponse.json(
-                        {
-                            error: message,
-                            code: 'PLACES_UNAVAILABLE',
-                            providers: [],
-                        },
-                        { status: response.status === 429 ? 429 : 503 }
-                    );
-                }
-                throw new Error(`Google Places API error (${response.status}): ${errorText}`);
+            if (searchResult.kind === 'error') {
+                console.error(`Google Places API Error Details: ${searchResult.errorText}`);
+                logAiEvent({
+                    endpoint: 'providers',
+                    status: 'error',
+                    durationMs: Date.now() - startedAt,
+                    meta: {
+                        error: searchResult.errorText.slice(0, 500),
+                        placesHttpStatus: searchResult.status,
+                    },
+                });
+                const message =
+                    searchResult.status === 429
+                        ? 'Google Places is rate-limiting requests. Try again in a moment.'
+                        : 'Google Places is temporarily unavailable. Try again shortly.';
+                return NextResponse.json(
+                    {
+                        error: message,
+                        code: 'PLACES_UNAVAILABLE',
+                        providers: [],
+                    },
+                    { status: searchResult.status === 429 ? 429 : 503 },
+                );
             }
 
-            data = await response.json();
-            const rawPlaces = data.places || [];
-            const rawRouting = data.routingSummaries || [];
-
-            // Filter out retail stores (e.g. Builders Warehouse) — we want contractors/service providers, not shops that sell parts
-            const filtered: { place: any; routing: any }[] = [];
-            rawPlaces.forEach((p: any, i: number) => {
-                const types = (p.types || []) as string[];
-                const hasRetailType = types.some((t: string) => RETAIL_TYPES.has(t));
-                if (!hasRetailType) filtered.push({ place: p, routing: rawRouting[i] });
-            });
-            places = filtered.map((f) => f.place);
-            routingSummaries = filtered.map((f) => f.routing);
-
-            const seenPlaceIds = new Set<string>(places.map((p: any) => String(p?.id ?? '')));
-            let nextSearchToken = (data.nextPageToken as string | undefined) || null;
-            const targetPlacesCount = getTargetPlacesCountByRadius(radius);
-            while (
-                nextSearchToken &&
-                !pageToken &&
-                textSearchExtraPagesFetched < TEXT_SEARCH_MAX_EXTRA_PAGES &&
-                places.length < targetPlacesCount
-            ) {
-                textSearchExtraPagesFetched += 1;
-                const responseMore = await fetchPlacesSearchText(apiKey, {
-                    textQuery: searchQuery,
-                    pageToken: nextSearchToken,
-                    routingParameters: {
-                        origin: {
-                            latitude: lat,
-                            longitude: lng,
-                        },
-                    },
-                    locationBias: {
-                        circle: {
-                            center: { latitude: lat, longitude: lng },
-                            radius: radius,
-                        },
-                    },
-                    pageSize: 20,
-                });
-                if (!responseMore.ok) break;
-                const dataMore = await responseMore.json();
-                const rawMore = dataMore.places || [];
-                const routeMore = dataMore.routingSummaries || [];
-                rawMore.forEach((p: any, i: number) => {
-                    const pid = String(p?.id ?? '');
-                    if (!pid || seenPlaceIds.has(pid)) return;
-                    const types = (p.types || []) as string[];
-                    const hasRetailType = types.some((t: string) => RETAIL_TYPES.has(t));
-                    if (hasRetailType) return;
-                    seenPlaceIds.add(pid);
-                    places.push(p);
-                    routingSummaries.push(routeMore[i] ?? {});
-                });
-                nextSearchToken = (dataMore.nextPageToken as string | undefined) || null;
-                data.nextPageToken = dataMore.nextPageToken ?? null;
-            }
+            places = searchResult.places;
+            routingSummaries = searchResult.routingSummaries;
+            data = { nextPageToken: searchResult.nextPageToken };
+            textSearchExtraPagesFetched = searchResult.textSearchExtraPagesFetched;
 
             if (supabase && !pageToken && places.length > 0) {
                 pendingCacheWrite = {
@@ -774,162 +609,24 @@ export async function POST(req: NextRequest) {
         const rawPlacesMergedCount = places.length;
 
         // 3. Fast-path mapping for MVP: skip enrichment and heavy caching.
-        const mapPlacesToFastProviders = (
-            minRatingCount: number,
-            relevanceMode: 'strict' | 'relaxed' = 'strict'
-        ) =>
-            places
-                .map((place: any, index: number) => {
-                if (
-                    !isProviderRelevantForTrade({
-                        place,
-                        aiData: null,
-                        cached: null,
-                        tradeNorm,
-                        isBoreholeLikeDetail,
-                        mode: relevanceMode,
-                    })
-                ) {
-                    return null;
-                }
-
-                const placeLat = place.location?.latitude;
-                const placeLng = place.location?.longitude;
-                if (typeof placeLat !== 'number' || typeof placeLng !== 'number') {
-                    return null;
-                }
-                const radiusKm = radius / 1000;
-                const straightLineKm = greatCircleDistanceKm(
-                    Number(lat),
-                    Number(lng),
-                    placeLat,
-                    placeLng
-                );
-                if (straightLineKm > radiusKm + 0.5) {
-                    return null;
-                }
-
-                let distanceKm: number | null = null;
-                let durationText = '';
-                const leg = routingSummaries[index]?.legs?.[0];
-                const meters = leg?.distanceMeters;
-                if (typeof meters === 'number') {
-                    distanceKm = Number((meters / 1000).toFixed(1));
-                    if (meters > radius) {
-                        return null;
-                    }
-                } else {
-                    distanceKm = Number(straightLineKm.toFixed(1));
-                }
-                const durationRaw: string | undefined = leg?.duration;
-                if (durationRaw) {
-                    const secs = parseInt(durationRaw.replace('s', ''), 10);
-                    if (!Number.isNaN(secs)) {
-                        const mins = Math.round(secs / 60);
-                        durationText =
-                            mins < 60
-                                ? `${mins} min`
-                                : `${Math.floor(mins / 60)} h ${mins % 60} min`;
-                    }
-                }
-
-                const normalizedName = normalizeProviderName(
-                    place.displayName?.text || 'Unknown Provider'
-                );
-                const ratingCount = place.userRatingCount ?? 0;
-
-                if (ratingCount < minRatingCount) {
-                    return null;
-                }
-                const services = getPlaceServices(place.types);
-                const weekdayDescriptionsRaw = (place.regularOpeningHours as any)?.weekdayDescriptions;
-                const weekdayDescriptionsFormatted = formatWeekdayDescriptionsTo24h(weekdayDescriptionsRaw) ?? [];
-                const isOpen = isOpenNowFromWeekdayDescriptions(weekdayDescriptionsFormatted, new Date());
-                // "Mendr Summary" comes from our AI review summariser.
-                // Fallback: if the AI summary is missing (e.g. summarisation timeout/failure),
-                // show Google's editorial/review summary so the UI doesn't stay as a skeleton.
-                const finalSummary =
-                    (place?.editorialSummary?.text as string | undefined) ||
-                    (place?.editorialSummary as string | undefined) ||
-                    (place?.reviewSummary as string | undefined) ||
-                    (place?.reviewSummary?.text as string | undefined) ||
-                    '';
-
-                return {
-                    placeId: place.id,
-                    place_id: place.id?.replace?.(/^places\//, '') ?? place.id,
-                    name: normalizedName || 'Unknown Provider',
-                    address: place.formattedAddress || 'Address not available',
-                    rating: place.rating ?? null,
-                    ratingCount: place.userRatingCount ?? 0,
-                    latitude: place.location?.latitude ?? null,
-                    longitude: place.location?.longitude ?? null,
-                    distanceKm,
-                    durationText,
-                    website: place.websiteUri ?? null,
-                    phone: place.nationalPhoneNumber ?? null,
-                    summary: finalSummary,
-                    summaryMeta: null,
-                    services,
-                    isOpen,
-                    weekdayDescriptions: weekdayDescriptionsFormatted,
-                };
-            })
-                .filter(Boolean) as Array<{
-            placeId: string;
-            place_id?: string;
-            name: string;
-            address: string;
-            rating: number | null;
-            ratingCount: number;
-            latitude: number | null;
-            longitude: number | null;
-            distanceKm: number | null;
-            durationText: string;
-            website: string | null;
-            phone: string | null;
-            summary: string;
-            summaryMeta?: { kind: 'reviews'; pos: number; neg: number; neu: number } | null;
-            isOpen: boolean | null;
-        }>;
-
         const providerLimit = getProviderResultLimitByRadius(radius);
-        const baseMinRating = radius >= 20_000 ? 3 : 5;
-        let minRatingUsed = baseMinRating;
-        let relevanceModeUsed: 'strict' | 'relaxed' = 'strict';
-        let fastProviders = mapPlacesToFastProviders(baseMinRating, 'strict');
+        const fastResult = selectFastProviders({
+            places,
+            routingSummaries,
+            lat: Number(lat),
+            lng: Number(lng),
+            radius,
+            tradeNorm,
+            isBoreholeLikeDetail,
+            providerLimit,
+        });
+        let fastProviders = fastResult.providers;
+        const minRatingUsed = fastResult.minRatingUsed;
+        const relevanceModeUsed = fastResult.relevanceModeUsed;
         logStage(
-            `fast providers strict/base mapped (count=${fastProviders.length}, minReviews=${baseMinRating})`,
-            'fast_map_base'
+            `fast providers prepared (count=${fastProviders.length}, minReviews=${minRatingUsed}, mode=${relevanceModeUsed})`,
+            'fast_map_done',
         );
-        if (baseMinRating > 3 && fastProviders.length < providerLimit) {
-            minRatingUsed = 3;
-            fastProviders = mapPlacesToFastProviders(3, 'strict');
-            logStage(
-                `fast providers strict/relaxed-minReviews mapped (count=${fastProviders.length}, minReviews=3)`,
-                'fast_map_min3'
-            );
-        }
-        // Final fallback for sparse areas: include lower-review providers rather
-        // than returning an unusably small list (quality is still handled by ranking).
-        if (fastProviders.length < providerLimit) {
-            minRatingUsed = 1;
-            fastProviders = mapPlacesToFastProviders(1, 'strict');
-            logStage(
-                `fast providers strict/minReviews1 mapped (count=${fastProviders.length})`,
-                'fast_map_min1'
-            );
-        }
-        // If strict relevance still starves the list, relax semantic matching while
-        // keeping hard safety exclusions (banned categories + geo radius).
-        if (fastProviders.length < providerLimit) {
-            relevanceModeUsed = 'relaxed';
-            fastProviders = mapPlacesToFastProviders(minRatingUsed, 'relaxed');
-            logStage(
-                `fast providers relaxed relevance mapped (count=${fastProviders.length})`,
-                'fast_map_relaxed'
-            );
-        }
 
         // Pre-fetched providers rows — fired in parallel with provider_cache below to save a round-trip.
         let prefetchedProvRows:
@@ -1379,239 +1076,13 @@ export async function POST(req: NextRequest) {
             p.summary = sanitizeCustomerSummary(String(p?.summary ?? ''));
         });
 
-        // Best-effort: persist returned providers to unified `providers` table for later reuse.
-        // Do not block the response if DB is slow/unavailable.
+        // Best-effort: persist returned providers + reviews. Fire-and-forget.
         if (!pageToken && limitedProviders.length > 0) {
-            const placeById = new Map<string, any>();
-            for (const pl of places || []) {
-                const pid = normalizePlaceId(pl?.id || '');
-                if (pid) placeById.set(pid, pl);
-            }
-
-            // Fire-and-forget — do not await, do not block response.
-            void (async () => {
-                try {
-                    const adminSupabase = await createSupabaseAdminClient();
-                    const nowIso = new Date().toISOString();
-                    const rows = limitedProviders.map((p) => {
-                        const googlePlaceId =
-                            typeof p.placeId === 'string' && p.placeId.startsWith('places/')
-                                ? p.placeId
-                                : `places/${p.placeId}`;
-                        const openingHours = (p as any).weekdayDescriptions;
-                        const hoursArray = formatWeekdayDescriptionsTo24h(openingHours) ?? [];
-
-                        return {
-                            source: 'google',
-                            google_place_id: googlePlaceId,
-                            name: formatBusinessName(p.name) || p.name,
-                            address: p.address,
-                            rating: p.rating,
-                            rating_count: p.ratingCount ?? 0,
-                            phone: p.phone,
-                            website: p.website,
-                            latitude: p.latitude,
-                            longitude: p.longitude,
-                            summary: p.summary ?? '',
-                            weekday_descriptions: hoursArray.length > 0 ? hoursArray : null,
-                            last_updated: nowIso,
-                            updated_at: nowIso,
-                        };
-                    });
-
-                    const upsertRes = await adminSupabase.from('providers').upsert(rows, {
-                        onConflict: 'google_place_id',
-                    });
-                    if (upsertRes.error) return upsertRes;
-
-                    // Load provider ids so we can upsert reviews (reviews.provider_id FK).
-                    // R6: also load reviews_synced_at to decide whether a fresh Google review
-                    // import is needed even when reviews already exist in the database.
-                    const googleIds = rows.map((r) => r.google_place_id).filter(Boolean);
-                    const { data: providerRows, error: provErr } = await adminSupabase
-                        .from('providers')
-                        .select('id, google_place_id, reviews_synced_at')
-                        .eq('is_active', true)
-                        .in('google_place_id', googleIds);
-                    if (provErr) {
-                        console.warn('Reviews upsert skipped:', provErr.message);
-                        return upsertRes;
-                    }
-                    const providerIdByGoogle = new Map<string, string>(
-                        (providerRows || []).map((r: any) => [String(r.google_place_id), String(r.id)])
-                    );
-                    // R6: track when each provider last had a fresh Google review import.
-                    const reviewSyncedAtByGoogleId = new Map<string, string | null>(
-                        (providerRows || []).map((r: any) => [
-                            String(r.google_place_id),
-                            r.reviews_synced_at ?? null,
-                        ])
-                    );
-
-                    // Ensure the API response includes internal `providerId` so the frontend can
-                    // route to `/contractors/[id]` using providers.id rather than the Google place id.
-                    limitedProviders.forEach((p: any) => {
-                        const rawPid = p?.placeId || p?.place_id;
-                        if (typeof rawPid !== 'string') return;
-                        const googlePlaceId = toGooglePlaceId(rawPid);
-                        const providerId = providerIdByGoogle.get(googlePlaceId);
-                        if (providerId) p.providerId = providerId;
-                    });
-
-                    // Background website enrichment for providers that have a website but
-                    // no enriched content yet (first ingestion path). This builds the rich
-                    // profile data (about, past work, AI-extracted specialisations) that
-                    // improves both the provider card and future relevance scoring.
-                    // Cap at 2 per request so we don't hammer external sites on busy periods.
-                    {
-                        const toEnrich = rows
-                            .filter((r) => r.website && !r.summary)
-                            .slice(0, 2)
-                            .map((r) => providerIdByGoogle.get(r.google_place_id))
-                            .filter(Boolean) as string[];
-
-                        if (toEnrich.length > 0) {
-                            import('@/lib/providers/refresh-provider-website')
-                                .then(async ({ refreshProviderWebsiteById }) => {
-                                    for (const pid of toEnrich) {
-                                        await refreshProviderWebsiteById(pid).catch(() => {});
-                                    }
-                                })
-                                .catch(() => {});
-                        }
-                    }
-
-                    const reviewPayload: any[] = [];
-                    const cutoffMs = Date.now() - TWENTY_FOUR_MONTHS_MS;
-
-                    for (const googlePlaceId of googleIds) {
-                        const providerId = providerIdByGoogle.get(googlePlaceId);
-                        if (!providerId) continue;
-                        const pl = placeById.get(normalizePlaceId(googlePlaceId));
-                        let revs = (pl?.reviews || []) as any[];
-                        // R6: also refresh when existing reviews are stale (> 7 days since last sync).
-                        const syncedAt = reviewSyncedAtByGoogleId.get(googlePlaceId);
-                        const isReviewStale =
-                            !syncedAt ||
-                            Date.now() - new Date(syncedAt).getTime() > REVIEW_SYNC_TTL_MS;
-                        if (!Array.isArray(revs) || revs.length === 0 || isReviewStale) {
-                            // Fallback / refresh: Places search results can omit review bodies for some
-                            // rows, or the stored data may be > 7 days old. Pull place details directly
-                            // so review sync is up-to-date.
-                            const freshRevs = await fetchPlaceReviewsFromGoogle(googlePlaceId, apiKey);
-                            if (freshRevs.length > 0) revs = freshRevs;
-                        }
-                        for (const rev of revs) {
-                            const publishTime = rev?.publishTime ? new Date(rev.publishTime).getTime() : null;
-                            if (publishTime && publishTime < cutoffMs) {
-                                continue;
-                            }
-
-                            const sourceRef =
-                                rev?.name ||
-                                `${googlePlaceId}:${rev?.publishTime || rev?.relativePublishTimeDescription || ''}:${rev?.authorAttribution?.displayName || rev?.authorAttribution?.name || ''}`;
-                            const rawBody =
-                                (typeof rev?.originalText?.text === 'string' && rev.originalText.text) ||
-                                (typeof rev?.text?.text === 'string' && rev.text.text) ||
-                                (typeof rev?.text === 'string' && rev.text) ||
-                                '';
-                            const originalBody = String(rawBody || '').trim();
-                            if (!originalBody) continue;
-
-                            const originalName =
-                                (rev?.authorAttribution?.displayName as string) ||
-                                (rev?.authorAttribution?.name as string) ||
-                                null;
-
-                            reviewPayload.push({
-                                provider_id: providerId,
-                                source: 'google',
-                                source_ref: String(sourceRef || '').slice(0, 512),
-                                status: 'approved',
-                                reviewer_name: originalName,
-                                rating: typeof rev?.rating === 'number' ? rev.rating : null,
-                                body: originalBody,
-                                relative_publish_time_description:
-                                    rev?.relativePublishTimeDescription || null,
-                                published_at: rev?.publishTime || null,
-                                raw: rev ?? null,
-                                updated_at: nowIso,
-                            });
-                        }
-                    }
-
-                    if (reviewPayload.length > 0) {
-                        const { error: reviewsErr } = await adminSupabase
-                            .from('reviews')
-                            .upsert(reviewPayload, {
-                                onConflict: 'provider_id,source,source_ref',
-                            });
-                        if (reviewsErr) {
-                            console.warn('Reviews upsert skipped:', reviewsErr.message);
-                        }
-
-                        // R6: stamp reviews_synced_at so future requests know when reviews were last
-                        // fetched from Google, enabling staleness-based refresh decisions.
-                        const syncedProviderIds = Array.from(
-                            new Set(reviewPayload.map((r) => r.provider_id))
-                        );
-                        if (syncedProviderIds.length > 0) {
-                            // Non-fatal — reviews are already stored; stamp is best-effort.
-                            try {
-                                await adminSupabase
-                                    .from('providers')
-                                    .update({ reviews_synced_at: nowIso })
-                                    .in('id', syncedProviderIds);
-                            } catch {
-                                // ignore
-                            }
-                        }
-
-                        // Enforce 24-month window & 50-review cap for all affected providers.
-                        const cutoffIso = new Date(cutoffMs).toISOString();
-                        const { data: affectedProviders } = await adminSupabase
-                            .from('reviews')
-                            .select('provider_id')
-                            .eq('source', 'google')
-                            .in(
-                                'provider_id',
-                                Array.from(new Set(reviewPayload.map((r) => r.provider_id)))
-                            );
-
-                        const uniqueProviderIds = Array.from(
-                            new Set((affectedProviders || []).map((r: any) => r.provider_id))
-                        );
-
-                        for (const pid of uniqueProviderIds) {
-                            await adminSupabase
-                                .from('reviews')
-                                .delete()
-                                .eq('provider_id', pid)
-                                .eq('source', 'google')
-                                .lt('published_at', cutoffIso);
-
-                            const { data: recentRows } = await adminSupabase
-                                .from('reviews')
-                                .select('id, published_at')
-                                .eq('provider_id', pid)
-                                .eq('source', 'google')
-                                .order('published_at', { ascending: false })
-                                .limit(60);
-
-                            if (recentRows && recentRows.length > 50) {
-                                const idsToDelete = recentRows.slice(50).map((r: any) => r.id);
-                                if (idsToDelete.length > 0) {
-                                    await adminSupabase.from('reviews').delete().in('id', idsToDelete);
-                                }
-                            }
-                        }
-                    }
-
-                    return upsertRes;
-                } catch (err) {
-                    console.error('[providers] background sync error:', err);
-                }
-            })();
+            scheduleProvidersBackgroundSync({
+                limitedProviders,
+                places,
+                apiKey,
+            });
         }
 
         const durationMs = Date.now() - startedAt;

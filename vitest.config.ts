@@ -18,19 +18,19 @@ export default defineConfig({
                 'node_modules',
                 '.next',
             ],
-            // Phase 1 thresholds — locked just below current actuals after
-            // adding pure-function unit tests for providers/relevance,
-            // providers/open-status, rate-limit, diagnosis/start-description-quality,
-            // whatsapp-message-validate, providers/review-normalization,
-            // providers/review-ingestion, and email/utils. Note: lines/statements
-            // remain low because the coverage scope was widened to `src/**/*`
-            // in Phase 0 and most route handlers / client components are still
-            // untested; later phases will lift these to the planned 35/30/35/35.
+            // Phase 2 thresholds — locked just below the actuals after extracting
+            // sibling modules from `app/api/diagnose/route.ts` and
+            // `lib/providers/handler.ts` and adding parser fixtures + unit tests
+            // for `agent-classify` + `agent-prose`. Phase 2 actuals:
+            //   lines:      9.09
+            //   branches:   64.43
+            //   functions:  28.83
+            //   statements: 9.09
             thresholds: {
-                lines: 5,
-                branches: 30,
-                functions: 19,
-                statements: 5,
+                lines: 8,
+                branches: 63,
+                functions: 28,
+                statements: 8,
             },
         },
     },

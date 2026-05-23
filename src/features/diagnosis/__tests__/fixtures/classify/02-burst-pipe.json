@@ -1,0 +1,17 @@
+{
+    "name": "burst pipe leak - plumbing high confidence",
+    "raw": "{\"subcategory_id\":\"burst_pipe_leak\",\"trade\":\"Plumbing\",\"trade_detail\":\"Burst Pipe / Major Leak\",\"confidence\":92,\"rejected\":false,\"requires_clarification\":false,\"unserviced\":false,\"refetch_providers\":false,\"unsupported_reason\":\"\",\"failed_component\":\"copper supply line at elbow joint\",\"cascading_damage\":\"\"}",
+    "expected": {
+        "trade": "Plumbing",
+        "trade_detail": "Burst Pipe / Major Leak",
+        "subcategory_id": "burst_pipe_leak",
+        "confidence": 92,
+        "rejected": false,
+        "requires_clarification": false,
+        "unserviced": false,
+        "refetch_providers": false,
+        "unsupported_reason": "",
+        "failed_component": "copper supply line at elbow joint",
+        "cascading_damage": ""
+    }
+}

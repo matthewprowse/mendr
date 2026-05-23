@@ -1,0 +1,17 @@
+{
+    "name": "garage door spring failure - high confidence",
+    "raw": "{\"subcategory_id\":\"garage_door_fault\",\"trade\":\"Security\",\"trade_detail\":\"Garage Door Fault / Repair\",\"confidence\":94,\"rejected\":false,\"requires_clarification\":false,\"unserviced\":false,\"refetch_providers\":false,\"unsupported_reason\":\"\",\"failed_component\":\"left torsion spring\",\"cascading_damage\":\"bent connecting rod from spring loss\"}",
+    "expected": {
+        "trade": "Security",
+        "trade_detail": "Garage Door Fault / Repair",
+        "subcategory_id": "garage_door_fault",
+        "confidence": 94,
+        "rejected": false,
+        "requires_clarification": false,
+        "unserviced": false,
+        "refetch_providers": false,
+        "unsupported_reason": "",
+        "failed_component": "left torsion spring",
+        "cascading_damage": "bent connecting rod from spring loss"
+    }
+}

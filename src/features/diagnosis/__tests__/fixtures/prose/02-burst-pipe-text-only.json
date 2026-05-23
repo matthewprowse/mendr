@@ -1,0 +1,12 @@
+{
+    "name": "burst pipe - text-only description, no image_observations",
+    "raw": "{\"thought\":\"Based on the description alone, the user reports a sudden loss of pressure across the whole house combined with a visible pool of water near the front boundary wall. That combination — drop in pressure plus surface water at the supply side of the property — strongly suggests a burst on the mains supply between the meter and the house. Without a photo I cannot be certain whether the leak is at a joint, mid-pipe, or at the stop valve, so the diagnosis is inferred rather than directly observed. A photo of the wet area and the meter would let me confirm.\",\"diagnosis\":\"Likely Mains Supply Burst\",\"message\":\"The combination of low pressure throughout the house and water surfacing near the boundary wall points to a burst on the mains supply line. The water is travelling along the path of least resistance through the soil before it surfaces.\\n\\nClose the main stop valve at the meter immediately to limit water loss and prevent saturation of the surrounding ground.\",\"action_required\":\"\",\"contractor_checklist\":[\"Excavate carefully around the surfacing point to expose the supply line.\",\"Identify whether the leak is at a joint, a section of pipe, or the stop valve.\",\"Repair or replace the damaged section using compression or compression fittings rated for mains pressure.\",\"Restore supply and test for further leaks at the meter.\"],\"homeowner_prep\":\"Close the main stop valve at the meter and note the meter reading.\",\"image_descriptions\":[],\"image_observations\":[],\"clarification_questions\":[],\"diy_verification\":\"With the main stop valve closed, watch the meter for five minutes; if it continues to register flow, the leak is on your side of the meter.\",\"photo_request\":\"A photo of the wet area near the boundary wall, plus a close-up of the water meter and stop valve, would let me confirm exactly where the burst is.\",\"confidence_drivers\":[\"No photo available\",\"Description is consistent with mains-side burst\",\"Pressure drop across whole house\"]}",
+    "expected": {
+        "diagnosis": "Likely Mains Supply Burst",
+        "contractor_checklist_count": 4,
+        "image_descriptions_count": 0,
+        "image_observations_count": 0,
+        "homeowner_prep_present": true,
+        "photo_request_present": true
+    }
+}

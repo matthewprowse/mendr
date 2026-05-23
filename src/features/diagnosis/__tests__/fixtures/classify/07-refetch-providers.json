@@ -1,0 +1,11 @@
+{
+    "name": "refetch_providers true - user asking for alternatives",
+    "raw": "{\"subcategory_id\":\"tap_toilet_repair\",\"trade\":\"Plumbing\",\"trade_detail\":\"Tap / Toilet / Fitting Repair\",\"confidence\":86,\"rejected\":false,\"requires_clarification\":false,\"unserviced\":false,\"refetch_providers\":true,\"unsupported_reason\":\"\",\"failed_component\":\"toilet flush valve\",\"cascading_damage\":\"\"}",
+    "expected": {
+        "trade": "Plumbing",
+        "trade_detail": "Tap / Toilet / Fitting Repair",
+        "subcategory_id": "tap_toilet_repair",
+        "confidence": 86,
+        "refetch_providers": true
+    }
+}

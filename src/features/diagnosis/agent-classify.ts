@@ -234,7 +234,7 @@ export function finalizeClassificationAgainstCatalogAndTaxonomy(
     };
 }
 
-const FALLBACK_CLASSIFICATION: ClassificationResult = {
+export const FALLBACK_CLASSIFICATION: ClassificationResult = {
     trade: 'N/A',
     trade_detail: '',
     subcategory_id: TAXONOMY_NONE_ID,
@@ -247,6 +247,36 @@ const FALLBACK_CLASSIFICATION: ClassificationResult = {
     failed_component: '',
     cascading_damage: '',
 };
+
+/**
+ * Parse a raw Gemini JSON response into a fully validated ClassificationResult.
+ *
+ * This is the parser/validator boundary used by `runClassification`. Pulled out
+ * as a pure function so it can be fixture-tested against a wide range of model
+ * outputs (well-formed, malformed, empty, refusal) without needing to mock the
+ * Gemini SDK.
+ *
+ * Returns the parsed result, or `null` when the input is empty/unparseable.
+ * Callers should treat `null` as a `requestFailed` outcome and fall back.
+ */
+export function parseClassificationResponse(
+    raw: string,
+    allowedTradeLabels: string[],
+): ClassificationResult | null {
+    const trimmed = typeof raw === 'string' ? raw.trim() : '';
+    if (!trimmed) return null;
+    let parsed: ClassificationResult;
+    try {
+        parsed = JSON.parse(trimmed) as ClassificationResult;
+    } catch {
+        return null;
+    }
+    if (typeof parsed !== 'object' || parsed === null) {
+        return null;
+    }
+    parsed.confidence = Math.max(0, Math.min(100, Math.round(parsed.confidence ?? 0)));
+    return finalizeClassificationAgainstCatalogAndTaxonomy(parsed, allowedTradeLabels);
+}
 
 export async function runClassification(
     contents: GeminiContent[],
@@ -297,36 +327,21 @@ export async function runClassification(
         });
 
         const raw = result.response.text().trim();
-        if (!raw) {
-            console.error('[agent-classify] empty model text', {
+        const out = parseClassificationResponse(raw, allowedTradeLabels);
+        if (!out) {
+            const reason = raw ? 'JSON parse failed' : 'empty model text';
+            console.error(`[agent-classify] ${reason}`, raw ? raw.slice(0, 400) : {
                 cand: result.response.candidates?.length ?? 0,
             });
             logPipelineStep({
                 stepName: 'agent-classify', status: 'error', durationMs: Date.now() - stepStart,
                 conversationId: ctx?.conversationId, userId: ctx?.userId,
-                modelName: GEMINI_MODEL_NAME, errorMessage: 'empty model text',
+                modelName: GEMINI_MODEL_NAME, errorMessage: reason,
                 promptTokens: usage?.promptTokenCount, completionTokens: usage?.candidatesTokenCount,
             });
             return { ...FALLBACK_CLASSIFICATION, requestFailed: true };
         }
 
-        let parsed: ClassificationResult;
-        try {
-            parsed = JSON.parse(raw) as ClassificationResult;
-        } catch {
-            console.error('[agent-classify] JSON.parse failed', raw.slice(0, 400));
-            logPipelineStep({
-                stepName: 'agent-classify', status: 'error', durationMs: Date.now() - stepStart,
-                conversationId: ctx?.conversationId, userId: ctx?.userId,
-                modelName: GEMINI_MODEL_NAME, errorMessage: 'JSON parse failed',
-                promptTokens: usage?.promptTokenCount, completionTokens: usage?.candidatesTokenCount,
-            });
-            return { ...FALLBACK_CLASSIFICATION, requestFailed: true };
-        }
-
-        parsed.confidence = Math.max(0, Math.min(100, Math.round(parsed.confidence ?? 0)));
-
-        const out = finalizeClassificationAgainstCatalogAndTaxonomy(parsed, allowedTradeLabels);
         logPipelineStep({
             stepName: 'agent-classify', status: 'ok', durationMs: Date.now() - stepStart,
             conversationId: ctx?.conversationId, userId: ctx?.userId,
