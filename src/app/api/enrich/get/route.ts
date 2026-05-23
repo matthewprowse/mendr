@@ -26,20 +26,11 @@ const UUID_RE =
 const PROVIDER_CACHE_SELECT_MATCH =
     'provider_id, google_place_id, review_summary, enriched_at, cache_version, scrape_status';
 
-export interface EnrichmentCacheEntry {
-    googlePlaceId: string;
-    bio: string | null;
-    specialisations: string[];
-    hasWorkPhotos: boolean;
-    reviewSummary: string | null;
-    /** True when fast path deliberately skipped AI (not enough DB reviews); do not keep polling. */
-    fastSummaryInsufficient?: boolean;
-    responseProfile: string | null;
-    websiteQuality: string | null;
-    enrichedAt: string | null;
-    profileCompleteness: number;
-    cacheVersion: number;
-}
+// EnrichmentCacheEntry is the cross-module wire shape for this route's response.
+// Defined in features/match/contracts.ts; re-exported here so external callers
+// can keep importing from the route path if they prefer.
+export type { EnrichmentCacheEntry } from '@/features/match/contracts';
+import type { EnrichmentCacheEntry } from '@/features/match/contracts';
 
 /** Server-side memo for identical GET bodies; longer TTL makes repeat match navigations feel instant. */
 const ENRICH_GET_CACHE_TTL_MS = 60_000;

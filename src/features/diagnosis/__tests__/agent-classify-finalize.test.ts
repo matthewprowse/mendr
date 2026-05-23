@@ -27,6 +27,7 @@ describe('finalizeClassificationAgainstCatalogAndTaxonomy', () => {
                 unsupported_reason: '',
                 failed_component: '',
                 cascading_damage: '',
+                trade_candidates: [],
             },
             ALLOWED
         );
@@ -49,6 +50,7 @@ describe('finalizeClassificationAgainstCatalogAndTaxonomy', () => {
                 unsupported_reason: '',
                 failed_component: '',
                 cascading_damage: '',
+                trade_candidates: [],
             },
             ALLOWED
         );
@@ -69,6 +71,7 @@ describe('finalizeClassificationAgainstCatalogAndTaxonomy', () => {
                 unsupported_reason: '',
                 failed_component: '',
                 cascading_damage: '',
+                trade_candidates: [],
             },
             ALLOWED
         );

@@ -1,4 +1,4 @@
-import type { EnrichmentCacheEntry } from '@/app/api/enrich/get/route';
+import type { EnrichmentCacheEntry } from '@/features/match/contracts';
 import type { MatchLocation, MatchProvider } from '../contracts';
 
 const CACHE_KEY_PREFIX = 'match-page-cache:';

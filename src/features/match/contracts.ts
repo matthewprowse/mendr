@@ -114,3 +114,23 @@ export type ContractorProfile = MatchProvider & {
     nextOpensAt: string | null;
 };
 
+/**
+ * Cached enrichment data for a single Google Place ID.
+ * Returned by POST /api/enrich/get and consumed by the match page client + cache layer.
+ * Defined here (not in the route file) because it's a cross-module contract.
+ */
+export interface EnrichmentCacheEntry {
+    googlePlaceId: string;
+    bio: string | null;
+    specialisations: string[];
+    hasWorkPhotos: boolean;
+    reviewSummary: string | null;
+    /** True when fast path deliberately skipped AI (not enough DB reviews); do not keep polling. */
+    fastSummaryInsufficient?: boolean;
+    responseProfile: string | null;
+    websiteQuality: string | null;
+    enrichedAt: string | null;
+    profileCompleteness: number;
+    cacheVersion: number;
+}
+

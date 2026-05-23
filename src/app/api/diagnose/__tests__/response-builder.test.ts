@@ -49,6 +49,7 @@ function makeClassification(overrides: Partial<ClassificationResult> = {}): Clas
         unsupported_reason: '',
         failed_component: 'copper supply line at elbow joint',
         cascading_damage: '',
+        trade_candidates: [],
         ...overrides,
     };
 }

@@ -36,7 +36,7 @@ import {
     fetchEnrichmentApi,
     restoreProviderTokenApi,
 } from '@/features/match/api/client';
-import type { EnrichmentCacheEntry } from '@/app/api/enrich/get/route';
+import type { EnrichmentCacheEntry } from '@/features/match/contracts';
 import { toGooglePlaceId } from '@/lib/providers/persistence';
 import { useMatchConversationContext } from '@/features/match/hooks/use-match-conversation-context';
 import { useMatchProviders } from '@/features/match/hooks/use-match-providers';

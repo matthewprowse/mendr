@@ -79,6 +79,7 @@ describe('MOCK_LLM branch — runProseGeneration', () => {
                 unsupported_reason: '',
                 failed_component: '',
                 cascading_damage: '',
+                trade_candidates: [],
             },
             baseSystemInstruction: 'ignored in mock',
         });
@@ -108,6 +109,7 @@ describe('MOCK_LLM branch — runProseGeneration', () => {
                     unsupported_reason: '',
                     failed_component: '',
                     cascading_damage: '',
+                    trade_candidates: [],
                 },
                 baseSystemInstruction: '',
             });

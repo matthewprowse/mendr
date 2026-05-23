@@ -4,7 +4,7 @@ import type {
     ProvidersRequest,
     ProvidersResponse,
 } from '../contracts';
-import type { EnrichmentCacheEntry } from '@/app/api/enrich/get/route';
+import type { EnrichmentCacheEntry } from '@/features/match/contracts';
 import { toGooglePlaceId } from '@/lib/providers/persistence';
 import { aiConfig } from '@/lib/ai/ai-config';
 

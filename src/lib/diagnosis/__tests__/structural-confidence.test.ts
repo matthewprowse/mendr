@@ -25,6 +25,7 @@ function makeClassification(
         unsupported_reason: '',
         failed_component: '',
         cascading_damage: '',
+        trade_candidates: [],
         ...overrides,
     };
 }

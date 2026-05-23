@@ -1,4 +1,8 @@
 import type { DiagnosisData } from '@/features/diagnosis/types';
+// Intentional cross-feature imports: when the diagnosis pipeline finishes,
+// it prefetches the matching providers and warms the match page cache so
+// the /match route is instant. The dependency direction is diagnosis → match
+// (one-way); match never imports from diagnosis.
 import { fetchProvidersApi } from '@/features/match/api/client';
 import { saveMatchPageCache } from '@/features/match/cache/match-page-cache';
 import { fetchConversationDiagnosis, patchConversation, type ConversationDiagnosisRow } from '@/lib/diagnosis/diagnoses-api';

@@ -26,6 +26,19 @@ export type SavedLocation = {
     lng?: number | null;
 };
 
+export type SavedContractorRow = {
+    savedId: string;
+    providerId: string;
+    name: string;
+    phone: string | null;
+    email: string | null;
+    website: string | null;
+    rating: number | null;
+    ratingCount: number;
+    address: string;
+    services: string[];
+};
+
 // ── AccountAuthClient — unauthenticated state ─────────────────────────────────
 
 export function AccountAuthClient() {
