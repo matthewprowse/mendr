@@ -1057,6 +1057,33 @@ export default function DiagnosisPageClient({
                   .filter((q) => q.length > 0)
             : [];
     const hasClarificationQuestions = clarificationQuestions.length > 0;
+
+    // E2 — derive soft trade suggestions for the rejection UI. The classifier
+    // emits the top 3 candidates it considered (see ClassificationResult);
+    // we filter to ones we actually offer (present in the serviceCatalog —
+    // N/A and unsupported trades dropped), drop zero-score entries, dedupe,
+    // and cap at 3. Lets users tap "did you mean Security?" rather than
+    // seeing a dead-end rejection.
+    const tradeCandidates = Array.isArray(currentDiagnosis?.trade_candidates)
+        ? currentDiagnosis.trade_candidates
+        : [];
+    const serviceCatalogLower = new Set(serviceCatalog.map((s) => s.toLowerCase()));
+    const seenTrades = new Set<string>();
+    const tradeSuggestions: { trade: string; score: number }[] = [];
+    for (const c of tradeCandidates) {
+        if (!c || typeof c.trade !== 'string') continue;
+        const t = c.trade.trim();
+        const tLower = t.toLowerCase();
+        if (!t || tLower === 'n/a' || tLower === tradeLabel.trim().toLowerCase()) continue;
+        if (seenTrades.has(tLower)) continue;
+        if (serviceCatalog.length > 0 && !serviceCatalogLower.has(tLower)) continue;
+        if (typeof c.score === 'number' && c.score <= 0) continue;
+        seenTrades.add(tLower);
+        tradeSuggestions.push({ trade: t, score: typeof c.score === 'number' ? c.score : 0 });
+        if (tradeSuggestions.length >= 3) break;
+    }
+    const hasTradeSuggestions = tradeSuggestions.length > 0;
+
     // When the classifier returns trade='N/A' it can mean two very different
     // things: (a) "I don't know which trade — please ask the user" or
     // (b) "this trade isn't in the catalogue". Only (b) should show the
@@ -1138,6 +1165,26 @@ export default function DiagnosisPageClient({
             window.removeEventListener('resize', updateStickyHeaderTitle);
         };
     }, []);
+
+    // E2 — soft trade-suggestion chip handler. When the rejection UI surfaces
+    // a chip ("Did you mean Security?"), tapping it sets the trade hint and
+    // re-runs the diagnosis with that hint. The classifier prompt already
+    // biases toward `userSelectedTrade` when present, so we expect the next
+    // pass to land on the picked trade with higher confidence.
+    const handleTradeCandidatePick = async (candidateTrade: string) => {
+        const picked = candidateTrade.trim();
+        if (!picked || !imageSrc || isDiagnosing || showSkeleton) return;
+        setSelectedTradeHint(picked);
+        didRunDiagnosisRef.current = null;
+        setDiagnosisTitle('Diagnosing…');
+        const joinedInfo = customerInfoItems.join('\n\n').trim();
+        await runInitialDiagnosis(
+            imageSrc,
+            joinedInfo,
+            picked,
+            uploadedImageSources,
+        );
+    };
 
     const handleRescanReport = async () => {
         const trimmed = infoText.trim();
@@ -1499,6 +1546,39 @@ export default function DiagnosisPageClient({
 
                         </>
                     )}
+                    {/* E2 — soft trade-suggestion chips. When the classifier
+                        emitted candidate trades that match our catalogue,
+                        show them as tappable chips so the user can pick
+                        "did you mean X?" instead of seeing a dead-end. Only
+                        renders on rejection (isServiceBlocked) and never
+                        when we're already showing clarification questions. */}
+                    {isServiceBlocked && !shouldShowClarification && hasTradeSuggestions ? (
+                        <div
+                            className="flex flex-col gap-2"
+                            data-testid="trade-suggestions"
+                        >
+                            <p className="text-sm font-medium text-foreground">
+                                Did you mean one of these instead?
+                            </p>
+                            <div className="flex flex-wrap gap-2">
+                                {tradeSuggestions.map((s) => (
+                                    <Button
+                                        key={s.trade}
+                                        type="button"
+                                        variant="secondary"
+                                        size="sm"
+                                        disabled={isDiagnosing || showSkeleton}
+                                        onClick={() => handleTradeCandidatePick(s.trade)}
+                                    >
+                                        {s.trade}
+                                    </Button>
+                                ))}
+                            </div>
+                            <p className="text-xs text-muted-foreground">
+                                Tap a trade to re-diagnose with that hint.
+                            </p>
+                        </div>
+                    ) : null}
                     {isServiceBlocked && serviceCatalog.length > 0 ? (
                         <p className="text-sm text-muted-foreground">
                             Trades Mendr can match today: {serviceCatalog.join(', ')}.

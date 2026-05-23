@@ -332,6 +332,11 @@ export function buildCompatibleResponseText(
             typeof classification.cascading_damage === 'string'
                 ? classification.cascading_damage
                 : '',
+        // E2 — soft trade suggestions for the rejection UI. Empty array
+        // when the classifier didn't emit candidates.
+        trade_candidates: Array.isArray(classification.trade_candidates)
+            ? classification.trade_candidates
+            : [],
         // Metadata
         prompt_version: DIAGNOSE_PROMPT_VERSION,
         ai_model: GEMINI_MODEL_NAME,

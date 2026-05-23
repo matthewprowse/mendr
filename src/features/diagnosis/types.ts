@@ -57,6 +57,14 @@ export interface DiagnosisData {
     /** Legacy view: one short sentence per image. From v7.3, derived server-side from image_observations when not directly produced by the model. */
     image_descriptions?: string[];
     /**
+     * Top 3 candidate trades the classifier considered, ranked by score
+     * (0-100). Lets the rejection UI surface soft suggestions ("did you mean
+     * Security, Building & Construction, or Welding?") when the primary
+     * trade is N/A or low-confidence. Empty array when not emitted by the
+     * model or when the diagnosis request failed.
+     */
+    trade_candidates?: Array<{ trade: string; score: number }>;
+    /**
      * Phase 4 — deterministic confidence score computed from observable input/output
      * signals (image count, description length, taxonomy match, etc.) at the time the
      * agent ran. Separate from the model's self-reported `confidence` integer above;
