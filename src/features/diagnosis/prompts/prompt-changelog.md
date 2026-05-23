@@ -19,6 +19,18 @@ Format for each entry:
 
 ---
 
+## v7.4 — 2026-05-23
+
+**Changed:** `user-turn.ts` — added a single-side fallback paragraph to both `buildStreamingQuickThoughtPrompt` and the image-first prompt (multi-image branch). The fallback tells the model to look for negative-space cues (empty fastener points, paint shadows, dangling free ends, brackets with no part attached) when only one side of a fault is photographed. `prompt-version.ts` bumped to v7.4.
+
+**Problem solved:** 2026-05-23 garage-spring failure case. A user uploaded 4 photos of a motorised wooden gate with a missing lift spring. The existing absent-component detection assumed left-vs-right symmetry — it could only detect missing parts by comparing sides. The user (correctly) only photographed the broken side, so the heuristic never fired. The classifier returned `trade: 'N/A'` + `requires_clarification: true`, and the UI surfaced "We can't match this job" instead of asking clarification questions.
+
+**Regressions / known side-effects:** could over-detect "missing" parts in close-ups where a fastener point legitimately has nothing on it by design (e.g. an unused mounting hole, hose-bib threading, electrical knockout, junction-box punchout). Mitigated by requiring the prompt to anchor on a CONTEXTUAL cue (wear pattern, paint shadow, surrounding installation) before claiming a missing part. Watch the next 2 weeks of diagnoses for false-positives around those features.
+
+**Why this approach:** the alternative was per-trade anatomy schemas (recommendation B2 in `docs/diagnosis-accuracy-and-ux-recommendations.md`), which is the more thorough fix but takes ~1 day to build and eval. The single-side fallback is ~30 minutes of prompt work and addresses the highest-traffic failure mode. Per-trade schemas remain on the roadmap.
+
+---
+
 ## v7.3 — 2026-05-22
 
 **Changed:** `agent-prose.ts` (new `image_observations` structured array added to PROSE_SCHEMA and `ProseResult`; new `normaliseImageObservations` helper; post-parse derivation of `image_descriptions` from `image_observations` when missing; CROSS-IMAGE OBSERVATION TABLE block appended to the visual block of the prose system prompt). `features/diagnosis/types.ts` gains optional `image_observations` field. Report UI (`report-detail-content.tsx`) replaces the flat extra-images grid with a per-image observation section that pairs each image with a role badge, the primary observation, visible components and issues spotted; a top-of-section alert appears when any image is tagged `contradicting`.

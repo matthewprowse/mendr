@@ -25,6 +25,11 @@ export function buildStreamingQuickThoughtPrompt(): string {
     return (
         'Analyse every image provided. For each: name the specific components visible, their position and condition. ' +
         'Critically — compare left vs right, near vs far, upper vs lower. A component present on one side but ABSENT or detached on the other is the PRIMARY fault signal — name it explicitly (e.g. "left torsion spring is missing", "right cable is detached"). Missing components take priority over cosmetic or secondary cues. ' +
+        // Single-side fallback (v7.4 — 2026-05-23 gate-spring incident).
+        // Users routinely photograph only the broken side, so the symmetry
+        // heuristic above can never fire. Anchor the model on negative-space
+        // cues instead.
+        'Single-side fallback: if no comparison side is in frame, look for negative-space cues — empty fastener points (slots, eyes, hooks, threaded holes with no fastener), paint shadows or wear patterns indicating where a part used to sit, mounting brackets with no part attached, springs/cables/arms with one end dangling free. When such cues are present, name the absent part explicitly (e.g. "lift spring absent from bracket", "cable hook empty"). Symmetry is not required to claim a missing part. ' +
         'Return ONLY a <thought> block (2 sentences): sentence 1 states the specific missing/damaged component and which image(s) show it; sentence 2 gives the likely fault pattern. No JSON.'
     );
 }
@@ -73,7 +78,7 @@ export function buildImageFirstMessagePrompt(params: {
         params.userWordsPriority +
         `Analyse ${params.imageCount > 1 ? `all ${params.imageCount} images` : 'this image'}.\n\n` +
         (params.imageCount > 1
-            ? `For each image: name the specific components visible, their position, and their condition. Then look for asymmetry — compare left vs right, near side vs far side, upper vs lower. A component that is PRESENT on one side but ABSENT or detached on the other is the primary fault signal (e.g. a torsion spring bracket missing on one side, a cable hanging loose, a roller off its track). Missing components outweigh secondary cosmetic cues — name them explicitly.\n\nMerge the per-image evidence into one combined thought.\n\n`
+            ? `For each image: name the specific components visible, their position, and their condition. Then look for asymmetry — compare left vs right, near side vs far side, upper vs lower. A component that is PRESENT on one side but ABSENT or detached on the other is the primary fault signal (e.g. a torsion spring bracket missing on one side, a cable hanging loose, a roller off its track). Missing components outweigh secondary cosmetic cues — name them explicitly.\n\nSingle-side fallback: if no comparison side is in frame, look for negative-space cues — empty fastener points (slots, eyes, hooks, threaded holes with no fastener), paint shadows or wear patterns where a part used to sit, mounting brackets with no part attached, or springs/cables/arms with one end dangling free. When such cues are present, name the absent part explicitly (e.g. "lift spring absent from bracket"). Symmetry is NOT required to claim a missing part.\n\nMerge the per-image evidence into one combined thought.\n\n`
             : '') +
         `Output <thought> FIRST (2–3 short sentences in plain language naming the most likely fault and the specific evidence you saw). Never skip the thought block; the user sees it in real time.`
     );
