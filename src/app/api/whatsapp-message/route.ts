@@ -50,8 +50,18 @@ export async function POST(req: NextRequest) {
     const limited = await checkRateLimit(req, 'whatsappMessage');
     if (limited) return limited;
 
+    // Parse the body OUTSIDE the main try so malformed JSON returns 400, not
+    // 500. Other public POST routes return 400 on invalid bodies; this route
+    // previously returned 500 because the parse lived inside the outer
+    // try/catch.
+    let body: Body;
     try {
-        const body = (await req.json()) as Body;
+        body = (await req.json()) as Body;
+    } catch {
+        return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+    }
+
+    try {
         const provider_name = String(body.provider_name || 'the business').trim() || 'the business';
         const diagnosis = String(body.diagnosis || '').trim() || 'Home repair or maintenance';
         const trade = String(body.trade || '').trim();

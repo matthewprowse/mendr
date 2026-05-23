@@ -1057,21 +1057,35 @@ export default function DiagnosisPageClient({
                   .filter((q) => q.length > 0)
             : [];
     const hasClarificationQuestions = clarificationQuestions.length > 0;
-    const resolvedDetailText = isServiceBlocked
-        ? DIAGNOSIS_REJECT_DETAIL
-        : requiresClarification
-          ? 'Please pick one of the quick options below or type a short note so we can refine your diagnosis.'
-        : diagnosisDetailText;
+    // When the classifier returns trade='N/A' it can mean two very different
+    // things: (a) "I don't know which trade — please ask the user" or
+    // (b) "this trade isn't in the catalogue". Only (b) should show the
+    // service-blocked copy. If the model has clarification questions for the
+    // user, those win — we ask rather than dead-end. Reproduces the bug from
+    // the 2026-05-23 garage-spring failure case where users saw "not on
+    // Mendr's list yet" instead of clarification questions.
+    const shouldShowClarification = requiresClarification && hasClarificationQuestions;
 
-    const diagnosisHeadline = isServiceBlocked
-        ? DIAGNOSIS_REJECT_HEADLINE
-        : requiresClarification
-          ? 'Need More Information'
-          : diagnosisTitle;
+    const resolvedDetailText = shouldShowClarification
+        ? 'Please pick one of the quick options below or type a short note so we can refine your diagnosis.'
+        : isServiceBlocked
+          ? DIAGNOSIS_REJECT_DETAIL
+          : requiresClarification
+            ? 'Please add a short note about the issue below so we can refine your diagnosis.'
+            : diagnosisDetailText;
+
+    const diagnosisHeadline = shouldShowClarification
+        ? 'Need More Information'
+        : isServiceBlocked
+          ? DIAGNOSIS_REJECT_HEADLINE
+          : requiresClarification
+            ? 'Need More Information'
+            : diagnosisTitle;
 
     const pageTitle = 'Your Mendr Report';
-    const pageSubtitle =
-        'Here is what your photos suggest and sensible next steps for booking a contractor.';
+    const pageSubtitle = isServiceBlocked && !shouldShowClarification
+        ? "We could not match this job. Add detail below or try a closer photo, and we'll re-scan."
+        : 'Here is what your photos suggest and sensible next steps for booking a contractor.';
     const stickyHeaderTitle =
         showSkeleton || !isDetailStageReady
             ? diagnosisTitle.trim() || 'Diagnosing…'

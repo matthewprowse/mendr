@@ -1,0 +1,18 @@
+{
+    "name": "gate missing spring - multi-photo ambiguous, asks clarification (2026-05-23 incident)",
+    "_context": "User uploaded 4 photos of a motorised wooden gate: chaotic scene with mesh+wood+ground, sideways gate with a jack and a roller shutter behind it, hardware close-up of motor bracket, roller-shutter bottom edge close-up. The lift spring is missing but only the broken side is photographed. With the v7.4 single-side fallback, the classifier should land on Security and request clarification rather than returning N/A. This pins the correct behaviour against future regressions.",
+    "raw": "{\"subcategory_id\":\"garage_door_fault\",\"trade\":\"Security\",\"trade_detail\":\"Garage Door Fault / Repair\",\"confidence\":62,\"rejected\":false,\"requires_clarification\":true,\"unserviced\":false,\"refetch_providers\":false,\"unsupported_reason\":\"\",\"failed_component\":\"lift spring\",\"cascading_damage\":\"door cannot be lifted by hand without spring counterweight\"}",
+    "expected": {
+        "trade": "Security",
+        "trade_detail": "Garage Door Fault / Repair",
+        "subcategory_id": "garage_door_fault",
+        "confidence": 62,
+        "rejected": false,
+        "requires_clarification": true,
+        "unserviced": false,
+        "refetch_providers": false,
+        "unsupported_reason": "",
+        "failed_component": "lift spring",
+        "cascading_damage": "door cannot be lifted by hand without spring counterweight"
+    }
+}

@@ -35,6 +35,14 @@ export interface ClassificationResult {
     unsupported_reason: string;
     failed_component: string;
     cascading_damage: string;
+    /**
+     * Top 3 candidate trades the classifier considered, ranked by score
+     * (0-100). Lets the UI surface soft suggestions when the primary trade is
+     * N/A or low-confidence ("did you mean Security, Building & Construction,
+     * or Welding?"). Always present; empty array when the classifier didn't
+     * emit candidates or the response failed.
+     */
+    trade_candidates: Array<{ trade: string; score: number }>;
 }
 
 const CLASSIFICATION_SCHEMA = {
@@ -92,6 +100,25 @@ const CLASSIFICATION_SCHEMA = {
             description:
                 'Secondary mechanical or electrical damage caused by the primary failure (e.g. "bent connecting rod from spring loss", "warped frame from sustained leak", "tripped earth leakage from short to chassis"). Empty string when none.',
         },
+        trade_candidates: {
+            type: SchemaType.ARRAY,
+            description:
+                'Top 3 candidate trades you considered, ranked highest-first. Each candidate is the trade label (from the allowed list) and a score 0-100. Always include 3 entries when trade is set or trade is N/A (so the UI can show "did you mean ..."). Order by score descending. Repeat the chosen trade as the first entry. Empty array only if no trade could be considered at all.',
+            items: {
+                type: SchemaType.OBJECT,
+                properties: {
+                    trade: {
+                        type: SchemaType.STRING,
+                        description: 'One of the allowed trade labels exactly.',
+                    },
+                    score: {
+                        type: SchemaType.INTEGER,
+                        description: 'Integer 0-100. Higher = stronger candidate.',
+                    },
+                },
+                required: ['trade', 'score'],
+            },
+        },
     },
     required: [
         'subcategory_id',
@@ -105,6 +132,7 @@ const CLASSIFICATION_SCHEMA = {
         'unsupported_reason',
         'failed_component',
         'cascading_damage',
+        'trade_candidates',
     ],
 };
 
@@ -120,6 +148,7 @@ const SCHEMA_PROPERTY_ORDER = [
     'unsupported_reason',
     'failed_component',
     'cascading_damage',
+    'trade_candidates',
 ] as const;
 
 const ORDERED_SCHEMA = {
@@ -216,6 +245,37 @@ export function finalizeClassificationAgainstCatalogAndTaxonomy(
         trade = 'N/A';
     }
 
+    // Coerce trade_candidates from the model output. Tolerant: accepts missing
+    // arrays, missing fields, oversized lists. Cap at 3, deduplicate by trade
+    // label (keeping the highest score), and only retain entries whose trade
+    // label is in the allowed catalogue or 'N/A'.
+    const rawCandidates: unknown = parsed.trade_candidates;
+    const candidateInputs: Array<{ trade: string; score: number }> = Array.isArray(rawCandidates)
+        ? rawCandidates
+              .map((c: unknown) => {
+                  if (typeof c !== 'object' || c == null) return null;
+                  const obj = c as Record<string, unknown>;
+                  const rawTrade = typeof obj.trade === 'string' ? obj.trade.trim() : '';
+                  if (!rawTrade) return null;
+                  const canon = canonicalTradeLabel(rawTrade, allowedTradeLabels);
+                  const tradeOut = canon ?? (rawTrade.toLowerCase() === 'n/a' ? 'N/A' : null);
+                  if (!tradeOut) return null;
+                  const score = typeof obj.score === 'number' && Number.isFinite(obj.score)
+                      ? Math.max(0, Math.min(100, Math.round(obj.score)))
+                      : 0;
+                  return { trade: tradeOut, score };
+              })
+              .filter((c): c is { trade: string; score: number } => c !== null)
+        : [];
+    const dedupedCandidates = new Map<string, { trade: string; score: number }>();
+    for (const c of candidateInputs) {
+        const existing = dedupedCandidates.get(c.trade);
+        if (!existing || c.score > existing.score) dedupedCandidates.set(c.trade, c);
+    }
+    const trade_candidates = Array.from(dedupedCandidates.values())
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 3);
+
     return {
         trade,
         trade_detail: detail,
@@ -231,6 +291,7 @@ export function finalizeClassificationAgainstCatalogAndTaxonomy(
             typeof parsed.failed_component === 'string' ? parsed.failed_component : '',
         cascading_damage:
             typeof parsed.cascading_damage === 'string' ? parsed.cascading_damage : '',
+        trade_candidates,
     };
 }
 
@@ -246,6 +307,7 @@ export const FALLBACK_CLASSIFICATION: ClassificationResult = {
     unsupported_reason: '',
     failed_component: '',
     cascading_damage: '',
+    trade_candidates: [],
 };
 
 /**
@@ -303,6 +365,11 @@ export async function runClassification(
             unsupported_reason: '',
             failed_component: 'pressure relief valve',
             cascading_damage: '',
+            trade_candidates: [
+                { trade: 'Plumbing', score: 92 },
+                { trade: 'General Handyman', score: 35 },
+                { trade: 'Electrical', score: 10 },
+            ],
         };
         logPipelineStep({
             stepName: 'agent-classify', status: 'ok', durationMs: Date.now() - stepStart,

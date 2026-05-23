@@ -23,17 +23,19 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ComingSoonClient } from '@/app/coming-soon/client';
 import { server } from '@/__tests__/msw/server';
 
-// We mock window.location so we can assert navigations without jsdom errors.
-const originalLocation = window.location;
+// Mock next/navigation so we can assert router-driven redirects without
+// needing a real Next runtime. As of 2026-05-23 the beta-access success path
+// uses `router.push('/')` (was `window.location.href = '/'`) so the test
+// asserts the router call, not a window.location mutation.
+const routerPush = vi.fn();
+const routerRefresh = vi.fn();
+vi.mock('next/navigation', () => ({
+    useRouter: () => ({ push: routerPush, refresh: routerRefresh, replace: vi.fn(), back: vi.fn(), forward: vi.fn(), prefetch: vi.fn() }),
+}));
 afterEach(() => {
-    Object.defineProperty(window, 'location', { configurable: true, value: originalLocation });
+    routerPush.mockReset();
+    routerRefresh.mockReset();
 });
-
-function stubLocation() {
-    const stub: Partial<Location> = { href: 'http://localhost/', assign: vi.fn(), replace: vi.fn() };
-    Object.defineProperty(window, 'location', { configurable: true, value: stub });
-    return stub;
-}
 
 describe('ComingSoonClient — contact form', () => {
     it('submit stays disabled until name + email + message are populated', async () => {
@@ -106,14 +108,14 @@ describe('ComingSoonClient — beta-access form', () => {
 
     it('redirects to / on a 200 from /api/beta-access', async () => {
         const user = userEvent.setup();
-        const stub = stubLocation();
         server.use(http.post('/api/beta-access', () => HttpResponse.json({ ok: true })));
 
         render(<ComingSoonClient />);
         await user.type(screen.getByPlaceholderText(/early access code/i), 'sekret');
         await user.click(screen.getByRole('button', { name: /^continue$/i }));
 
-        await waitFor(() => expect(stub.href).toBe('/'));
+        await waitFor(() => expect(routerPush).toHaveBeenCalledWith('/'));
+        expect(routerRefresh).toHaveBeenCalled();
     });
 
     it('shows "Incorrect code." and clears the field on a 401', async () => {

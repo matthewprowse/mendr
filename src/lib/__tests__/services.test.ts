@@ -21,6 +21,30 @@ describe('tradeToServiceLabel', () => {
         expect(tradeToServiceLabel('handyman')).toBe('General Handyman');
     });
 
+    // Real-world rejection cases (2026-05-23 gate-spring incident).
+    it('maps garage door spring and tilt-door keywords to Security', () => {
+        expect(tradeToServiceLabel('garage spring')).toBe('Security');
+        expect(tradeToServiceLabel('torsion spring')).toBe('Security');
+        expect(tradeToServiceLabel('extension spring')).toBe('Security');
+        expect(tradeToServiceLabel('up and over door')).toBe('Security');
+        expect(tradeToServiceLabel('tilt door')).toBe('Security');
+        expect(tradeToServiceLabel('canopy door')).toBe('Security');
+    });
+
+    it('maps roller shutter keywords to Security', () => {
+        expect(tradeToServiceLabel('roller shutter')).toBe('Security');
+        expect(tradeToServiceLabel('roller shutters')).toBe('Security');
+        expect(tradeToServiceLabel('shutter door')).toBe('Security');
+        expect(tradeToServiceLabel('Roller Shutter Repair')).toBe('Security');
+    });
+
+    it('maps gate hardware keywords to Security', () => {
+        expect(tradeToServiceLabel('gate track')).toBe('Security');
+        expect(tradeToServiceLabel('gate roller')).toBe('Security');
+        expect(tradeToServiceLabel('gate hinge')).toBe('Security');
+        expect(tradeToServiceLabel('gate arm')).toBe('Security');
+    });
+
     it('matches multi-word canonical label exactly', () => {
         expect(tradeToServiceLabel('Building & Construction')).toBe('Building & Construction');
         expect(tradeToServiceLabel('Flooring & Tiling')).toBe('Flooring & Tiling');

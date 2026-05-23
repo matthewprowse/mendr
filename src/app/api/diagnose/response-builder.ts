@@ -19,6 +19,7 @@ import {
 } from '@/features/diagnosis/prompts/special-cases';
 import type { ClassificationResult } from '@/features/diagnosis/agent-classify';
 import type { ProseResult } from '@/features/diagnosis/agent-prose';
+import { isProseExcessivelyHedging } from '@/features/diagnosis/hedging-guard';
 import {
     inferTradeFromSignals,
     TAXONOMY_NONE_ID,
@@ -307,7 +308,18 @@ export function buildCompatibleResponseText(
         trade_detail: classification.trade_detail,
         confidence: classification.confidence,
         rejected: classification.rejected,
-        requires_clarification: classification.requires_clarification,
+        // Hedging guard: when the prose text is dominated by hedging language
+        // ("appears to be", "difficult to tell", "without more information"),
+        // override the classifier's self-reported confidence and force a
+        // clarification cycle. LLM self-confidence is poorly calibrated; the
+        // model's word choice is the more honest signal.
+        requires_clarification:
+            classification.requires_clarification ||
+            isProseExcessivelyHedging({
+                thought: prose.thought,
+                diagnosis: prose.diagnosis,
+                message: prose.message,
+            }),
         unserviced: classification.unserviced,
         refetch_providers: classification.refetch_providers,
         unsupported_reason: classification.unsupported_reason ?? '',

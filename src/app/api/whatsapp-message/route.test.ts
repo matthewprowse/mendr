@@ -54,12 +54,14 @@ describe('POST /api/whatsapp-message', () => {
         expect(body.message).toContain('Acme');
     });
 
-    it('returns 500 on completely malformed body (JSON throws)', async () => {
+    it('returns 400 on completely malformed body (matches other public POST routes)', async () => {
         const { POST } = await import('./route');
         const res = await POST(
             makeRequest({ method: 'POST', body: undefined, rawBody: 'not json at all' }),
         );
-        expect(res.status).toBe(500);
+        expect(res.status).toBe(400);
+        const body = await res.json();
+        expect(body).toEqual({ error: 'Invalid JSON body' });
     });
 
     it('returns 429 when rate limited', async () => {

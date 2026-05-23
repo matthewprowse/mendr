@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import { Instagram, Mail, ChevronDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -48,6 +49,7 @@ function AudienceCard({
 // ── Contact + access card ────────────────────────────────────────────────────
 
 function Card4() {
+    const router = useRouter();
     const [name, setName]       = useState('');
     const [email, setEmail]     = useState('');
     const [message, setMessage] = useState('');
@@ -92,7 +94,10 @@ function Card4() {
                 body:    JSON.stringify({ password: code.trim() }),
             });
             if (res.ok) {
-                window.location.href = '/';
+                // Use Next router so we keep client-side routing + cookies set
+                // by /api/beta-access take effect immediately on the next render.
+                router.push('/');
+                router.refresh();
             } else {
                 setCodeErr('Incorrect code.');
                 setCode('');

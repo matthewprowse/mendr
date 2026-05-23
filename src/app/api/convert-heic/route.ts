@@ -29,6 +29,17 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         }
 
         const input = Buffer.from(await file.arrayBuffer());
+        // KNOWN BUG (2026-05-23): `heic-convert` decodes HEIC to raw RGB
+        // pixels then re-encodes to JPEG WITHOUT consulting the HEIC
+        // orientation metadata. iPhone HEIC files taken in portrait carry an
+        // orientation tag (typically 6 = rotate 90° CW for display); after
+        // this route the resulting JPEG is landscape and has no EXIF, so the
+        // browser and Gemini both see a sideways image. To fix properly,
+        // replace `heic-convert` with `sharp` (handles HEIC orientation
+        // natively, well-tested on Vercel's nodejs runtime) or read the
+        // orientation tag separately and rotate the output buffer here. See
+        // docs/testing-build-followup.md and the diagnosis-accuracy doc for
+        // the rollout plan. Filed as task — DO NOT half-fix inline.
         const output = await convert({
             buffer: input,
             format: 'JPEG',
