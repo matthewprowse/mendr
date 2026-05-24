@@ -1,8 +1,8 @@
 {
     "crons": [
         {
-            "path": "/api/cron/data-layer-maintenance",
-            "schedule": "0 4 * * 0"
+            "path": "/api/cron/process-provider-applications",
+            "schedule": "*/5 * * * *"
         },
         {
             "path": "/api/cron/sync-provider-reviews",
@@ -13,12 +13,20 @@
             "schedule": "0 3 * * *"
         },
         {
+            "path": "/api/cron/data-layer-maintenance",
+            "schedule": "0 4 * * 0"
+        },
+        {
             "path": "/api/cron/retry-enrichment",
             "schedule": "0 5 * * *"
         },
         {
-            "path": "/api/cron/process-provider-applications",
-            "schedule": "*/5 * * * *"
+            "path": "/api/cron/contractor-onboarding",
+            "schedule": "0 7 * * *"
+        },
+        {
+            "path": "/api/cron/homeowner-followup",
+            "schedule": "0 8 * * *"
         },
         {
             "path": "/api/cron/lead-digest",
@@ -27,6 +35,10 @@
         {
             "path": "/api/cron/send-rating-requests",
             "schedule": "0 9 * * *"
+        },
+        {
+            "path": "/api/cron/homeowner-reengagement",
+            "schedule": "0 9 * * 1"
         }
     ]
 }
