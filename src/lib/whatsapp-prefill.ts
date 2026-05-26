@@ -71,6 +71,59 @@ export async function resolveWhatsAppPrefill(profileUrl: string): Promise<WhatsA
     return { diagnosis, trade, report_url, profile_url };
 }
 
+/**
+ * Builds a concise WhatsApp share message for a completed diagnosis report.
+ *
+ * Format (all parts present):
+ *   Mendr diagnosed my home fault: <title>\n\nTrade needed: <trade>. Confidence: <n>%.\n\nFull report: <url>
+ *
+ * Rules:
+ *  - trade line is omitted entirely when trade is null or blank.
+ *  - confidence clause is omitted when confidence is null.
+ *  - title falls back to "a home issue" when null or blank.
+ *  - confidence is rounded to the nearest integer.
+ *  - total length is capped at 700 chars (WhatsApp intent pre-fill limit).
+ */
+export function buildReportShareMessage(params: {
+    title: string | null;
+    trade: string | null;
+    confidence: number | null;
+    reportUrl: string;
+}): string {
+    const MAX_LEN = 699;
+
+    const title =
+        params.title && params.title.trim() ? params.title.trim() : 'a home issue';
+    const trade =
+        params.trade && params.trade.trim() ? params.trade.trim() : null;
+    const confidence =
+        params.confidence != null ? Math.round(params.confidence) : null;
+
+    const line1 = `Mendr diagnosed my home fault: ${title}`;
+    const line3 = `Full report: ${params.reportUrl}`;
+
+    let line2: string | null = null;
+    if (trade !== null) {
+        line2 =
+            confidence !== null
+                ? `Trade needed: ${trade}. Confidence: ${confidence}%.`
+                : `Trade needed: ${trade}.`;
+    }
+
+    const parts = [line1, ...(line2 ? [line2] : []), line3];
+    const raw = parts.join('\n\n');
+
+    if (raw.length <= MAX_LEN) return raw;
+
+    // Truncate title to fit within limit, preserving url and trade lines.
+    const fixed = [line3, ...(line2 ? [line2] : [])].join('\n\n');
+    const prefix = 'Mendr diagnosed my home fault: ';
+    const available = MAX_LEN - prefix.length - (line2 ? '\n\n'.length + line2.length + '\n\n'.length : '\n\n'.length) - line3.length;
+    const truncatedTitle = available > 3 ? title.slice(0, available - 3) + '...' : title.slice(0, Math.max(0, available));
+    void fixed;
+    return `${prefix}${truncatedTitle}\n\n${line2 ? line2 + '\n\n' : ''}${line3}`.slice(0, MAX_LEN);
+}
+
 export function setLastConversationIdForWhatsApp(conversationId: string) {
     if (typeof window === 'undefined' || !conversationId?.trim()) return;
     try {

@@ -36,21 +36,20 @@ export default defineConfig({
                 'node_modules',
                 '.next',
             ],
-            // Phase 7 thresholds — ratcheted to current actuals minus ~1pp,
-            // floored at the previous Phase 4 thresholds so we never lower
-            // the bar in CI.
+            // Phase 7 final thresholds — ratcheted to current actuals minus ~1pp,
+            // floored at previous thresholds so we never lower the bar in CI.
             //
-            // Phase 7 actuals (1108 tests across 122 files):
-            //   lines:      20.02
-            //   branches:   65.94
-            //   functions:  47.95
-            //   statements: 20.02
+            // Phase 7 final actuals (1522 tests across 144 files):
+            //   lines:      20.78
+            //   branches:   66.42
+            //   functions:  48.18
+            //   statements: 20.78
             //
-            // Applied thresholds (max(prev-threshold, actuals-1pp)):
-            //   lines:      19   (max(18, 19.02))
-            //   branches:   65   (max(65, 64.94) → floored)
-            //   functions:  46   (max(46, 46.95))
-            //   statements: 19   (max(18, 19.02))
+            // Applied thresholds (max(prev-threshold, floor(actual)-1)):
+            //   lines:      19   (max(19, floor(20.78)-1=19))
+            //   branches:   65   (max(65, floor(66.42)-1=65))
+            //   functions:  47   (max(46, floor(48.18)-1=47))  ← up from 46
+            //   statements: 19   (max(19, floor(20.78)-1=19))
             //
             // Phase 5 (Supabase integration tests) was deferred — Docker is
             // not installed locally. Once it ships, lines/statements should
@@ -59,7 +58,7 @@ export default defineConfig({
             thresholds: {
                 lines: 19,
                 branches: 65,
-                functions: 46,
+                functions: 47,
                 statements: 19,
             },
         },

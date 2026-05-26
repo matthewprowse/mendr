@@ -79,9 +79,12 @@ vi.mock('@/lib/ai/prompt-utils', () => ({
     toHeadlineStyle: (s: string) => s,
     stripFillerSentenceStarts: (s: string) => s,
 }));
+// Use the real SERVICE_LABELS so the taxonomy assertion at module load does not
+// fail — the taxonomy validates every trade entry against SERVICE_LABELS at
+// parse time. Overriding to a single-trade list breaks that invariant.
 vi.mock('@/lib/services', async () => {
     const actual = await vi.importActual<typeof import('@/lib/services')>('@/lib/services');
-    return { ...actual, SERVICE_LABELS: ['Plumbing'] };
+    return { ...actual };
 });
 vi.mock('@/lib/diagnosis/parse-diagnosis-from-model-response', () => ({
     parseDiagnosisFromModelResponse: vi.fn(() => ({

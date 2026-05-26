@@ -304,6 +304,81 @@ export function jobRatingRequestEmail(params: {
 }
 
 /**
+ * Transactional lead-alert email sent to a contractor when a new homeowner
+ * diagnosis matches their trade and service area.
+ *
+ * Returns both a plain-text and an HTML version for maximum deliverability.
+ * The caller is responsible for sending via sendScandioEmail().
+ */
+export function contractorLeadAlertEmail(params: {
+    contractorName: string;
+    homeownerFirstName: string | null;
+    suburb: string | null;
+    diagnosisTitle: string;
+    trade: string;
+    severity: 'low' | 'medium' | 'high' | null;
+    reportUrl: string;
+    whatsappDeeplink: string | null;
+    unsubscribeUrl: string;
+}): { text: string; html: string } {
+    const {
+        contractorName,
+        homeownerFirstName,
+        suburb,
+        diagnosisTitle,
+        trade,
+        severity,
+        reportUrl,
+        whatsappDeeplink,
+        unsubscribeUrl,
+    } = params;
+
+    const homeownerLabel = homeownerFirstName ? homeownerFirstName : 'A homeowner';
+    const locationClause = suburb ? ` in ${suburb}` : '';
+    const severityLine = severity ? `Severity: ${severity}` : null;
+
+    const whatsappTextLine = whatsappDeeplink
+        ? `Reply on WhatsApp: ${whatsappDeeplink}`
+        : null;
+
+    const textParts = [
+        `Hi ${contractorName},`,
+        '',
+        `${homeownerLabel} needs ${trade} help${locationClause}.`,
+        '',
+        `Fault: ${diagnosisTitle}`,
+        ...(severityLine ? [severityLine] : []),
+        '',
+        `View the full diagnosis report: ${reportUrl}`,
+        ...(whatsappTextLine ? ['', whatsappTextLine] : []),
+        '',
+        '---',
+        `To stop receiving these emails: ${unsubscribeUrl}`,
+    ];
+
+    const text = textParts.join('\n');
+
+    const whatsappHtml = whatsappDeeplink
+        ? `<p><a href="${whatsappDeeplink}">Reply on WhatsApp</a></p>`
+        : '';
+
+    const html = buildEmailHtml({
+        body: [
+            `<p>Hi ${contractorName},</p>`,
+            `<p>${homeownerLabel} needs <strong>${trade}</strong> help${locationClause}.</p>`,
+            `<p><strong>Fault:</strong> ${diagnosisTitle}</p>`,
+            ...(severityLine ? [`<p>${severityLine}</p>`] : []),
+            whatsappHtml,
+            `<p style="font-size:0.8em;color:#888">To stop receiving these emails: <a href="${unsubscribeUrl}">${unsubscribeUrl}</a></p>`,
+        ].join('\n'),
+        ctaLabel: 'View diagnosis report',
+        ctaUrl: reportUrl,
+    });
+
+    return { text, html };
+}
+
+/**
  * Monthly lead digest email for providers.
  * Sent once per month to providers who received homeowner contact events.
  */

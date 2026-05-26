@@ -46,6 +46,16 @@ export interface ProviderItem {
     lastMatchedAt?: string | null;
     /** Enrichment-derived profile depth score (0..3). */
     profileCompleteness?: number;
+    /** Mendr-side Bayesian rating derived from job_outcomes (null when no outcomes yet). */
+    mendrRating?: number | null;
+    /** Number of Mendr job outcomes contributing to mendrRating. */
+    mendrRatingCount?: number | null;
+    /** Service area centre latitude (null = no declared service area — serve all). */
+    service_area_center_lat?: number | null;
+    /** Service area centre longitude. */
+    service_area_center_lng?: number | null;
+    /** Service area radius in km (null = no declared service area). */
+    service_area_radius_km?: number | null;
 }
 
 export interface ProvidersResponseBody {

@@ -36,6 +36,8 @@ const fullBody = {
     trade: 'Plumbing',
     specialisations: 'burst pipes',
     foundedYear: '2018',
+    // POPIA consent is now required — must be strict boolean true.
+    popiaConsent: true,
 };
 
 describe('POST /api/providers/apply — validation', () => {

@@ -7,14 +7,96 @@ import type { ProviderItem } from '@/lib/providers/contracts';
 const BAYESIAN_C = 10;
 const BAYESIAN_PRIOR = 4.0; // global mean rating assumption
 
+// Mendr-rating blending constants.
+// Mendr outcomes are treated as ~2× more credible per review than a Google
+// review, so each Mendr review contributes 2 "phantom" Google-equivalent
+// reviews to the Bayesian pool. We require at least 3 Mendr reviews before
+// blending — below that the signal is too noisy to trust.
+const MENDR_CREDIBILITY_MULTIPLIER = 2;
+const MENDR_MIN_COUNT = 3;
+
 /**
- * Bayesian-averaged star rating, normalised to 0–1.
- * Formula: (n×r + C×m) / (n + C)  where n = review count, r = rating, m = prior.
+ * Haversine great-circle distance between two lat/lng points, in km.
  */
-function bayesianRatingScore(rating: number | null, reviewCount: number): number {
+export function haversineKm(
+    lat1: number,
+    lng1: number,
+    lat2: number,
+    lng2: number,
+): number {
+    const R = 6371; // Earth radius in km
+    const dLat = ((lat2 - lat1) * Math.PI) / 180;
+    const dLng = ((lng2 - lng1) * Math.PI) / 180;
+    const a =
+        Math.sin(dLat / 2) ** 2 +
+        Math.cos((lat1 * Math.PI) / 180) *
+            Math.cos((lat2 * Math.PI) / 180) *
+            Math.sin(dLng / 2) ** 2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+/**
+ * Returns true if the customer location falls within the provider's declared
+ * service area. Back-compat: returns true when no service area is declared
+ * (null centre or null radius), treating the provider as available everywhere.
+ */
+export function isProviderInServiceArea(
+    provider: import('./contracts').ProviderItem,
+    customerLat: number,
+    customerLng: number,
+): boolean {
+    const { service_area_center_lat, service_area_center_lng, service_area_radius_km } = provider;
+    // If the provider has not declared a service area, they serve all customers.
+    if (
+        service_area_center_lat == null ||
+        service_area_center_lng == null ||
+        service_area_radius_km == null
+    ) {
+        return true;
+    }
+    const distKm = haversineKm(
+        service_area_center_lat,
+        service_area_center_lng,
+        customerLat,
+        customerLng,
+    );
+    return distKm <= service_area_radius_km;
+}
+
+/**
+ * Bayesian-averaged star rating that blends Google reviews with Mendr-side
+ * job outcomes. Mendr reviews are weighted at MENDR_CREDIBILITY_MULTIPLIER×
+ * because they are verified job completions rather than self-selected reviews.
+ *
+ * When mendrRatingCount < MENDR_MIN_COUNT the Mendr signal is ignored.
+ *
+ * Formula (no Mendr):  (n×r + C×m) / (n + C)
+ * Formula (with Mendr): blended_rating = (n×r + k×n_m×r_m) / (n + k×n_m)
+ *                       then: (blended_n×blended_r + C×m) / (blended_n + C)
+ */
+function bayesianRatingScore(
+    rating: number | null,
+    reviewCount: number,
+    mendrRating?: number | null,
+    mendrRatingCount?: number | null,
+): number {
     const r = rating ?? BAYESIAN_PRIOR;
     const n = Math.max(0, reviewCount ?? 0);
-    return (n * r + BAYESIAN_C * BAYESIAN_PRIOR) / (n + BAYESIAN_C) / 5.0;
+
+    let blendedR = r;
+    let blendedN = n;
+
+    const mr = mendrRating ?? null;
+    const mn = mendrRatingCount ?? 0;
+
+    if (mr !== null && mn >= MENDR_MIN_COUNT) {
+        // Inflate the Mendr count to reflect its higher credibility.
+        const mendrEquivN = mn * MENDR_CREDIBILITY_MULTIPLIER;
+        blendedN = n + mendrEquivN;
+        blendedR = (n * r + mendrEquivN * mr) / blendedN;
+    }
+
+    return (blendedN * blendedR + BAYESIAN_C * BAYESIAN_PRIOR) / (blendedN + BAYESIAN_C) / 5.0;
 }
 
 /**
@@ -113,7 +195,7 @@ export function compositeScore(
     const completenessBonus = ((p.profileCompleteness ?? 0) / 3) * 0.02;
     return (
         0.4 * relevanceScore(p, tradeDetail, trade) +
-        0.3 * bayesianRatingScore(p.rating, p.ratingCount ?? 0) +
+        0.3 * bayesianRatingScore(p.rating, p.ratingCount ?? 0, p.mendrRating, p.mendrRatingCount) +
         0.2 * proximityScore(p.distanceKm) +
         0.1 * recencyScore((p as any).lastMatchedAt) +
         completenessBonus
@@ -124,15 +206,27 @@ export function compositeScore(
  * Rank providers by composite score and return the top `limit`.
  *
  * @param limit  Maximum providers to return. Default 6 — enough for the carousel.
- * @param options  tradeDetail (subcategory from AI diagnosis) and broad trade string.
+ * @param options  tradeDetail (subcategory from AI diagnosis), broad trade string,
+ *                 and optional customer coordinates for service-area filtering.
+ *                 When customerLat and customerLng are both present, providers
+ *                 whose declared service area does not include the customer location
+ *                 are excluded before ranking. Providers with no declared service
+ *                 area are always kept (back-compat).
  */
 export function rankProviders(
     providers: ProviderItem[],
     limit = 6,
-    options?: { tradeDetail?: string; trade?: string }
+    options?: { tradeDetail?: string; trade?: string; customerLat?: number; customerLng?: number }
 ): ProviderItem[] {
-    const { tradeDetail, trade } = options ?? {};
-    return [...providers]
+    const { tradeDetail, trade, customerLat, customerLng } = options ?? {};
+
+    // Apply service-area filter only when both customer coordinates are available.
+    const filtered =
+        customerLat != null && customerLng != null
+            ? providers.filter((p) => isProviderInServiceArea(p, customerLat, customerLng))
+            : providers;
+
+    return [...filtered]
         .sort((a, b) => {
             const scoreDelta = compositeScore(b, tradeDetail, trade) - compositeScore(a, tradeDetail, trade);
             if (Math.abs(scoreDelta) > 0.01) return scoreDelta;

@@ -44,6 +44,8 @@ type ApplyBody = {
         radiusKm?: number;
         source?: string;
     }>;
+    /** POPIA / Privacy Policy consent — must be strict boolean true. */
+    popiaConsent?: unknown;
 };
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
@@ -86,6 +88,16 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     const trade         = typeof body?.trade         === 'string' ? body.trade.trim()         : '';
     const specialisations = typeof body?.specialisations === 'string' ? body.specialisations.trim() : '';
     const foundedYearRaw  = typeof body?.foundedYear  === 'string' ? body.foundedYear.trim()  : '';
+
+    // POPIA / Privacy Policy consent — must be strict boolean true.
+    // We do NOT accept truthy non-booleans (e.g. "yes", 1) so that client-side
+    // bugs that coerce the value do not silently bypass the consent gate.
+    if (body?.popiaConsent !== true) {
+        return NextResponse.json(
+            { error: 'You must accept the Privacy Policy (POPIA consent) to submit an application.' },
+            { status: 400 },
+        );
+    }
 
     if (!contractorType || !CONTRACTOR_TYPES.has(contractorType)) {
         return NextResponse.json({ error: 'Select whether you work as an individual, team, or enterprise.' }, { status: 400 });
@@ -179,6 +191,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
                 applicant_ip:        applicantIp,
                 user_id:             authenticatedUserId,
                 status:              'new',
+                // POPIA consent timestamp — generated server-side for the audit trail.
+                // Never trust a client-supplied timestamp for this field.
+                popia_consent_at:    new Date().toISOString(),
             })
             .select('id')
             .single();
