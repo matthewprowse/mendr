@@ -12,7 +12,7 @@ const DEV_ANALYTICS_FLAG = 'NEXT_PUBLIC_ENABLE_DEV_ANALYTICS';
 const DEDUPE_WINDOW_MS = 1500;
 const eventLastSentAt = new Map<string, number>();
 
-function getSessionId(): string {
+export function getSessionId(): string {
     if (typeof window === 'undefined') return 'ssr';
     try {
         let id = sessionStorage.getItem(SESSION_KEY);

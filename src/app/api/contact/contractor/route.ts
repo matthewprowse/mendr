@@ -3,6 +3,7 @@ import { createHash } from 'crypto';
 import { checkRateLimit } from '@/lib/rate-limit-config';
 import { createSupabaseAdminClient } from '@/lib/auth/supabase-server';
 import { notifyContractorOfLead } from '@/lib/providers/notify-contractor-of-lead';
+import { stampFirstContact } from '@/lib/analytics/funnel';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -119,6 +120,18 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         }).catch((err) => {
             console.error('[contact/contractor] lead notification error:', err);
         });
+    }
+
+    // Durable funnel stamp for the "Contacted" stage (first write wins), plus the
+    // explicit confirmation signal: contacting a contractor implies the homeowner
+    // accepted the diagnosis. Both are best-effort and must never fail the contact.
+    await stampFirstContact(diagnosisId);
+    const { error: confirmError } = await admin
+        .from('diagnoses')
+        .update({ diagnosis_confirmed: true })
+        .eq('id', diagnosisId);
+    if (confirmError) {
+        console.warn('[contact/contractor] diagnosis_confirmed update skipped:', confirmError.message);
     }
 
     return NextResponse.json({ ok: true });

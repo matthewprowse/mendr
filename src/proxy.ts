@@ -11,6 +11,8 @@ const BETA_PUBLIC_PREFIXES = [
     '/coming-soon',
     '/api/beta-access',
     '/api/contact',     // Pre-launch interest form on /coming-soon
+    '/api/geocode',     // Internal server-side fetch (WhatsApp bot) — no beta cookie
+    '/api/providers',   // Internal server-side fetch (WhatsApp bot) — no beta cookie
     '/admin',           // Admin has its own auth — handled below
     '/_next/',
     '/fonts/',

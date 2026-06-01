@@ -37,6 +37,22 @@ const TRADE_QUERY_MAP: Record<string, string> = {
     'water damage': 'Water Damage Restoration',
     builder: 'Builder',
     contractor: 'Building Contractor',
+    // New canonical trades.
+    'appliance repair': 'Appliance Repair Technician',
+    appliance: 'Appliance Repair Technician',
+    'glazing, glass & aluminium': 'Glazier',
+    glazing: 'Glazier',
+    glazier: 'Glazier',
+    'borehole, water & pumps': 'Borehole and pump contractor',
+    borehole: 'Borehole and pump contractor',
+    'pest control': 'Pest Control Service',
+    pest: 'Pest Control Service',
+    waterproofing: 'Waterproofing contractor',
+    'solar & backup power': 'Solar installer',
+    solar: 'Solar installer',
+    'paving & driveways': 'Paving Contractor',
+    'gas installation & repair': 'Gas Installer',
+    gas: 'Gas Installer',
 };
 
 const TRADE_SERVICE_LABEL_MAP: Record<string, string> = {
@@ -53,6 +69,16 @@ const TRADE_SERVICE_LABEL_MAP: Record<string, string> = {
     'pool maintenance': 'Pool Maintenance',
     'rubble & waste removal': 'Rubble & Waste Removal',
     welding: 'Welding',
+    'appliance repair': 'Appliance Repair',
+    'air conditioning': 'Air Conditioning',
+    'glazing, glass & aluminium': 'Glazing, Glass & Aluminium',
+    'borehole, water & pumps': 'Borehole, Water & Pumps',
+    'pest control': 'Pest Control',
+    waterproofing: 'Waterproofing',
+    'solar & backup power': 'Solar & Backup Power',
+    roofing: 'Roofing',
+    'paving & driveways': 'Paving & Driveways',
+    'gas installation & repair': 'Gas Installation & Repair',
 };
 
 export function buildProviderQuery(input: {

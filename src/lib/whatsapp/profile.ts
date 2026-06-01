@@ -42,3 +42,45 @@ export async function getSavedLocations(
         }))
         .filter((l) => l.id && l.address);
 }
+
+/**
+ * Append a geocoded location to the user's saved profile locations (max 10), so
+ * an address typed in WhatsApp persists and is offered next time. Best-effort:
+ * never throws. Skips duplicates that resolve to the same rounded coordinates.
+ */
+export async function saveLocationForUser(
+    userId: string,
+    loc: { label?: string; address: string; lat: number; lng: number },
+): Promise<void> {
+    try {
+        const admin = await createSupabaseAdminClient();
+        const { data } = await admin
+            .from('profiles')
+            .select('locations')
+            .eq('id', userId)
+            .maybeSingle();
+        const existing = Array.isArray(data?.locations) ? data.locations : [];
+        const round = (n: number) => Math.round(n * 1000) / 1000;
+        const isDuplicate = existing.some(
+            (l) =>
+                typeof l === 'object' &&
+                l !== null &&
+                typeof (l as { lat?: unknown }).lat === 'number' &&
+                typeof (l as { lng?: unknown }).lng === 'number' &&
+                round((l as { lat: number }).lat) === round(loc.lat) &&
+                round((l as { lng: number }).lng) === round(loc.lng),
+        );
+        if (isDuplicate) return;
+        const entry = {
+            id: crypto.randomUUID(),
+            label: (loc.label ?? '').trim() || 'Saved address',
+            address: loc.address,
+            lat: loc.lat,
+            lng: loc.lng,
+        };
+        const next = [...existing, entry].slice(0, 10);
+        await admin.from('profiles').update({ locations: next }).eq('id', userId);
+    } catch (e) {
+        console.error('[whatsapp/profile] saveLocationForUser error:', e);
+    }
+}

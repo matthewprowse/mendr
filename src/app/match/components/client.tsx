@@ -867,6 +867,19 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
         if (!matchViewFiredRef.current && providers.length > 0) {
             matchViewFiredRef.current = true;
             trackEvent('match_view', { diagnosis_id: conversationId || undefined });
+            // Durable "Matches Shown" funnel stamp (server-side, first write wins).
+            // Unlike the analytics event above, this persists to diagnosis_funnel.
+            if (conversationId) {
+                void fetch(
+                    `/api/diagnoses/${encodeURIComponent(conversationId)}/matches-shown`,
+                    {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ matchCount: providers.length }),
+                        keepalive: true,
+                    },
+                ).catch(() => {});
+            }
         }
     }, [providers.length, conversationId]);
 

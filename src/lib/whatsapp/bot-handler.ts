@@ -26,7 +26,8 @@ import {
     setDiagnosisLocation,
 } from './diagnosis-runner';
 import { matchContractors, logContractorLead } from './contractor-matcher';
-import { getSavedLocations } from './profile';
+import { getSavedLocations, saveLocationForUser } from './profile';
+import { geocodeAddress } from './geocode';
 import {
     detectGlobalCommand,
     resolveOption,
@@ -177,9 +178,34 @@ async function presentDiagnosis(
     diagnosisId: string,
     data: DiagnosisData,
 ): Promise<{ messages: OutboundMessage[]; state: WhatsappSession['state'] }> {
-    if (data.requires_clarification) {
-        const clar = extractClarificationOptions(data);
-        if (clar && clar.options.length > 0) {
+    // Route to clarification when the pipeline flags it OR when it produced
+    // usable clarification options even with requires_clarification=false.
+    // The shared diagnosis pipeline can return an internally inconsistent
+    // result for vague text-only input (e.g. title "Unspecified Garage Door
+    // Fault", confidence 95, requires_clarification=false, yet
+    // clarification_questions populated). Offering a report link and
+    // contractors for an unspecified fault is useless, so prefer clarifying
+    // whenever there is something concrete to ask.
+    const clar = extractClarificationOptions(data);
+    const hasClarificationOptions = clar !== null && clar.options.length > 0;
+    // The shared pipeline keeps emitting clarification_questions even AFTER it
+    // commits to a specific diagnosis (e.g. "Detached Left Side Tension Spring",
+    // confidence 95, requires_clarification=false, failed_component set). If we
+    // clarified on the mere presence of options the bot would loop forever,
+    // asking ever-finer questions. So only override a commit and clarify when
+    // the diagnosis is genuinely unspecified: no failed_component AND a vague or
+    // placeholder title. A specific committed diagnosis goes straight to the
+    // summary and contractor offer.
+    const probe = data as unknown as { failed_component?: unknown; diagnosis?: unknown };
+    const failedComponent =
+        typeof probe.failed_component === 'string' ? probe.failed_component.trim() : '';
+    const title = typeof probe.diagnosis === 'string' ? probe.diagnosis.trim() : '';
+    const looksUnspecified =
+        failedComponent.length === 0 &&
+        (title.length === 0 ||
+            /\b(unspecified|unclear|unknown|undiagnosed|general)\b/i.test(title));
+    if (data.requires_clarification || (hasClarificationOptions && looksUnspecified)) {
+        if (hasClarificationOptions && clar) {
             await updateSession(phone, {
                 state: 'awaiting_clarification',
                 active_diagnosis_id: diagnosisId,
@@ -257,13 +283,14 @@ async function beginAddressSelection(
         : [];
 
     if (locations.length === 0) {
-        // No saved addresses → send them to the web form, stay awaiting_address.
+        // No saved addresses → let them type one directly in chat (geocoded on
+        // reply). Empty options signals free-text entry mode to the handler.
         await updateSession(session.phone_number, {
             state: 'awaiting_address',
             pending_address: { options: [], trade, tradeDetail },
         });
         return {
-            messages: [out(fmt.formatNoAddressPrompt())],
+            messages: [out(fmt.formatAddressEntryPrompt())],
             state: 'awaiting_address',
         };
     }
@@ -305,26 +332,38 @@ async function runContractorSearch(
     const trade = pending?.trade ?? '';
     const tradeDetail = pending?.tradeDetail ?? '';
 
-    if (chosen.lat == null || chosen.lng == null) {
-        // Saved address without coordinates — cannot geocode reliably from text.
-        return {
-            messages: [out(fmt.formatNoAddressPrompt())],
-            state: 'awaiting_address',
-        };
+    // Resolve coordinates: prefer the stored ones; otherwise geocode the
+    // address text on the fly rather than dead-ending at the web form.
+    let lat = chosen.lat;
+    let lng = chosen.lng;
+    let resolvedAddress: string | null = chosen.address || null;
+    if (lat == null || lng == null) {
+        const geo = chosen.address
+            ? await geocodeAddress(chosen.address, { requestOrigin: deps.requestOrigin })
+            : null;
+        if (!geo) {
+            return {
+                messages: [out(fmt.formatAddressNotFound())],
+                state: 'awaiting_address',
+            };
+        }
+        lat = geo.lat;
+        lng = geo.lng;
+        resolvedAddress = geo.address;
     }
 
     // Copy the chosen coordinates onto the diagnosis — matching keys off these.
     if (session.active_diagnosis_id) {
         await setDiagnosisLocation(session.active_diagnosis_id, {
-            lat: chosen.lat,
-            lng: chosen.lng,
-            address: chosen.address || null,
+            lat,
+            lng,
+            address: resolvedAddress,
         });
     }
 
     const contractors = await matchContractors({
-        lat: chosen.lat,
-        lng: chosen.lng,
+        lat,
+        lng,
         trade,
         tradeDetail,
         requestOrigin: deps.requestOrigin,
@@ -680,8 +719,11 @@ async function handleAwaitingAddress(
     // No saved options → the user was sent to the web form and asked to reply
     // "ready". On "ready" (or yes), re-load saved locations and re-present.
     if (!pending || pending.options.length === 0) {
+        // Free-text address-entry mode. "ready"/"yes" means they saved one on
+        // the web — re-load saved locations. Otherwise treat the message as the
+        // address itself: geocode it, save it for next time, and search.
         const yn = await resolveYesNo(text, classifier);
-        if (yn === 'yes' || /ready/i.test(text)) {
+        if (yn === 'yes' || /\bready\b/i.test(text)) {
             return beginAddressSelection(
                 session,
                 session.active_diagnosis_id
@@ -689,10 +731,32 @@ async function handleAwaitingAddress(
                     : null,
             );
         }
-        return {
-            messages: [out(fmt.formatReprompt(fmt.formatNoAddressPrompt()))],
-            state: 'awaiting_address',
-        };
+        const geo = await geocodeAddress(text, { requestOrigin: deps.requestOrigin });
+        if (!geo) {
+            return {
+                messages: [out(fmt.formatAddressNotFound())],
+                state: 'awaiting_address',
+            };
+        }
+        if (session.user_id) {
+            await saveLocationForUser(session.user_id, {
+                address: geo.address,
+                lat: geo.lat,
+                lng: geo.lng,
+            });
+        }
+        return runContractorSearch(
+            session,
+            {
+                index: 0,
+                id: 'typed',
+                label: '',
+                address: geo.address,
+                lat: geo.lat,
+                lng: geo.lng,
+            },
+            deps,
+        );
     }
 
     const options: ParserOption[] = pending.options.map((o) => ({
@@ -733,9 +797,18 @@ async function handleAwaitingAddress(
     }
 
     if (chosen.isOther) {
-        await updateSession(session.phone_number, { state: 'awaiting_address' });
+        // Switch to free-text entry mode (empty options) so the next message is
+        // geocoded as a typed address.
+        await updateSession(session.phone_number, {
+            state: 'awaiting_address',
+            pending_address: {
+                options: [],
+                trade: pending.trade,
+                tradeDetail: pending.tradeDetail,
+            },
+        });
         return {
-            messages: [out(fmt.formatNoAddressPrompt())],
+            messages: [out(fmt.formatAddressEntryPrompt())],
             state: 'awaiting_address',
         };
     }

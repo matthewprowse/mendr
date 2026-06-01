@@ -146,6 +146,26 @@ export function formatNoAddressPrompt(): string {
     return `To find contractors near you I need an address. Add one here: ${getSiteUrl()}/settings/addresses then reply "ready".`;
 }
 
+/**
+ * Ask the user to type an address directly in the chat. This is the primary
+ * path now (in-chat entry), with the web form mentioned only as an alternative.
+ */
+export function formatAddressEntryPrompt(): string {
+    return (
+        'What address should I search near? Reply with the street and suburb, ' +
+        'for example: 12 Main Road, Claremont. ' +
+        `You can also save addresses in your account: ${getSiteUrl()}/settings/addresses`
+    );
+}
+
+/** Sent when a typed address could not be geocoded. */
+export function formatAddressNotFound(): string {
+    return (
+        'I could not find that address. Please reply with a fuller address ' +
+        'including the suburb, for example: 12 Main Road, Claremont.'
+    );
+}
+
 /** The numbered contractor list (three per message handled by the caller). */
 export function formatContractorList(
     trade: string,

@@ -24,7 +24,7 @@ import {
     inferTradeFromSignals,
     TAXONOMY_NONE_ID,
 } from '@/lib/diagnosis/diagnosis-trade-taxonomy';
-import { tradeToServiceLabel } from '@/lib/services';
+import { resolveCanonicalTrade } from '@/lib/diagnosis/trade-resolver';
 import { computeStructuralConfidence } from '@/lib/diagnosis/structural-confidence';
 
 interface HistoryLike {
@@ -137,31 +137,24 @@ export function buildTradeFallbackClarificationChips(trade: string): string[] {
 export function inferTradeFromProseFallback(value: unknown, allowed: string[]): string {
     const raw = typeof value === 'string' ? value : '';
     if (!raw.trim()) return '';
-    const taxonomyHit = inferTradeFromSignals(raw);
-    if (taxonomyHit) {
-        const hit = allowed.find(
-            (l) => l.toLowerCase() === taxonomyHit.trade.toLowerCase(),
-        );
-        if (hit) return hit;
-        return taxonomyHit.trade;
+    // Single resolver first: exact label, trade-noun/hardware synonyms, taxonomy anchors.
+    const resolved = resolveCanonicalTrade(raw);
+    if (resolved) {
+        const hit = allowed.find((l) => l.toLowerCase() === resolved.toLowerCase());
+        return hit ?? resolved;
     }
+    // Last-resort generic symptom words the resolver does not key on.
     const t = raw.toLowerCase();
     if (/\b(garage door|gate motor|garage motor|roller shutter|access control)\b/.test(t)) {
-        const hit = allowed.find((l) => l.toLowerCase() === 'security');
-        return hit ?? 'Security';
+        return allowed.find((l) => l.toLowerCase() === 'security') ?? 'Security';
     }
     if (/\b(leak|pipe|geyser|toilet|tap|drain|plumbing)\b/.test(t)) {
-        const hit = allowed.find((l) => l.toLowerCase() === 'plumbing');
-        return hit ?? 'Plumbing';
+        return allowed.find((l) => l.toLowerCase() === 'plumbing') ?? 'Plumbing';
     }
     if (/\b(trip|db board|socket|light|wiring|electrical)\b/.test(t)) {
-        const hit = allowed.find((l) => l.toLowerCase() === 'electrical');
-        return hit ?? 'Electrical';
+        return allowed.find((l) => l.toLowerCase() === 'electrical') ?? 'Electrical';
     }
-    const loose = tradeToServiceLabel(raw);
-    if (!loose) return '';
-    const hit = allowed.find((l) => l.toLowerCase() === loose.toLowerCase());
-    return hit ?? loose;
+    return '';
 }
 
 /** Align trade/trade_detail with taxonomy keywords when prose contradicts classification. */

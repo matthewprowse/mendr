@@ -1,6 +1,7 @@
 /**
- * Canonical service labels — must match the `label` column in the Supabase `services` table exactly.
- * Supabase is the source of truth. Update here whenever the DB changes.
+ * Canonical service labels. This TypeScript constant is the single source of
+ * truth (the Supabase `services` table was removed). The diagnosis classifier,
+ * taxonomy, provider matching, and stats all derive from this list.
  */
 export const SERVICE_LABELS = [
     'Electrical',
@@ -16,6 +17,16 @@ export const SERVICE_LABELS = [
     'Pool Maintenance',
     'Rubble & Waste Removal',
     'Welding',
+    'Appliance Repair',
+    'Air Conditioning',
+    'Glazing, Glass & Aluminium',
+    'Borehole, Water & Pumps',
+    'Pest Control',
+    'Waterproofing',
+    'Solar & Backup Power',
+    'Roofing',
+    'Paving & Driveways',
+    'Gas Installation & Repair',
 ] as const;
 
 /** Maps AI trade variations (lowercase keywords) to canonical Supabase service label. */
@@ -93,6 +104,105 @@ const TRADE_TO_SERVICE: Record<string, (typeof SERVICE_LABELS)[number]> = {
     rubble: 'Rubble & Waste Removal',
     welding: 'Welding',
     welder: 'Welding',
+    // Gap fixes for existing trades (previously fell through to null).
+    construction: 'Building & Construction',
+    carpentry: 'Carpentry & Woodwork',
+    'home maintenance': 'General Handyman',
+    'general home maintenance': 'General Handyman',
+    // Appliance Repair
+    appliance: 'Appliance Repair',
+    'appliance repair': 'Appliance Repair',
+    fridge: 'Appliance Repair',
+    refrigerator: 'Appliance Repair',
+    freezer: 'Appliance Repair',
+    'washing machine': 'Appliance Repair',
+    'tumble dryer': 'Appliance Repair',
+    dishwasher: 'Appliance Repair',
+    microwave: 'Appliance Repair',
+    oven: 'Appliance Repair',
+    stove: 'Appliance Repair',
+    // Air Conditioning (gas variants below win by longest-match)
+    'air conditioning': 'Air Conditioning',
+    'air conditioner': 'Air Conditioning',
+    aircon: 'Air Conditioning',
+    hvac: 'Air Conditioning',
+    'heat pump': 'Air Conditioning',
+    // Glazing, Glass & Aluminium
+    glazing: 'Glazing, Glass & Aluminium',
+    glazier: 'Glazing, Glass & Aluminium',
+    glass: 'Glazing, Glass & Aluminium',
+    'window glass': 'Glazing, Glass & Aluminium',
+    'broken window': 'Glazing, Glass & Aluminium',
+    'aluminium window': 'Glazing, Glass & Aluminium',
+    'aluminium door': 'Glazing, Glass & Aluminium',
+    'shower door': 'Glazing, Glass & Aluminium',
+    mirror: 'Glazing, Glass & Aluminium',
+    // Borehole, Water & Pumps
+    borehole: 'Borehole, Water & Pumps',
+    'submersible pump': 'Borehole, Water & Pumps',
+    'pressure pump': 'Borehole, Water & Pumps',
+    'booster pump': 'Borehole, Water & Pumps',
+    'water pump': 'Borehole, Water & Pumps',
+    'water tank pump': 'Borehole, Water & Pumps',
+    rainwater: 'Borehole, Water & Pumps',
+    'water filtration': 'Borehole, Water & Pumps',
+    // Pest Control
+    pest: 'Pest Control',
+    'pest control': 'Pest Control',
+    rodent: 'Pest Control',
+    termite: 'Pest Control',
+    borer: 'Pest Control',
+    cockroach: 'Pest Control',
+    fumigation: 'Pest Control',
+    'bee removal': 'Pest Control',
+    wasp: 'Pest Control',
+    pigeon: 'Pest Control',
+    // Waterproofing
+    waterproofing: 'Waterproofing',
+    waterproof: 'Waterproofing',
+    'damp proofing': 'Waterproofing',
+    'rising damp': 'Waterproofing',
+    'penetrating damp': 'Waterproofing',
+    damp: 'Waterproofing',
+    'torch-on': 'Waterproofing',
+    membrane: 'Waterproofing',
+    // Solar & Backup Power
+    solar: 'Solar & Backup Power',
+    'solar panel': 'Solar & Backup Power',
+    'solar geyser': 'Solar & Backup Power',
+    inverter: 'Solar & Backup Power',
+    'battery backup': 'Solar & Backup Power',
+    'backup power': 'Solar & Backup Power',
+    'ups system': 'Solar & Backup Power',
+    // Roofing
+    roof: 'Roofing',
+    roofing: 'Roofing',
+    'roof leak': 'Roofing',
+    'roof repair': 'Roofing',
+    'roof tiles': 'Roofing',
+    gutter: 'Roofing',
+    gutters: 'Roofing',
+    ibr: 'Roofing',
+    fascia: 'Roofing',
+    ridging: 'Roofing',
+    // Paving & Driveways
+    paving: 'Paving & Driveways',
+    driveway: 'Paving & Driveways',
+    cobble: 'Paving & Driveways',
+    cobblestone: 'Paving & Driveways',
+    asphalt: 'Paving & Driveways',
+    'tar surfacing': 'Paving & Driveways',
+    'concrete driveway': 'Paving & Driveways',
+    // Gas Installation & Repair (longest-match beats appliance/geyser/plumbing keywords)
+    gas: 'Gas Installation & Repair',
+    'gas installation': 'Gas Installation & Repair',
+    'gas geyser': 'Gas Installation & Repair',
+    'gas hob': 'Gas Installation & Repair',
+    'gas stove': 'Gas Installation & Repair',
+    'gas oven': 'Gas Installation & Repair',
+    'gas fireplace': 'Gas Installation & Repair',
+    'gas leak': 'Gas Installation & Repair',
+    lpg: 'Gas Installation & Repair',
 };
 
 /**

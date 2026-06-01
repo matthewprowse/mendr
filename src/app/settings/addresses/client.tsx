@@ -509,8 +509,10 @@ export default function AddressesClient({ initialLocations }: { initialLocations
                                                         <Skeleton className="h-3.5 w-1/4 rounded" />
                                                         <Skeleton className="h-3 w-3/4 rounded" />
                                                     </div>
-                                                    <Skeleton className="size-8 shrink-0 rounded-md" />
-                                                    <Skeleton className="size-8 shrink-0 rounded-md" />
+                                                    <div className="flex items-center gap-2">
+                                                        <Skeleton className="size-8 shrink-0 rounded-md" />
+                                                        <Skeleton className="size-8 shrink-0 rounded-md" />
+                                                    </div>
                                                 </div>
                                             </Fragment>
                                         ))}
@@ -553,31 +555,33 @@ export default function AddressesClient({ initialLocations }: { initialLocations
                                                             {loc.address}
                                                         </p>
                                                     </div>
-                                                    <Button
-                                                        type="button"
-                                                        variant="ghost"
-                                                        size="icon"
-                                                        className="size-8 shrink-0 text-muted-foreground hover:text-foreground"
-                                                        aria-label={`Edit ${loc.label}`}
-                                                        onClick={() => openEdit(loc)}
-                                                    >
-                                                        <SquarePen size={16} />
-                                                    </Button>
-                                                    <Button
-                                                        type="button"
-                                                        variant="ghost"
-                                                        size="icon"
-                                                        className="size-8 shrink-0 text-muted-foreground hover:text-foreground"
-                                                        aria-label="Delete address"
-                                                        disabled={deletingId === loc.id}
-                                                        onClick={() => void handleDelete(loc.id)}
-                                                    >
-                                                        {deletingId === loc.id ? (
-                                                            <Spinner className="size-4" />
-                                                        ) : (
-                                                            <X size={16} strokeWidth={2.5} />
-                                                        )}
-                                                    </Button>
+                                                    <div className="flex items-center gap-2">
+                                                        <Button
+                                                            type="button"
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            className="size-8 shrink-0 text-muted-foreground hover:text-foreground"
+                                                            aria-label={`Edit ${loc.label}`}
+                                                            onClick={() => openEdit(loc)}
+                                                        >
+                                                            <SquarePen size={16} />
+                                                        </Button>
+                                                        <Button
+                                                            type="button"
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            className="size-8 shrink-0 text-muted-foreground hover:text-foreground"
+                                                            aria-label="Delete address"
+                                                            disabled={deletingId === loc.id}
+                                                            onClick={() => void handleDelete(loc.id)}
+                                                        >
+                                                            {deletingId === loc.id ? (
+                                                                <Spinner className="size-4" />
+                                                            ) : (
+                                                                <X size={16} strokeWidth={2.5} />
+                                                            )}
+                                                        </Button>
+                                                    </div>
                                                 </div>
                                             </div>
                                         ))}

@@ -4,6 +4,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseAdminClient } from '@/lib/auth/supabase-server';
 import { checkRateLimit } from '@/lib/rate-limit-config';
+import { stampDiagnosisDelivered } from '@/lib/analytics/funnel';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -148,6 +149,17 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
         return NextResponse.json({ error: 'No valid fields to update' }, { status: 400 });
     }
 
+    // The "Diagnosis Delivered" funnel stage is stamped the first time a
+    // non-null diagnosis object is written. First write wins (see funnel helper).
+    const finalizingDiagnosis =
+        Object.prototype.hasOwnProperty.call(body, 'diagnosis') &&
+        body.diagnosis != null &&
+        typeof body.diagnosis === 'object';
+    const respondOk = async () => {
+        if (finalizingDiagnosis) await stampDiagnosisDelivered(conversationId);
+        return NextResponse.json({ ok: true });
+    };
+
     try {
         const admin = await createSupabaseAdminClient();
 
@@ -162,7 +174,7 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
         }
 
         if (Array.isArray(updated) && updated.length > 0) {
-            return NextResponse.json({ ok: true });
+            return respondOk();
         }
 
         const title =
@@ -203,12 +215,12 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
                     return NextResponse.json({ error: retryErr.message }, { status: 500 });
                 }
                 if (Array.isArray(retryUpdated) && retryUpdated.length > 0) {
-                    return NextResponse.json({ ok: true });
+                    return respondOk();
                 }
             }
             return NextResponse.json({ error: insertErr.message }, { status: 500 });
         }
-        return NextResponse.json({ ok: true });
+        return respondOk();
     } catch (e) {
         const message = e instanceof Error ? e.message : 'Server error';
         if (message.includes('SUPABASE_SERVICE_ROLE_KEY')) {

@@ -25,7 +25,7 @@ import {
     getSubcategoryById,
     TAXONOMY_NONE_ID,
 } from '@/lib/diagnosis/diagnosis-trade-taxonomy';
-import { tradeToServiceLabel } from '@/lib/services';
+import { resolveCanonicalTrade } from '@/lib/diagnosis/trade-resolver';
 import {
     resolveVariant,
     getClassificationSystemPrompt,
@@ -206,20 +206,19 @@ A user may describe the same fault in many ways; the scope descriptions handle t
 
 Gate motor (boundary post, driveway gate) vs garage door motor (ceiling track, overhead door) — these are distinct subcategory_ids.
 
-USER CORRECTIONS BEAT THE PHOTO: If the user explicitly states what the equipment or issue is (e.g. "it's a borehole pump not a pool pump", "this is a gate motor", "I need a plumber"), their statement overrides the image. Update trade, trade_detail, and subcategory_id to match their correction. Cap confidence at 75 unless a new image confirms the corrected assessment.`.trim();
+USER CORRECTIONS BEAT THE PHOTO: If the user explicitly states what the equipment or issue is (e.g. "it's a borehole pump not a pool pump", "this is a gate motor", "I need a plumber"), their statement overrides the image. Update trade, trade_detail, and subcategory_id to match their correction. Cap confidence at 75 unless a new image confirms the corrected assessment.
+
+GENERAL HANDYMAN THRESHOLD: choose General Handyman for minor, cosmetic, or low-skill fixes that do not need a licensed or specialist trade, for example a perished silicone seal, a single loose handle or hinge, a small filler patch, swapping a light bulb, or hanging an item. Choose a specialist trade only when the job genuinely needs that trade's skill, scale, or certification. Never route gas, electrical, structural, or other certification-required work to General Handyman.
+
+ONE PRIMARY TRADE: pick exactly one trade. If two trades are genuinely plausible, choose the higher-confidence one, set requires_clarification true, and list the alternative in trade_candidates. Never emit a combined "X or Y" trade string.`.trim();
 }
 
 function canonicalTradeLabel(tradeRaw: string, allowedTradeLabels: string[]): string | null {
-    const t = typeof tradeRaw === 'string' ? tradeRaw.trim() : '';
-    if (!t || t === 'N/A') return null;
-    const lowered = allowedTradeLabels.map((s) => s.trim()).filter(Boolean);
-    const hit = lowered.find((l) => l.toLowerCase() === t.toLowerCase());
-    if (hit) return hit;
-    const mapped = tradeToServiceLabel(t);
-    if (mapped && lowered.some((l) => l.toLowerCase() === mapped.toLowerCase())) {
-        return lowered.find((l) => l.toLowerCase() === mapped.toLowerCase())!;
-    }
-    return null;
+    // Single resolver: exact label, trade-noun/hardware synonyms, then taxonomy
+    // anchors. Gated by the runtime allowed-label list.
+    const resolved = resolveCanonicalTrade(tradeRaw);
+    if (!resolved) return null;
+    return allowedTradeLabels.find((l) => l.trim().toLowerCase() === resolved.toLowerCase()) ?? null;
 }
 
 /** Applies routing coercion from subcategory_id and normalises trade to the catalogue. */

@@ -59,7 +59,7 @@ function assertKnownTrades(rows: TaxonomySubcategory[]): void {
 }
 
 /**
- * Full taxonomy across all 12 platform service categories.
+ * Full taxonomy across all 23 platform service categories.
  * Ordered by trade, then specificity within each trade.
  */
 export const TAXONOMY_SUBCATEGORIES: readonly TaxonomySubcategory[] = (
@@ -139,6 +139,9 @@ export const TAXONOMY_SUBCATEGORIES: readonly TaxonomySubcategory[] = (
             label: 'Lights and Wiring',
             trade: 'Electrical',
             scope: 'Any fault with light fittings, switches, plug sockets, or fixed wiring — including flickering or dead lights, failed downlights, broken socket outlets, wiring faults behind walls, ceiling rose replacements, and light fitting installations.',
+            excludes: [
+                'Swapping a light bulb or resetting a single tripped plug with no wiring fault (→ minor_home_repairs in General Handyman)',
+            ],
             inferenceAnchors: ['light fitting', 'downlights', 'plug socket', 'wiring fault', 'ceiling rose', 'light switch', 'no lights'],
         },
         {
@@ -151,7 +154,7 @@ export const TAXONOMY_SUBCATEGORIES: readonly TaxonomySubcategory[] = (
         {
             id: 'solar_inverter',
             label: 'Solar Panel / Inverter System',
-            trade: 'Electrical',
+            trade: 'Solar & Backup Power',
             scope: 'Any fault with a residential solar panel system, inverter, or battery backup installation — including inverter not switching to backup power during load shedding, solar panels not generating, battery not holding charge, inverter alarm codes, and new solar or backup power installations. Solar adoption has accelerated significantly in South Africa due to load shedding.',
             inferenceAnchors: ['solar panel', 'inverter', 'solar system', 'battery backup', 'backup power', 'ups system', 'solar fault'],
         },
@@ -202,7 +205,7 @@ export const TAXONOMY_SUBCATEGORIES: readonly TaxonomySubcategory[] = (
         {
             id: 'roof_leak_repair',
             label: 'Roof Leak / Repair',
-            trade: 'Building & Construction',
+            trade: 'Roofing',
             scope: 'Any fault with a residential roof — including active leaks during or after rain, missing, cracked, or broken roof tiles, damaged IBR or corrugated iron sheeting, failed ridging or flashing, leaking skylights, damaged roof trusses or battens, fascia and barge board damage, and gutters that are detached or directing water into the structure. Cape Town\'s wet winter rainfall makes roof leaks one of the most frequent building faults.',
             excludes: [
                 'Waterproofing coatings applied to flat roofs as paint (→ roof_waterproof_coating in Painting)',
@@ -212,7 +215,7 @@ export const TAXONOMY_SUBCATEGORIES: readonly TaxonomySubcategory[] = (
         {
             id: 'damp_waterproofing',
             label: 'Damp / Waterproofing',
-            trade: 'Building & Construction',
+            trade: 'Waterproofing',
             scope: 'Any damp, moisture, or water ingress problem in the building fabric — including rising damp in walls, penetrating damp after rain, persistently wet walls, damp patches on ceilings or floors, efflorescence on brickwork, mould caused by structural moisture, and waterproofing of flat roofs, parapets, balconies, retaining walls, and below-ground walls. Damp is a pervasive issue in Cape Town due to the wet south-west winter climate.',
             excludes: [
                 'Roof tile or structural roof leaks (→ roof_leak_repair)',
@@ -225,6 +228,9 @@ export const TAXONOMY_SUBCATEGORIES: readonly TaxonomySubcategory[] = (
             label: 'Wall Crack / Plastering',
             trade: 'Building & Construction',
             scope: 'Any cracked, damaged, or failing plasterwork on internal or external walls and ceilings — including hairline cracks, structural cracks, spalling or hollow plaster, damaged cornices, full re-plastering, and minor brickwork repairs or hole patching.',
+            excludes: [
+                'Minor filler patching of a single small hole or hairline crack with no structural cause (→ minor_home_repairs in General Handyman)',
+            ],
             inferenceAnchors: ['wall crack', 'cracked plaster', 'plaster repair', 'ceiling crack', 'brickwork repair', 'hollow plaster', 'hole in wall'],
         },
         {
@@ -252,6 +258,7 @@ export const TAXONOMY_SUBCATEGORIES: readonly TaxonomySubcategory[] = (
             excludes: [
                 'Lock or handle mechanism faults (→ Locksmith Services)',
                 'Steel security gates or doors (→ Welding or Security & Access)',
+                'A loose handle, squeaky hinge, or latch adjustment only (→ minor_home_repairs in General Handyman)',
             ],
             inferenceAnchors: ['door sticking', 'door frame', 'warped door', 'door repair', 'hollow door', 'door not closing'],
         },
@@ -289,6 +296,9 @@ export const TAXONOMY_SUBCATEGORIES: readonly TaxonomySubcategory[] = (
             label: 'General Carpentry / Custom Woodwork',
             trade: 'Carpentry & Woodwork',
             scope: 'Custom woodwork and general carpentry not covered by more specific subcategories — including shelving installations, skirting boards, timber wall cladding, wooden staircase repairs, bespoke furniture construction, and any other custom timber fabrication.',
+            excludes: [
+                'Re-fixing a single loose skirting length or minor trim with no fabrication (→ minor_home_repairs in General Handyman)',
+            ],
             inferenceAnchors: ['skirting board', 'shelving', 'timber cladding', 'wooden staircase', 'custom woodwork', 'bespoke carpentry'],
         },
 
@@ -407,7 +417,7 @@ export const TAXONOMY_SUBCATEGORIES: readonly TaxonomySubcategory[] = (
         {
             id: 'roof_waterproof_coating',
             label: 'Roof Paint / Waterproofing Coat',
-            trade: 'Painting',
+            trade: 'Waterproofing',
             scope: 'Application of waterproofing coatings, roof sealers, or speciality paints to flat or low-pitch roofs, parapets, and balconies — including acrylic waterproofing membranes, bitumen-based sealants, and surface-applied coating systems. This is a paint application trade, not structural waterproofing.',
             excludes: [
                 'Structural damp penetrating through walls or foundations (→ damp_waterproofing in Building & Construction)',
@@ -588,6 +598,288 @@ export const TAXONOMY_SUBCATEGORIES: readonly TaxonomySubcategory[] = (
             trade: 'Welding',
             scope: 'Custom steel or metal fabrication not covered by the security gate or structural categories — including steel balustrades, staircase handrails, custom steel frames, braai stand fabrication, decorative metalwork, and steel-framed garden structures. Braai (barbecue) stands and entertainment area metalwork are frequently commissioned in Cape Town.',
             inferenceAnchors: ['steel balustrade', 'handrail welding', 'steel fabrication', 'braai stand', 'custom metalwork', 'custom steel frame'],
+        },
+
+        // ── Appliance Repair ──────────────────────────────────────────────────────
+
+        {
+            id: 'large_kitchen_appliance',
+            label: 'Fridge / Freezer / Oven / Stove',
+            trade: 'Appliance Repair',
+            scope: 'Faults with major kitchen appliances including fridges, freezers, electric ovens, stoves and hobs, and dishwashers, such as not cooling, not heating, leaking water, or showing error codes.',
+            excludes: [
+                'Gas hobs, gas ovens, or gas stoves (→ Gas Installation & Repair)',
+                'The cabinetry or built-in unit around the appliance (→ Carpentry & Woodwork)',
+            ],
+            inferenceAnchors: ['fridge', 'refrigerator', 'freezer', 'electric oven', 'dishwasher', 'stove not working', 'appliance repair'],
+        },
+        {
+            id: 'laundry_appliance',
+            label: 'Washing Machine / Tumble Dryer',
+            trade: 'Appliance Repair',
+            scope: 'Faults with washing machines and tumble dryers, such as not draining, not spinning, leaking, not heating, or showing error codes.',
+            excludes: [
+                'A blocked waste or drain line behind the machine (→ blocked_drain in Plumbing)',
+                'A dead wall socket feeding the machine (→ lights_wiring in Electrical)',
+            ],
+            inferenceAnchors: ['washing machine', 'tumble dryer', 'washer not draining', 'dryer not heating', 'machine not spinning'],
+        },
+        {
+            id: 'small_appliance',
+            label: 'Microwave / Small Appliance',
+            trade: 'Appliance Repair',
+            scope: 'Faults with microwaves and other plug-in household appliances.',
+            inferenceAnchors: ['microwave', 'small appliance', 'kettle', 'toaster', 'appliance not switching on'],
+        },
+
+        // ── Air Conditioning ──────────────────────────────────────────────────────
+
+        {
+            id: 'aircon_cooling_fault',
+            label: 'AC Not Cooling or Heating',
+            trade: 'Air Conditioning',
+            scope: 'Split or window air conditioners with weak or no cooling or heating, ice forming on the unit, bad smells, or error codes, including a gas regas.',
+            excludes: [
+                'A tripped breaker or isolator with no AC fault (→ db_board_tripping in Electrical)',
+            ],
+            inferenceAnchors: ['aircon not cooling', 'air conditioner', 'ac not cold', 'aircon icing', 'aircon regas', 'hvac'],
+        },
+        {
+            id: 'aircon_install',
+            label: 'AC Installation or Relocation',
+            trade: 'Air Conditioning',
+            scope: 'Supply and installation of a new air conditioner, or relocating an existing indoor or outdoor unit.',
+            inferenceAnchors: ['aircon installation', 'install air conditioner', 'aircon relocation', 'new aircon'],
+        },
+        {
+            id: 'aircon_service_leak',
+            label: 'AC Service, Leak or Smell',
+            trade: 'Air Conditioning',
+            scope: 'Routine air conditioner servicing, water dripping from the indoor unit, a blocked condensate drain, or a musty smell from the unit.',
+            excludes: [
+                'A ceiling water stain from the roof or a pipe rather than the AC (→ roof_leak_repair in Roofing or burst_pipe_leak in Plumbing)',
+            ],
+            inferenceAnchors: ['aircon service', 'aircon leaking water', 'aircon smell', 'aircon dripping', 'aircon drain'],
+        },
+        {
+            id: 'heat_pump',
+            label: 'Heat Pump',
+            trade: 'Air Conditioning',
+            scope: 'Heat pumps for geyser hot water or pool heating that are not heating, short cycling, or showing fault codes.',
+            excludes: [
+                'A standard geyser element or thermostat (→ geyser_electrical in Electrical)',
+                'Pool circulation or filtration only (→ pool_pump_filter in Pool Maintenance)',
+            ],
+            inferenceAnchors: ['heat pump', 'heat pump not heating', 'geyser heat pump', 'pool heat pump'],
+        },
+
+        // ── Glazing, Glass & Aluminium ────────────────────────────────────────────
+
+        {
+            id: 'broken_window_glass',
+            label: 'Broken or Cracked Glass',
+            trade: 'Glazing, Glass & Aluminium',
+            scope: 'Cracked or shattered window panes and glass replacement, including safety glass after a break-in or storm.',
+            inferenceAnchors: ['broken window', 'cracked glass', 'shattered window', 'window glass', 'replace glass', 'broken pane'],
+        },
+        {
+            id: 'aluminium_window_door',
+            label: 'Aluminium Window or Door',
+            trade: 'Glazing, Glass & Aluminium',
+            scope: 'Aluminium-framed windows and sliding doors that stick, jam, will not lock, have worn rollers, or need new installation.',
+            excludes: [
+                'Wooden window or door frames (→ window_frame_repair or door_frame_repair in Carpentry & Woodwork)',
+            ],
+            inferenceAnchors: ['aluminium window', 'aluminium door', 'sliding door stuck', 'aluminium frame', 'sliding door roller'],
+        },
+        {
+            id: 'shower_glass_mirror',
+            label: 'Shower Door, Frameless Glass and Mirror',
+            trade: 'Glazing, Glass & Aluminium',
+            scope: 'Frameless shower enclosures, glass shower doors, mirrors, and glass splashbacks, for installation or replacement.',
+            inferenceAnchors: ['shower door', 'frameless glass', 'shower glass', 'mirror', 'glass splashback'],
+        },
+        {
+            id: 'glass_balustrade',
+            label: 'Glass Balustrade or Pool Fence',
+            trade: 'Glazing, Glass & Aluminium',
+            scope: 'Glass balustrades and frameless glass pool safety fencing, for installation, repair, or panel replacement.',
+            excludes: [
+                'Steel or aluminium balustrades and railings (→ custom_metalwork in Welding)',
+            ],
+            inferenceAnchors: ['glass balustrade', 'glass pool fence', 'glass railing', 'frameless balustrade'],
+        },
+
+        // ── Borehole, Water & Pumps ───────────────────────────────────────────────
+
+        {
+            id: 'borehole_pump',
+            label: 'Borehole or Submersible Pump',
+            trade: 'Borehole, Water & Pumps',
+            scope: 'Borehole and submersible pumps not pumping, low yield, motor failure, or pressure tank faults. Boreholes are widely used for water security in the Western Cape.',
+            excludes: [
+                'A swimming pool pump (→ pool_pump_filter in Pool Maintenance)',
+            ],
+            inferenceAnchors: ['borehole', 'borehole pump', 'submersible pump', 'borehole not pumping', 'well pump'],
+        },
+        {
+            id: 'pressure_tank_pump',
+            label: 'Tank or Pressure Pump System',
+            trade: 'Borehole, Water & Pumps',
+            scope: 'JoJo tank pressure pumps, booster pumps, float valves, and water storage tank installation and repair.',
+            excludes: [
+                'A leaking supply pipe or fitting on the mains (→ burst_pipe_leak in Plumbing)',
+            ],
+            inferenceAnchors: ['pressure pump', 'booster pump', 'jojo tank pump', 'water tank pump', 'float valve'],
+        },
+        {
+            id: 'water_filtration',
+            label: 'Water Filtration and Treatment',
+            trade: 'Borehole, Water & Pumps',
+            scope: 'Water filtration, UV treatment, and softener systems for borehole or municipal water, including installation, servicing, and filter replacement.',
+            inferenceAnchors: ['water filtration', 'water filter', 'water softener', 'uv water treatment', 'water purifier'],
+        },
+        {
+            id: 'rainwater_harvesting',
+            label: 'Rainwater Harvesting',
+            trade: 'Borehole, Water & Pumps',
+            scope: 'Rainwater harvesting systems from gutter to tank, including first-flush diverters and harvesting pumps.',
+            inferenceAnchors: ['rainwater harvesting', 'rainwater tank', 'gutter to tank', 'rainwater pump'],
+        },
+
+        // ── Pest Control ──────────────────────────────────────────────────────────
+
+        {
+            id: 'general_pest',
+            label: 'Rodents, Ants and Cockroaches',
+            trade: 'Pest Control',
+            scope: 'Infestations of rodents, ants, cockroaches, fishmoths, and similar household pests, including inspection, baiting, and fumigation.',
+            inferenceAnchors: ['rodent', 'rats', 'mice', 'cockroach', 'ants', 'fumigation', 'pest control'],
+        },
+        {
+            id: 'termite_borer',
+            label: 'Termite and Wood Borer',
+            trade: 'Pest Control',
+            scope: 'Treatment of termites and wood borer in structural and finish timber, including inspection and certificates for property transfer.',
+            excludes: [
+                'Repairing or replacing borer-damaged timber after treatment (→ general_carpentry in Carpentry & Woodwork)',
+            ],
+            inferenceAnchors: ['termite', 'wood borer', 'borer', 'termite treatment', 'borer certificate'],
+        },
+        {
+            id: 'bees_wasps',
+            label: 'Bee and Wasp Removal',
+            trade: 'Pest Control',
+            scope: 'Removal or relocation of bee swarms, hives, and wasp nests from a property.',
+            inferenceAnchors: ['bee removal', 'bee swarm', 'wasp nest', 'beehive', 'remove bees'],
+        },
+        {
+            id: 'bird_proofing',
+            label: 'Bird and Pigeon Proofing',
+            trade: 'Pest Control',
+            scope: 'Netting, spikes, and deterrents to stop pigeons and other birds roosting on a property.',
+            inferenceAnchors: ['pigeon', 'bird proofing', 'bird netting', 'bird spikes', 'pigeons roosting'],
+        },
+
+        // ── Waterproofing ─────────────────────────────────────────────────────────
+        // damp_waterproofing and roof_waterproof_coating were migrated into this
+        // trade from Building & Construction and Painting respectively.
+
+        {
+            id: 'wet_area_waterproofing',
+            label: 'Shower and Bathroom Waterproofing',
+            trade: 'Waterproofing',
+            scope: 'Under-tile waterproofing of showers, bathrooms, and other wet areas before tiling, and re-waterproofing a leaking wet area back to the screed.',
+            excludes: [
+                'The tiling or grouting itself (→ tile_repair or grout_sealing in Flooring & Tiling)',
+            ],
+            inferenceAnchors: ['shower waterproofing', 'bathroom waterproofing', 'wet area waterproofing', 'under tile waterproofing', 'leaking shower waterproofing'],
+        },
+
+        // ── Solar & Backup Power ──────────────────────────────────────────────────
+        // solar_inverter was migrated into this trade from Electrical.
+
+        {
+            id: 'solar_geyser',
+            label: 'Solar Geyser',
+            trade: 'Solar & Backup Power',
+            scope: 'Solar water heating systems, including collector panels, circulation pumps, controllers, and freeze or hail damage to the solar geyser.',
+            excludes: [
+                'A standard electric geyser element or thermostat (→ geyser_electrical in Electrical)',
+                'A leaking geyser tank or valve (→ geyser_fault_plumbing in Plumbing)',
+            ],
+            inferenceAnchors: ['solar geyser', 'solar water heater', 'solar collector', 'evacuated tube geyser'],
+        },
+
+        // ── Paving & Driveways ────────────────────────────────────────────────────
+
+        {
+            id: 'paving_install',
+            label: 'Paving Installation',
+            trade: 'Paving & Driveways',
+            scope: 'Installation of brick, cobble, or concrete paver driveways, patios, and walkways.',
+            inferenceAnchors: ['paving', 'new paving', 'paver driveway', 'cobble paving', 'lay paving'],
+        },
+        {
+            id: 'paving_repair',
+            label: 'Paving Repair or Re-levelling',
+            trade: 'Paving & Driveways',
+            scope: 'Repair of sunken, lifted, cracked, or weed-infested paving, including re-levelling and re-sanding the joints.',
+            inferenceAnchors: ['sunken paving', 'lifted paving', 'paving repair', 'paving relevelling', 'weeds in paving'],
+        },
+        {
+            id: 'concrete_driveway',
+            label: 'Concrete Driveway or Slab',
+            trade: 'Paving & Driveways',
+            scope: 'Poured concrete driveways and outdoor slabs, including new pours, cracking, and surface repair.',
+            excludes: [
+                'Indoor floor screed or levelling (→ floor_screed in Flooring & Tiling)',
+                'A structural building slab or foundation (→ building_extensions in Building & Construction)',
+            ],
+            inferenceAnchors: ['concrete driveway', 'concrete slab outdoor', 'driveway crack', 'poured concrete driveway'],
+        },
+        {
+            id: 'tar_asphalt',
+            label: 'Tar and Asphalt Surfacing',
+            trade: 'Paving & Driveways',
+            scope: 'Asphalt or tar driveway and surface laying and repair.',
+            inferenceAnchors: ['asphalt', 'tar surfacing', 'tar driveway', 'asphalt driveway'],
+        },
+
+        // ── Gas Installation & Repair ─────────────────────────────────────────────
+        // Compliance-critical: requires a registered installer and a gas certificate
+        // of conformity. Must never be routed to General Handyman.
+
+        {
+            id: 'gas_hob_stove',
+            label: 'Gas Hob, Stove and Oven',
+            trade: 'Gas Installation & Repair',
+            scope: 'Installation and repair of gas cooktops, hobs, stoves, and ovens, including ignition faults, regulators, and connections.',
+            inferenceAnchors: ['gas hob', 'gas stove', 'gas oven', 'gas cooktop', 'gas ignition'],
+        },
+        {
+            id: 'gas_geyser',
+            label: 'Gas Geyser or Water Heater',
+            trade: 'Gas Installation & Repair',
+            scope: 'Installation and repair of instantaneous gas water heaters and gas geysers, including ignition and gas supply faults.',
+            excludes: [
+                'An electric geyser element or leak (→ geyser_electrical in Electrical or geyser_fault_plumbing in Plumbing)',
+            ],
+            inferenceAnchors: ['gas geyser', 'gas water heater', 'instantaneous gas geyser', 'gas geyser not igniting'],
+        },
+        {
+            id: 'gas_installation_coc',
+            label: 'Gas Installation and CoC',
+            trade: 'Gas Installation & Repair',
+            scope: 'LPG bottle installation, gas piping, leak detection, and issuing a gas certificate of conformity. A registered installer is legally required.',
+            inferenceAnchors: ['gas installation', 'gas coc', 'lpg installation', 'gas leak', 'gas piping', 'gas certificate'],
+        },
+        {
+            id: 'gas_fireplace',
+            label: 'Gas Fireplace or Braai',
+            trade: 'Gas Installation & Repair',
+            scope: 'Installation and repair of gas fireplaces and built-in gas braais.',
+            inferenceAnchors: ['gas fireplace', 'gas braai', 'gas heater install', 'built-in gas braai'],
         },
 
     ] satisfies TaxonomySubcategory[]

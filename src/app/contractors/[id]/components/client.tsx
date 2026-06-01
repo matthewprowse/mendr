@@ -33,6 +33,7 @@ import { HomeownerAuthDialog } from '@/components/homeowner-auth-dialog';
 import { INK } from '@/lib/design-tokens';
 import { normalizeWebsiteUrl } from '@/lib/utils';
 import { trackEvent } from '@/lib/analytics';
+import { trackProviderView } from '@/lib/analytics/provider-view';
 import { useAuth } from '@/context/auth-context';
 import { ProviderCardCarousel } from '@/app/match/components/provider-card';
 import { ProReviewsTab } from '@/app/contractors/components/reviews';
@@ -104,7 +105,16 @@ function ContractorClient({
             profile_completeness:
                 typeof profile.profileCompleteness === 'number' ? profile.profileCompleteness : undefined,
         });
-    }, [profile]);
+        // Durable profile-view capture (provider-level metric, first per session).
+        // Only when we have a DB provider id (FK target). `conversationId` present
+        // means the visit came through the diagnosis → match flow.
+        if (profile.providerId) {
+            trackProviderView(profile.providerId, {
+                diagnosisId: conversationId || undefined,
+                source: conversationId ? 'match' : 'contractor_page',
+            });
+        }
+    }, [profile, conversationId]);
 
     const trackSectionExpand = useCallback(
         (section: 'about' | 'reviews' | 'hours' | 'gallery' | 'highlights') => {

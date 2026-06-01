@@ -1,5 +1,4 @@
 import { createSupabaseAdminClient } from '@/lib/auth/supabase-server';
-import { tradeToServiceLabel } from '@/lib/services';
 
 export type PlatformHomeStats = {
     committed_total: number;
@@ -153,21 +152,10 @@ export async function getHomeStats(userId: string): Promise<{
         admin.rpc('user_home_stats', { p_user_id: userId }),
     ]);
 
-    const rawPlatform = (platformRes.data as (Partial<PlatformHomeStats> & { distinct_trades?: string[] }) | null) ?? {};
-    const platform: PlatformHomeStats = { ...EMPTY_PLATFORM, ...rawPlatform };
-
-    // "Trades Covered" must reflect first-tier canonical trades (Security, Plumbing,
-    // Electrical…), not raw AI free-text. Map each distinct raw trade to its canonical
-    // service label and count the distinct results.
-    const canonicalTrades = new Set(
-        (rawPlatform.distinct_trades ?? [])
-            .map((t) => tradeToServiceLabel(t))
-            .filter((label): label is string => Boolean(label)),
-    );
-    platform.trades_covered = canonicalTrades.size;
-
+    // trades_covered now comes pre-computed from the canonical `primary_trade`
+    // column inside platform_home_stats(); no read-time mapping needed.
     return {
-        platform,
+        platform: { ...EMPTY_PLATFORM, ...((platformRes.data as Partial<PlatformHomeStats>) ?? {}) },
         user: { ...EMPTY_USER, ...((userRes.data as Partial<UserHomeStats>) ?? {}) },
     };
 }
