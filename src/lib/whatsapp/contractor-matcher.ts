@@ -51,7 +51,11 @@ export async function matchContractors(
                 trade: input.trade,
                 tradeDetail: input.tradeDetail,
                 radius: input.radius ?? 15000,
-                quick: true,
+                // NOTE: do NOT send quick:true. Quick mode skips the full
+                // recommendation path (soft rotation token bucket, Mendr review
+                // counts) AND omits the internal providerId — which both breaks
+                // the app's recommendation ordering and makes leads
+                // unattributable. Use the same full ranking as the web match page.
             }),
         });
         if (!res.ok) {
