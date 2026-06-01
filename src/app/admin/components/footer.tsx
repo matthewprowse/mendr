@@ -16,6 +16,7 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 const NAV = [
     { href: '/admin', label: 'Home' },
     { href: '/admin/providers', label: 'Providers' },
+    { href: '/admin/analytics', label: 'Analytics' },
     { href: '/admin/contact', label: 'Contact' },
 ] as const;
 
@@ -41,9 +42,9 @@ export function AdminFooter() {
     const pathname = usePathname();
     const active = resolveActiveHref(pathname);
     return (
-        <div className="sticky bottom-0 shrink-0 bg-background p-4">
-            <Tabs value={active} className="mx-auto w-full max-w-3xl">
-                <TabsList className="grid h-10 w-full grid-cols-3">
+        <div className="sticky bottom-0 shrink-0 bg-background py-4">
+            <Tabs value={active} className="mx-auto w-full max-w-3xl px-4 sm:px-6 lg:px-8">
+                <TabsList className="grid h-10 w-full grid-cols-4">
                     {NAV.map((tab) => (
                         <TabsTrigger key={tab.href} value={tab.href} asChild>
                             <Link href={tab.href}>{tab.label}</Link>

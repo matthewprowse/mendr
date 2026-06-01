@@ -22,7 +22,6 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
-import { AdminPageHeader } from '../components/page-header';
 import { AdminDataTable } from '../components/data-table';
 import { TableCell, TableRow } from '@/components/ui/table';
 
@@ -573,10 +572,6 @@ export default function AdminProvidersPage() {
 
     return (
         <div className="mx-auto w-full max-w-3xl px-4 pb-8 pt-4 sm:px-6 lg:px-8">
-            <div className="mb-6">
-                <AdminPageHeader title="Providers" />
-            </div>
-
             {/* Filter bar */}
             <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center">
                 <div className="flex flex-wrap gap-1">

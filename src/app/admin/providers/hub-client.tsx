@@ -1,6 +1,7 @@
 'use client';
 
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { AdminPageHeader } from '../components/page-header';
 import AdminProvidersClient from './client';
 import AdminReviewsClient from '../reviews/client';
 import AdminGalleryClient from '../gallery/client';
@@ -14,6 +15,9 @@ export default function ProvidersHubClient() {
     return (
         <Tabs defaultValue="directory" className="w-full">
             <div className="mx-auto w-full max-w-3xl px-4 pt-4 sm:px-6 lg:px-8">
+                <div className="mb-4">
+                    <AdminPageHeader title="Providers" />
+                </div>
                 <TabsList>
                     <TabsTrigger value="directory">Directory</TabsTrigger>
                     <TabsTrigger value="reviews">Reviews</TabsTrigger>

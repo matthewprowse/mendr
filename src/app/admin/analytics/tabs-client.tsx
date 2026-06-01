@@ -1,6 +1,7 @@
 'use client';
 
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { AdminPageHeader } from '../components/page-header';
 import AdminFunnelClient from '../funnel/client';
 import AiCostsClient from '../ai-costs/client';
 import AdminQualityClient from '../quality/client';
@@ -16,6 +17,9 @@ export default function AnalyticsTabsClient() {
     return (
         <Tabs defaultValue="funnel" className="w-full">
             <div className="mx-auto w-full max-w-3xl px-4 pt-4 sm:px-6 lg:px-8">
+                <div className="mb-4">
+                    <AdminPageHeader title="Analytics" />
+                </div>
                 <TabsList>
                     <TabsTrigger value="funnel">Funnel</TabsTrigger>
                     <TabsTrigger value="cost">AI Cost</TabsTrigger>

@@ -957,7 +957,20 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
                     ? providerCardRefs.current[selectedProvider.placeId] ?? null
                     : null
             }
-            headerRight={
+            mapSlot={<div ref={mapHostRef} className="absolute inset-0 h-full w-full" />}
+            mapLoadingOverlay={
+                showBottomSkeleton || !userLocation ? (
+                    <div className="pointer-events-none absolute inset-0 z-[1] flex items-center justify-center bg-background/70">
+                        <p className="px-4 text-center text-xs text-muted-foreground">
+                            {isLoading || isProvidersLoading
+                                ? 'Finding Pros…'
+                                : 'Add your address or use current location'}
+                        </p>
+                    </div>
+                ) : null
+            }
+        >
+                {/* Address search + sort/filter — top of the results list (moved out of the header). */}
                 <div className="flex w-full min-w-0 items-center gap-2">
                     <div className="relative min-w-0 flex-1">
                         <Input
@@ -1015,20 +1028,7 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
                         ) : null}
                     </button>
                 </div>
-            }
-            mapSlot={<div ref={mapHostRef} className="absolute inset-0 h-full w-full" />}
-            mapLoadingOverlay={
-                showBottomSkeleton || !userLocation ? (
-                    <div className="pointer-events-none absolute inset-0 z-[1] flex items-center justify-center bg-background/70">
-                        <p className="px-4 text-center text-xs text-muted-foreground">
-                            {isLoading || isProvidersLoading
-                                ? 'Finding Pros…'
-                                : 'Add your address or use current location'}
-                        </p>
-                    </div>
-                ) : null
-            }
-        >
+
                 <div className="flex flex-col gap-1 text-center">
                     <p className="text-sm font-semibold text-foreground">
                         {!showBottomSkeleton && sheetProviders.length > 0

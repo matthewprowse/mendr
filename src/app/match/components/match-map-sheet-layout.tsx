@@ -14,12 +14,9 @@ import { ArrowLeft } from 'lucide-react';
 import { BRAND_NAME } from '@/lib/brand-system';
 import { UserAvatar } from '@/components/user-avatar';
 
-/** Branded top row (back + Mendr wordmark + avatar) — matches the account-page FlowTopBar (h-16 = 64px). */
-const BRAND_ROW_PX = 64;
-/** Secondary controls row (address search + sort/filter) sits directly beneath the branded row. */
-const CONTROL_ROW_PX = 56;
-/** Total fixed header height; the map starts and the sheet's "full" snap stops at this offset. */
-const HEADER_STOP_TOP_PX = BRAND_ROW_PX + CONTROL_ROW_PX;
+/** Height of the fixed branded header (back + Mendr wordmark + avatar) — matches the account-page FlowTopBar.
+ *  The map starts and the sheet's "full" snap stops at this offset. */
+const HEADER_STOP_TOP_PX = 64;
 /** "Half" sheet covers ~50% of a typical mobile viewport — preserves map visibility. */
 const SHEET_HALF_HEIGHT_PX = 348;
 /** "Peek" sheet only exposes the drag handle, count chip, and the first card. */
@@ -48,7 +45,6 @@ function getDesktopSplitSnapshot() {
 
 export type MatchMapSheetLayoutProps = {
     onClose: () => void;
-    headerRight: ReactNode;
     mapSlot: ReactNode;
     mapLoadingOverlay?: ReactNode;
     children: ReactNode;
@@ -72,7 +68,6 @@ export const MatchMapSheetLayout = forwardRef<HTMLDivElement, MatchMapSheetLayou
     function MatchMapSheetLayout(
         {
             onClose,
-            headerRight,
             mapSlot,
             mapLoadingOverlay,
             children,
@@ -403,34 +398,24 @@ export const MatchMapSheetLayout = forwardRef<HTMLDivElement, MatchMapSheetLayou
 
         return (
             <div className="h-dvh overflow-hidden overscroll-none flex flex-col bg-background">
-                {/* Fixed header — branded row (matches the account-page FlowTopBar) + a secondary controls row. */}
-                <div className="fixed inset-x-0 top-0 z-[200] flex flex-col bg-background shadow-sm">
-                    {/* Branded row: back (left), Mendr wordmark (centered), avatar (right) */}
-                    <div
-                        className="relative flex items-center justify-between gap-3 px-4"
-                        style={{ height: BRAND_ROW_PX }}
+                {/* Fixed branded header — matches the account-page FlowTopBar (back, Mendr wordmark, avatar). */}
+                <div
+                    className="fixed inset-x-0 top-0 z-[200] flex items-center justify-between gap-3 bg-background px-4"
+                    style={{ height: HEADER_STOP_TOP_PX }}
+                >
+                    <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        aria-label="Go back"
+                        onClick={onClose}
                     >
-                        <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            aria-label="Go back"
-                            onClick={onClose}
-                        >
-                            <ArrowLeft strokeWidth={2.5} />
-                        </Button>
-                        <p className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-base font-medium text-foreground">
-                            {BRAND_NAME}
-                        </p>
-                        <UserAvatar />
-                    </div>
-                    {/* Controls row: address search + sort/filter */}
-                    <div
-                        className="flex items-center px-4"
-                        style={{ height: CONTROL_ROW_PX }}
-                    >
-                        {headerRight}
-                    </div>
+                        <ArrowLeft strokeWidth={2.5} />
+                    </Button>
+                    <p className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-base font-medium text-foreground">
+                        {BRAND_NAME}
+                    </p>
+                    <UserAvatar />
                 </div>
 
                 {/* Body — map fills the background; sheet overlays it */}
