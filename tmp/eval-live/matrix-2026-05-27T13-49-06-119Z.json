@@ -1,0 +1,168 @@
+{
+  "ts": "2026-05-27T13-49-06-119Z",
+  "rounds": 1,
+  "summaries": [
+    {
+      "cell": {
+        "tag": "A",
+        "label": "2.5 model + v2.5 prompts",
+        "model": "gemini-2.5-flash",
+        "promptVariant": "v2.5"
+      },
+      "totalChecks": 8,
+      "correct": 2,
+      "meanConfidence": 0,
+      "commitRate": 0,
+      "titleStabilityRate": 1,
+      "rescueActivations": 0,
+      "perTest": {
+        "geyser-full-cues": {
+          "titles": [
+            ""
+          ],
+          "sids": [
+            ""
+          ],
+          "trades": [
+            ""
+          ],
+          "confidences": [
+            0
+          ],
+          "commits": [
+            true
+          ],
+          "h1Confidences": []
+        },
+        "garage-with-cause": {
+          "titles": [
+            ""
+          ],
+          "sids": [
+            ""
+          ],
+          "trades": [
+            ""
+          ],
+          "confidences": [
+            0
+          ],
+          "commits": [
+            true
+          ],
+          "h1Confidences": []
+        }
+      }
+    },
+    {
+      "cell": {
+        "tag": "D",
+        "label": "3.5 model + v3.5 prompts",
+        "model": "gemini-3.5-flash",
+        "promptVariant": "v3.5"
+      },
+      "totalChecks": 8,
+      "correct": 2,
+      "meanConfidence": 0,
+      "commitRate": 0,
+      "titleStabilityRate": 1,
+      "rescueActivations": 0,
+      "perTest": {
+        "geyser-full-cues": {
+          "titles": [
+            ""
+          ],
+          "sids": [
+            ""
+          ],
+          "trades": [
+            ""
+          ],
+          "confidences": [
+            0
+          ],
+          "commits": [
+            true
+          ],
+          "h1Confidences": []
+        },
+        "garage-with-cause": {
+          "titles": [
+            ""
+          ],
+          "sids": [
+            ""
+          ],
+          "trades": [
+            ""
+          ],
+          "confidences": [
+            0
+          ],
+          "commits": [
+            true
+          ],
+          "h1Confidences": []
+        }
+      }
+    }
+  ],
+  "allResults": [
+    {
+      "cell": {
+        "tag": "A",
+        "label": "2.5 model + v2.5 prompts",
+        "model": "gemini-2.5-flash",
+        "promptVariant": "v2.5"
+      },
+      "round": 1,
+      "testId": "geyser-full-cues",
+      "conversationId": "f9f9bfc1-f53d-41cf-8964-db7a6f94af60",
+      "status": "error",
+      "error": "upload-image 500: Internal Server Error",
+      "elapsedMs": 1712
+    },
+    {
+      "cell": {
+        "tag": "A",
+        "label": "2.5 model + v2.5 prompts",
+        "model": "gemini-2.5-flash",
+        "promptVariant": "v2.5"
+      },
+      "round": 1,
+      "testId": "garage-with-cause",
+      "conversationId": "be1b96fd-146e-4fd3-bab6-8e2aa242f75c",
+      "status": "error",
+      "error": "upload-image 500: Internal Server Error",
+      "elapsedMs": 1263
+    },
+    {
+      "cell": {
+        "tag": "D",
+        "label": "3.5 model + v3.5 prompts",
+        "model": "gemini-3.5-flash",
+        "promptVariant": "v3.5"
+      },
+      "round": 1,
+      "testId": "geyser-full-cues",
+      "conversationId": "766cfdff-bf2c-4457-b679-2e8f43b6d2c4",
+      "status": "error",
+      "error": "upload-image 500: Internal Server Error",
+      "elapsedMs": 913
+    },
+    {
+      "cell": {
+        "tag": "D",
+        "label": "3.5 model + v3.5 prompts",
+        "model": "gemini-3.5-flash",
+        "promptVariant": "v3.5"
+      },
+      "round": 1,
+      "testId": "garage-with-cause",
+      "conversationId": "af4d5913-0467-4855-846f-36511c9a3613",
+      "status": "error",
+      "error": "upload-image 500: Internal Server Error",
+      "elapsedMs": 1099
+    }
+  ]
+}

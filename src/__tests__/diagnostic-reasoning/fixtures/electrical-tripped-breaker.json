@@ -1,0 +1,45 @@
+{
+  "name": "electrical-tripped-breaker",
+  "trade": "Electrical",
+  "description": "One breaker in my DB board keeps tripping. It's the circuit for the bedroom.",
+  "mockAgentOutput": {
+    "hypotheses": [
+      {
+        "id": "h1",
+        "label": "Faulty appliance overload",
+        "confidence_alone": 0.7,
+        "evidence_for": ["Single circuit affected — other circuits fine"],
+        "evidence_against": []
+      },
+      {
+        "id": "h2",
+        "label": "Loose neutral causing arc",
+        "confidence_alone": 0.6,
+        "evidence_for": ["Intermittent tripping suggests arcing"],
+        "evidence_against": ["Could also be intermittent load"]
+      },
+      {
+        "id": "h3",
+        "label": "Undersized breaker",
+        "confidence_alone": 0.5,
+        "evidence_for": ["Circuit may have been extended since install"],
+        "evidence_against": ["Bedroom circuit rarely overloaded by standard loads"]
+      }
+    ],
+    "what_we_dont_know": "We cannot tell whether the breaker trips immediately on reset or holds for some time before tripping again.",
+    "why_it_matters": "Immediate tripping suggests a hard fault like a short; delayed tripping suggests an overload or loose connection.",
+    "chips": [
+      { "id": "c1", "text": "It trips immediately when I reset it.", "supports": "h2", "rules_out": ["h1", "h3"] },
+      { "id": "c2", "text": "It holds for a while then trips again.", "supports": "h1", "rules_out": ["h2"] },
+      { "id": "c3", "text": "It trips only when a specific device is on.", "supports": "h1", "rules_out": ["h2", "h3"] },
+      { "id": "c4", "text": "Something else is happening.", "supports": "", "rules_out": [] }
+    ],
+    "round": 1,
+    "next_step_if_unresolved": "ask_again"
+  },
+  "expected": {
+    "must_consider_hypotheses": ["overload", "appliance", "neutral", "breaker"],
+    "must_not_consider": ["garage door", "geyser", "plumbing"],
+    "must_ask_about": "whether breaker trips immediately or after a delay"
+  }
+}

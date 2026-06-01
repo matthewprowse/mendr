@@ -1,0 +1,20 @@
+{
+    "id": "blocked-drain-kitchen-01",
+    "case_summary": "Kitchen sink draining very slowly with rising odour — straightforward blocked-drain routing.",
+    "verified": false,
+    "ground_truth": {
+        "trade": "Plumbing",
+        "subcategory_id": "blocked_drain",
+        "confidence_floor": 85,
+        "notes": "Easy, high-confidence case. Useful as a baseline 'we should never get this wrong' anchor. If routing or trade ever regresses on this case, the regression is severe."
+    },
+    "inputs": {
+        "user_text": "Our kitchen sink has been draining slower and slower for the last two weeks and now it's barely draining at all. There's a really nasty smell coming from the drain itself. Pouring hot water down doesn't help, and we tried a drain unblocker from the shop but it didn't make much difference.",
+        "user_history": []
+    },
+    "optional_assertions": {
+        "cost_band": "minor",
+        "urgency": "soon",
+        "requires_clarification_expected": false
+    }
+}

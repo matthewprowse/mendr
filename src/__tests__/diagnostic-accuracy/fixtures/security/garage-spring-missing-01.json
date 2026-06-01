@@ -1,0 +1,20 @@
+{
+    "id": "garage-spring-missing-01",
+    "case_summary": "Garage door extremely heavy to lift; one of the overhead torsion springs has snapped and is hanging loose.",
+    "verified": false,
+    "ground_truth": {
+        "trade": "Security",
+        "subcategory_id": "garage_door_fault",
+        "confidence_floor": 80,
+        "notes": "Tests routing of garage spring / counterbalance failures to garage_door_fault (not gate_motor_fault). A 'snapped spring' phrase plus 'overhead' should anchor the visual context to garage rather than gate."
+    },
+    "inputs": {
+        "user_text": "Our sectional garage door has suddenly become incredibly heavy — we can barely lift it manually. Looking up at the overhead mechanism, one of the long coiled springs has come apart in the middle and is hanging in two pieces. The motor tried to open it once and now sounds like it's straining, so we've stopped using it.",
+        "user_history": []
+    },
+    "optional_assertions": {
+        "cost_band": "medium",
+        "urgency": "soon",
+        "requires_clarification_expected": false
+    }
+}

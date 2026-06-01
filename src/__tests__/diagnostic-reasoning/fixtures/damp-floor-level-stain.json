@@ -1,0 +1,45 @@
+{
+  "name": "damp-floor-level-stain",
+  "trade": "Building & Construction",
+  "description": "There is a dark stain at the base of my interior wall. It's been there for months and seems to be growing.",
+  "mockAgentOutput": {
+    "hypotheses": [
+      {
+        "id": "h1",
+        "label": "Rising damp (no DPC)",
+        "confidence_alone": 0.75,
+        "evidence_for": ["Stain at floor level consistent with rising water", "Months of growth matches slow wicking"],
+        "evidence_against": []
+      },
+      {
+        "id": "h2",
+        "label": "Leaking pipe behind wall",
+        "confidence_alone": 0.65,
+        "evidence_for": ["Interior wall location could conceal a pipe"],
+        "evidence_against": ["Pipe leak usually has more defined wet patch not diffuse stain"]
+      },
+      {
+        "id": "h3",
+        "label": "Lateral seepage from outside",
+        "confidence_alone": 0.5,
+        "evidence_for": ["Exterior wall likely"],
+        "evidence_against": ["Would typically worsen after rain, not be constant"]
+      }
+    ],
+    "what_we_dont_know": "We cannot tell whether the stain gets worse after rain or stays constant regardless of weather.",
+    "why_it_matters": "If it worsens after rain, the source is external penetration or seepage. If constant, the source is internal — either a pipe or rising ground moisture.",
+    "chips": [
+      { "id": "c1", "text": "It gets worse after heavy rain.", "supports": "h3", "rules_out": ["h1", "h2"] },
+      { "id": "c2", "text": "It stays the same rain or shine.", "supports": "h1", "rules_out": ["h3"] },
+      { "id": "c3", "text": "It appeared suddenly, not gradually.", "supports": "h2", "rules_out": ["h1"] },
+      { "id": "c4", "text": "Something else is happening.", "supports": "", "rules_out": [] }
+    ],
+    "round": 1,
+    "next_step_if_unresolved": "commit_low_confidence"
+  },
+  "expected": {
+    "must_consider_hypotheses": ["rising damp", "pipe", "seepage", "penetrating damp"],
+    "must_not_consider": ["electrical", "garage door", "roof tile"],
+    "must_ask_about": "whether stain worsens after rain or stays constant"
+  }
+}

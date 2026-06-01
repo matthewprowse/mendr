@@ -9,7 +9,7 @@ export async function GET(req: NextRequest) {
     if (limited) return limited;
 
     const admin = await createSupabaseAdminClient();
-    const [diagnosesCountRes, matchViewCountRes, homeownerSessionsRes, providerCountRes, servicesRes] = await Promise.all([
+    const [diagnosesCountRes, matchViewCountRes, homeownerSessionsRes, providerCountRes, servicesRes, platformStatsRes] = await Promise.all([
         admin
             .from('diagnosis_events')
             .select('id', { count: 'exact', head: true })
@@ -33,6 +33,7 @@ export async function GET(req: NextRequest) {
             .select('label')
             .eq('active', true)
             .order('sort_order', { ascending: true }),
+        admin.rpc('platform_home_stats'),
     ]);
 
     const diagnosesCompleted = diagnosesCountRes.count ?? 0;
@@ -42,14 +43,24 @@ export async function GET(req: NextRequest) {
     const serviceLabels = (servicesRes.data ?? [])
         .map((s: any) => String(s.label || '').trim())
         .filter(Boolean);
+    const platform = (platformStatsRes.data ?? {}) as {
+        committed_total?: number;
+        first_pass_pct?: number;
+        avg_confidence?: number;
+        trades_covered?: number;
+    };
 
     return NextResponse.json(
         {
             totals: {
                 diagnoses_completed: diagnosesCompleted,
+                diagnoses_provided: platform.committed_total ?? 0,
                 unique_homeowners: uniqueHomeowners,
                 match_views: matchViews,
                 providers: providerCount,
+                first_pass_pct: platform.first_pass_pct ?? 0,
+                avg_confidence: platform.avg_confidence ?? 0,
+                trades_covered: platform.trades_covered ?? 0,
             },
             services: serviceLabels,
         },

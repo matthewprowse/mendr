@@ -1,0 +1,45 @@
+{
+  "name": "roofing-ceiling-stain",
+  "trade": "Roofing",
+  "description": "Large brown stain on my ceiling, no obvious source. Appeared after recent wind and rain.",
+  "mockAgentOutput": {
+    "hypotheses": [
+      {
+        "id": "h1",
+        "label": "Dislodged or broken roof tile",
+        "confidence_alone": 0.75,
+        "evidence_for": ["Appeared after wind and rain", "Stain consistent with roof penetration"],
+        "evidence_against": []
+      },
+      {
+        "id": "h2",
+        "label": "Blocked gutter overflow",
+        "confidence_alone": 0.6,
+        "evidence_for": ["Heavy rain could back up into eaves"],
+        "evidence_against": ["Stain position would need to be near eaves"]
+      },
+      {
+        "id": "h3",
+        "label": "Failed valley or ridge flashing",
+        "confidence_alone": 0.55,
+        "evidence_for": ["Wind could lift metal flashing", "Appears after rain"],
+        "evidence_against": ["Would appear near ridge or valley, not centre of ceiling"]
+      }
+    ],
+    "what_we_dont_know": "We cannot tell from the description where on the ceiling the stain is — whether it's under the roof slope, near the eaves, or under the ridge.",
+    "why_it_matters": "The position of the stain maps directly to the roof component above it, which tells us where to start the repair.",
+    "chips": [
+      { "id": "c1", "text": "Stain is in the middle of the ceiling.", "supports": "h1", "rules_out": ["h2"] },
+      { "id": "c2", "text": "Stain is near the edge or corner.", "supports": "h2", "rules_out": ["h3"] },
+      { "id": "c3", "text": "Stain runs along a line under the roof ridge.", "supports": "h3", "rules_out": ["h1", "h2"] },
+      { "id": "c4", "text": "Something else is happening.", "supports": "", "rules_out": [] }
+    ],
+    "round": 1,
+    "next_step_if_unresolved": "commit_low_confidence"
+  },
+  "expected": {
+    "must_consider_hypotheses": ["tile", "flashing", "gutter", "valley"],
+    "must_not_consider": ["plumbing", "electrical", "garage door"],
+    "must_ask_about": "position of the stain on the ceiling"
+  }
+}

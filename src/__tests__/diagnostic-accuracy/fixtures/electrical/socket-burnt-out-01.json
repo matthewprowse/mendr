@@ -1,0 +1,20 @@
+{
+    "id": "socket-burnt-out-01",
+    "case_summary": "Wall socket discoloured / scorched around the pins; dead, with a faint plastic smell.",
+    "verified": false,
+    "ground_truth": {
+        "trade": "Electrical",
+        "subcategory_id": "lights_wiring",
+        "confidence_floor": 80,
+        "notes": "Socket / wiring fault — clearly within the lights_wiring scope (plug sockets and fixed wiring). Tests that the system doesn't over-route to load_shedding_surge or db_board_tripping when the visible damage is localised to one socket."
+    },
+    "inputs": {
+        "user_text": "One of the plug sockets in our lounge has gone dark brown around the pin holes and there's a faint burnt-plastic smell when you stand near it. The socket itself isn't working any more — nothing plugged in there gets power. The other sockets in the same room are fine.",
+        "user_history": []
+    },
+    "optional_assertions": {
+        "cost_band": "minor",
+        "urgency": "now",
+        "requires_clarification_expected": false
+    }
+}

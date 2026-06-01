@@ -1,0 +1,20 @@
+{
+    "id": "db-board-overloaded-01",
+    "case_summary": "Specific circuit breaker (kitchen) keeps tripping when high-load appliances run together.",
+    "verified": false,
+    "ground_truth": {
+        "trade": "Electrical",
+        "subcategory_id": "db_board_tripping",
+        "confidence_floor": 75,
+        "notes": "Overloaded-circuit / undersized breaker pattern, as distinct from earth leakage. Tests that the system still routes to db_board_tripping but reflects the different failure mode in the narrative."
+    },
+    "inputs": {
+        "user_text": "Our kitchen breaker trips out whenever we use the kettle and the microwave at the same time. We have to go to the DB board and flip it back. It only ever affects the kitchen circuit, the rest of the house stays on. Nothing visibly burnt on the breaker itself, just trips every few days.",
+        "user_history": []
+    },
+    "optional_assertions": {
+        "cost_band": "minor",
+        "urgency": "planned",
+        "requires_clarification_expected": false
+    }
+}

@@ -18,17 +18,18 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
-    CaretLeft,
-    CaretRight,
+    ChevronLeft,
+    ChevronRight,
     Car,
-    Image as ImageIcon,
-    MapPinLine,
+    Image,
+    MapPin,
     ShieldCheck,
     Star,
-} from '@phosphor-icons/react';
+} from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
+import { SaveProviderButton } from '@/components/save-provider-button';
 import { cn, formatBusinessName } from '@/lib/utils';
 import { INK } from '@/lib/design-tokens';
 import type { MatchProvider } from '@/features/match/contracts';
@@ -164,7 +165,7 @@ export function ProviderCardCarousel({ images, providerName, onImageSwipe }: Pro
                             activeIdx === 0 ? 'opacity-0 pointer-events-none' : 'opacity-100'
                         )}
                     >
-                        <CaretLeft size={16} weight="bold" />
+                        <ChevronLeft size={16} strokeWidth={2.5} />
                     </button>
                     <button
                         type="button"
@@ -178,7 +179,7 @@ export function ProviderCardCarousel({ images, providerName, onImageSwipe }: Pro
                             activeIdx >= total - 1 ? 'opacity-0 pointer-events-none' : 'opacity-100'
                         )}
                     >
-                        <CaretRight size={16} weight="bold" />
+                        <ChevronRight size={16} strokeWidth={2.5} />
                     </button>
 
                     <div
@@ -205,7 +206,7 @@ function ImagePlaceholder({ providerName }: { providerName: string }) {
     return (
         <div className="flex aspect-[16/10] w-full items-center justify-center rounded-2xl bg-gradient-to-br from-muted to-secondary text-muted-foreground">
             <div className="flex flex-col items-center gap-1">
-                <ImageIcon size={28} weight="duotone" aria-hidden="true" />
+                <Image size={28} aria-hidden="true" />
                 <p className="text-[11px] font-medium uppercase tracking-wide">No photos yet</p>
                 <p className="sr-only">{providerName}</p>
             </div>
@@ -324,15 +325,21 @@ export function ProviderCard({
                 isSelected && 'ring-2 ring-foreground/70'
             )}
         >
-            {carouselImages.length > 0 ? (
-                <ProviderCardCarousel
-                    images={carouselImages}
-                    providerName={provider.name}
-                    onImageSwipe={onImageSwipe}
+            <div className="relative">
+                {carouselImages.length > 0 ? (
+                    <ProviderCardCarousel
+                        images={carouselImages}
+                        providerName={provider.name}
+                        onImageSwipe={onImageSwipe}
+                    />
+                ) : (
+                    <ImagePlaceholder providerName={provider.name} />
+                )}
+                <SaveProviderButton
+                    providerId={provider.providerId ?? null}
+                    className="absolute right-3 top-3 z-10"
                 />
-            ) : (
-                <ImagePlaceholder providerName={provider.name} />
-            )}
+            </div>
 
             <div className="flex flex-col gap-3 px-2 pb-2 pt-1">
                 <div className="flex items-start justify-between gap-3">
@@ -366,7 +373,7 @@ export function ProviderCard({
 
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
                     <span className="inline-flex items-center gap-1 font-semibold tabular-nums" style={{ color: INK }}>
-                        <Star size={16} weight="fill" className="text-yellow-500" aria-hidden="true" />
+                        <Star size={16} fill="currentColor" className="text-yellow-500" aria-hidden="true" />
                         {provider.rating != null ? provider.rating.toFixed(1) : 'New'}
                         {reviewCount > 0 ? (
                             <span className="font-normal text-muted-foreground">
@@ -383,7 +390,7 @@ export function ProviderCard({
                                 key={chip.key}
                                 className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700"
                             >
-                                <ShieldCheck size={10} weight="fill" aria-hidden />
+                                <ShieldCheck size={10} fill="currentColor" aria-hidden />
                                 {chip.label}
                             </span>
                         ))}
@@ -433,13 +440,13 @@ export function ProviderCard({
 
                 {driveLabel ? (
                     <div className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-                        <Car size={14} weight="regular" aria-hidden="true" />
+                        <Car size={14} aria-hidden="true" />
                         {driveLabel}
                     </div>
                 ) : null}
 
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <MapPinLine size={14} className="shrink-0" aria-hidden="true" />
+                    <MapPin size={14} className="shrink-0" aria-hidden="true" />
                     <span className="truncate">
                         {[address, distanceLabel].filter(Boolean).join(' • ') || 'Distance unavailable'}
                     </span>

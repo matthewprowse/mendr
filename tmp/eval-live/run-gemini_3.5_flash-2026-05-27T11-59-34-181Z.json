@@ -1,0 +1,738 @@
+{
+  "ts": "2026-05-27T11-59-34-181Z",
+  "model": "gemini-3.5-flash",
+  "results": [
+    {
+      "id": "geyser-full-cues",
+      "description": "Geyser corroded tank — text describes rusty water + electricity + temperature loss",
+      "conversationId": "2d45123f-d8f1-4746-88a1-fe03377791ed",
+      "model": "gemini-3.5-flash",
+      "status": "ok",
+      "diagnose_status": 200,
+      "elapsed_ms": 84005,
+      "row": {
+        "id": "2d45123f-d8f1-4746-88a1-fe03377791ed",
+        "title": "New Diagnosis",
+        "image_url": "https://muzbjrtlklluitmhkcja.supabase.co/storage/v1/object/public/gallery/welcome_scans/2d45123f-d8f1-4746-88a1-fe03377791ed/1779882837233-Geyser_1.jpg",
+        "customer_lat": null,
+        "customer_lng": null,
+        "customer_address": null,
+        "device": null,
+        "user_agent": null,
+        "created_at": "2026-05-27T11:54:05.242496+00:00",
+        "updated_at": "2026-05-27T11:54:05.242496+00:00",
+        "diagnosis": null,
+        "providers": null,
+        "user_id": null,
+        "diagnosis_confirmed": false,
+        "initial_image_description": null,
+        "pinned": false,
+        "trade_detail": null,
+        "urgency_key": null,
+        "requires_clarification": null,
+        "clarification_question_count": 0,
+        "is_direct_match": false,
+        "image_urls": [
+          "https://muzbjrtlklluitmhkcja.supabase.co/storage/v1/object/public/gallery/welcome_scans/2d45123f-d8f1-4746-88a1-fe03377791ed/1779882837233-Geyser_1.jpg",
+          "https://muzbjrtlklluitmhkcja.supabase.co/storage/v1/object/public/gallery/welcome_scans/2d45123f-d8f1-4746-88a1-fe03377791ed/1779882845404-Geyser_2.jpg",
+          "https://muzbjrtlklluitmhkcja.supabase.co/storage/v1/object/public/gallery/welcome_scans/2d45123f-d8f1-4746-88a1-fe03377791ed/1779882857430-Geyser_3.jpg"
+        ],
+        "image_refinement_log": [],
+        "clarification_round": 0,
+        "hypothesis_state": null,
+        "diagnosis_critique": null
+      },
+      "breadcrumbs": [
+        {
+          "created_at": "2026-05-27T11:55:12.333379+00:00",
+          "action": "agent_critique_breadcrumb",
+          "payload": {
+            "step": "callback_fired",
+            "envEnabled": true
+          }
+        }
+      ],
+      "parsed": {
+        "thought": "The first image shows a hot water geyser sitting in a drip tray filled with rusty brown water, with active dripping visible at the brass connection. The second image reveals water staining on the wooden support board beneath the pipe penetrations. These signs, combined with the user's report of high electricity bills and limited hot water, point to an internal cylinder failure or a severely scaled heating element. No bilateral symmetry to enumerate on this single-cylinder geyser setup.",
+        "thinking": "The first image shows a hot water geyser sitting in a drip tray filled with rusty brown water, with active dripping visible at the brass connection. The second image reveals water staining on the wooden support board beneath the pipe penetrations. These signs, combined with the user's report of high electricity bills and limited hot water, point to an internal cylinder failure or a severely scaled heating element. No bilateral symmetry to enumerate on this single-cylinder geyser setup.",
+        "thoughts_history": [
+          {
+            "round": 0,
+            "thought": "The first image shows a hot water geyser sitting in a drip tray filled with rusty brown water, with active dripping visible at the brass connection. The second image reveals water staining on the wooden support board beneath the pipe penetrations. These signs, combined with the user's report of high electricity bills and limited hot water, point to an internal cylinder failure or a severely scaled heating element. No bilateral symmetry to enumerate on this single-cylinder geyser setup.",
+            "created_at": "2026-05-27T11:55:10.835Z"
+          }
+        ],
+        "diagnosis": "Corroded Geyser Inner Cylinder",
+        "estimated_diagnosis_sentence": "Corroded Geyser Inner Cylinder",
+        "message": "We could not finish the automated analysis for these photos right now. The rusty brown water pooling in your drip tray, combined with a sudden increase in your electricity bill and a shortage of hot water, strongly indicates that your geyser's inner steel cylinder has corroded and failed. When the inner tank ruptures, water escapes into the surrounding insulation and the drip tray, carrying rust from the corroding steel tank with it.\n\nThis failure typically develops over several years as the sacrificial anode rod inside the tank degrades. Once the anode is entirely consumed, the water begins to attack the steel tank itself, leading to rust, structural failure of the cylinder, and electrical shorting of the heating element as water breaches the electrical enclosure.\n\nIf left unaddressed, the leak will continue to fill the drip tray, risking an overflow that can cause severe ceiling and structural water damage to your home. Additionally, the compromised electrical components pose a continuous risk of tripping your main distribution board.",
+        "action_required": "The rusty brown water pooling in your drip tray, combined with a sudden increase in your electricity bill and a shortage of hot water, strongly indicates that your geyser's inner steel cylinder has corroded and failed. When the inner tank ruptures, water escapes into the surrounding insulation and the drip tray, carrying rust from the corroding steel tank with it.\n\nThis failure typically develops over several years as the sacrificial anode rod inside the tank degrades. Once the anode is entirely consumed, the water begins to attack the steel tank itself, leading to rust, structural failure of the cylinder, and electrical shorting of the heating element as water breaches the electrical enclosure.\n\nIf left unaddressed, the leak will continue to fill the drip tray, risking an overflow that can cause severe ceiling and structural water damage to your home. Additionally, the compromised electrical components pose a continuous risk of tripping your main distribution board.",
+        "image_descriptions": [
+          "A close-up view of the geyser cylinder resting in a black plastic drip tray filled with standing, rusty brown water, showing active water droplets clinging to the brass T-junction fitting.",
+          "A view underneath the mounting platform showing copper and white plastic pipes passing through the wall, with dark water staining visible on the wooden board below.",
+          "An outdoor perspective showing the external walkway of the apartment building, showing the context of the installation environment."
+        ],
+        "image_thought_breakdown": [
+          "A close-up view of the geyser cylinder resting in a black plastic drip tray filled with standing, rusty brown water, showing active water droplets clinging to the brass T-junction fitting.",
+          "A view underneath the mounting platform showing copper and white plastic pipes passing through the wall, with dark water staining visible on the wooden board below.",
+          "An outdoor perspective showing the external walkway of the apartment building, showing the context of the installation environment."
+        ],
+        "clarification_questions": [
+          "No, the outside pipe is dry",
+          "Yes, water runs outside constantly",
+          "I cannot locate the outside pipe"
+        ],
+        "structured_clarification": {
+          "intro": "A few different issues can cause these symptoms. Answering this question will help narrow down the exact fault.",
+          "hypotheses": [
+            {
+              "id": "h1",
+              "label": "Corroded Geyser Inner Cylinder",
+              "confidence": 75,
+              "why": "Rusty water in the drip tray and reduced hot water duration strongly point to a ruptured inner tank and saturated insulation.",
+              "discriminating_question": "Is water constantly overflowing from the discharge pipe on the outside wall?",
+              "answer_chips": [
+                {
+                  "id": "c1",
+                  "text": "No, the outside pipe is dry",
+                  "effect": "confirms"
+                },
+                {
+                  "id": "c2",
+                  "text": "Yes, water runs outside constantly",
+                  "effect": "rules_out"
+                },
+                {
+                  "id": "c3",
+                  "text": "I cannot locate the outside pipe",
+                  "effect": "partial"
+                }
+              ]
+            },
+            {
+              "id": "h2",
+              "label": "Failed Geyser Heating Element",
+              "confidence": 65,
+              "why": "The rising electricity bill and lack of hot water suggest the heating element is heavily scaled or shorting out due to the leak.",
+              "discriminating_question": "Does your main electricity board trip when you turn the geyser switch on?",
+              "answer_chips": [
+                {
+                  "id": "c1",
+                  "text": "Yes, it trips immediately",
+                  "effect": "confirms"
+                },
+                {
+                  "id": "c2",
+                  "text": "No, it stays on but water is cold",
+                  "effect": "partial"
+                },
+                {
+                  "id": "c3",
+                  "text": "No, the power does not trip",
+                  "effect": "rules_out"
+                }
+              ]
+            }
+          ],
+          "escape": {
+            "prompt": "Doesn't match any of these? Tell me what you're seeing in your own words."
+          }
+        },
+        "contractor_checklist": [],
+        "homeowner_prep": "Switch off the geyser circuit breaker at your main distribution board and isolate the water supply to the geyser.",
+        "diy_verification": "Check if the water dripping into the tray stops or slows down significantly after you close the main cold water shut-off valve to the geyser.",
+        "photo_request": "A photo of the geyser's electrical cover plate and the main pressure control valve would help confirm if the leak is originating from the element port or a valve.",
+        "confidence_drivers": [
+          "Rusty water in the drip tray is a classic sign of tank failure",
+          "Active dripping visible at the brass connection",
+          "Stated symptoms of high electricity bills and limited hot water match element failure"
+        ],
+        "trade": "Plumbing",
+        "trade_detail": "Geyser Fault",
+        "confidence": 65,
+        "rejected": false,
+        "requires_clarification": true,
+        "unserviced": false,
+        "refetch_providers": false,
+        "unsupported_reason": "",
+        "subcategory_id": "geyser_fault_plumbing",
+        "failed_component": "",
+        "cascading_damage": "",
+        "trade_candidates": [],
+        "prompt_version": "v7.4",
+        "ai_model": "gemini-3.5-flash",
+        "pipeline": "v2-classify-prose",
+        "structural_confidence": {
+          "score": 95,
+          "signals": {
+            "hasImage": true,
+            "imageCount": 3,
+            "descriptionWordCount": 27,
+            "subcategoryMatched": true,
+            "failedComponentNamed": false,
+            "isCatchAllWithNoVisual": false,
+            "isRejectedOrUnserviced": false
+          }
+        }
+      }
+    },
+    {
+      "id": "geyser-minimal",
+      "description": "Geyser, minimal text — equipment guard test",
+      "conversationId": "d17d38aa-63c2-49c7-86f4-6a54a255b3f2",
+      "model": "gemini-3.5-flash",
+      "status": "ok",
+      "diagnose_status": 200,
+      "elapsed_ms": 131081,
+      "row": {
+        "id": "d17d38aa-63c2-49c7-86f4-6a54a255b3f2",
+        "title": "New Diagnosis",
+        "image_url": "https://muzbjrtlklluitmhkcja.supabase.co/storage/v1/object/public/gallery/welcome_scans/d17d38aa-63c2-49c7-86f4-6a54a255b3f2/1779882921316-Geyser_1.jpg",
+        "customer_lat": null,
+        "customer_lng": null,
+        "customer_address": null,
+        "device": null,
+        "user_agent": null,
+        "created_at": "2026-05-27T11:55:25.384004+00:00",
+        "updated_at": "2026-05-27T11:55:25.384004+00:00",
+        "diagnosis": null,
+        "providers": null,
+        "user_id": null,
+        "diagnosis_confirmed": false,
+        "initial_image_description": null,
+        "pinned": false,
+        "trade_detail": null,
+        "urgency_key": null,
+        "requires_clarification": null,
+        "clarification_question_count": 0,
+        "is_direct_match": false,
+        "image_urls": [
+          "https://muzbjrtlklluitmhkcja.supabase.co/storage/v1/object/public/gallery/welcome_scans/d17d38aa-63c2-49c7-86f4-6a54a255b3f2/1779882921316-Geyser_1.jpg",
+          "https://muzbjrtlklluitmhkcja.supabase.co/storage/v1/object/public/gallery/welcome_scans/d17d38aa-63c2-49c7-86f4-6a54a255b3f2/1779882925485-Geyser_2.jpg",
+          "https://muzbjrtlklluitmhkcja.supabase.co/storage/v1/object/public/gallery/welcome_scans/d17d38aa-63c2-49c7-86f4-6a54a255b3f2/1779882930610-Geyser_3.jpg"
+        ],
+        "image_refinement_log": [],
+        "clarification_round": 0,
+        "hypothesis_state": null,
+        "diagnosis_critique": null
+      },
+      "breadcrumbs": [
+        {
+          "created_at": "2026-05-27T11:57:23.620654+00:00",
+          "action": "agent_critique_breadcrumb",
+          "payload": {
+            "step": "callback_fired",
+            "envEnabled": true
+          }
+        }
+      ],
+      "parsed": {
+        "thought": "The first image shows a horizontal geyser cylinder resting in a black plastic drip tray which is filled with brown, rusty water. Water droplets are visibly clinging to the brass T-piece and the black pressure control valve connection. The second image shows the pipe run underneath the shelf with water staining on the wooden board below. The third image shows an outdoor apartment walkway, indicating the unit is likely installed in an exterior-facing cupboard. The primary suspect is a leaking pressure control valve or a failed connection joint, but a ruptured inner cylinder releasing water behind the casing cannot be ruled out.",
+        "thinking": "The first image shows a horizontal geyser cylinder resting in a black plastic drip tray which is filled with brown, rusty water. Water droplets are visibly clinging to the brass T-piece and the black pressure control valve connection. The second image shows the pipe run underneath the shelf with water staining on the wooden board below. The third image shows an outdoor apartment walkway, indicating the unit is likely installed in an exterior-facing cupboard. The primary suspect is a leaking pressure control valve or a failed connection joint, but a ruptured inner cylinder releasing water behind the casing cannot be ruled out.",
+        "thoughts_history": [
+          {
+            "round": 0,
+            "thought": "The first image shows a horizontal geyser cylinder resting in a black plastic drip tray which is filled with brown, rusty water. Water droplets are visibly clinging to the brass T-piece and the black pressure control valve connection. The second image shows the pipe run underneath the shelf with water staining on the wooden board below. The third image shows an outdoor apartment walkway, indicating the unit is likely installed in an exterior-facing cupboard. The primary suspect is a leaking pressure control valve or a failed connection joint, but a ruptured inner cylinder releasing water behind the casing cannot be ruled out.",
+            "created_at": "2026-05-27T11:57:21.775Z"
+          }
+        ],
+        "diagnosis": "Leaking Pressure Control Valve",
+        "estimated_diagnosis_sentence": "Leaking Pressure Control Valve",
+        "message": "We could not finish the automated analysis for these photos right now. A leaking pressure control valve or connection joint appears to be releasing water directly into your geyser's drip tray. The first photo shows active water droplets clinging to the underside of the brass T-piece and the black valve assembly, with a significant amount of standing water already pooled in the tray.\n\nThese leaks typically develop when the internal seals or diaphragms within the pressure control valve degrade over time due to constant thermal expansion and system pressure. Alternatively, thread seal tape or jointing compound at the metal connections can fail, allowing water to weep past the threads under municipal pressure.\n\nIf left unaddressed, the drip tray overflow pipe may become overwhelmed or blocked, leading to water escaping the tray and causing serious structural damage to the wooden shelving and ceiling below.",
+        "action_required": "A leaking pressure control valve or connection joint appears to be releasing water directly into your geyser's drip tray. The first photo shows active water droplets clinging to the underside of the brass T-piece and the black valve assembly, with a significant amount of standing water already pooled in the tray.\n\nThese leaks typically develop when the internal seals or diaphragms within the pressure control valve degrade over time due to constant thermal expansion and system pressure. Alternatively, thread seal tape or jointing compound at the metal connections can fail, allowing water to weep past the threads under municipal pressure.\n\nIf left unaddressed, the drip tray overflow pipe may become overwhelmed or blocked, leading to water escaping the tray and causing serious structural damage to the wooden shelving and ceiling below.",
+        "image_descriptions": [
+          "Close-up of a horizontal geyser in a black drip tray filled with pooled water, showing droplets on the brass T-piece and black valve connection.",
+          "Underside view of the wooden support shelf showing copper and white pipes passing through the wall with visible water staining on the wood.",
+          "Exterior view of an apartment building walkway showing the outdoor context where the geyser cupboard or overflow drain is located."
+        ],
+        "image_thought_breakdown": [
+          "Close-up of a horizontal geyser in a black drip tray filled with pooled water, showing droplets on the brass T-piece and black valve connection.",
+          "Underside view of the wooden support shelf showing copper and white pipes passing through the wall with visible water staining on the wood.",
+          "Exterior view of an apartment building walkway showing the outdoor context where the geyser cupboard or overflow drain is located."
+        ],
+        "clarification_questions": [
+          "Yes dripping from valve body",
+          "Dripping only from threaded joints",
+          "No valve body is dry"
+        ],
+        "structured_clarification": {
+          "intro": "Answering one quick question about where the water is coming from will help us pinpoint the exact issue.",
+          "hypotheses": [
+            {
+              "id": "h1",
+              "label": "Leaking Pressure Control Valve",
+              "confidence": 75,
+              "why": "Water droplets are visible directly on the body of the black valve assembly connected to the T-piece.",
+              "discriminating_question": "Is water dripping directly from the plastic body of the valve?",
+              "answer_chips": [
+                {
+                  "id": "c1",
+                  "text": "Yes dripping from valve body",
+                  "effect": "confirms"
+                },
+                {
+                  "id": "c2",
+                  "text": "Dripping only from threaded joints",
+                  "effect": "partial"
+                },
+                {
+                  "id": "c3",
+                  "text": "No valve body is dry",
+                  "effect": "rules_out"
+                }
+              ]
+            },
+            {
+              "id": "h2",
+              "label": "Failed Connection Joint",
+              "confidence": 65,
+              "why": "The water appears concentrated around the threaded connections of the brass T-piece.",
+              "discriminating_question": "Is the water weeping specifically from the threaded metal joints?",
+              "answer_chips": [
+                {
+                  "id": "c1",
+                  "text": "Yes weeping from threads",
+                  "effect": "confirms"
+                },
+                {
+                  "id": "c2",
+                  "text": "Dripping from inside geyser casing",
+                  "effect": "rules_out"
+                },
+                {
+                  "id": "c3",
+                  "text": "Unsure where water originates",
+                  "effect": "partial"
+                }
+              ]
+            },
+            {
+              "id": "h3",
+              "label": "Ruptured Geyser Cylinder",
+              "confidence": 40,
+              "why": "If water is leaking from inside the casing and running along the pipes, the inner tank may have failed.",
+              "discriminating_question": "Is water escaping from behind the black plastic end-cap of the geyser?",
+              "answer_chips": [
+                {
+                  "id": "c1",
+                  "text": "Yes leaking from inside casing",
+                  "effect": "confirms"
+                },
+                {
+                  "id": "c2",
+                  "text": "No casing is completely dry",
+                  "effect": "rules_out"
+                },
+                {
+                  "id": "c3",
+                  "text": "Water only on external fittings",
+                  "effect": "partial"
+                }
+              ]
+            }
+          ],
+          "escape": {
+            "prompt": "Doesn't match any of these? Tell me what you're seeing in your own words."
+          }
+        },
+        "contractor_checklist": [],
+        "homeowner_prep": "Switch off the geyser circuit breaker at the main DB board and close the cold water stopcock supplying the unit.",
+        "diy_verification": "Wipe the brass T-piece and valve dry with a cloth, then watch closely to see if water immediately begins to weep from the threaded joints or the valve body itself.",
+        "photo_request": "",
+        "confidence_drivers": [
+          "Clear view of water pooling in the drip tray",
+          "Droplets visible on the valve assembly",
+          "Water staining on the support structure below"
+        ],
+        "trade": "Plumbing",
+        "trade_detail": "Geyser Fault",
+        "confidence": 65,
+        "rejected": false,
+        "requires_clarification": true,
+        "unserviced": false,
+        "refetch_providers": false,
+        "unsupported_reason": "",
+        "subcategory_id": "geyser_fault_plumbing",
+        "failed_component": "",
+        "cascading_damage": "",
+        "trade_candidates": [],
+        "prompt_version": "v7.4",
+        "ai_model": "gemini-3.5-flash",
+        "pipeline": "v2-classify-prose",
+        "structural_confidence": {
+          "score": 85,
+          "signals": {
+            "hasImage": true,
+            "imageCount": 3,
+            "descriptionWordCount": 4,
+            "subcategoryMatched": true,
+            "failedComponentNamed": false,
+            "isCatchAllWithNoVisual": false,
+            "isRejectedOrUnserviced": false
+          }
+        }
+      }
+    },
+    {
+      "id": "garage-with-cause",
+      "description": "Garage door — user names the missing spring",
+      "conversationId": "ed6aaf39-2d2e-47b6-9eef-3db5cb963972",
+      "model": "gemini-3.5-flash",
+      "status": "ok",
+      "diagnose_status": 200,
+      "elapsed_ms": 72053,
+      "row": {
+        "id": "ed6aaf39-2d2e-47b6-9eef-3db5cb963972",
+        "title": "New Diagnosis",
+        "image_url": "https://muzbjrtlklluitmhkcja.supabase.co/storage/v1/object/public/gallery/welcome_scans/ed6aaf39-2d2e-47b6-9eef-3db5cb963972/1779883052648-Garage_Door_1.jpg",
+        "customer_lat": null,
+        "customer_lng": null,
+        "customer_address": null,
+        "device": null,
+        "user_agent": null,
+        "created_at": "2026-05-27T11:57:38.240825+00:00",
+        "updated_at": "2026-05-27T11:57:38.240825+00:00",
+        "diagnosis": null,
+        "providers": null,
+        "user_id": null,
+        "diagnosis_confirmed": false,
+        "initial_image_description": null,
+        "pinned": false,
+        "trade_detail": null,
+        "urgency_key": null,
+        "requires_clarification": null,
+        "clarification_question_count": 0,
+        "is_direct_match": false,
+        "image_urls": [
+          "https://muzbjrtlklluitmhkcja.supabase.co/storage/v1/object/public/gallery/welcome_scans/ed6aaf39-2d2e-47b6-9eef-3db5cb963972/1779883052648-Garage_Door_1.jpg",
+          "https://muzbjrtlklluitmhkcja.supabase.co/storage/v1/object/public/gallery/welcome_scans/ed6aaf39-2d2e-47b6-9eef-3db5cb963972/1779883058354-Garage_Door_2.jpg",
+          "https://muzbjrtlklluitmhkcja.supabase.co/storage/v1/object/public/gallery/welcome_scans/ed6aaf39-2d2e-47b6-9eef-3db5cb963972/1779883062794-Garage_Door_3.jpg",
+          "https://muzbjrtlklluitmhkcja.supabase.co/storage/v1/object/public/gallery/welcome_scans/ed6aaf39-2d2e-47b6-9eef-3db5cb963972/1779883066483-Garage_Door_4.jpg"
+        ],
+        "image_refinement_log": [],
+        "clarification_round": 0,
+        "hypothesis_state": null,
+        "diagnosis_critique": null
+      },
+      "breadcrumbs": [
+        {
+          "created_at": "2026-05-27T11:58:35.320068+00:00",
+          "action": "agent_critique_breadcrumb",
+          "payload": {
+            "step": "callback_fired",
+            "envEnabled": true
+          }
+        }
+      ],
+      "parsed": {
+        "thought": "Comparing the two sides of the garage door in the second image reveals a major asymmetry where the right side has a heavy vertical tension spring installed but the left side has none. The first image shows a close-up of this left-hand hinge mechanism completely devoid of its counterbalance spring. This missing spring causes the door to be severely unbalanced, which forces the opener motor to lift the full dead weight of the timber panel. The motor then detects this excessive resistance as an obstruction, triggers its safety overload sensor, and reverses the door.",
+        "thinking": "Comparing the two sides of the garage door in the second image reveals a major asymmetry where the right side has a heavy vertical tension spring installed but the left side has none. The first image shows a close-up of this left-hand hinge mechanism completely devoid of its counterbalance spring. This missing spring causes the door to be severely unbalanced, which forces the opener motor to lift the full dead weight of the timber panel. The motor then detects this excessive resistance as an obstruction, triggers its safety overload sensor, and reverses the door.",
+        "thoughts_history": [
+          {
+            "round": 0,
+            "thought": "Comparing the two sides of the garage door in the second image reveals a major asymmetry where the right side has a heavy vertical tension spring installed but the left side has none. The first image shows a close-up of this left-hand hinge mechanism completely devoid of its counterbalance spring. This missing spring causes the door to be severely unbalanced, which forces the opener motor to lift the full dead weight of the timber panel. The motor then detects this excessive resistance as an obstruction, triggers its safety overload sensor, and reverses the door.",
+            "created_at": "2026-05-27T11:58:33.551Z"
+          }
+        ],
+        "diagnosis": "Missing Tension Spring",
+        "estimated_diagnosis_sentence": "Missing Tension Spring",
+        "message": "We could not finish the automated analysis for these photos right now. The garage door is failing to open because the counterbalance tension spring on the left-hand side is completely missing, leaving the door severely unbalanced. Under normal operation, a pair of heavy springs shares the weight of the timber panel so the motor only has to guide the movement. Without the left spring, the motor is forced to lift almost the entire dead weight of the heavy wooden door on its own.\n\nThis extreme load causes the motor's safety sensors to detect excessive resistance, which it interprets as an obstruction. To prevent damage to the drive gear or motor windings, the system automatically stops, beeps an error code, and reverses the door back to the closed position.",
+        "action_required": "The garage door is failing to open because the counterbalance tension spring on the left-hand side is completely missing, leaving the door severely unbalanced. Under normal operation, a pair of heavy springs shares the weight of the timber panel so the motor only has to guide the movement. Without the left spring, the motor is forced to lift almost the entire dead weight of the heavy wooden door on its own.\n\nThis extreme load causes the motor's safety sensors to detect excessive resistance, which it interprets as an obstruction. To prevent damage to the drive gear or motor windings, the system automatically stops, beeps an error code, and reverses the door back to the closed position.",
+        "image_descriptions": [
+          "A close-up of the left-hand side hinge mechanism showing the black metal articulated arms mounted to the wall and wooden door frame, with no tension spring attached.",
+          "A wide view of the entire wooden garage door from the inside, showing a vertical tension spring on the right-hand side but none on the left-hand side.",
+          "A view looking up at the central ceiling-mounted motor rail, the red emergency release cord, and the metal drawbar arm connected to the top of the door.",
+          "A close-up of the silver metal header bracket bolted to the top wooden rail of the door, securing the motor's drawbar arm with a clevis pin and cotter pin."
+        ],
+        "image_thought_breakdown": [
+          "A close-up of the left-hand side hinge mechanism showing the black metal articulated arms mounted to the wall and wooden door frame, with no tension spring attached.",
+          "A wide view of the entire wooden garage door from the inside, showing a vertical tension spring on the right-hand side but none on the left-hand side.",
+          "A view looking up at the central ceiling-mounted motor rail, the red emergency release cord, and the metal drawbar arm connected to the top of the door.",
+          "A close-up of the silver metal header bracket bolted to the top wooden rail of the door, securing the motor's drawbar arm with a clevis pin and cotter pin."
+        ],
+        "clarification_questions": [
+          "It snapped recently",
+          "It was never there",
+          "Both springs are present"
+        ],
+        "structured_clarification": {
+          "intro": "The missing spring on the left side is the clear cause of the imbalance, but we need to confirm the spring type to proceed.",
+          "hypotheses": [
+            {
+              "id": "h1",
+              "label": "Missing Tension Spring",
+              "confidence": 95,
+              "why": "The right side clearly shows a vertical tension spring, while the left side has none, causing a severe weight imbalance.",
+              "discriminating_question": "Did the left spring snap recently, or has it been missing for a long time?",
+              "answer_chips": [
+                {
+                  "id": "c1",
+                  "text": "It snapped recently",
+                  "effect": "confirms"
+                },
+                {
+                  "id": "c2",
+                  "text": "It was never there",
+                  "effect": "partial"
+                },
+                {
+                  "id": "c3",
+                  "text": "Both springs are present",
+                  "effect": "rules_out"
+                }
+              ]
+            }
+          ],
+          "escape": {
+            "prompt": "Doesn't match any of these? Tell me what you're seeing in your own words."
+          }
+        },
+        "contractor_checklist": [],
+        "homeowner_prep": "Avoid operating the garage door motor to prevent burning out the drive gear.",
+        "diy_verification": "With the motor disengaged via the red cord, try to lift the door manually; if it feels extremely heavy and will not stay open on its own, the counterbalance system is failed.",
+        "photo_request": "",
+        "confidence_drivers": [
+          "Clear visual asymmetry between left and right sides",
+          "User description matches the missing spring exactly",
+          "Motor behavior is consistent with an unbalanced load safety trip"
+        ],
+        "trade": "Security",
+        "trade_detail": "Garage Door Fault / Repair",
+        "confidence": 65,
+        "rejected": false,
+        "requires_clarification": true,
+        "unserviced": false,
+        "refetch_providers": false,
+        "unsupported_reason": "",
+        "subcategory_id": "garage_door_fault",
+        "failed_component": "",
+        "cascading_damage": "",
+        "trade_candidates": [],
+        "prompt_version": "v7.4",
+        "ai_model": "gemini-3.5-flash",
+        "pipeline": "v2-classify-prose",
+        "structural_confidence": {
+          "score": 85,
+          "signals": {
+            "hasImage": true,
+            "imageCount": 4,
+            "descriptionWordCount": 20,
+            "subcategoryMatched": true,
+            "failedComponentNamed": false,
+            "isCatchAllWithNoVisual": false,
+            "isRejectedOrUnserviced": false
+          }
+        }
+      }
+    },
+    {
+      "id": "garage-no-text",
+      "description": "Garage door — photos only (symmetry-enumeration test)",
+      "conversationId": "d19cc1ad-20a7-4c56-a29c-90f33ee1ad41",
+      "model": "gemini-3.5-flash",
+      "status": "ok",
+      "diagnose_status": 200,
+      "elapsed_ms": 50825,
+      "row": {
+        "id": "d19cc1ad-20a7-4c56-a29c-90f33ee1ad41",
+        "title": "New Diagnosis",
+        "image_url": "https://muzbjrtlklluitmhkcja.supabase.co/storage/v1/object/public/gallery/welcome_scans/d19cc1ad-20a7-4c56-a29c-90f33ee1ad41/1779883124474-Garage_Door_1.jpg",
+        "customer_lat": null,
+        "customer_lng": null,
+        "customer_address": null,
+        "device": null,
+        "user_agent": null,
+        "created_at": "2026-05-27T11:58:50.709259+00:00",
+        "updated_at": "2026-05-27T11:58:50.709259+00:00",
+        "diagnosis": null,
+        "providers": null,
+        "user_id": null,
+        "diagnosis_confirmed": false,
+        "initial_image_description": null,
+        "pinned": false,
+        "trade_detail": null,
+        "urgency_key": null,
+        "requires_clarification": null,
+        "clarification_question_count": 0,
+        "is_direct_match": false,
+        "image_urls": [
+          "https://muzbjrtlklluitmhkcja.supabase.co/storage/v1/object/public/gallery/welcome_scans/d19cc1ad-20a7-4c56-a29c-90f33ee1ad41/1779883124474-Garage_Door_1.jpg",
+          "https://muzbjrtlklluitmhkcja.supabase.co/storage/v1/object/public/gallery/welcome_scans/d19cc1ad-20a7-4c56-a29c-90f33ee1ad41/1779883130823-Garage_Door_2.jpg",
+          "https://muzbjrtlklluitmhkcja.supabase.co/storage/v1/object/public/gallery/welcome_scans/d19cc1ad-20a7-4c56-a29c-90f33ee1ad41/1779883132504-Garage_Door_3.jpg",
+          "https://muzbjrtlklluitmhkcja.supabase.co/storage/v1/object/public/gallery/welcome_scans/d19cc1ad-20a7-4c56-a29c-90f33ee1ad41/1779883133952-Garage_Door_4.jpg"
+        ],
+        "image_refinement_log": [],
+        "clarification_round": 0,
+        "hypothesis_state": null,
+        "diagnosis_critique": {
+          "failure_mode": "rubric_miscalibration",
+          "knowledge_gap": "The pipeline did not correctly assess the clarity of the visual evidence for the missing component.",
+          "surprise_signals": [],
+          "prompt_hypothesis": "output-format.ts:confidence_definition",
+          "resolution_would_be": "The system should have recognised the clear visual evidence of the missing spring and committed to the diagnosis.",
+          "confidence_calibration": {
+            "delta_reasoning": "The agent correctly identified the core issue: a missing left tension spring on the garage door. This is clearly visible in the second image, which shows the right side with a spring and the left side with an empty bracket. The diagnosis 'Missing Left Tension Spring' is specific and accurate, and there is no ambiguity in the visual evidence. Therefore, the agent's confidence should have been high, and it should have committed to the diagnosis rather than requiring clarification.",
+            "agent_confidence": 0,
+            "rubric_facets_used": [
+              "component_missing",
+              "symptom_unique",
+              "image_clarity",
+              "equipment_visible"
+            ],
+            "critique_confidence": 95
+          },
+          "notes_for_human_review": "The agent correctly identified the missing component and the resulting imbalance. However, it set confidence to 0 and required clarification, which is a miscalibration given the clear visual evidence. This case should have been a high-confidence commit.",
+          "considered_alternatives": []
+        }
+      },
+      "breadcrumbs": [
+        {
+          "created_at": "2026-05-27T11:59:27.704548+00:00",
+          "action": "agent_critique_breadcrumb",
+          "payload": {
+            "step": "callback_fired",
+            "envEnabled": true
+          }
+        },
+        {
+          "created_at": "2026-05-27T11:59:33.604238+00:00",
+          "action": "agent_critique_breadcrumb",
+          "payload": {
+            "step": "runCritique_returned",
+            "resultNull": false
+          }
+        },
+        {
+          "created_at": "2026-05-27T11:59:33.862848+00:00",
+          "action": "agent_critique_breadcrumb",
+          "payload": {
+            "step": "persistCritique_completed"
+          }
+        }
+      ],
+      "parsed": {
+        "thought": "Symmetry check: Comparing the left and right sides of the garage door in the second image, the right side has a heavy vertical tension spring installed, whereas the left side has an empty bracket with no spring present. This severe asymmetry has left the heavy wooden door completely unbalanced, causing it to sag heavily on the left. The motor arm is struggling against this dead weight, leaving the door jammed in a crooked, partially open position.",
+        "thinking": "Symmetry check: Comparing the left and right sides of the garage door in the second image, the right side has a heavy vertical tension spring installed, whereas the left side has an empty bracket with no spring present. This severe asymmetry has left the heavy wooden door completely unbalanced, causing it to sag heavily on the left. The motor arm is struggling against this dead weight, leaving the door jammed in a crooked, partially open position.",
+        "thoughts_history": [
+          {
+            "round": 0,
+            "thought": "Symmetry check: Comparing the left and right sides of the garage door in the second image, the right side has a heavy vertical tension spring installed, whereas the left side has an empty bracket with no spring present. This severe asymmetry has left the heavy wooden door completely unbalanced, causing it to sag heavily on the left. The motor arm is struggling against this dead weight, leaving the door jammed in a crooked, partially open position.",
+            "created_at": "2026-05-27T11:59:25.564Z"
+          }
+        ],
+        "diagnosis": "Missing Left Tension Spring",
+        "estimated_diagnosis_sentence": "Missing Left Tension Spring",
+        "message": "We could not finish the automated analysis for these photos right now. The garage door is hanging unevenly and is jammed because it is completely unbalanced. A comparison of the two sides reveals that the right-hand side has a large vertical tension spring installed, while the left-hand side is missing its matching spring entirely.\n\nGarage door counterbalance systems rely on equal tension from springs on both sides to lift heavy wooden doors. When one spring breaks or is removed, the door becomes extremely heavy on that side, causing the mechanism to bind and putting dangerous levels of stress on the opener carriage and motor arm.",
+        "action_required": "The garage door is hanging unevenly and is jammed because it is completely unbalanced. A comparison of the two sides reveals that the right-hand side has a large vertical tension spring installed, while the left-hand side is missing its matching spring entirely.\n\nGarage door counterbalance systems rely on equal tension from springs on both sides to lift heavy wooden doors. When one spring breaks or is removed, the door becomes extremely heavy on that side, causing the mechanism to bind and putting dangerous levels of stress on the opener carriage and motor arm.",
+        "image_descriptions": [
+          "A close-up of the left-hand side hinge mechanism showing the black articulated bracket mounted to the wall and the wooden door panel, with no vertical tension spring attached.",
+          "A wide view of the entire wooden garage door hanging crookedly in a semi-open state, showing a vertical tension spring on the right side but none on the left.",
+          "A view looking up at the central ceiling-mounted opener rail, showing the carriage assembly, the curved metal towing arm, and the red emergency release cord hanging down.",
+          "A close-up of the silver mounting bracket bolted to the top centre of the wooden door frame, showing the clevis pin and cotter pin securing the motor towing arm."
+        ],
+        "image_thought_breakdown": [
+          "A close-up of the left-hand side hinge mechanism showing the black articulated bracket mounted to the wall and the wooden door panel, with no vertical tension spring attached.",
+          "A wide view of the entire wooden garage door hanging crookedly in a semi-open state, showing a vertical tension spring on the right side but none on the left.",
+          "A view looking up at the central ceiling-mounted opener rail, showing the carriage assembly, the curved metal towing arm, and the red emergency release cord hanging down.",
+          "A close-up of the silver mounting bracket bolted to the top centre of the wooden door frame, showing the clevis pin and cotter pin securing the motor towing arm."
+        ],
+        "clarification_questions": [
+          "It snapped with a loud bang",
+          "It was removed during a previous repair",
+          "Both springs are actually there"
+        ],
+        "structured_clarification": {
+          "intro": "The door is hanging unevenly, which usually points to a spring issue. Answering this question will help confirm.",
+          "hypotheses": [
+            {
+              "id": "h1",
+              "label": "Missing Left Tension Spring",
+              "confidence": 90,
+              "why": "The right side has a large vertical tension spring, but the left side bracket is completely empty, causing the door to sag on the left.",
+              "discriminating_question": "Did the left-side spring snap suddenly, or did someone remove it?",
+              "answer_chips": [
+                {
+                  "id": "c1",
+                  "text": "It snapped with a loud bang",
+                  "effect": "confirms"
+                },
+                {
+                  "id": "c2",
+                  "text": "It was removed during a previous repair",
+                  "effect": "confirms"
+                },
+                {
+                  "id": "c3",
+                  "text": "Both springs are actually there",
+                  "effect": "rules_out"
+                }
+              ]
+            },
+            {
+              "id": "h2",
+              "label": "Bent Garage Door Hinge",
+              "confidence": 40,
+              "why": "The crooked hanging angle might have caused the left-hand side hinge arms to twist or bend under the uneven load.",
+              "discriminating_question": "Are any of the black metal hinge arms on the left side visibly twisted or bent?",
+              "answer_chips": [
+                {
+                  "id": "c1",
+                  "text": "Yes, the metal arms are bent",
+                  "effect": "confirms"
+                },
+                {
+                  "id": "c2",
+                  "text": "No, they look straight but loose",
+                  "effect": "partial"
+                },
+                {
+                  "id": "c3",
+                  "text": "They look perfectly straight and intact",
+                  "effect": "rules_out"
+                }
+              ]
+            }
+          ],
+          "escape": {
+            "prompt": "If you see something else, like a broken cable or a track issue, please describe it here."
+          }
+        },
+        "contractor_checklist": [],
+        "homeowner_prep": "Switch off the garage door opener at the wall outlet to prevent anyone from trying to operate the motor.",
+        "diy_verification": "Look closely at the floor or side tracks to see if a broken metal spring or pieces of a snapped cable are lying nearby.",
+        "photo_request": "",
+        "confidence_drivers": [
+          "Clear visual absence of the left-hand tension spring",
+          "Highly asymmetric door hanging angle",
+          "Right-hand spring is clearly visible and intact"
+        ],
+        "trade": "Security",
+        "trade_detail": "Garage Door Fault / Repair",
+        "confidence": 65,
+        "rejected": false,
+        "requires_clarification": true,
+        "unserviced": false,
+        "refetch_providers": false,
+        "unsupported_reason": "",
+        "subcategory_id": "garage_door_fault",
+        "failed_component": "",
+        "cascading_damage": "",
+        "trade_candidates": [],
+        "prompt_version": "v7.4",
+        "ai_model": "gemini-3.5-flash",
+        "pipeline": "v2-classify-prose",
+        "structural_confidence": {
+          "score": 85,
+          "signals": {
+            "hasImage": true,
+            "imageCount": 4,
+            "descriptionWordCount": 0,
+            "subcategoryMatched": true,
+            "failedComponentNamed": false,
+            "isCatchAllWithNoVisual": false,
+            "isRejectedOrUnserviced": false
+          }
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,888 @@
+{
+  "ts": "2026-05-28T08-03-34-544Z",
+  "rounds": 1,
+  "source": "hardcoded",
+  "fixturesPath": null,
+  "summaries": [
+    {
+      "cell": {
+        "tag": "A",
+        "label": "2.5 model + v2.5 prompts",
+        "model": "gemini-2.5-flash",
+        "promptVariant": "v2.5"
+      },
+      "totalChecks": 13,
+      "correct": 11,
+      "meanConfidence": 98,
+      "commitRate": 1,
+      "titleStabilityRate": 1,
+      "rescueActivations": 0,
+      "perTest": {
+        "geyser-full-cues": {
+          "titles": [
+            "Corroded Geyser Tank"
+          ],
+          "sids": [
+            "geyser_fault_plumbing"
+          ],
+          "trades": [
+            "Plumbing"
+          ],
+          "confidences": [
+            98
+          ],
+          "commits": [
+            true
+          ],
+          "h1Confidences": []
+        },
+        "geyser-minimal": {
+          "titles": [
+            "Leaking Geyser Inlet or Outlet Fitting"
+          ],
+          "sids": [
+            "geyser_fault_plumbing"
+          ],
+          "trades": [
+            "Plumbing"
+          ],
+          "confidences": [
+            98
+          ],
+          "commits": [
+            true
+          ],
+          "h1Confidences": []
+        },
+        "garage-with-cause": {
+          "titles": [
+            "Missing Garage Door Counterbalance Spring"
+          ],
+          "sids": [
+            "garage_door_fault"
+          ],
+          "trades": [
+            "Security"
+          ],
+          "confidences": [
+            98
+          ],
+          "commits": [
+            true
+          ],
+          "h1Confidences": []
+        },
+        "garage-no-text": {
+          "titles": [
+            ""
+          ],
+          "sids": [
+            ""
+          ],
+          "trades": [
+            ""
+          ],
+          "confidences": [
+            0
+          ],
+          "commits": [
+            true
+          ],
+          "h1Confidences": []
+        }
+      }
+    },
+    {
+      "cell": {
+        "tag": "B",
+        "label": "2.5 model + v3.5 prompts",
+        "model": "gemini-2.5-flash",
+        "promptVariant": "v3.5"
+      },
+      "totalChecks": 13,
+      "correct": 2,
+      "meanConfidence": 0,
+      "commitRate": 0,
+      "titleStabilityRate": 1,
+      "rescueActivations": 0,
+      "perTest": {
+        "geyser-full-cues": {
+          "titles": [
+            ""
+          ],
+          "sids": [
+            ""
+          ],
+          "trades": [
+            ""
+          ],
+          "confidences": [
+            0
+          ],
+          "commits": [
+            true
+          ],
+          "h1Confidences": []
+        },
+        "geyser-minimal": {
+          "titles": [
+            ""
+          ],
+          "sids": [
+            ""
+          ],
+          "trades": [
+            ""
+          ],
+          "confidences": [
+            0
+          ],
+          "commits": [
+            true
+          ],
+          "h1Confidences": []
+        },
+        "garage-with-cause": {
+          "titles": [
+            ""
+          ],
+          "sids": [
+            ""
+          ],
+          "trades": [
+            ""
+          ],
+          "confidences": [
+            0
+          ],
+          "commits": [
+            true
+          ],
+          "h1Confidences": []
+        },
+        "garage-no-text": {
+          "titles": [
+            ""
+          ],
+          "sids": [
+            ""
+          ],
+          "trades": [
+            ""
+          ],
+          "confidences": [
+            0
+          ],
+          "commits": [
+            true
+          ],
+          "h1Confidences": []
+        }
+      }
+    },
+    {
+      "cell": {
+        "tag": "C",
+        "label": "3.5 model + v2.5 prompts",
+        "model": "gemini-3.5-flash",
+        "promptVariant": "v2.5"
+      },
+      "totalChecks": 13,
+      "correct": 2,
+      "meanConfidence": 0,
+      "commitRate": 0,
+      "titleStabilityRate": 1,
+      "rescueActivations": 0,
+      "perTest": {
+        "geyser-full-cues": {
+          "titles": [
+            ""
+          ],
+          "sids": [
+            ""
+          ],
+          "trades": [
+            ""
+          ],
+          "confidences": [
+            0
+          ],
+          "commits": [
+            true
+          ],
+          "h1Confidences": []
+        },
+        "geyser-minimal": {
+          "titles": [
+            ""
+          ],
+          "sids": [
+            ""
+          ],
+          "trades": [
+            ""
+          ],
+          "confidences": [
+            0
+          ],
+          "commits": [
+            true
+          ],
+          "h1Confidences": []
+        },
+        "garage-with-cause": {
+          "titles": [
+            ""
+          ],
+          "sids": [
+            ""
+          ],
+          "trades": [
+            ""
+          ],
+          "confidences": [
+            0
+          ],
+          "commits": [
+            true
+          ],
+          "h1Confidences": []
+        },
+        "garage-no-text": {
+          "titles": [
+            ""
+          ],
+          "sids": [
+            ""
+          ],
+          "trades": [
+            ""
+          ],
+          "confidences": [
+            0
+          ],
+          "commits": [
+            true
+          ],
+          "h1Confidences": []
+        }
+      }
+    },
+    {
+      "cell": {
+        "tag": "D",
+        "label": "3.5 model + v3.5 prompts",
+        "model": "gemini-3.5-flash",
+        "promptVariant": "v3.5"
+      },
+      "totalChecks": 13,
+      "correct": 2,
+      "meanConfidence": 0,
+      "commitRate": 0,
+      "titleStabilityRate": 1,
+      "rescueActivations": 0,
+      "perTest": {
+        "geyser-full-cues": {
+          "titles": [
+            ""
+          ],
+          "sids": [
+            ""
+          ],
+          "trades": [
+            ""
+          ],
+          "confidences": [
+            0
+          ],
+          "commits": [
+            true
+          ],
+          "h1Confidences": []
+        },
+        "geyser-minimal": {
+          "titles": [
+            ""
+          ],
+          "sids": [
+            ""
+          ],
+          "trades": [
+            ""
+          ],
+          "confidences": [
+            0
+          ],
+          "commits": [
+            true
+          ],
+          "h1Confidences": []
+        },
+        "garage-with-cause": {
+          "titles": [
+            ""
+          ],
+          "sids": [
+            ""
+          ],
+          "trades": [
+            ""
+          ],
+          "confidences": [
+            0
+          ],
+          "commits": [
+            true
+          ],
+          "h1Confidences": []
+        },
+        "garage-no-text": {
+          "titles": [
+            ""
+          ],
+          "sids": [
+            ""
+          ],
+          "trades": [
+            ""
+          ],
+          "confidences": [
+            0
+          ],
+          "commits": [
+            true
+          ],
+          "h1Confidences": []
+        }
+      }
+    }
+  ],
+  "allResults": [
+    {
+      "cell": {
+        "tag": "A",
+        "label": "2.5 model + v2.5 prompts",
+        "model": "gemini-2.5-flash",
+        "promptVariant": "v2.5"
+      },
+      "round": 1,
+      "testId": "geyser-full-cues",
+      "conversationId": "60b35954-1089-44e3-a22a-e7b670885ec6",
+      "status": "ok",
+      "elapsedMs": 33762,
+      "parsed": {
+        "thought": "The user explicitly states the geyser is leaking, the drip tray water is rusty brown, and they are experiencing higher electricity bills with reduced hot water duration. Image 1 shows a drip tray with rusty brown water and a visible leak from a copper pipe connection near a pump or control unit. Image 2 provides a closer view of the copper pipework, showing corrosion and mineral deposits at a joint, consistent with a long-term leak and water quality issues. Image 3 is an exterior shot of the building, providing context but no direct diagnostic evidence. The combination of rusty water, reduced hot water, and higher bills strongly indicates internal tank corrosion, which is a more severe issue than a simple fitting leak.",
+        "thinking": "The user explicitly states the geyser is leaking, the drip tray water is rusty brown, and they are experiencing higher electricity bills with reduced hot water duration. Image 1 shows a drip tray with rusty brown water and a visible leak from a copper pipe connection near a pump or control unit. Image 2 provides a closer view of the copper pipework, showing corrosion and mineral deposits at a joint, consistent with a long-term leak and water quality issues. Image 3 is an exterior shot of the building, providing context but no direct diagnostic evidence. The combination of rusty water, reduced hot water, and higher bills strongly indicates internal tank corrosion, which is a more severe issue than a simple fitting leak.",
+        "thoughts_history": [
+          {
+            "round": 0,
+            "thought": "The user explicitly states the geyser is leaking, the drip tray water is rusty brown, and they are experiencing higher electricity bills with reduced hot water duration. Image 1 shows a drip tray with rusty brown water and a visible leak from a copper pipe connection near a pump or control unit. Image 2 provides a closer view of the copper pipework, showing corrosion and mineral deposits at a joint, consistent with a long-term leak and water quality issues. Image 3 is an exterior shot of the building, providing context but no direct diagnostic evidence. The combination of rusty water, reduced hot water, and higher bills strongly indicates internal tank corrosion, which is a more severe issue than a simple fitting leak.",
+            "created_at": "2026-05-28T08:00:54.998Z"
+          }
+        ],
+        "diagnosis": "Corroded Geyser Tank",
+        "estimated_diagnosis_sentence": "Corroded Geyser Tank",
+        "message": "Your geyser appears to have a corroded tank. The rusty brown water visible in the drip tray and your description of rust-tinted water, reduced hot water duration, and higher electricity bills are all strong indicators that the internal sacrificial anode has been consumed and the tank wall is rusting through.\n\nThis issue typically develops over many years as the geyser's internal sacrificial anode, designed to protect the steel tank from corrosion, gradually depletes. Once the anode is gone, the tank itself becomes vulnerable to electrochemical corrosion from the water inside, leading to rust and eventual structural failure.\n\nIf left unaddressed, the corrosion will worsen, leading to a more significant leak or a complete burst of the geyser tank. This could cause extensive water damage to your property, including ceilings, walls, and flooring, and would require an emergency replacement.\n\nThere is a risk of significant water damage to your property if the tank bursts. It is important to address this issue promptly to prevent further escalation.",
+        "action_required": "",
+        "image_descriptions": [
+          "This image shows a black plastic drip tray filled with rusty brown water, with a copper pipe and a black plastic fitting dripping water into the tray from above, indicating an active leak.",
+          "This close-up view reveals corroded copper pipework and white mineral deposits around a connection point, suggesting a long-term leak and hard water exposure, with a white plastic pipe also visible in the background.",
+          "This image provides an exterior view of an apartment building with multiple windows and a brick wall, offering contextual information about the property type but no direct diagnostic evidence of the geyser issue."
+        ],
+        "image_thought_breakdown": [
+          "This image shows a black plastic drip tray filled with rusty brown water, with a copper pipe and a black plastic fitting dripping water into the tray from above, indicating an active leak.",
+          "This close-up view reveals corroded copper pipework and white mineral deposits around a connection point, suggesting a long-term leak and hard water exposure, with a white plastic pipe also visible in the background.",
+          "This image provides an exterior view of an apartment building with multiple windows and a brick wall, offering contextual information about the property type but no direct diagnostic evidence of the geyser issue."
+        ],
+        "clarification_questions": [],
+        "contractor_checklist": [
+          "Inspect the geyser unit and plumbing connections for the source and extent of the leak.",
+          "Assess the overall condition of the geyser, including its age and any signs of internal tank corrosion.",
+          "Recommend a suitable replacement geyser unit if the tank is confirmed to be corroded.",
+          "Install the new geyser, ensuring all plumbing and electrical connections are compliant with safety standards."
+        ],
+        "homeowner_prep": "Switch off the geyser's circuit breaker at your main distribution board to prevent further heating and potential electrical hazards, and turn off the main water supply to the geyser if you can safely access its isolation valve.",
+        "diy_verification": "Observe the water collected in the drip tray; if it consistently appears rusty brown, it strongly indicates internal tank corrosion.",
+        "photo_request": "",
+        "confidence_drivers": [
+          "User explicitly stated rusty water, reduced hot water, and higher bills.",
+          "Image 1 shows rusty brown water in the drip tray.",
+          "Image 2 shows corrosion and mineral deposits on pipework.",
+          "Symptoms align with corroded-tank failure mode."
+        ],
+        "trade": "Plumbing",
+        "trade_detail": "Geyser Fault",
+        "confidence": 98,
+        "rejected": false,
+        "requires_clarification": false,
+        "unserviced": false,
+        "refetch_providers": false,
+        "unsupported_reason": "N/A",
+        "subcategory_id": "geyser_fault_plumbing",
+        "failed_component": "Geyser tank or pipe connection",
+        "cascading_damage": "Water damage to surrounding area, increased electricity consumption",
+        "trade_candidates": [
+          {
+            "trade": "Plumbing",
+            "score": 98
+          },
+          {
+            "trade": "Electrical",
+            "score": 70
+          },
+          {
+            "trade": "General Handyman",
+            "score": 20
+          }
+        ],
+        "prompt_version": "v7.4",
+        "ai_model": "gemini-2.5-flash",
+        "pipeline": "v2-classify-prose",
+        "structural_confidence": {
+          "score": 100,
+          "signals": {
+            "hasImage": true,
+            "imageCount": 3,
+            "descriptionWordCount": 27,
+            "subcategoryMatched": true,
+            "failedComponentNamed": true,
+            "isCatchAllWithNoVisual": false,
+            "isRejectedOrUnserviced": false
+          }
+        }
+      },
+      "critique": {
+        "failure_mode": "none",
+        "knowledge_gap": null,
+        "surprise_signals": [],
+        "prompt_hypothesis": null,
+        "resolution_would_be": null,
+        "confidence_calibration": {
+          "delta_reasoning": "The agent's confidence is well-calibrated. The user's description explicitly states a leaking geyser, rusty brown water in the drip tray, increased electricity bills, and reduced hot water duration. These symptoms, combined with the visual evidence of rusty water in the drip tray in Image 1, strongly point to a corroded geyser tank. There is no conflicting evidence, and the diagnosis aligns perfectly with the provided information.",
+          "agent_confidence": 98,
+          "rubric_facets_used": [
+            "description_complete",
+            "symptom_unique",
+            "image_clarity",
+            "equipment_visible"
+          ],
+          "critique_confidence": 95
+        },
+        "notes_for_human_review": "The diagnosis is accurate and well-supported by both the user's description and the visual evidence. The agent correctly inferred a corroded geyser tank from the combination of rusty water, increased bills, and reduced hot water. The confidence is appropriate for a committed diagnosis.",
+        "considered_alternatives": []
+      }
+    },
+    {
+      "cell": {
+        "tag": "A",
+        "label": "2.5 model + v2.5 prompts",
+        "model": "gemini-2.5-flash",
+        "promptVariant": "v2.5"
+      },
+      "round": 1,
+      "testId": "geyser-minimal",
+      "conversationId": "4dcd4d00-9fb0-48be-aefa-dad7d2ee217d",
+      "status": "ok",
+      "elapsedMs": 29557,
+      "parsed": {
+        "thought": "The user explicitly stated their geyser is leaking. The first image clearly shows water dripping from a copper pipe connection above a drip tray, which contains rusty water. This visual evidence strongly supports a leak within the geyser's plumbing system. The second image provides a closer view of the pipework and some corrosion, further corroborating a plumbing fault. The third image offers environmental context but no direct diagnostic cues for the leak itself.",
+        "thinking": "The user explicitly stated their geyser is leaking. The first image clearly shows water dripping from a copper pipe connection above a drip tray, which contains rusty water. This visual evidence strongly supports a leak within the geyser's plumbing system. The second image provides a closer view of the pipework and some corrosion, further corroborating a plumbing fault. The third image offers environmental context but no direct diagnostic cues for the leak itself.",
+        "thoughts_history": [
+          {
+            "round": 0,
+            "thought": "The user explicitly stated their geyser is leaking. The first image clearly shows water dripping from a copper pipe connection above a drip tray, which contains rusty water. This visual evidence strongly supports a leak within the geyser's plumbing system. The second image provides a closer view of the pipework and some corrosion, further corroborating a plumbing fault. The third image offers environmental context but no direct diagnostic cues for the leak itself.",
+            "created_at": "2026-05-28T08:01:24.170Z"
+          }
+        ],
+        "diagnosis": "Leaking Geyser Inlet or Outlet Fitting",
+        "estimated_diagnosis_sentence": "Leaking Geyser Inlet or Outlet Fitting",
+        "message": "Your geyser appears to be leaking from a pipe connection, as evidenced by the visible drips and the rusty water collected in the drip tray. This type of leak often occurs at compression fittings, flexible braided connectors, or copper joints on either the cold water inlet or the hot water outlet.\n\nThese leaks typically develop due to thermal cycling, which can cause compression nuts to loosen over time, or from the natural degradation of flexible connectors that have reached the end of their service life. Mineral deposits or limescale can also contribute to the breakdown of seals.\n\nIf left unaddressed, a continuous leak can lead to significant water damage to ceilings, walls, or flooring beneath the geyser. It also results in unnecessary water wastage and increased utility bills as the geyser constantly reheats lost water. There is also a risk of electrical shorting if water comes into contact with electrical components.",
+        "action_required": "",
+        "image_descriptions": [
+          "This image shows a copper pipe connection with active water drips falling into a black plastic drip tray. The drip tray contains a pool of rusty, discoloured water, indicating a persistent leak.",
+          "This close-up image reveals the copper pipework connecting to what appears to be a pressure relief valve and white PEX piping. There is visible corrosion and mineral build-up around the base of the copper pipe where it enters the wall or geyser, suggesting a long-standing leak point.",
+          "This image provides an exterior view of an apartment building with multiple windows and brickwork. It offers environmental context for the property but does not show any specific components related to the geyser leak."
+        ],
+        "image_thought_breakdown": [
+          "This image shows a copper pipe connection with active water drips falling into a black plastic drip tray. The drip tray contains a pool of rusty, discoloured water, indicating a persistent leak.",
+          "This close-up image reveals the copper pipework connecting to what appears to be a pressure relief valve and white PEX piping. There is visible corrosion and mineral build-up around the base of the copper pipe where it enters the wall or geyser, suggesting a long-standing leak point.",
+          "This image provides an exterior view of an apartment building with multiple windows and brickwork. It offers environmental context for the property but does not show any specific components related to the geyser leak."
+        ],
+        "clarification_questions": [],
+        "contractor_checklist": [
+          "Isolate the water and electrical supply to the geyser.",
+          "Inspect all inlet and outlet fittings, including the pressure control valve and flexible connectors, to pinpoint the exact source of the leak.",
+          "Replace the faulty fitting, valve, or connector with new, appropriate plumbing components.",
+          "Test the system thoroughly for any further leaks and ensure proper operation of the geyser."
+        ],
+        "homeowner_prep": "Switch off the geyser's circuit breaker at your main distribution board and turn off the main water supply to your property to prevent further water damage.",
+        "diy_verification": "Place a dry paper towel directly under the leaking connection and check it after an hour to confirm the active drip.",
+        "photo_request": "",
+        "confidence_drivers": [
+          "User explicitly stated 'My geyser is leaking'.",
+          "Visible water drips from pipe connection in image 1.",
+          "Rusty water collected in drip tray in image 1.",
+          "Corrosion around pipework in image 2."
+        ],
+        "trade": "Plumbing",
+        "trade_detail": "Geyser Fault",
+        "confidence": 98,
+        "rejected": false,
+        "requires_clarification": false,
+        "unserviced": false,
+        "refetch_providers": false,
+        "unsupported_reason": "N/A",
+        "subcategory_id": "geyser_fault_plumbing",
+        "failed_component": "Geyser pipe connection",
+        "cascading_damage": "Water damage to surrounding area",
+        "trade_candidates": [
+          {
+            "trade": "Plumbing",
+            "score": 98
+          },
+          {
+            "trade": "General Handyman",
+            "score": 20
+          },
+          {
+            "trade": "Building & Construction",
+            "score": 10
+          }
+        ],
+        "prompt_version": "v7.4",
+        "ai_model": "gemini-2.5-flash",
+        "pipeline": "v2-classify-prose",
+        "structural_confidence": {
+          "score": 95,
+          "signals": {
+            "hasImage": true,
+            "imageCount": 3,
+            "descriptionWordCount": 4,
+            "subcategoryMatched": true,
+            "failedComponentNamed": true,
+            "isCatchAllWithNoVisual": false,
+            "isRejectedOrUnserviced": false
+          }
+        }
+      },
+      "critique": {
+        "failure_mode": "none",
+        "knowledge_gap": null,
+        "surprise_signals": [],
+        "prompt_hypothesis": null,
+        "resolution_would_be": null,
+        "confidence_calibration": {
+          "delta_reasoning": "The agent's confidence is well-calibrated. The user explicitly stated 'My geyser is leaking,' and the first image clearly shows water dripping from a pipe connection into a drip tray, which contains standing water. There is no contradictory evidence, and the visual cues directly support the user's description, leading to a high certainty in the diagnosis.",
+          "agent_confidence": 98,
+          "rubric_facets_used": [
+            "component_named",
+            "symptom_unique",
+            "image_clarity",
+            "description_complete"
+          ],
+          "critique_confidence": 98
+        },
+        "notes_for_human_review": "The diagnosis is accurate and well-supported by both the user's description and the visual evidence. The agent correctly identified the leaking geyser and provided a comprehensive message. The confidence is appropriate for the clear-cut nature of the fault.",
+        "considered_alternatives": []
+      }
+    },
+    {
+      "cell": {
+        "tag": "A",
+        "label": "2.5 model + v2.5 prompts",
+        "model": "gemini-2.5-flash",
+        "promptVariant": "v2.5"
+      },
+      "round": 1,
+      "testId": "garage-with-cause",
+      "conversationId": "75117612-95bd-4f70-bb34-47d9ee7b120d",
+      "status": "ok",
+      "elapsedMs": 34580,
+      "parsed": {
+        "thought": "The user explicitly states that \"the spring is missing on one side\" and the garage door opens partially then stops. Image 1 shows the left side of the garage door with the lifting arm and bracket, but no visible spring mechanism. Image 2 provides a wider view, clearly showing the garage door tilted and hanging lower on the left side, confirming the asymmetry. Comparing the two sides, the right side (visible in Image 2) appears to have its spring mechanism intact, while the left side (Image 1) is missing its counterbalance spring. This absence of a critical component on one side directly explains the door's tilted position and inability to open fully. The motor's beeping and stopping are consistent with it attempting to lift an unbalanced, excessively heavy door.",
+        "thinking": "The user explicitly states that \"the spring is missing on one side\" and the garage door opens partially then stops. Image 1 shows the left side of the garage door with the lifting arm and bracket, but no visible spring mechanism. Image 2 provides a wider view, clearly showing the garage door tilted and hanging lower on the left side, confirming the asymmetry. Comparing the two sides, the right side (visible in Image 2) appears to have its spring mechanism intact, while the left side (Image 1) is missing its counterbalance spring. This absence of a critical component on one side directly explains the door's tilted position and inability to open fully. The motor's beeping and stopping are consistent with it attempting to lift an unbalanced, excessively heavy door.",
+        "thoughts_history": [
+          {
+            "round": 0,
+            "thought": "The user explicitly states that \"the spring is missing on one side\" and the garage door opens partially then stops. Image 1 shows the left side of the garage door with the lifting arm and bracket, but no visible spring mechanism. Image 2 provides a wider view, clearly showing the garage door tilted and hanging lower on the left side, confirming the asymmetry. Comparing the two sides, the right side (visible in Image 2) appears to have its spring mechanism intact, while the left side (Image 1) is missing its counterbalance spring. This absence of a critical component on one side directly explains the door's tilted position and inability to open fully. The motor's beeping and stopping are consistent with it attempting to lift an unbalanced, excessively heavy door.",
+            "created_at": "2026-05-28T08:01:59.018Z"
+          }
+        ],
+        "diagnosis": "Missing Garage Door Counterbalance Spring",
+        "estimated_diagnosis_sentence": "Missing Garage Door Counterbalance Spring",
+        "message": "Your garage door appears to have a missing or broken counterbalance spring on one side. This spring is crucial for balancing the weight of the door, allowing the motor to lift it smoothly and safely. Without this spring, the full weight of the door rests unevenly on the motor and the remaining hardware, causing it to tilt and struggle to open.\n\nCounterbalance springs, whether torsion (above the door) or extension (along the sides), are under immense tension and are designed to assist the motor in lifting the heavy door. They typically fail due to metal fatigue after many years of operation, often with a loud snapping sound. When one spring fails, the door becomes unbalanced, placing excessive strain on the remaining components.\n\nContinuing to operate the door in this condition can lead to further damage to the motor, tracks, cables, and other hardware. The uneven load can bend components or cause the door to come completely off its tracks. This situation also presents a significant safety hazard, as the door could fall unexpectedly if the remaining support fails.",
+        "action_required": "",
+        "image_descriptions": [
+          "This close-up image shows the left side of the garage door, revealing the lifting arm and its attachment bracket to the door frame. The counterbalance spring mechanism that would typically be present on this side is visibly absent.",
+          "The full view of the garage door from inside the garage clearly shows it hanging at a severe angle, significantly lower on the left side than on the right. The ceiling-mounted opener motor and its rail are visible above the door.",
+          "This image provides a closer look at the central attachment point of the motor's connecting arm to the garage door, showing the emergency release cord hanging down. The overall tilt of the door is still evident from this perspective.",
+          "A detailed view of the connecting arm's attachment bracket on the garage door is visible here, showing the pin connection. This angle highlights the hardware that links the motor to the door panel."
+        ],
+        "image_thought_breakdown": [
+          "This close-up image shows the left side of the garage door, revealing the lifting arm and its attachment bracket to the door frame. The counterbalance spring mechanism that would typically be present on this side is visibly absent.",
+          "The full view of the garage door from inside the garage clearly shows it hanging at a severe angle, significantly lower on the left side than on the right. The ceiling-mounted opener motor and its rail are visible above the door.",
+          "This image provides a closer look at the central attachment point of the motor's connecting arm to the garage door, showing the emergency release cord hanging down. The overall tilt of the door is still evident from this perspective.",
+          "A detailed view of the connecting arm's attachment bracket on the garage door is visible here, showing the pin connection. This angle highlights the hardware that links the motor to the door panel."
+        ],
+        "clarification_questions": [],
+        "contractor_checklist": [
+          "Inspect the garage door system to identify the exact type of counterbalance spring (torsion or extension) and confirm the extent of the damage.",
+          "Replace the missing or broken spring with a new one matched to the door's weight and specifications.",
+          "Rebalance the garage door to ensure it operates smoothly and safely, distributing the weight evenly.",
+          "Check all associated hardware, including cables, rollers, and tracks, for any secondary damage caused by the imbalance and repair or replace as necessary."
+        ],
+        "homeowner_prep": "For safety, disengage the garage door opener motor using the emergency release cord and avoid attempting to open or close the door manually.",
+        "diy_verification": "With the motor disengaged using the emergency release cord, attempt to lift the door manually; it will feel extremely heavy and unbalanced on the side where the spring is missing.",
+        "photo_request": "",
+        "confidence_drivers": [
+          "User explicitly stated \"spring is missing on one side\"",
+          "Image 1 shows absence of spring mechanism on left side",
+          "Image 2 clearly shows door tilted and unbalanced",
+          "Symptoms described (partial opening, motor beeping) align with an unbalanced door"
+        ],
+        "trade": "Security",
+        "trade_detail": "Garage Door Fault / Repair",
+        "confidence": 98,
+        "rejected": false,
+        "requires_clarification": false,
+        "unserviced": false,
+        "refetch_providers": false,
+        "unsupported_reason": "N/A",
+        "subcategory_id": "garage_door_fault",
+        "failed_component": "Torsion spring",
+        "cascading_damage": "Bent connecting rod, motor strain",
+        "trade_candidates": [
+          {
+            "trade": "Security",
+            "score": 98
+          },
+          {
+            "trade": "General Handyman",
+            "score": 70
+          },
+          {
+            "trade": "Building & Construction",
+            "score": 50
+          }
+        ],
+        "prompt_version": "v7.4",
+        "ai_model": "gemini-2.5-flash",
+        "pipeline": "v2-classify-prose",
+        "structural_confidence": {
+          "score": 95,
+          "signals": {
+            "hasImage": true,
+            "imageCount": 4,
+            "descriptionWordCount": 20,
+            "subcategoryMatched": true,
+            "failedComponentNamed": true,
+            "isCatchAllWithNoVisual": false,
+            "isRejectedOrUnserviced": false
+          }
+        }
+      },
+      "critique": {
+        "failure_mode": "none",
+        "knowledge_gap": null,
+        "surprise_signals": [],
+        "prompt_hypothesis": null,
+        "resolution_would_be": null,
+        "confidence_calibration": {
+          "delta_reasoning": "The agent's confidence is well-calibrated. The user explicitly stated the problem (\"The spring is missing on one side\"), which was directly corroborated by the visual evidence showing the garage door tilted and the absence of a spring mechanism on the left side. There was no conflicting information or ambiguity, allowing for high confidence.",
+          "agent_confidence": 98,
+          "rubric_facets_used": [
+            "component_named",
+            "symptom_unique",
+            "image_clarity",
+            "description_complete"
+          ],
+          "critique_confidence": 98
+        },
+        "notes_for_human_review": "The diagnosis is accurate and well-supported by both user input and visual evidence. The agent correctly identified the missing spring and explained the implications. The confidence level is appropriate for a clear-cut case.",
+        "considered_alternatives": []
+      }
+    },
+    {
+      "cell": {
+        "tag": "A",
+        "label": "2.5 model + v2.5 prompts",
+        "model": "gemini-2.5-flash",
+        "promptVariant": "v2.5"
+      },
+      "round": 1,
+      "testId": "garage-no-text",
+      "conversationId": "931e02a1-4498-42d2-b4d8-3ce3163e6943",
+      "status": "error",
+      "error": "upload-image 500: {\"error\":\"fetch failed\"}",
+      "elapsedMs": 73753
+    },
+    {
+      "cell": {
+        "tag": "B",
+        "label": "2.5 model + v3.5 prompts",
+        "model": "gemini-2.5-flash",
+        "promptVariant": "v3.5"
+      },
+      "round": 1,
+      "testId": "geyser-full-cues",
+      "conversationId": "d672ec37-c1e5-45a9-a936-f660c48a6890",
+      "status": "error",
+      "error": "upload-image 500: Internal Server Error",
+      "elapsedMs": 2689
+    },
+    {
+      "cell": {
+        "tag": "B",
+        "label": "2.5 model + v3.5 prompts",
+        "model": "gemini-2.5-flash",
+        "promptVariant": "v3.5"
+      },
+      "round": 1,
+      "testId": "geyser-minimal",
+      "conversationId": "d72c767f-b6d1-4cb8-b64b-f6b65e16dcb0",
+      "status": "error",
+      "error": "upload-image 500: Internal Server Error",
+      "elapsedMs": 1086
+    },
+    {
+      "cell": {
+        "tag": "B",
+        "label": "2.5 model + v3.5 prompts",
+        "model": "gemini-2.5-flash",
+        "promptVariant": "v3.5"
+      },
+      "round": 1,
+      "testId": "garage-with-cause",
+      "conversationId": "97a71d3a-264b-41cc-a4c0-d52f81e77338",
+      "status": "error",
+      "error": "upload-image 500: Internal Server Error",
+      "elapsedMs": 1256
+    },
+    {
+      "cell": {
+        "tag": "B",
+        "label": "2.5 model + v3.5 prompts",
+        "model": "gemini-2.5-flash",
+        "promptVariant": "v3.5"
+      },
+      "round": 1,
+      "testId": "garage-no-text",
+      "conversationId": "d0ab9abd-3d57-4b16-90be-8c504554bc15",
+      "status": "error",
+      "error": "upload-image 500: Internal Server Error",
+      "elapsedMs": 1261
+    },
+    {
+      "cell": {
+        "tag": "C",
+        "label": "3.5 model + v2.5 prompts",
+        "model": "gemini-3.5-flash",
+        "promptVariant": "v2.5"
+      },
+      "round": 1,
+      "testId": "geyser-full-cues",
+      "conversationId": "e81c88c8-3837-4d16-b599-24df1499b36d",
+      "status": "error",
+      "error": "upload-image 500: Internal Server Error",
+      "elapsedMs": 992
+    },
+    {
+      "cell": {
+        "tag": "C",
+        "label": "3.5 model + v2.5 prompts",
+        "model": "gemini-3.5-flash",
+        "promptVariant": "v2.5"
+      },
+      "round": 1,
+      "testId": "geyser-minimal",
+      "conversationId": "008e91e8-7d9e-4ab1-a9b3-5ea7333b92ab",
+      "status": "error",
+      "error": "upload-image 500: Internal Server Error",
+      "elapsedMs": 994
+    },
+    {
+      "cell": {
+        "tag": "C",
+        "label": "3.5 model + v2.5 prompts",
+        "model": "gemini-3.5-flash",
+        "promptVariant": "v2.5"
+      },
+      "round": 1,
+      "testId": "garage-with-cause",
+      "conversationId": "6044fb90-2cdc-4547-8e51-f652b8190763",
+      "status": "error",
+      "error": "upload-image 500: Internal Server Error",
+      "elapsedMs": 1216
+    },
+    {
+      "cell": {
+        "tag": "C",
+        "label": "3.5 model + v2.5 prompts",
+        "model": "gemini-3.5-flash",
+        "promptVariant": "v2.5"
+      },
+      "round": 1,
+      "testId": "garage-no-text",
+      "conversationId": "57b3ef25-a7fc-4929-bf96-55dee29ea920",
+      "status": "error",
+      "error": "upload-image 500: Internal Server Error",
+      "elapsedMs": 1250
+    },
+    {
+      "cell": {
+        "tag": "D",
+        "label": "3.5 model + v3.5 prompts",
+        "model": "gemini-3.5-flash",
+        "promptVariant": "v3.5"
+      },
+      "round": 1,
+      "testId": "geyser-full-cues",
+      "conversationId": "f069fc9c-f5a2-41a8-9923-053b9504e50f",
+      "status": "error",
+      "error": "upload-image 500: Internal Server Error",
+      "elapsedMs": 971
+    },
+    {
+      "cell": {
+        "tag": "D",
+        "label": "3.5 model + v3.5 prompts",
+        "model": "gemini-3.5-flash",
+        "promptVariant": "v3.5"
+      },
+      "round": 1,
+      "testId": "geyser-minimal",
+      "conversationId": "dbc77c27-844c-4a5e-b470-135a02399126",
+      "status": "error",
+      "error": "upload-image 500: Internal Server Error",
+      "elapsedMs": 1053
+    },
+    {
+      "cell": {
+        "tag": "D",
+        "label": "3.5 model + v3.5 prompts",
+        "model": "gemini-3.5-flash",
+        "promptVariant": "v3.5"
+      },
+      "round": 1,
+      "testId": "garage-with-cause",
+      "conversationId": "578876f4-0d63-4c01-8e27-184290df3677",
+      "status": "error",
+      "error": "upload-image 500: Internal Server Error",
+      "elapsedMs": 1261
+    },
+    {
+      "cell": {
+        "tag": "D",
+        "label": "3.5 model + v3.5 prompts",
+        "model": "gemini-3.5-flash",
+        "promptVariant": "v3.5"
+      },
+      "round": 1,
+      "testId": "garage-no-text",
+      "conversationId": "c179fbf3-115c-43f4-8dbd-231805abad33",
+      "status": "error",
+      "error": "upload-image 500: Internal Server Error",
+      "elapsedMs": 1258
+    }
+  ]
+}

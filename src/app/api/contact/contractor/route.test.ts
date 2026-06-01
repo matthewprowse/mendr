@@ -14,10 +14,24 @@ vi.mock('@/lib/auth/supabase-server', () => ({
     createSupabaseAdminClient: vi.fn(async () => supabase),
 }));
 
+const notifyContractorOfLeadMock = vi.fn(async () => ({ ok: true }));
+vi.mock('@/lib/providers/notify-contractor-of-lead', () => ({
+    notifyContractorOfLead: (...args: unknown[]) => notifyContractorOfLeadMock(...args),
+}));
+
 const VALID_UUID = '11111111-2222-3333-4444-555555555555';
 const VALID_UUID_2 = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
 
-function freshSupabase(providerExists = true, diagnosisTrade: string | null = 'Plumbing') {
+/**
+ * @param insertedRows what the `provider_contact_events` upsert+select resolves
+ *   to. A non-empty array represents a genuinely new event; an empty array (or
+ *   null) represents a duplicate tap that `ignoreDuplicates` skipped.
+ */
+function freshSupabase(
+    providerExists = true,
+    diagnosisTrade: string | null = 'Plumbing',
+    insertedRows: Array<{ id: string }> | null = [{ id: 'evt-1' }],
+) {
     return mockSupabaseClient({
         tables: {
             providers: (_t, op) => {
@@ -29,7 +43,7 @@ function freshSupabase(providerExists = true, diagnosisTrade: string | null = 'P
                 return { data: null, error: null };
             },
             diagnoses: { data: { diagnosis: { trade: diagnosisTrade } }, error: null },
-            provider_contact_events: { data: null, error: null },
+            provider_contact_events: { data: insertedRows, error: null },
         },
     });
 }
@@ -105,6 +119,20 @@ describe('POST /api/contact/contractor — edge cases', () => {
         expect(res.status).toBe(404);
     });
 
+    it('still returns { ok: true } when the lead notification rejects', async () => {
+        notifyContractorOfLeadMock.mockRejectedValueOnce(new Error('smtp down'));
+        const { POST } = await import('./route');
+        const res = await POST(
+            makeRequest({
+                method: 'POST',
+                body: { providerId: VALID_UUID, diagnosisId: VALID_UUID_2 },
+            }),
+        );
+        expect(res.status).toBe(200);
+        const body = await res.json();
+        expect(body.ok).toBe(true);
+    });
+
     it('returns 429 when rate-limited', async () => {
         const { NextResponse } = await import('next/server');
         const rateLimitConfig = await import('@/lib/rate-limit-config');
@@ -119,5 +147,45 @@ describe('POST /api/contact/contractor — edge cases', () => {
             }),
         );
         expect(res.status).toBe(429);
+    });
+});
+
+describe('POST /api/contact/contractor — realtime lead notification wiring', () => {
+    it('fires the lead notification for a genuinely new contact event', async () => {
+        supabase = freshSupabase(true, 'Plumbing', [{ id: 'evt-1' }]);
+        const { POST } = await import('./route');
+        const res = await POST(
+            makeRequest({
+                method: 'POST',
+                body: {
+                    providerId: VALID_UUID,
+                    diagnosisId: VALID_UUID_2,
+                    homeownerWhatsapp: '+27821234567',
+                },
+            }),
+        );
+        expect(res.status).toBe(200);
+        // Fire-and-forget — allow the microtask queue to flush.
+        await Promise.resolve();
+        expect(notifyContractorOfLeadMock).toHaveBeenCalledTimes(1);
+        expect(notifyContractorOfLeadMock).toHaveBeenCalledWith({
+            contractorId: VALID_UUID,
+            diagnosisId: VALID_UUID_2,
+            homeownerWhatsapp: '+27821234567',
+        });
+    });
+
+    it('does NOT fire the notification for a duplicate tap (empty insert result)', async () => {
+        supabase = freshSupabase(true, 'Plumbing', []);
+        const { POST } = await import('./route');
+        const res = await POST(
+            makeRequest({
+                method: 'POST',
+                body: { providerId: VALID_UUID, diagnosisId: VALID_UUID_2 },
+            }),
+        );
+        expect(res.status).toBe(200);
+        await Promise.resolve();
+        expect(notifyContractorOfLeadMock).not.toHaveBeenCalled();
     });
 });

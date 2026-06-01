@@ -1,0 +1,45 @@
+{
+  "name": "structural-wall-crack",
+  "trade": "Building & Construction",
+  "description": "There is a diagonal crack in the plaster on my living room wall. It's been there since I moved in 2 years ago.",
+  "mockAgentOutput": {
+    "hypotheses": [
+      {
+        "id": "h1",
+        "label": "Seasonal movement (non-structural)",
+        "confidence_alone": 0.8,
+        "evidence_for": ["2 years old and apparently static", "Diagonal crack pattern typical of thermal movement"],
+        "evidence_against": []
+      },
+      {
+        "id": "h2",
+        "label": "Foundation settlement",
+        "confidence_alone": 0.6,
+        "evidence_for": ["Diagonal crack can indicate differential settlement"],
+        "evidence_against": ["2-year-old crack that hasn't grown suggests stable"]
+      },
+      {
+        "id": "h3",
+        "label": "Lintel deflection over opening",
+        "confidence_alone": 0.55,
+        "evidence_for": ["Diagonal crack near opening consistent with lintel failure"],
+        "evidence_against": ["No mention of a door or window nearby"]
+      }
+    ],
+    "what_we_dont_know": "We cannot tell whether the crack is growing or has been completely static since it appeared.",
+    "why_it_matters": "A growing crack is a structural warning sign; a static crack over 2+ years is almost always cosmetic seasonal movement.",
+    "chips": [
+      { "id": "c1", "text": "It looks the same as when I first noticed it.", "supports": "h1", "rules_out": ["h2", "h3"] },
+      { "id": "c2", "text": "It has grown or new cracks appeared nearby.", "supports": "h2", "rules_out": ["h1"] },
+      { "id": "c3", "text": "It is right next to a door or window.", "supports": "h3", "rules_out": ["h1"] },
+      { "id": "c4", "text": "Something else is happening.", "supports": "", "rules_out": [] }
+    ],
+    "round": 1,
+    "next_step_if_unresolved": "commit_low_confidence"
+  },
+  "expected": {
+    "must_consider_hypotheses": ["settlement", "seasonal", "lintel", "movement"],
+    "must_not_consider": ["plumbing", "electrical", "garage"],
+    "must_ask_about": "whether the crack is growing or static"
+  }
+}

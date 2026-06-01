@@ -1,0 +1,115 @@
+{
+    "name": "p0-sub-board-tripping-after-rain",
+    "trade": "Electrical",
+    "description": "Our DB sub-board keeps tripping the main earth leakage after it rains. Has happened three times in the last week, only after rain. The board has several circuits \u2014 geyser, plug points, lights, pool pump. No photo attached.",
+    "image_present": false,
+    "mockAgentOutput": {
+        "hypotheses": [
+            {
+                "id": "h1",
+                "label": "Water ingress at an exterior plug or light fitting",
+                "confidence_alone": 0.5,
+                "evidence_for": [
+                    "Tripping correlates with rain \u2014 outdoor circuits are the typical entry point for moisture",
+                    "Sub-board with mixed indoor/outdoor circuits commonly fails this way"
+                ],
+                "evidence_against": [
+                    "No specific circuit identified yet"
+                ]
+            },
+            {
+                "id": "h2",
+                "label": "Geyser element earth leakage",
+                "confidence_alone": 0.4,
+                "evidence_for": [
+                    "Element burnout is a common earth-leakage trip cause"
+                ],
+                "evidence_against": [
+                    "Geyser leakage usually trips regardless of weather"
+                ]
+            },
+            {
+                "id": "h3",
+                "label": "Pool pump motor earth leakage",
+                "confidence_alone": 0.4,
+                "evidence_for": [
+                    "Pool pump motors are outdoor and weather-exposed",
+                    "Damaged seals admit water into windings \u2014 symptom emerges after rain"
+                ],
+                "evidence_against": [
+                    "Cannot confirm without isolating the pool circuit"
+                ]
+            }
+        ],
+        "what_we_dont_know": "Which specific circuit on the sub-board is responsible for the trip \u2014 the user has not yet isolated circuits one at a time.",
+        "why_it_matters": "Knowing the offending circuit narrows the fault from an open-ended 'electrical fault' to a specific component (geyser element, outdoor socket, pool pump motor, etc.) that the contractor can quote on directly.",
+        "chips": [
+            {
+                "id": "c1",
+                "text": "Trips only when the pool circuit is on.",
+                "supports": "h3",
+                "rules_out": [
+                    "h2"
+                ]
+            },
+            {
+                "id": "c2",
+                "text": "Trips even with everything off except the geyser.",
+                "supports": "h2",
+                "rules_out": [
+                    "h3"
+                ]
+            },
+            {
+                "id": "c3",
+                "text": "Trips only when outdoor lights or plugs are powered.",
+                "supports": "h1",
+                "rules_out": [
+                    "h2",
+                    "h3"
+                ]
+            },
+            {
+                "id": "c4",
+                "text": "Something else is happening.",
+                "supports": "",
+                "rules_out": []
+            }
+        ],
+        "round": 1,
+        "next_step_if_unresolved": "ask_again"
+    },
+    "mockFacets": {
+        "trade_confidence": 80,
+        "component_confidence": 60,
+        "cause_confidence": 50,
+        "image_sufficiency": "absent",
+        "committed_observations": [
+            "sub-board trips main earth-leakage after rain",
+            "multiple circuits on the board (geyser, plugs, lights, pool)"
+        ],
+        "explicit_unknowns": [
+            "which specific circuit is the leak source",
+            "whether one device or wiring is implicated"
+        ]
+    },
+    "expected": {
+        "recommended_action": "ask",
+        "must_consider_hypotheses": [
+            "outdoor circuit water ingress",
+            "geyser element",
+            "pool pump motor"
+        ],
+        "must_not_consider": [
+            "main supply fault",
+            "Eskom outage",
+            "load shedding"
+        ],
+        "must_ask_about": "which specific circuit trips when the others are isolated",
+        "failure_baseline_today": {
+            "observed_behaviour": "System force-commits 'Electrical fault \u2014 sub-board tripping' with confidence 60-70 and no specific question. Contractor arrives without a hypothesis.",
+            "why_it_fails": "Without explicit per-facet uncertainty, the single confidence integer floats around the threshold and the system either commits to a useless generic diagnosis or asks a generic 'tell us more' question. There is no rubric for 'multiple plausible circuits, isolation question would resolve'."
+        },
+        "phase_6_ask_rationale": "Top hypothesis confidence_alone=0.5 (<0.75) and gap to next=0.10 (<0.25). Discriminating chips targeting circuit isolation directly partition the hypothesis space \u2014 so ask, not commit_low_confidence."
+    }
+}

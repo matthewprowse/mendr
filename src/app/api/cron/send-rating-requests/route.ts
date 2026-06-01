@@ -64,6 +64,14 @@ async function handler(req: NextRequest): Promise<NextResponse> {
 
         const providerName = (provider?.name as string | null) ?? 'the contractor';
 
+        // Check notification preference (opt-out).
+        const { data: pref } = await admin
+            .from('notification_preferences')
+            .select('rating_enabled')
+            .eq('user_id', userId)
+            .maybeSingle();
+        if (pref?.rating_enabled === false) { skipped++; continue; }
+
         // Check suppression list.
         const { data: suppression } = await admin
             .from('email_suppressions')

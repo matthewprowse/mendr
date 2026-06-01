@@ -1,0 +1,22 @@
+{
+    "id": "geyser-corroded-tank-01",
+    "case_summary": "Geyser leaking rusty water from drip tray; homeowner reports higher bills and shorter hot water duration.",
+    "verified": false,
+    "ground_truth": {
+        "trade": "Plumbing",
+        "subcategory_id": "geyser_fault_plumbing",
+        "failure_mode_id": "corroded-tank",
+        "confidence_floor": 80,
+        "notes": "Textbook corroded-tank case — multiple cues fire together (rusty drip tray water + elevated electricity bill + reduced hot-water duration). Should land on the corroded-tank failure mode rather than defaulting to a generic fitting-leak fallback. Confidence floor 80 reflects the high cue density."
+    },
+    "inputs": {
+        "user_text": "Our geyser is dripping water from underneath and the water in the tray looks rusty / brown. We've also noticed our electricity bill went up the last two months and the hot water doesn't last as long as it used to. The geyser was installed when we moved in about ten years ago.",
+        "user_history": []
+    },
+    "optional_assertions": {
+        "cascading_damage_includes": ["drip tray", "rust"],
+        "cost_band": "replacement",
+        "urgency": "soon",
+        "requires_clarification_expected": false
+    }
+}

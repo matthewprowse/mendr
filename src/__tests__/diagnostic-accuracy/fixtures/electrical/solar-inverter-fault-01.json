@@ -1,0 +1,20 @@
+{
+    "id": "solar-inverter-fault-01",
+    "case_summary": "Hybrid solar inverter not switching to battery backup during load shedding; alarm code on the front panel.",
+    "verified": false,
+    "ground_truth": {
+        "trade": "Electrical",
+        "subcategory_id": "solar_inverter",
+        "confidence_floor": 75,
+        "notes": "Tests routing to solar_inverter rather than db_board_tripping or load_shedding_surge. The user-named equipment (inverter) plus the specific symptom (failed backup transfer) should anchor to the solar subcategory."
+    },
+    "inputs": {
+        "user_text": "Our hybrid solar inverter has stopped switching the house to battery during load shedding — the power just goes out like normal. The inverter is showing a flashing red alarm light and a code we don't recognise on the small screen. The batteries appear to have charge (the lights on them are green). Solar generation during the day still seems to be happening.",
+        "user_history": []
+    },
+    "optional_assertions": {
+        "cost_band": "medium",
+        "urgency": "soon",
+        "requires_clarification_expected": false
+    }
+}

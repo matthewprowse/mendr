@@ -416,9 +416,21 @@ export async function runClassification(
     // mixed-tier classify already produced identical confusion-matrix rows).
     // For every OTHER variant (v2.5, v3.5, v2.5-polished) we leave behaviour
     // unchanged so production paths are untouched.
+    // v3.5-native classifier uses a cheaper model for the cost win — Agent 2a
+    // output is tiny structured JSON so cheap models handle it well, while
+    // 3.5 Flash stays on prose where diagnostic richness matters.
+    //
+    // 2026-05-29: Google retired `gemini-2.0-flash-lite` ("no longer available
+    // to new users" 404 from the API). We default to `gemini-2.5-flash` as
+    // the next-cheapest model that is guaranteed available — still a 5×
+    // cost cut vs 3.5 Flash on classify. Override via `V35_NATIVE_CLASSIFY_MODEL`
+    // env if Google brings a cheaper tier back online (or if you want to
+    // experiment with `gemini-2.5-flash-lite` once verified).
+    const v35NativeClassifyModel =
+        process.env.V35_NATIVE_CLASSIFY_MODEL || 'gemini-2.5-flash';
     const effectiveModel =
         variant === 'v3.5-native'
-            ? 'gemini-2.0-flash-lite'
+            ? v35NativeClassifyModel
             : requestedModel;
     const stepStart = Date.now();
     // Mock branch — used by Playwright E2E to avoid real Gemini calls.
@@ -542,7 +554,9 @@ export async function runClassification(
                 ? {}
                 : { systemInstruction: { role: 'system' as const, parts: [{ text: systemBlock }] } }),
         };
+        const geminiStartedAt = Date.now();
         const result = await model.generateContent(generateRequest);
+        const latencyMs = Date.now() - geminiStartedAt;
 
         const usage = result.response.usageMetadata;
 
@@ -552,6 +566,7 @@ export async function runClassification(
             modelName: effectiveModel,
             userId: ctx?.userId,
             conversationId: ctx?.conversationId,
+            latencyMs,
         });
 
         const raw = result.response.text().trim();

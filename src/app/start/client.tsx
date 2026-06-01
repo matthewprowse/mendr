@@ -8,46 +8,51 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { getSupabase } from '@/lib/auth/supabase';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { createClientId } from '@/lib/client-random-id';
-import { compressImage } from '@/lib/image-compression';
+import {
+    createSelectedPhotoId,
+    isHeicLike,
+    normalizeSelectedPhoto,
+    readFileAsDataUrl,
+    uploadPhotoToStorage,
+    type SelectedPhoto,
+} from '@/lib/diagnosis/photo-upload';
 import { setPendingDiagnosisImages } from '@/lib/diagnosis/pending-diagnosis-images-cache';
 import { setImageData } from '@/lib/image-store';
 import { Textarea } from '@/components/ui/textarea';
 import { importLibrary } from '@googlemaps/js-api-loader';
 import { ensureGoogleMapsLoaderOptions } from '@/lib/google-maps-js-loader';
 import {
-    CircleNotch,
-    MapPin,
+    ArrowLeft,
     Camera,
-    DotsThree,
-    DotsSixVertical,
-} from '@phosphor-icons/react';
+    Loader,
+    GripVertical,
+    Ellipsis,
+} from 'lucide-react';
 import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
+    DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Card, CardContent } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
+import { Spinner } from '@/components/ui/spinner';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { FlowTopBar, StepHeading } from '@/components/match/flow-shell';
-import { INK } from '@/lib/design-tokens';
+import { useAuth } from '@/context/auth-context';
 
 type FlowStep = 1 | 2;
 type LocationMode = 'choose' | 'gps-loading' | 'gps-done' | 'manual';
-type SelectedPhotoStatus = 'pending' | 'ready' | 'error';
-type SelectedPhoto = {
-    id: string;
-    file: File;
-    status: SelectedPhotoStatus;
-    previewSrc: string | null;
-    diagnosisSrc: string | null;
-    errorMessage?: string;
-};
+// SelectedPhoto and related types live in @/lib/diagnosis/photo-upload so the
+// `/diagnosis` refine overlay can reuse the same shape.
 
 const WESTERN_CAPE_ERROR = 'Please use a location in the Western Cape, South Africa.';
 const LOCATION_GENERIC_ERROR = 'Could not verify your location. Please try again or enter your address manually.';
@@ -77,81 +82,6 @@ function toUserFriendlyLocationError(input: string | null | undefined): string {
     return LOCATION_GENERIC_ERROR;
 }
 
-function createSelectedPhotoId(): string {
-    return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-}
-
-function isHeicLike(file: File): boolean {
-    const type = (file.type || '').toLowerCase();
-    const name = (file.name || '').toLowerCase();
-    return type.includes('heic') || type.includes('heif') || /\.(heic|heif)$/i.test(name);
-}
-
-function readFileAsDataUrl(file: File): Promise<string> {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => {
-            const result = reader.result;
-            if (typeof result === 'string') { resolve(result); return; }
-            reject(new Error('Could not read the selected image.'));
-        };
-        reader.onerror = () => reject(reader.error ?? new Error('Could not read the selected image.'));
-        reader.readAsDataURL(file);
-    });
-}
-
-function dataUrlToFile(dataUrl: string, fallbackName = 'upload.jpg'): File {
-    const [meta, base64] = dataUrl.split(',');
-    const mimeMatch = meta?.match(/data:(.*?);base64/);
-    const mime = mimeMatch?.[1] || 'image/jpeg';
-    const binStr = atob(base64 || '');
-    const len = binStr.length;
-    const bytes = new Uint8Array(len);
-    for (let i = 0; i < len; i += 1) bytes[i] = binStr.charCodeAt(i);
-    const ext = mime.includes('png') ? 'png' : mime.includes('webp') ? 'webp' : 'jpg';
-    const baseName = fallbackName.replace(/\.[^.]+$/, '') || 'upload';
-    return new File([bytes], `${baseName}.${ext}`, { type: mime });
-}
-
-async function normalizeSelectedPhoto(file: File): Promise<SelectedPhoto> {
-    let raw = await readFileAsDataUrl(file);
-    if (isHeicLike(file)) {
-        const form = new FormData();
-        form.set('file', file);
-        const res = await fetch('/api/convert-heic', { method: 'POST', body: form });
-        const json = (await res.json().catch(() => ({}))) as { dataUrl?: string };
-        if (!res.ok || typeof json.dataUrl !== 'string' || !json.dataUrl.startsWith('data:image/')) {
-            throw new Error('Could not convert HEIC image.');
-        }
-        raw = json.dataUrl;
-    }
-    const compressed = await compressImage(raw);
-    const normalizedFile = dataUrlToFile(compressed, file.name);
-    return {
-        id: createSelectedPhotoId(),
-        file: normalizedFile,
-        status: 'ready',
-        previewSrc: compressed,
-        diagnosisSrc: compressed,
-    };
-}
-
-async function uploadPhotoToStorage(file: File, conversationId: string): Promise<string | null> {
-    try {
-        const form = new FormData();
-        form.set('conversationId', conversationId);
-        form.set('file', file);
-        const res = await fetch('/api/upload-image', { method: 'POST', body: form });
-        if (!res.ok) return null;
-        const json = (await res.json().catch(() => null)) as { imageUrl?: string } | null;
-        return typeof json?.imageUrl === 'string' && json.imageUrl.startsWith('http')
-            ? json.imageUrl
-            : null;
-    } catch {
-        return null;
-    }
-}
-
 // ── Step 1 — Photos + Description ─────────────────────────────────────────────
 
 function Step1({
@@ -160,13 +90,45 @@ function Step1({
     description,
     setDescription,
     onContinue,
+    onHeaderTitleChange,
 }: {
     selectedPhotos: SelectedPhoto[];
     setSelectedPhotos: React.Dispatch<React.SetStateAction<SelectedPhoto[]>>;
     description: string;
     setDescription: (v: string) => void;
     onContinue: () => void;
+    onHeaderTitleChange?: (title: string | null) => void;
 }) {
+    // Surface the page title in the sticky header once the H1 is fully
+    // scrolled out of the visible area. Uses a scroll listener (not
+    // IntersectionObserver) because the latter has timing issues with the
+    // initial mount state when the scroll container doesn't yet have a stable
+    // layout.
+    const scrollRef = useRef<HTMLDivElement>(null);
+    const headingRef = useRef<HTMLHeadingElement>(null);
+    useEffect(() => {
+        const root = scrollRef.current;
+        const target = headingRef.current;
+        const onChange = onHeaderTitleChange;
+        if (!root || !target || !onChange) return;
+        const update = () => {
+            const rootRect = root.getBoundingClientRect();
+            const targetRect = target.getBoundingClientRect();
+            // Title goes into the header the moment the H1's bottom is at or
+            // above the scroll container's top edge — i.e. no pixel of the H1
+            // is visible anymore. The instant any pixel re-enters, we hide.
+            const fullyScrolledOut = targetRect.bottom <= rootRect.top;
+            onChange(fullyScrolledOut ? "What's Happening?" : null);
+        };
+        root.addEventListener('scroll', update, { passive: true });
+        // Compute initial state on next frame so layout is settled.
+        const rafId = requestAnimationFrame(update);
+        return () => {
+            cancelAnimationFrame(rafId);
+            root.removeEventListener('scroll', update);
+            onChange(null);
+        };
+    }, [onHeaderTitleChange]);
     // Hard cap. Gemini 2.5 Flash processes images with parallel attention —
     // past four photos the attention dilutes faster than the diagnostic value
     // of additional photos.
@@ -359,10 +321,10 @@ function Step1({
     };
 
     return (
-        <div className="h-full overflow-y-auto">
+        <div ref={scrollRef} className="h-full overflow-y-auto">
             <div className="flex min-h-full flex-col">
-                <div className="flex-1 flex flex-col p-6 gap-6">
-                    <div className="flex flex-col gap-6 w-full max-w-sm mx-auto pt-4">
+                <div className="flex-1 flex flex-col items-center justify-center p-4 min-h-0">
+                    <div className="flex flex-col gap-8 w-full max-w-xl">
                         <input
                             ref={uploadInputRef}
                             type="file"
@@ -375,198 +337,130 @@ function Step1({
                             }}
                         />
 
-                        <StepHeading
-                            title="Add Photos"
-                            sub="Show us what needs fixing — a clear photo helps us diagnose accurately."
-                        />
+                        <div className="flex w-full flex-col items-center gap-3 text-center">
+                            <h1
+                                ref={headingRef}
+                                className="text-2xl font-semibold text-foreground"
+                            >
+                                What&apos;s Happening?
+                            </h1>
+                            <p className="text-sm text-muted-foreground">
+                                Lorem ipsum dolor sit amet, consectetur
+                                adipiscing elit. Sed do eiusmod tempor
+                                incididunt ut labore et dolore.
+                            </p>
+                        </div>
 
-                        {/* Photo upload area */}
-                        {selectedPhotos.length === 0 ? (
-                            <>
-                                <button
+                        {/* Photo upload */}
+                        {selectedPhotos.length === 1 || selectedPhotos.length === 3 ? (
+                            <div className="grid grid-cols-2 gap-2">
+                                {selectedPhotos.map((p, i) => (
+                                    <PhotoTile
+                                        key={p.id}
+                                        photo={p}
+                                        index={i}
+                                        showNumber={selectedPhotos.length > 1}
+                                        isDraggable={p.status === 'ready' && selectedPhotos.length > 1}
+                                        isDragged={draggedPhotoId === p.id}
+                                        isDropTarget={dropTargetId === p.id && draggedPhotoId !== p.id}
+                                        onRemove={handleRemovePhoto}
+                                        onDragStart={handleDragStart(p.id)}
+                                        onDragOver={handleDragOver(p.id)}
+                                        onDragLeave={handleDragLeave(p.id)}
+                                        onDrop={handleDrop(p.id)}
+                                        onDragEnd={handleDragEnd}
+                                    />
+                                ))}
+                                <Button
                                     type="button"
+                                    variant="secondary"
                                     onClick={handleSelectPhotos}
-                                    className="flex flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-border bg-secondary/40 py-12 px-6 text-center transition-colors hover:border-foreground/30 hover:bg-secondary/60 active:bg-secondary"
+                                    className="aspect-square h-auto w-full"
                                 >
-                                    <Camera className="size-8 text-muted-foreground" aria-hidden />
-                                    <span className="text-sm font-medium text-foreground">Tap to add photos</span>
-                                    <span className="text-xs text-muted-foreground">JPEG, PNG, HEIC supported</span>
-                                </button>
+                                    Add Photos
+                                </Button>
+                            </div>
+                        ) : selectedPhotos.length >= 2 ? (
+                            <div className="grid grid-cols-2 gap-2">
+                                {selectedPhotos.map((p, i) => (
+                                    <PhotoTile
+                                        key={p.id}
+                                        photo={p}
+                                        index={i}
+                                        showNumber
+                                        isDraggable={p.status === 'ready' && selectedPhotos.length > 1}
+                                        isDragged={draggedPhotoId === p.id}
+                                        isDropTarget={dropTargetId === p.id && draggedPhotoId !== p.id}
+                                        onRemove={handleRemovePhoto}
+                                        onDragStart={handleDragStart(p.id)}
+                                        onDragOver={handleDragOver(p.id)}
+                                        onDragLeave={handleDragLeave(p.id)}
+                                        onDrop={handleDrop(p.id)}
+                                        onDragEnd={handleDragEnd}
+                                    />
+                                ))}
+                            </div>
+                        ) : null}
+
+                        {selectedPhotos.length !== 1 && selectedPhotos.length !== 3 && selectedPhotos.length < MAX_PHOTOS ? (
+                            <div className="flex flex-col gap-2">
+                                <Button
+                                    type="button"
+                                    variant="secondary"
+                                    onClick={handleSelectPhotos}
+                                >
+                                    Add Photos
+                                </Button>
                                 <p className="text-center text-xs text-muted-foreground">
-                                    Up to {MAX_PHOTOS} photos. Put your clearest fault photo first.
-                                </p>
-                            </>
-                        ) : (
-                            <div className="flex flex-col gap-3">
-                                <div className="grid grid-cols-2 gap-3">
-                                    {selectedPhotos.map((photo, idx) => {
-                                        const isPrimary = idx === 0;
-                                        const isLast = idx === selectedPhotos.length - 1;
-                                        const isDragged = draggedPhotoId === photo.id;
-                                        const isDropTarget = dropTargetId === photo.id && draggedPhotoId !== photo.id;
-                                        const isDraggable = photo.status === 'ready' && selectedPhotos.length > 1;
-                                        return (
-                                            <div
-                                                key={photo.id}
-                                                role="button"
-                                                aria-label={`Photo ${idx + 1} of ${selectedPhotos.length}. Drag to reorder, or tap menu to move.`}
-                                                aria-grabbed={isDragged ? true : undefined}
-                                                draggable={isDraggable}
-                                                onDragStart={isDraggable ? handleDragStart(photo.id) : undefined}
-                                                onDragOver={isDraggable ? handleDragOver(photo.id) : undefined}
-                                                onDragLeave={isDraggable ? handleDragLeave(photo.id) : undefined}
-                                                onDrop={isDraggable ? handleDrop(photo.id) : undefined}
-                                                onDragEnd={isDraggable ? handleDragEnd : undefined}
-                                                className={[
-                                                    'relative aspect-square overflow-hidden rounded-lg border border-border bg-background transition-all duration-150',
-                                                    isDragged ? 'opacity-50 scale-95' : '',
-                                                    isDropTarget ? 'ring-2 ring-primary' : '',
-                                                ].join(' ').trim()}
-                                            >
-                                                {photo.status === 'ready' && photo.previewSrc ? (
-                                                    <>
-                                                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                                                        <img
-                                                            src={photo.previewSrc}
-                                                            alt={photo.file.name || ''}
-                                                            className="h-full w-full object-cover"
-                                                            draggable={false}
-                                                        />
-                                                        {isPrimary ? (
-                                                            <Badge className="absolute top-2 left-2 bg-foreground text-background">
-                                                                Primary
-                                                            </Badge>
-                                                        ) : null}
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => handleRemovePhoto(photo.id)}
-                                                            aria-label="Remove photo"
-                                                            className="absolute top-2 right-2 flex h-6 w-6 items-center justify-center rounded-full bg-background/90 text-xs font-semibold text-foreground shadow-sm hover:bg-background"
-                                                        >
-                                                            ✕
-                                                        </button>
-                                                        {selectedPhotos.length > 1 ? (
-                                                            <>
-                                                                {/* Drag handle — only visible on devices with a fine pointer (mouse). */}
-                                                                <div
-                                                                    aria-hidden
-                                                                    className="pointer-events-none absolute bottom-2 left-2 hidden h-6 w-6 items-center justify-center rounded-full bg-background/90 text-foreground shadow-sm [@media(pointer:fine)]:flex"
-                                                                >
-                                                                    <DotsSixVertical className="size-3.5" />
-                                                                </div>
-                                                                {/* Overflow menu — touch-friendly reorder fallback. */}
-                                                                <DropdownMenu>
-                                                                    <DropdownMenuTrigger asChild>
-                                                                        <button
-                                                                            type="button"
-                                                                            aria-label="Reorder photo"
-                                                                            className="absolute bottom-2 right-2 flex h-6 w-6 items-center justify-center rounded-full bg-background/90 text-foreground shadow-sm hover:bg-background"
-                                                                        >
-                                                                            <DotsThree weight="bold" className="size-4" />
-                                                                        </button>
-                                                                    </DropdownMenuTrigger>
-                                                                    <DropdownMenuContent align="end" side="top">
-                                                                        <DropdownMenuItem
-                                                                            disabled={isPrimary}
-                                                                            onSelect={() => movePhotoToPrimary(photo.id)}
-                                                                        >
-                                                                            Move to position 1 (Primary)
-                                                                        </DropdownMenuItem>
-                                                                        <DropdownMenuItem
-                                                                            disabled={isPrimary}
-                                                                            onSelect={() => movePhoto(photo.id, -1)}
-                                                                        >
-                                                                            Move forward
-                                                                        </DropdownMenuItem>
-                                                                        <DropdownMenuItem
-                                                                            disabled={isLast}
-                                                                            onSelect={() => movePhoto(photo.id, 1)}
-                                                                        >
-                                                                            Move backward
-                                                                        </DropdownMenuItem>
-                                                                    </DropdownMenuContent>
-                                                                </DropdownMenu>
-                                                            </>
-                                                        ) : null}
-                                                    </>
-                                                ) : photo.status === 'pending' ? (
-                                                    <div className="flex h-full w-full flex-col items-center justify-center bg-secondary px-3 text-center">
-                                                        <CircleNotch className="mb-2 size-5 animate-spin text-muted-foreground" />
-                                                        <p className="line-clamp-2 text-xs text-muted-foreground">{photo.file.name}</p>
-                                                    </div>
-                                                ) : (
-                                                    <div className="flex h-full w-full flex-col items-center justify-center gap-2 bg-secondary px-3 text-center">
-                                                        <p className="line-clamp-2 text-xs text-muted-foreground">
-                                                            {photo.errorMessage ?? 'Could not process this image.'}
-                                                        </p>
-                                                        <div className="flex gap-2">
-                                                            <Button type="button" variant="secondary" size="sm" onClick={() => void handleRetryPhoto(photo.id)}>
-                                                                Retry
-                                                            </Button>
-                                                            <Button type="button" variant="ghost" size="sm" onClick={() => handleRemovePhoto(photo.id)}>
-                                                                Remove
-                                                            </Button>
-                                                        </div>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        );
-                                    })}
-                                    {selectedPhotos.length < MAX_PHOTOS ? (
-                                        <button
-                                            type="button"
-                                            onClick={handleSelectPhotos}
-                                            aria-label="Add more photos"
-                                            className="flex aspect-square flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-border bg-secondary/40 text-center transition-colors hover:border-foreground/30 hover:bg-secondary/60 active:bg-secondary"
-                                        >
-                                            <Camera className="size-6 text-muted-foreground" aria-hidden />
-                                            <span className="text-xs font-medium text-foreground">Add photo</span>
-                                            <span className="text-[10px] text-muted-foreground">
-                                                {selectedPhotos.length} / {MAX_PHOTOS}
-                                            </span>
-                                        </button>
-                                    ) : null}
-                                </div>
-                                <p className="text-center text-xs text-muted-foreground">
-                                    Up to {MAX_PHOTOS} photos. Put your clearest fault photo first.
+                                    Lorem ipsum dolor sit amet, consectetur adipiscing elit.
                                 </p>
                             </div>
-                        )}
+                        ) : null}
 
                         {/* Description */}
-                        <div className="flex flex-col gap-2">
-                            <label className="text-sm font-medium text-foreground">
-                                Describe the problem <span className="text-muted-foreground font-normal">(optional)</span>
-                            </label>
-                            <Textarea
-                                className="h-24 w-full resize-none"
-                                placeholder="e.g. My garage door won't open — the spring on the left side looks broken…"
-                                value={description}
-                                onChange={(e) => setDescription(e.target.value)}
-                            />
+                        <div className="flex flex-col gap-3">
+                            <div className="flex items-center justify-between">
+                                <Label htmlFor="description">Problem Description</Label>
+                                <span className="text-xs text-muted-foreground">
+                                    {description.length} / 500
+                                </span>
+                            </div>
+                            <div className="flex flex-col gap-2">
+                                <Textarea
+                                    id="description"
+                                    maxLength={500}
+                                    value={description}
+                                    onChange={(e) => setDescription(e.target.value)}
+                                />
+                                <p className="text-xs text-muted-foreground">
+                                    Lorem ipsum dolor sit amet, consectetur adipiscing elit.
+                                </p>
+                            </div>
                         </div>
                     </div>
                 </div>
 
-                <div className="sticky bottom-0 shrink-0 bg-background px-6 py-3 border-t border-border/50">
-                    <div className="w-full max-w-sm mx-auto">
+                <div className="sticky bottom-0 shrink-0 bg-background p-4">
+                    <div className="w-full max-w-xl mx-auto flex flex-col gap-2">
                         <Button
                             type="button"
-                            className="h-10 w-full"
+                            className="w-full"
                             onClick={onContinue}
                             disabled={!canContinue}
                         >
                             {hasPendingPhotos ? (
                                 <>
-                                    <CircleNotch className="size-4 animate-spin shrink-0" aria-hidden />
-                                    Processing photos…
+                                    Processing Photos...
                                 </>
                             ) : canContinue ? (
                                 'Continue'
                             ) : (
-                                'Add at least one photo'
+                                'Continue'
                             )}
                         </Button>
+                        <p className="text-center text-xs text-muted-foreground">
+                            Lorem ipsum dolor sit amet, consectetur adipiscing elit.
+                        </p>
                     </div>
                 </div>
             </div>
@@ -625,8 +519,8 @@ function Step2({
     return (
         <div className="h-full overflow-y-auto">
             <div className="flex min-h-full flex-col">
-                <div className="flex-1 flex flex-col items-center justify-center px-6 py-4 min-h-0">
-                    <div className="flex flex-col gap-6 w-full max-w-sm mx-auto">
+                <div className="flex-1 flex flex-col items-center justify-center p-4 min-h-0">
+                    <div className="flex flex-col gap-8 w-full max-w-xl">
                         {locationMode === 'manual' ? (
                             <>
                                 <StepHeading
@@ -636,8 +530,7 @@ function Step2({
                                 <input
                                     ref={manualRef}
                                     type="text"
-                                    className="w-full bg-transparent border-none focus:outline-none text-[22px] font-medium text-center leading-relaxed placeholder:text-stone-400/50 focus:placeholder-transparent"
-                                    style={{ color: INK }}
+                                    className="w-full bg-transparent border-none focus:outline-none text-[22px] font-medium text-center leading-relaxed text-foreground placeholder:text-muted-foreground focus:placeholder-transparent"
                                     placeholder="Your Address"
                                     value={locationValue}
                                     onChange={(e) => setLocationValue(e.target.value)}
@@ -658,92 +551,110 @@ function Step2({
                             <>
                                 <StepHeading
                                     title="Get Nearby Contractors"
-                                    sub="We use your location to find vetted local professionals."
+                                    sub="Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore."
                                 />
+
+                                <div className="flex flex-col gap-2">
+                                    <Button
+                                        type="button"
+                                        variant="secondary"
+                                        disabled={isGettingLocation}
+                                        onClick={async () => {
+                                            setLocationMode('gps-loading');
+                                            await onGetCurrentLocation();
+                                        }}
+                                    >
+                                        {isGettingLocation ? 'Getting Location…' : 'Use My Location'}
+                                    </Button>
+                                    <p className="text-center text-xs text-muted-foreground">
+                                        Lorem ipsum dolor sit amet, consectetur adipiscing elit.
+                                    </p>
+                                </div>
 
                                 {savedAddresses.length > 0 && (
                                     <div className="flex flex-col gap-2">
-                                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                            Saved Addresses
-                                        </p>
-                                        {savedAddresses.map((addr) => (
-                                            <button
-                                                key={addr.id}
-                                                type="button"
-                                                className="flex w-full flex-col items-start rounded-lg border bg-secondary px-4 py-3 text-left hover:bg-secondary/80"
-                                                onClick={() => {
-                                                    setLocationValue(addr.address);
-                                                    setLocationMode('gps-done');
-                                                }}
-                                            >
-                                                <span className="text-sm font-medium text-foreground">{addr.label}</span>
-                                                <span className="truncate text-xs text-muted-foreground">{addr.address}</span>
-                                            </button>
-                                        ))}
-                                        <Separator />
+                                        {savedAddresses.map((addr) => {
+                                            const select = () => {
+                                                setLocationValue(addr.address);
+                                                setLocationMode('gps-done');
+                                            };
+                                            return (
+                                                <Card
+                                                    key={addr.id}
+                                                    size="sm"
+                                                    role="button"
+                                                    tabIndex={0}
+                                                    onClick={select}
+                                                    onKeyDown={(e) => {
+                                                        if (e.key === 'Enter' || e.key === ' ') {
+                                                            e.preventDefault();
+                                                            select();
+                                                        }
+                                                    }}
+                                                    className="cursor-pointer hover:bg-accent"
+                                                >
+                                                    <CardContent className="flex flex-col gap-1">
+                                                        <p className="text-sm font-medium">{addr.label}</p>
+                                                        <p className="truncate text-xs text-muted-foreground">{addr.address}</p>
+                                                    </CardContent>
+                                                </Card>
+                                            );
+                                        })}
                                     </div>
                                 )}
-
-                                <Button
-                                    variant="secondary"
-                                    className="h-10 w-full"
-                                    disabled={isGettingLocation}
-                                    onClick={async () => {
-                                        setLocationMode('gps-loading');
-                                        await onGetCurrentLocation();
-                                    }}
-                                >
-                                    <MapPin className="size-4 shrink-0" aria-hidden />
-                                    {isGettingLocation ? 'Getting Location…' : 'Use Current Location'}
-                                </Button>
 
                                 <Separator />
 
                                 <div className="flex flex-col gap-3">
-                                    <Label>Search Address</Label>
-                                    <Input
-                                        ref={locationInputRef}
-                                        className="h-10 w-full"
-                                        placeholder="e.g. 12 Oak Street, Stellenbosch"
-                                        value={locationValue}
-                                        onChange={(e) => setLocationValue(e.target.value)}
-                                    />
+                                    <Label htmlFor="search-address">Search Address</Label>
+                                    <div className="flex flex-col gap-2">
+                                        <Input
+                                            id="search-address"
+                                            ref={locationInputRef}
+                                            value={locationValue}
+                                            onChange={(e) => setLocationValue(e.target.value)}
+                                        />
+                                        <p className="text-xs text-muted-foreground">
+                                            Lorem ipsum dolor sit amet, consectetur adipiscing elit.
+                                        </p>
+                                    </div>
                                 </div>
                             </>
                         )}
                     </div>
                 </div>
 
-                <div className="sticky bottom-0 shrink-0 bg-background border-t border-border/50 px-6 py-4">
-                    <div className="w-full max-w-sm mx-auto flex flex-col gap-2">
-                        <Button
-                            className="h-11 w-full"
-                            disabled={!hasLocation || isSubmitting}
-                            onClick={() => void onDiagnose()}
-                        >
-                            {isSubmitting ? (
-                                <>
-                                    <CircleNotch className="size-4 animate-spin shrink-0" aria-hidden />
-                                    Starting…
-                                </>
-                            ) : (
-                                'Get Diagnosis & Find Contractors'
-                            )}
-                        </Button>
+                <div className="sticky bottom-0 shrink-0 bg-background p-4">
+                    <div className="w-full max-w-xl mx-auto flex flex-col gap-4">
                         <Button
                             type="button"
                             variant="ghost"
-                            className="h-10 w-full text-muted-foreground"
+                            className="w-full text-muted-foreground"
                             disabled={!hasLocation || isSubmitting}
                             onClick={() => void onSkip()}
                         >
                             Find Contractors Now
                         </Button>
-                        {!hasLocation && (
+                        <div className="flex flex-col gap-2">
+                            <Button
+                                type="button"
+                                className="w-full"
+                                disabled={!hasLocation || isSubmitting}
+                                onClick={() => void onDiagnose()}
+                            >
+                                {isSubmitting ? (
+                                    <>
+                                        <Spinner className="shrink-0" aria-hidden />
+                                        Starting…
+                                    </>
+                                ) : (
+                                    'Continue'
+                                )}
+                            </Button>
                             <p className="text-center text-xs text-muted-foreground">
-                                Add your location to find contractors nearby.
+                                Lorem ipsum dolor sit amet, consectetur adipiscing elit.
                             </p>
-                        )}
+                        </div>
                     </div>
                 </div>
             </div>
@@ -755,9 +666,30 @@ function Step2({
 
 export function StartPageClient() {
     const router = useRouter();
+    const { user, signOut } = useAuth();
     const [step, setStep] = useState<FlowStep>(1);
     const [selectedPhotos, setSelectedPhotos] = useState<SelectedPhoto[]>([]);
     const [description, setDescription] = useState('');
+    const [headerTitle, setHeaderTitle] = useState<string | null>(null);
+
+    // Show the avatar only for real users, not anonymous Supabase sessions.
+    const isLoggedIn = !!user && !!user.email;
+    const userMeta = (user?.user_metadata ?? {}) as Record<string, string | undefined>;
+    const avatarUrl = userMeta.avatar_url || userMeta.picture;
+    const displayName =
+        userMeta.full_name || userMeta.name || user?.email || '';
+    const initials = displayName
+        .split(/\s+/)
+        .map((part) => part[0])
+        .filter(Boolean)
+        .slice(0, 2)
+        .join('')
+        .toUpperCase();
+
+    const handleSignOut = useCallback(async () => {
+        await signOut();
+        router.push('/');
+    }, [router, signOut]);
 
     // Conversation ID created at mount so background uploads can start immediately.
     const [conversationId] = useState(() => createClientId());
@@ -964,13 +896,79 @@ export function StartPageClient() {
     return (
         <div className="fixed inset-0 z-0 flex flex-col overflow-hidden bg-background">
             <FlowTopBar
-                onBack={() => {
-                    if (step > 1) {
-                        setStep((s) => (Math.max(1, s - 1) as FlowStep));
-                        return;
-                    }
-                    router.back();
-                }}
+                className="p-4"
+                leftSlot={
+                    <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        aria-label="Go back"
+                        onClick={() => {
+                            if (step > 1) {
+                                setStep(
+                                    (s) => (Math.max(1, s - 1) as FlowStep)
+                                );
+                                return;
+                            }
+                            router.back();
+                        }}
+                    >
+                        <ArrowLeft strokeWidth={2.5} />
+                    </Button>
+                }
+                centerSlot={
+                    headerTitle ? (
+                        <p className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-base font-medium text-foreground">
+                            {headerTitle}
+                        </p>
+                    ) : null
+                }
+                rightSlot={
+                    isLoggedIn ? (
+                        <DropdownMenu key="menu">
+                            <DropdownMenuTrigger asChild>
+                                <button
+                                    type="button"
+                                    aria-label="Account menu"
+                                    className="cursor-pointer rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                                >
+                                    <Avatar>
+                                        {avatarUrl ? (
+                                            <AvatarImage
+                                                src={avatarUrl}
+                                                alt={displayName}
+                                            />
+                                        ) : null}
+                                        <AvatarFallback>
+                                            {initials || '?'}
+                                        </AvatarFallback>
+                                    </Avatar>
+                                </button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                                <DropdownMenuItem asChild>
+                                    <Link href="/diagnoses">History</Link>
+                                </DropdownMenuItem>
+                                <DropdownMenuItem asChild>
+                                    <Link href="/favourites">Favourites</Link>
+                                </DropdownMenuItem>
+                                <DropdownMenuItem asChild>
+                                    <Link href="/settings">Settings</Link>
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem
+                                    onSelect={() => void handleSignOut()}
+                                >
+                                    Log Out
+                                </DropdownMenuItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+                    ) : (
+                        <Button asChild variant="ghost" size="sm">
+                            <Link href="/auth/login">Login</Link>
+                        </Button>
+                    )
+                }
             />
 
             <div className="flex-1 overflow-hidden">
@@ -981,6 +979,7 @@ export function StartPageClient() {
                         description={description}
                         setDescription={setDescription}
                         onContinue={() => setStep(2)}
+                        onHeaderTitleChange={setHeaderTitle}
                     />
                 )}
                 {step === 2 && (
@@ -999,6 +998,99 @@ export function StartPageClient() {
                     />
                 )}
             </div>
+        </div>
+    );
+}
+
+// ── Photo tile ──────────────────────────────────────────────────────────────
+
+function PhotoTile({
+    photo,
+    index,
+    showNumber = false,
+    isDraggable = false,
+    isDragged = false,
+    isDropTarget = false,
+    onRemove,
+    onDragStart,
+    onDragOver,
+    onDragLeave,
+    onDrop,
+    onDragEnd,
+}: {
+    photo: SelectedPhoto;
+    index: number;
+    showNumber?: boolean;
+    isDraggable?: boolean;
+    isDragged?: boolean;
+    isDropTarget?: boolean;
+    onRemove?: (photoId: string) => void;
+    onDragStart?: (e: React.DragEvent<HTMLDivElement>) => void;
+    onDragOver?: (e: React.DragEvent<HTMLDivElement>) => void;
+    onDragLeave?: () => void;
+    onDrop?: (e: React.DragEvent<HTMLDivElement>) => void;
+    onDragEnd?: () => void;
+}) {
+    const isReady = photo.status === 'ready' && photo.previewSrc;
+    const wrapperCls = [
+        'relative aspect-square overflow-hidden rounded-lg border border-border transition-all duration-150',
+        isReady ? 'bg-background' : 'bg-secondary',
+        isDraggable ? 'cursor-grab active:cursor-grabbing' : '',
+        isDragged ? 'opacity-50' : '',
+        isDropTarget ? 'ring-2 ring-foreground' : '',
+    ]
+        .filter(Boolean)
+        .join(' ');
+
+    return (
+        <div
+            className={wrapperCls}
+            draggable={isDraggable}
+            onDragStart={isDraggable ? onDragStart : undefined}
+            onDragOver={isDraggable ? onDragOver : undefined}
+            onDragLeave={isDraggable ? onDragLeave : undefined}
+            onDrop={isDraggable ? onDrop : undefined}
+            onDragEnd={isDraggable ? onDragEnd : undefined}
+        >
+            {isReady ? (
+                /* eslint-disable-next-line @next/next/no-img-element */
+                <img
+                    src={photo.previewSrc!}
+                    alt={photo.file.name || ''}
+                    className="h-full w-full object-cover"
+                    draggable={false}
+                />
+            ) : photo.status === 'pending' ? (
+                <div className="flex h-full w-full items-center justify-center">
+                    <Spinner className="size-5 text-muted-foreground" />
+                </div>
+            ) : (
+                <div className="flex h-full w-full items-center justify-center p-3 text-center">
+                    <p className="line-clamp-3 text-xs text-muted-foreground">
+                        {photo.errorMessage ?? 'Could not process this image.'}
+                    </p>
+                </div>
+            )}
+            {showNumber ? (
+                <Badge variant="count" className="absolute bottom-2 left-2">
+                    {index + 1}
+                </Badge>
+            ) : null}
+            {isReady && onRemove ? (
+                <Badge asChild variant="outline">
+                    <button
+                        type="button"
+                        className="absolute right-2 top-2 cursor-pointer"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            onRemove(photo.id);
+                        }}
+                        aria-label="Remove photo"
+                    >
+                        Remove
+                    </button>
+                </Badge>
+            ) : null}
         </div>
     );
 }

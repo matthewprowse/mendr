@@ -8,7 +8,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { toWhatsAppPhone } from '@/lib/utils';
 import { setLastConversationIdForWhatsApp, resolveWhatsAppPrefill } from '@/lib/whatsapp-prefill';
 import { INK } from '@/lib/design-tokens';
-import { CircleNotch, Crosshair, FunnelSimple } from '@phosphor-icons/react';
+import { Loader, Crosshair, Filter } from 'lucide-react';
 import { toast } from 'sonner';
 import { MatchMapSheetLayout } from '@/app/match/components/match-map-sheet-layout';
 import { ProviderCard } from '@/app/match/components/provider-card';
@@ -968,7 +968,7 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
                             }}
                         >
                             {isLocatingUser ? (
-                                <CircleNotch size={16} className="animate-spin" />
+                                <Loader size={16} className="animate-spin" />
                             ) : (
                                 <Crosshair size={16} />
                             )}
@@ -990,7 +990,7 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
                             });
                         }}
                     >
-                        <FunnelSimple size={18} weight="bold" />
+                        <Filter size={18} strokeWidth={2.5} />
                         {activeFilterCount > 0 ? (
                             <span
                                 className="absolute -right-1 -top-1 inline-flex min-w-[18px] items-center justify-center rounded-full bg-foreground px-1 py-0.5 text-[10px] font-semibold leading-none text-background"
@@ -1158,7 +1158,11 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
                                                                         ? `${window.location.origin}/contractors/${provider.providerId}`
                                                                         : window.location.href;
                                                                     const prefill = await resolveWhatsAppPrefill(profileUrl);
-                                                                    const parts: string[] = [
+
+                                                                    // Build a template fallback up front so the button
+                                                                    // always opens a usable message even if the AI
+                                                                    // generator is unavailable.
+                                                                    const fallbackParts: string[] = [
                                                                         `Hi! I found you on Mendr.`,
                                                                         prefill.diagnosis && prefill.diagnosis !== 'Home repair or maintenance'
                                                                             ? `I have a ${prefill.trade ? prefill.trade.toLowerCase() + ' issue' : 'home repair issue'}: ${prefill.diagnosis}.`
@@ -1168,7 +1172,34 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
                                                                             : '',
                                                                         `Are you available to assist?`,
                                                                     ].filter(Boolean);
-                                                                    const text = parts.join(' ');
+                                                                    let text = fallbackParts.join(' ');
+
+                                                                    // Prefer the AI-generated message (same endpoint
+                                                                    // the contact popover uses) so messages are
+                                                                    // consistent across the app. Fall back to the
+                                                                    // template on any failure.
+                                                                    try {
+                                                                        const msgRes = await fetch('/api/whatsapp-message', {
+                                                                            method: 'POST',
+                                                                            headers: { 'Content-Type': 'application/json' },
+                                                                            body: JSON.stringify({
+                                                                                diagnosis: prefill.diagnosis,
+                                                                                provider_name: provider.name,
+                                                                                trade: prefill.trade,
+                                                                                report_url: prefill.report_url,
+                                                                                profile_url: prefill.profile_url,
+                                                                            }),
+                                                                        });
+                                                                        const msgData = (await msgRes
+                                                                            .json()
+                                                                            .catch(() => ({}))) as { message?: string };
+                                                                        if (msgRes.ok && msgData.message?.trim()) {
+                                                                            text = msgData.message.trim();
+                                                                        }
+                                                                    } catch {
+                                                                        // Network/endpoint failure — keep the template fallback.
+                                                                    }
+
                                                                     window.open(
                                                                         `https://wa.me/${phone}?text=${encodeURIComponent(text)}`,
                                                                         '_blank',

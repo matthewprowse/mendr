@@ -1,0 +1,407 @@
+{
+  "ts": "2026-05-27T14-39-16-534Z",
+  "rounds": 1,
+  "summaries": [
+    {
+      "cell": {
+        "tag": "D",
+        "label": "3.5 model + v3.5 prompts",
+        "model": "gemini-3.5-flash",
+        "promptVariant": "v3.5"
+      },
+      "totalChecks": 13,
+      "correct": 8,
+      "meanConfidence": 95,
+      "commitRate": 1,
+      "titleStabilityRate": 1,
+      "rescueActivations": 0,
+      "perTest": {
+        "geyser-full-cues": {
+          "titles": [
+            "Corroded Geyser Tank"
+          ],
+          "sids": [
+            "geyser_fault_plumbing"
+          ],
+          "trades": [
+            "Plumbing"
+          ],
+          "confidences": [
+            95
+          ],
+          "commits": [
+            true
+          ],
+          "h1Confidences": [
+            95
+          ]
+        },
+        "geyser-minimal": {
+          "titles": [
+            "Corroded Geyser Tank"
+          ],
+          "sids": [
+            "geyser_fault_plumbing"
+          ],
+          "trades": [
+            "Plumbing"
+          ],
+          "confidences": [
+            95
+          ],
+          "commits": [
+            true
+          ],
+          "h1Confidences": [
+            95
+          ]
+        },
+        "garage-with-cause": {
+          "titles": [
+            ""
+          ],
+          "sids": [
+            ""
+          ],
+          "trades": [
+            ""
+          ],
+          "confidences": [
+            0
+          ],
+          "commits": [
+            true
+          ],
+          "h1Confidences": []
+        },
+        "garage-no-text": {
+          "titles": [
+            ""
+          ],
+          "sids": [
+            ""
+          ],
+          "trades": [
+            ""
+          ],
+          "confidences": [
+            0
+          ],
+          "commits": [
+            true
+          ],
+          "h1Confidences": []
+        }
+      }
+    }
+  ],
+  "allResults": [
+    {
+      "cell": {
+        "tag": "D",
+        "label": "3.5 model + v3.5 prompts",
+        "model": "gemini-3.5-flash",
+        "promptVariant": "v3.5"
+      },
+      "round": 1,
+      "testId": "geyser-full-cues",
+      "conversationId": "89d96b0b-5d56-4ca5-949a-afa5917772c5",
+      "status": "ok",
+      "elapsedMs": 31021,
+      "parsed": {
+        "thought": "The first image shows a geyser drip tray filled with dark, rust-coloured water, which is a clear sign of internal tank corrosion. The second image reveals water staining on the supporting wooden board underneath the piping, confirming an active leak. The third image shows the exterior walkway where the overflow pipes exit, providing context for the apartment installation. The combination of rusty water, reduced hot water duration, and increased electricity usage strongly indicates that the internal sacrificial anode has been fully consumed and the steel tank wall is rusting through.",
+        "thinking": "The first image shows a geyser drip tray filled with dark, rust-coloured water, which is a clear sign of internal tank corrosion. The second image reveals water staining on the supporting wooden board underneath the piping, confirming an active leak. The third image shows the exterior walkway where the overflow pipes exit, providing context for the apartment installation. The combination of rusty water, reduced hot water duration, and increased electricity usage strongly indicates that the internal sacrificial anode has been fully consumed and the steel tank wall is rusting through.",
+        "thoughts_history": [
+          {
+            "round": 0,
+            "thought": "The first image shows a geyser drip tray filled with dark, rust-coloured water, which is a clear sign of internal tank corrosion. The second image reveals water staining on the supporting wooden board underneath the piping, confirming an active leak. The third image shows the exterior walkway where the overflow pipes exit, providing context for the apartment installation. The combination of rusty water, reduced hot water duration, and increased electricity usage strongly indicates that the internal sacrificial anode has been fully consumed and the steel tank wall is rusting through.",
+            "created_at": "2026-05-27T14:38:35.730Z"
+          }
+        ],
+        "diagnosis": "Corroded Geyser Tank",
+        "estimated_diagnosis_sentence": "Corroded Geyser Tank",
+        "message": "A corroded geyser tank occurs when the internal sacrificial anode is fully consumed, allowing the water to attack and rust through the steel cylinder walls. This leads to iron oxide leaching into the water, which explains the rusty brown pooling in your drip tray. The loss of hot water duration and increased electricity bills happen because the heating element must work continuously to heat incoming cold water that is constantly escaping through the leak.\n\nThis is a progressive failure that will eventually lead to a complete structural rupture of the cylinder. If left unattended, the leak will worsen, potentially overflowing the drip tray and causing extensive water damage to the ceilings and floorboards below.",
+        "action_required": "Your technician will isolate the electrical supply at the main distribution board and shut off the cold water mains. They will then drain the remaining water from the cylinder, disconnect the plumbing fittings, and remove the failed unit. Finally, they will install a new geyser, connect it to the existing piping, and issue a Certificate of Compliance.",
+        "image_descriptions": [
+          "A close-up view of the geyser end-cap and brass T-junction fitting, showing rusty brown water pooled deeply inside the black plastic drip tray.",
+          "An under-sink or behind-wall view showing copper and white plastic pipes with dark water stains on the wooden shelf below them.",
+          "An exterior view of an apartment walkway showing the white overflow discharge pipes running down the outer brick wall."
+        ],
+        "image_thought_breakdown": [
+          "A close-up view of the geyser end-cap and brass T-junction fitting, showing rusty brown water pooled deeply inside the black plastic drip tray.",
+          "An under-sink or behind-wall view showing copper and white plastic pipes with dark water stains on the wooden shelf below them.",
+          "An exterior view of an apartment walkway showing the white overflow discharge pipes running down the outer brick wall."
+        ],
+        "clarification_questions": [
+          "Yes, it is rusty and leaking.",
+          "No, the water is completely clear.",
+          "It is just a slow, clear drip."
+        ],
+        "structured_clarification": {
+          "intro": "Two things could be causing this — answering one quick question will narrow it down.",
+          "hypotheses": [
+            {
+              "id": "h1",
+              "label": "Corroded Geyser Tank",
+              "confidence": 95,
+              "why": "The presence of dark, rusty water in the drip tray combined with reduced heating performance strongly points to internal cylinder corrosion.",
+              "discriminating_question": "Is the water in the drip tray actively dripping and rust-coloured?",
+              "answer_chips": [
+                {
+                  "id": "c1",
+                  "text": "Yes, it is rusty and leaking.",
+                  "effect": "confirms"
+                },
+                {
+                  "id": "c2",
+                  "text": "No, the water is completely clear.",
+                  "effect": "rules_out"
+                },
+                {
+                  "id": "c3",
+                  "text": "It is just a slow, clear drip.",
+                  "effect": "partial"
+                }
+              ]
+            }
+          ],
+          "escape": {
+            "prompt": "Doesn't match any of these? Tell me what you're seeing in your own words."
+          }
+        },
+        "contractor_checklist": [
+          "Isolate the electrical supply and water mains to the geyser.",
+          "Drain the damaged cylinder completely into the waste line.",
+          "Remove the corroded geyser and inspect the drip tray for structural integrity.",
+          "Install a new geyser unit and reconnect all plumbing and electrical connections."
+        ],
+        "homeowner_prep": "Switch off the geyser circuit breaker at your main distribution board and close the cold water stopcock leading to the geyser.",
+        "diy_verification": "Check the water colour from your hot taps; if it has a slight yellow or brown tint compared to the cold taps, the internal tank is corroding.",
+        "photo_request": "",
+        "confidence_drivers": [
+          "Rust-coloured water pooled in the drip tray",
+          "User reports increased electricity bills and poor heating",
+          "Water staining visible on the supporting woodwork"
+        ],
+        "trade": "Plumbing",
+        "trade_detail": "Geyser Fault",
+        "confidence": 95,
+        "rejected": false,
+        "requires_clarification": false,
+        "unserviced": false,
+        "refetch_providers": false,
+        "unsupported_reason": "",
+        "subcategory_id": "geyser_fault_plumbing",
+        "failed_component": "inner cylinder",
+        "cascading_damage": "corroded heating element and saturated insulation",
+        "trade_candidates": [
+          {
+            "trade": "Plumbing",
+            "score": 100
+          },
+          {
+            "trade": "Electrical",
+            "score": 40
+          },
+          {
+            "trade": "General Handyman",
+            "score": 20
+          }
+        ],
+        "prompt_version": "v7.4",
+        "ai_model": "gemini-2.5-flash",
+        "pipeline": "v2-classify-prose",
+        "structural_confidence": {
+          "score": 100,
+          "signals": {
+            "hasImage": true,
+            "imageCount": 3,
+            "descriptionWordCount": 27,
+            "subcategoryMatched": true,
+            "failedComponentNamed": true,
+            "isCatchAllWithNoVisual": false,
+            "isRejectedOrUnserviced": false
+          }
+        }
+      },
+      "critique": null
+    },
+    {
+      "cell": {
+        "tag": "D",
+        "label": "3.5 model + v3.5 prompts",
+        "model": "gemini-3.5-flash",
+        "promptVariant": "v3.5"
+      },
+      "round": 1,
+      "testId": "geyser-minimal",
+      "conversationId": "a7517e5a-f13a-4777-b8cf-ad88c657d5b0",
+      "status": "ok",
+      "elapsedMs": 31933,
+      "parsed": {
+        "thought": "The first image shows a horizontal geyser cylinder sitting in a black drip tray that is filled with murky, rust-coloured water. Droplets are visible on the brass T-piece and the black plastic vacuum breaker, indicating an active leak. The second image shows water staining on the wooden support board below the pipe entry points. The presence of dark, rust-stained water in the drip tray strongly indicates that the internal steel tank has corroded through.",
+        "thinking": "The first image shows a horizontal geyser cylinder sitting in a black drip tray that is filled with murky, rust-coloured water. Droplets are visible on the brass T-piece and the black plastic vacuum breaker, indicating an active leak. The second image shows water staining on the wooden support board below the pipe entry points. The presence of dark, rust-stained water in the drip tray strongly indicates that the internal steel tank has corroded through.",
+        "thoughts_history": [
+          {
+            "round": 0,
+            "thought": "The first image shows a horizontal geyser cylinder sitting in a black drip tray that is filled with murky, rust-coloured water. Droplets are visible on the brass T-piece and the black plastic vacuum breaker, indicating an active leak. The second image shows water staining on the wooden support board below the pipe entry points. The presence of dark, rust-stained water in the drip tray strongly indicates that the internal steel tank has corroded through.",
+            "created_at": "2026-05-27T14:39:07.684Z"
+          }
+        ],
+        "diagnosis": "Corroded Geyser Tank",
+        "estimated_diagnosis_sentence": "Corroded Geyser Tank",
+        "message": "A corroded geyser tank is causing water to pool in your safety drip tray. The rust-coloured water in the tray indicates that the sacrificial anode inside the cylinder has been fully consumed, allowing the water to attack and eat through the inner steel lining of the tank.\n\nThis type of corrosion develops gradually over several years as mineral content in the municipal water supply reacts with the metal. Once the protective lining is breached, the structural integrity of the cylinder is compromised, and the leak will steadily worsen under mains pressure.\n\nBecause the inner tank has rusted through, this issue cannot be repaired by replacing individual valves or fittings. A complete replacement of the geyser unit is required to prevent a sudden, catastrophic burst that could flood your ceiling and living spaces.",
+        "action_required": "Your technician will isolate the electrical supply and water mains to the geyser. They will drain the remaining water from the damaged cylinder, disconnect the plumbing and electrical connections, and remove the old unit. New geyser will be installed along with a compliant drip tray, vacuum breakers, and safety valves, followed by testing and electrical re-certification.",
+        "image_descriptions": [
+          "A close-up of the Electrolux geyser showing the brass T-piece connection with active water droplets and a black drip tray filled with dark, rusty water.",
+          "An under-shelf view showing copper and white plastic pipes passing through a wall, with a large dark water stain on the wooden board below.",
+          "An exterior view of the apartment walkway showing the white overflow pipes running down the outer wall of the building."
+        ],
+        "image_thought_breakdown": [
+          "A close-up of the Electrolux geyser showing the brass T-piece connection with active water droplets and a black drip tray filled with dark, rusty water.",
+          "An under-shelf view showing copper and white plastic pipes passing through a wall, with a large dark water stain on the wooden board below.",
+          "An exterior view of the apartment walkway showing the white overflow pipes running down the outer wall of the building."
+        ],
+        "clarification_questions": [
+          "The water is brown and rusty.",
+          "The water is completely clear.",
+          "It is just a slow, clear drip."
+        ],
+        "structured_clarification": {
+          "intro": "Two things could be causing this — answering one quick question will narrow it down.",
+          "hypotheses": [
+            {
+              "id": "h1",
+              "label": "Corroded Geyser Tank",
+              "confidence": 95,
+              "why": "The water in the drip tray is heavily discoloured with rust, which typically indicates the inner steel cylinder has breached.",
+              "discriminating_question": "Is the water leaking into the tray clear or rusty?",
+              "answer_chips": [
+                {
+                  "id": "c1",
+                  "text": "The water is brown and rusty.",
+                  "effect": "confirms"
+                },
+                {
+                  "id": "c2",
+                  "text": "The water is completely clear.",
+                  "effect": "rules_out"
+                },
+                {
+                  "id": "c3",
+                  "text": "It is just a slow, clear drip.",
+                  "effect": "partial"
+                }
+              ]
+            }
+          ],
+          "escape": {
+            "prompt": "Doesn't match any of these? Tell me what you're seeing in your own words."
+          }
+        },
+        "contractor_checklist": [
+          "Isolate the electrical supply at the main distribution board and disconnect the geyser wiring.",
+          "Shut off the cold-water control valve and drain the compromised cylinder completely.",
+          "Remove the corroded geyser and inspect the existing drip tray and overflow piping for blockages.",
+          "Install a new pressure-rated geyser and replace the vacuum breakers and safety valves to ensure compliance."
+        ],
+        "homeowner_prep": "Switch off the geyser circuit breaker at your main distribution board and close the cold-water stopcock leading to the geyser.",
+        "diy_verification": "Check the external overflow pipe on the outside wall; if it is dry but the indoor drip tray is actively filling with rusty water, the tank itself is leaking.",
+        "photo_request": "",
+        "confidence_drivers": [
+          "Murky brown water in the drip tray indicates internal rust",
+          "Active droplets visible on the lower fittings",
+          "Water staining on the support structure below"
+        ],
+        "trade": "Plumbing",
+        "trade_detail": "Geyser Fault",
+        "confidence": 95,
+        "rejected": false,
+        "requires_clarification": false,
+        "unserviced": false,
+        "refetch_providers": false,
+        "unsupported_reason": "",
+        "subcategory_id": "geyser_fault_plumbing",
+        "failed_component": "geyser cylinder",
+        "cascading_damage": "flooded drip tray and water damage to supporting wooden platform",
+        "trade_candidates": [
+          {
+            "trade": "Plumbing",
+            "score": 100
+          },
+          {
+            "trade": "General Handyman",
+            "score": 40
+          },
+          {
+            "trade": "Building & Construction",
+            "score": 20
+          }
+        ],
+        "prompt_version": "v7.4",
+        "ai_model": "gemini-2.5-flash",
+        "pipeline": "v2-classify-prose",
+        "structural_confidence": {
+          "score": 95,
+          "signals": {
+            "hasImage": true,
+            "imageCount": 3,
+            "descriptionWordCount": 4,
+            "subcategoryMatched": true,
+            "failedComponentNamed": true,
+            "isCatchAllWithNoVisual": false,
+            "isRejectedOrUnserviced": false
+          }
+        }
+      },
+      "critique": {
+        "failure_mode": "none",
+        "knowledge_gap": null,
+        "surprise_signals": [],
+        "prompt_hypothesis": null,
+        "resolution_would_be": null,
+        "confidence_calibration": {
+          "delta_reasoning": "The agent's confidence is well-calibrated. The user explicitly stated 'My geyser is leaking,' which is directly supported by the visual evidence of a drip tray full of rust-coloured water and active drips from the plumbing connections. This combination of user input and clear visual cues makes the diagnosis highly certain.",
+          "agent_confidence": 95,
+          "rubric_facets_used": [
+            "component_named",
+            "symptom_unique",
+            "image_clarity",
+            "description_complete"
+          ],
+          "critique_confidence": 95
+        },
+        "notes_for_human_review": "The diagnosis is accurate and well-supported by both the user's description and the visual evidence. The rust-coloured water is a strong indicator of internal tank corrosion, justifying the diagnosis and the recommended action of replacement. The confidence level is appropriate.",
+        "considered_alternatives": []
+      }
+    },
+    {
+      "cell": {
+        "tag": "D",
+        "label": "3.5 model + v3.5 prompts",
+        "model": "gemini-3.5-flash",
+        "promptVariant": "v3.5"
+      },
+      "round": 1,
+      "testId": "garage-with-cause",
+      "conversationId": "d21f52a8-51c5-4793-a905-f870d46ac95a",
+      "status": "error",
+      "error": "upload-image 500: Internal Server Error",
+      "elapsedMs": 1592
+    },
+    {
+      "cell": {
+        "tag": "D",
+        "label": "3.5 model + v3.5 prompts",
+        "model": "gemini-3.5-flash",
+        "promptVariant": "v3.5"
+      },
+      "round": 1,
+      "testId": "garage-no-text",
+      "conversationId": "f851833e-5ae9-49d3-976b-085cbd58818d",
+      "status": "error",
+      "error": "upload-image 500: Internal Server Error",
+      "elapsedMs": 944
+    }
+  ]
+}

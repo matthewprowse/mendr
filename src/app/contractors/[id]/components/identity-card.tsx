@@ -1,6 +1,6 @@
 'use client';
 
-import { Star, ShieldCheck, Clock } from '@phosphor-icons/react';
+import { Star, ShieldCheck, Clock } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { INK } from '@/lib/design-tokens';
 import { formatBusinessName } from '@/lib/utils';
@@ -67,7 +67,7 @@ export function IdentityCard({
                         </h1>
                         {!isLoading && verified ? (
                             <div className="inline-flex items-center gap-1.5 self-start rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-medium text-emerald-700">
-                                <ShieldCheck size={12} weight="fill" aria-hidden />
+                                <ShieldCheck size={12} fill="currentColor" aria-hidden />
                                 Verified on Mendr
                             </div>
                         ) : null}
@@ -88,7 +88,7 @@ export function IdentityCard({
                     <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-sm" style={{ color: INK }}>
                         {rating != null ? (
                             <span className="inline-flex items-center gap-1">
-                                <Star size={14} weight="fill" className="text-yellow-500" aria-hidden />
+                                <Star size={14} fill="currentColor" className="text-yellow-500" aria-hidden />
                                 <span className="font-semibold tabular-nums">{rating.toFixed(1)}</span>
                                 {ratingCount > 0 ? (
                                     <span className="text-muted-foreground">
@@ -105,7 +105,7 @@ export function IdentityCard({
                         ) : null}
                         {yearsLabel ? (
                             <span className="text-muted-foreground inline-flex items-center gap-1">
-                                <Clock size={12} weight="bold" aria-hidden />
+                                <Clock size={12} strokeWidth={2.5} aria-hidden />
                                 {yearsLabel}
                             </span>
                         ) : null}

@@ -1,0 +1,112 @@
+{
+    "name": "p0-pool-pump-priming-failure",
+    "trade": "Pool Services",
+    "description": "Pool pump runs but won't prime. I open the lid of the pump basket, fill it with water until the basket is submerged, close the lid and switch on \u2014 the motor runs normally but it doesn't pull water through. I can see air bubbles forming inside the clear lid almost immediately. Clear photo attached showing the pump, basket, lid, and the suction-side pipe.",
+    "image_present": true,
+    "image_quality": "clear",
+    "mockAgentOutput": {
+        "hypotheses": [
+            {
+                "id": "h1",
+                "label": "Pump lid o-ring failed \u2014 pump drawing air",
+                "confidence_alone": 0.85,
+                "evidence_for": [
+                    "Pump primes briefly then draws air \u2014 classic seal failure",
+                    "Air bubbles visible in clear lid immediately after start",
+                    "Lid o-ring is the most common point of suction-side air ingress"
+                ],
+                "evidence_against": []
+            },
+            {
+                "id": "h2",
+                "label": "Suction-side pipe crack or loose union",
+                "confidence_alone": 0.5,
+                "evidence_for": [
+                    "A cracked suction pipe between skimmer and pump produces identical symptoms"
+                ],
+                "evidence_against": [
+                    "User has not reported visible water leaking from a pipe between cycles"
+                ]
+            },
+            {
+                "id": "h3",
+                "label": "Skimmer weir stuck / water level low",
+                "confidence_alone": 0.25,
+                "evidence_for": [
+                    "Low water at the skimmer drops the pump's prime"
+                ],
+                "evidence_against": [
+                    "User specifically fills the basket \u2014 they would notice low pool water"
+                ]
+            }
+        ],
+        "what_we_dont_know": "Whether the air ingress is at the pump lid o-ring (replace seal) or further upstream at a pipe joint (locate and repair).",
+        "why_it_matters": "Lid-seal failures are a quick visit; suction-pipe cracks require digging or repipe work, so the quote is very different.",
+        "chips": [
+            {
+                "id": "c1",
+                "text": "The o-ring on the lid looks compressed, cracked, or out of position.",
+                "supports": "h1",
+                "rules_out": [
+                    "h2"
+                ]
+            },
+            {
+                "id": "c2",
+                "text": "I can hear hissing or see drips on the suction pipework.",
+                "supports": "h2",
+                "rules_out": [
+                    "h1"
+                ]
+            },
+            {
+                "id": "c3",
+                "text": "Pool water level is below the skimmer mouth.",
+                "supports": "h3",
+                "rules_out": [
+                    "h1",
+                    "h2"
+                ]
+            },
+            {
+                "id": "c4",
+                "text": "Something else is happening.",
+                "supports": "",
+                "rules_out": []
+            }
+        ],
+        "round": 1,
+        "next_step_if_unresolved": "commit_low_confidence"
+    },
+    "mockFacets": {
+        "trade_confidence": 95,
+        "component_confidence": 88,
+        "cause_confidence": 85,
+        "image_sufficiency": "sufficient",
+        "committed_observations": [
+            "pool pump runs but does not prime",
+            "air bubbles visible in clear lid"
+        ],
+        "explicit_unknowns": [
+            "whether the lid seal or the suction-side pipework is the leak source"
+        ]
+    },
+    "expected": {
+        "recommended_action": "commit",
+        "must_consider_hypotheses": [
+            "pump lid seal",
+            "suction-side pipe",
+            "water level"
+        ],
+        "must_not_consider": [
+            "borehole pump",
+            "irrigation pump"
+        ],
+        "must_ask_about": "whether the o-ring or the suction pipe is the source of the air leak",
+        "failure_baseline_today": {
+            "observed_behaviour": "System routes correctly to Pool Services but asks a clarifying question about whether this is a pool pump or a borehole pump \u2014 even though the photo and description are unambiguous about the equipment.",
+            "why_it_fails": "Prompt's per-case 'pool vs borehole pump' disambiguation example fires defensively even when the case isn't ambiguous. This is the worked-example bias the plan calls out \u2014 the model treats the example as a rule rather than as one possible case."
+        },
+        "phase_6_commit_rationale": "Top hypothesis confidence_alone=0.85 (>=0.75), gap to second=0.35 (>=0.25), evidence_for has 3 entries, evidence_against empty. Equipment is unambiguous (photo + description match a pool pump) so trade_confidence will be ~95. The 'pool vs borehole' disambiguation is removed from the prompt in Phase 5 \u2014 taxonomy excludes carry it now."
+    }
+}

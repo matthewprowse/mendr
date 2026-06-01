@@ -1,0 +1,311 @@
+{
+  "ts": "2026-05-28T08-18-44-649Z",
+  "rounds": 1,
+  "source": "hardcoded",
+  "fixturesPath": null,
+  "summaries": [
+    {
+      "cell": {
+        "tag": "B",
+        "label": "2.5 model + v3.5 prompts",
+        "model": "gemini-2.5-flash",
+        "promptVariant": "v3.5"
+      },
+      "totalChecks": 13,
+      "correct": 8,
+      "meanConfidence": 95,
+      "commitRate": 1,
+      "titleStabilityRate": 1,
+      "rescueActivations": 0,
+      "perTest": {
+        "geyser-full-cues": {
+          "titles": [
+            "Corroded Geyser Tank"
+          ],
+          "sids": [
+            "geyser_fault_plumbing"
+          ],
+          "trades": [
+            "Plumbing"
+          ],
+          "confidences": [
+            95
+          ],
+          "commits": [
+            true
+          ],
+          "h1Confidences": []
+        },
+        "geyser-minimal": {
+          "titles": [
+            "Corroded Geyser Tank"
+          ],
+          "sids": [
+            "geyser_fault_plumbing"
+          ],
+          "trades": [
+            "Plumbing"
+          ],
+          "confidences": [
+            95
+          ],
+          "commits": [
+            true
+          ],
+          "h1Confidences": []
+        },
+        "garage-with-cause": {
+          "titles": [
+            ""
+          ],
+          "sids": [
+            ""
+          ],
+          "trades": [
+            ""
+          ],
+          "confidences": [
+            0
+          ],
+          "commits": [
+            true
+          ],
+          "h1Confidences": []
+        },
+        "garage-no-text": {
+          "titles": [
+            ""
+          ],
+          "sids": [
+            ""
+          ],
+          "trades": [
+            ""
+          ],
+          "confidences": [
+            0
+          ],
+          "commits": [
+            true
+          ],
+          "h1Confidences": []
+        }
+      }
+    }
+  ],
+  "allResults": [
+    {
+      "cell": {
+        "tag": "B",
+        "label": "2.5 model + v3.5 prompts",
+        "model": "gemini-2.5-flash",
+        "promptVariant": "v3.5"
+      },
+      "round": 1,
+      "testId": "geyser-full-cues",
+      "conversationId": "fa956d0b-12c0-4828-a479-962cfbfd1327",
+      "status": "ok",
+      "elapsedMs": 70960,
+      "parsed": {
+        "thought": "The user reports a geyser leak, rusty brown water in the drip tray, increased electricity bills, and reduced hot water duration. Image 1 clearly shows rusty brown water collected in a drip tray beneath a geyser, with a visible leak from a copper pipe connection. Image 2 offers a closer view of corroded pipework and connections. These visual cues, combined with the user's description of higher bills and shorter hot water supply, strongly indicate that the geyser's internal tank is corroding. The leak from the pipe fitting is likely a symptom of the geyser's overall degraded state.",
+        "thinking": "The user reports a geyser leak, rusty brown water in the drip tray, increased electricity bills, and reduced hot water duration. Image 1 clearly shows rusty brown water collected in a drip tray beneath a geyser, with a visible leak from a copper pipe connection. Image 2 offers a closer view of corroded pipework and connections. These visual cues, combined with the user's description of higher bills and shorter hot water supply, strongly indicate that the geyser's internal tank is corroding. The leak from the pipe fitting is likely a symptom of the geyser's overall degraded state.",
+        "thoughts_history": [
+          {
+            "round": 0,
+            "thought": "The user reports a geyser leak, rusty brown water in the drip tray, increased electricity bills, and reduced hot water duration. Image 1 clearly shows rusty brown water collected in a drip tray beneath a geyser, with a visible leak from a copper pipe connection. Image 2 offers a closer view of corroded pipework and connections. These visual cues, combined with the user's description of higher bills and shorter hot water supply, strongly indicate that the geyser's internal tank is corroding. The leak from the pipe fitting is likely a symptom of the geyser's overall degraded state.",
+            "created_at": "2026-05-28T08:16:01.349Z"
+          }
+        ],
+        "diagnosis": "Corroded Geyser Tank",
+        "estimated_diagnosis_sentence": "Corroded Geyser Tank",
+        "message": "Your geyser appears to have a corroded internal tank. The rusty brown water visible in the drip tray, combined with your observations of higher electricity bills and reduced hot water duration, are strong indicators of this issue.\n\nThis typically develops when the geyser's internal sacrificial anode, designed to prevent corrosion, has been fully consumed. Once the anode is gone, the tank's steel wall begins to rust, leading to discoloured water and a loss of thermal efficiency as the tank's integrity degrades. The leak from the pipe fitting is likely a result of the overall corrosion and weakening of the system.\n\nIf left unaddressed, the corrosion will worsen, potentially leading to a catastrophic burst of the geyser tank. This could cause significant water damage to your property and poses an electrical hazard.",
+        "action_required": "",
+        "image_descriptions": [
+          "This close-up image shows a black plastic drip tray filled with rusty brown water, positioned beneath a geyser unit. A copper pipe connection near the base of the geyser is visibly dripping water into the tray.",
+          "This image provides a closer view of the copper pipework and connections, revealing signs of corrosion and mineral build-up around the joints. White plastic pipes are also visible in the foreground.",
+          "This image shows an exterior view of a building with multiple windows and a brick wall, providing context of the property's surroundings. No specific geyser components or faults are visible in this general outdoor shot."
+        ],
+        "image_thought_breakdown": [
+          "This close-up image shows a black plastic drip tray filled with rusty brown water, positioned beneath a geyser unit. A copper pipe connection near the base of the geyser is visibly dripping water into the tray.",
+          "This image provides a closer view of the copper pipework and connections, revealing signs of corrosion and mineral build-up around the joints. White plastic pipes are also visible in the foreground.",
+          "This image shows an exterior view of a building with multiple windows and a brick wall, providing context of the property's surroundings. No specific geyser components or faults are visible in this general outdoor shot."
+        ],
+        "clarification_questions": [],
+        "contractor_checklist": [
+          "Isolate the electrical supply and water inlet to the geyser.",
+          "Inspect the geyser for external signs of corrosion and confirm the source of the leak.",
+          "Drain the existing geyser and safely remove it from the installation.",
+          "Install a new geyser unit, ensuring all plumbing and electrical connections are compliant with current regulations."
+        ],
+        "homeowner_prep": "Switch off the geyser's circuit breaker at your distribution board and close the main water supply valve to the geyser if you can locate it.",
+        "diy_verification": "Observe the colour of the hot water from your taps; if it also appears rusty or discoloured, it further confirms internal tank corrosion.",
+        "photo_request": "",
+        "confidence_drivers": [
+          "User explicitly stated rusty water, higher bills, and reduced hot water.",
+          "Image 1 shows rusty brown water in the drip tray.",
+          "Visible leak from pipe connection in Image 1.",
+          "Corroded pipework visible in Image 2."
+        ],
+        "trade": "Plumbing",
+        "trade_detail": "Geyser Fault",
+        "confidence": 95,
+        "rejected": false,
+        "requires_clarification": false,
+        "unserviced": false,
+        "refetch_providers": false,
+        "unsupported_reason": "",
+        "subcategory_id": "geyser_fault_plumbing",
+        "failed_component": "Geyser tank or pipe connection",
+        "cascading_damage": "Water damage to surrounding area, increased electricity consumption",
+        "trade_candidates": [
+          {
+            "trade": "Plumbing",
+            "score": 95
+          },
+          {
+            "trade": "Electrical",
+            "score": 70
+          },
+          {
+            "trade": "General Handyman",
+            "score": 30
+          }
+        ],
+        "prompt_version": "v7.4",
+        "ai_model": "gemini-2.5-flash",
+        "pipeline": "v2-classify-prose",
+        "structural_confidence": {
+          "score": 100,
+          "signals": {
+            "hasImage": true,
+            "imageCount": 3,
+            "descriptionWordCount": 27,
+            "subcategoryMatched": true,
+            "failedComponentNamed": true,
+            "isCatchAllWithNoVisual": false,
+            "isRejectedOrUnserviced": false
+          }
+        }
+      },
+      "critique": null
+    },
+    {
+      "cell": {
+        "tag": "B",
+        "label": "2.5 model + v3.5 prompts",
+        "model": "gemini-2.5-flash",
+        "promptVariant": "v3.5"
+      },
+      "round": 1,
+      "testId": "geyser-minimal",
+      "conversationId": "e4444c26-fa01-4d81-9a83-98f814924d70",
+      "status": "ok",
+      "elapsedMs": 123764,
+      "parsed": {
+        "thought": "The image clearly shows a geyser drip tray filled with brown, murky water, indicating a leak. Visible drips are present on a brass fitting connecting a copper pipe to a black plastic component. This suggests a leak from a connection point rather than a catastrophic tank failure. The discoloured water also points towards internal corrosion within the geyser system.",
+        "thinking": "The image clearly shows a geyser drip tray filled with brown, murky water, indicating a leak. Visible drips are present on a brass fitting connecting a copper pipe to a black plastic component. This suggests a leak from a connection point rather than a catastrophic tank failure. The discoloured water also points towards internal corrosion within the geyser system.",
+        "thoughts_history": [
+          {
+            "round": 0,
+            "thought": "The image clearly shows a geyser drip tray filled with brown, murky water, indicating a leak. Visible drips are present on a brass fitting connecting a copper pipe to a black plastic component. This suggests a leak from a connection point rather than a catastrophic tank failure. The discoloured water also points towards internal corrosion within the geyser system.",
+            "created_at": "2026-05-28T08:17:50.070Z"
+          }
+        ],
+        "diagnosis": "Corroded Geyser Tank",
+        "estimated_diagnosis_sentence": "Corroded Geyser Tank",
+        "message": "Your geyser appears to have a corroded tank, which is causing it to leak. The brown, murky water visible in the drip tray is a strong indicator of rust and sediment from the inside of the tank.\n\nGeyser tanks typically corrode when the internal sacrificial anode, designed to protect the tank walls, has been fully consumed. Once the anode is gone, the tank's steel walls begin to rust, leading to leaks and discoloured water.\n\nIf left unattended, the corrosion will worsen, potentially leading to a more significant leak or a complete burst of the geyser tank. This can cause extensive water damage to your property.\n\nThere is a risk of electrical shorting if water comes into contact with the geyser's electrical components. It is important to address this issue promptly.",
+        "action_required": "",
+        "image_descriptions": [
+          "This image shows a close-up of a geyser's plumbing connections above a drip tray. Brown, murky water is visible in the drip tray, and there are active drips from a brass fitting connecting a copper pipe to a black plastic component."
+        ],
+        "image_thought_breakdown": [
+          "This image shows a close-up of a geyser's plumbing connections above a drip tray. Brown, murky water is visible in the drip tray, and there are active drips from a brass fitting connecting a copper pipe to a black plastic component."
+        ],
+        "clarification_questions": [],
+        "contractor_checklist": [
+          "Inspect the geyser for the exact source of the leak and assess the extent of internal corrosion.",
+          "Advise on whether a full geyser replacement is necessary, as anode replacement is often not viable once tank corrosion has begun.",
+          "Isolate the water and electrical supply to the geyser.",
+          "Remove the old geyser and install a new unit, ensuring all plumbing and electrical connections are secure and compliant."
+        ],
+        "homeowner_prep": "Switch off the geyser's circuit breaker at your main distribution board to prevent any electrical hazards.",
+        "diy_verification": "Observe the water in the drip tray over a few hours; if it continues to accumulate and remains brown, it confirms an active leak and internal corrosion.",
+        "photo_request": "",
+        "confidence_drivers": [
+          "Visible brown, murky water in drip tray",
+          "Visible drips from plumbing connection",
+          "User stated 'My geyser is leaking'"
+        ],
+        "trade": "Plumbing",
+        "trade_detail": "Geyser Fault",
+        "confidence": 95,
+        "rejected": false,
+        "requires_clarification": false,
+        "unserviced": false,
+        "refetch_providers": false,
+        "unsupported_reason": "",
+        "subcategory_id": "geyser_fault_plumbing",
+        "failed_component": "Geyser connection or pump seal",
+        "cascading_damage": "Water damage to surrounding area",
+        "trade_candidates": [
+          {
+            "trade": "Plumbing",
+            "score": 95
+          },
+          {
+            "trade": "General Handyman",
+            "score": 60
+          },
+          {
+            "trade": "Electrical",
+            "score": 40
+          }
+        ],
+        "prompt_version": "v7.4",
+        "ai_model": "gemini-2.5-flash",
+        "pipeline": "v2-classify-prose",
+        "structural_confidence": {
+          "score": 90,
+          "signals": {
+            "hasImage": true,
+            "imageCount": 1,
+            "descriptionWordCount": 4,
+            "subcategoryMatched": true,
+            "failedComponentNamed": true,
+            "isCatchAllWithNoVisual": false,
+            "isRejectedOrUnserviced": false
+          }
+        }
+      },
+      "critique": null
+    },
+    {
+      "cell": {
+        "tag": "B",
+        "label": "2.5 model + v3.5 prompts",
+        "model": "gemini-2.5-flash",
+        "promptVariant": "v3.5"
+      },
+      "round": 1,
+      "testId": "garage-with-cause",
+      "conversationId": "efd5eeb2-985a-4618-913b-4961aa60a53c",
+      "status": "error",
+      "error": "upload-image 500: {\"error\":\"fetch failed\"}",
+      "elapsedMs": 21487
+    },
+    {
+      "cell": {
+        "tag": "B",
+        "label": "2.5 model + v3.5 prompts",
+        "model": "gemini-2.5-flash",
+        "promptVariant": "v3.5"
+      },
+      "round": 1,
+      "testId": "garage-no-text",
+      "conversationId": "9bd2359a-dcac-4028-804c-db0a26b243dc",
+      "status": "error",
+      "error": "upload-image 500: {\"error\":\"fetch failed\"}",
+      "elapsedMs": 11419
+    }
+  ]
+}

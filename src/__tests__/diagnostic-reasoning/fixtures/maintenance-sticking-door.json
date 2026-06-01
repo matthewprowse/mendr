@@ -1,0 +1,45 @@
+{
+  "name": "maintenance-sticking-door",
+  "trade": "Carpentry & Woodwork",
+  "description": "My front door is sticking badly and won't close properly without slamming it.",
+  "mockAgentOutput": {
+    "hypotheses": [
+      {
+        "id": "h1",
+        "label": "Swollen frame from moisture",
+        "confidence_alone": 0.75,
+        "evidence_for": ["Sticking doors from moisture swelling is very common"],
+        "evidence_against": []
+      },
+      {
+        "id": "h2",
+        "label": "Worn or loose hinge",
+        "confidence_alone": 0.65,
+        "evidence_for": ["Loose hinge causes door to drop and catch the frame"],
+        "evidence_against": ["Would usually be worse at the catch side not the hinge side"]
+      },
+      {
+        "id": "h3",
+        "label": "Paint or varnish buildup",
+        "confidence_alone": 0.5,
+        "evidence_for": ["Older doors accumulate paint layers that reduce clearance"],
+        "evidence_against": ["Usually causes a consistent rather than seasonal sticking"]
+      }
+    ],
+    "what_we_dont_know": "We cannot tell whether the sticking is seasonal — worse in summer or after rain — or constant all year round.",
+    "why_it_matters": "Seasonal sticking strongly suggests moisture swelling; constant sticking through all seasons suggests paint buildup or a hinge issue.",
+    "chips": [
+      { "id": "c1", "text": "It's been worse since the rainy season.", "supports": "h1", "rules_out": ["h2", "h3"] },
+      { "id": "c2", "text": "It sticks the same all year.", "supports": "h3", "rules_out": ["h1"] },
+      { "id": "c3", "text": "The door visibly sags on the hinge side.", "supports": "h2", "rules_out": ["h1", "h3"] },
+      { "id": "c4", "text": "Something else is happening.", "supports": "", "rules_out": [] }
+    ],
+    "round": 1,
+    "next_step_if_unresolved": "commit_low_confidence"
+  },
+  "expected": {
+    "must_consider_hypotheses": ["moisture", "hinge", "swollen", "paint buildup"],
+    "must_not_consider": ["electrical", "plumbing", "roof"],
+    "must_ask_about": "whether sticking is seasonal or constant"
+  }
+}

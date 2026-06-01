@@ -16,8 +16,7 @@ import {
     SheetDescription,
 } from '@/components/ui/sheet';
 import { toast } from 'sonner';
-import { ArrowLeft } from 'lucide-react';
-import { Camera, CircleNotch } from '@phosphor-icons/react';
+import { ArrowLeft, Camera, Loader } from 'lucide-react';
 import { compressImage } from '@/lib/image-compression';
 import { UnrelatedImageCard } from './unrelated-image-card';
 import { UnservicedCategoryCard } from './unserviced-category-card';
@@ -795,7 +794,7 @@ export function ReportDetailContent({ reportId, serverResult }: ReportDetailCont
                 {!isRejected && !isUnserviced && photoRequest ? (
                     <div className="no-print flex flex-col gap-3 rounded-lg border border-primary/30 bg-primary/5 px-4 py-3">
                         <div className="flex items-start gap-2">
-                            <Camera size={16} weight="bold" className="mt-0.5 shrink-0 text-primary" />
+                            <Camera size={16} strokeWidth={2.5} className="mt-0.5 shrink-0 text-primary" />
                             <div className="flex flex-col gap-1">
                                 <p className="text-sm font-medium text-foreground">
                                     A photo would help me be more sure
@@ -1061,7 +1060,7 @@ export function ReportDetailContent({ reportId, serverResult }: ReportDetailCont
                                                 />
                                                 {p.uploading ? (
                                                     <div className="absolute inset-0 flex items-center justify-center bg-background/60">
-                                                        <CircleNotch className="size-4 animate-spin text-foreground" />
+                                                        <Loader className="size-4 animate-spin text-foreground" />
                                                     </div>
                                                 ) : null}
                                                 <button
@@ -1125,7 +1124,7 @@ export function ReportDetailContent({ reportId, serverResult }: ReportDetailCont
                                 >
                                     {isRefining ? (
                                         <>
-                                            <CircleNotch className="size-4 animate-spin shrink-0" aria-hidden />
+                                            <Loader className="size-4 animate-spin shrink-0" aria-hidden />
                                             Refining…
                                         </>
                                     ) : (

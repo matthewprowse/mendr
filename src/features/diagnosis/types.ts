@@ -8,6 +8,20 @@
  * `@/app/chat/components/types` re-exports this type for backward compat.
  */
 
+/**
+ * One clarification question + its pre-defined answer chips. The carousel UI
+ * renders one of these per card. Keep `options` tight (2–4) — the carousel
+ * card is a footer-sized surface and answer chips wrap awkwardly past four.
+ */
+export type ClarificationQuestion = {
+    /** Stable id for React keying. Falls back to array index when missing. */
+    id?: string;
+    /** Plain-English question. No trailing colon. */
+    question: string;
+    /** 2–4 answer options. */
+    options: string[];
+};
+
 export interface DiagnosisData {
     thinking: string;
     diagnosis: string;
@@ -31,8 +45,24 @@ export interface DiagnosisData {
      * 2–4 short clarifying statements (from the user's perspective) the AI
      * needs answered before producing a confident diagnosis.
      * Only present when requires_clarification is true.
+     *
+     * Legacy shape: ONE question (rendered as the prompt above the chips) with
+     * up to 3 candidate answer strings. The frontend wraps this into a single
+     * ClarificationCarousel card when the new `clarification_question_set`
+     * field below is absent.
      */
     clarification_questions?: string[];
+    /**
+     * New (additive) clarification shape: an ordered list of independent
+     * questions, each with its own pre-defined answer chips. Surfaced by the
+     * frontend as a swipeable carousel where the user picks one answer per
+     * card and submits the batch at the end.
+     *
+     * Backwards-compatible: legacy diagnosis rows have only the flat
+     * `clarification_questions` array above. The UI bridges by wrapping it as
+     * `[{ question: "<derived prompt>", options: clarification_questions }]`.
+     */
+    clarification_question_set?: ClarificationQuestion[];
     /** 2–4 full sentences describing what the contractor will do on-site. */
     contractor_checklist?: string[];
     /** One sentence: the most practical thing the homeowner can do before the contractor arrives. */

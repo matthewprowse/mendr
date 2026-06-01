@@ -56,7 +56,7 @@ export const META_HOME: Metadata = {
 };
 
 export const META_START: Metadata = {
-    title: 'Start a diagnosis',
+    title: { absolute: 'New Diagnosis' },
     description:
         'Upload a photo of your home maintenance problem and get a free written diagnosis. No account required.',
 };
@@ -128,13 +128,13 @@ export function buildContractorMeta(contractorName: string | null): Metadata {
 // ── Auth pages ────────────────────────────────────────────────────────────────
 
 export const META_SIGN_IN: Metadata = {
-    title: 'Sign in',
-    description: 'Sign in to your Mendr account.',
+    title: 'Log In',
+    description: 'Log in to your Mendr account.',
     robots: { index: false, follow: false },
 };
 
 export const META_REGISTER: Metadata = {
-    title: 'Create account',
+    title: 'Create Account',
     description: 'Create your free Mendr account.',
     robots: { index: false, follow: false },
 };

@@ -4,6 +4,7 @@ import { createContext, useContext, useEffect, useState } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/lib/auth/supabase';
 import { logScandioEvent } from '@/lib/audit-log';
+import { Spinner } from '@/components/ui/spinner';
 
 interface AuthContextType {
     user: User | null;
@@ -87,8 +88,8 @@ export function AuthProvider({
     return (
         <AuthContext.Provider value={{ user, session, isLoading, signOut }}>
             {isLoading ? (
-                <div className="flex items-center justify-center min-h-[50vh]">
-                    Loading…
+                <div className="flex min-h-screen w-full items-center justify-center bg-background">
+                    <Spinner className="size-8 text-muted-foreground" />
                 </div>
             ) : (
                 children

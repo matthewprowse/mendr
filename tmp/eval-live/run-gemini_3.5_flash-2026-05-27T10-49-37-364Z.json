@@ -1,0 +1,15 @@
+{
+  "ts": "2026-05-27T10-49-37-364Z",
+  "model": "gemini-3.5-flash",
+  "results": [
+    {
+      "id": "geyser-full-cues",
+      "description": "Geyser corroded tank — text describes rusty water + electricity + temperature loss",
+      "conversationId": "1129e235-2d51-4f28-870f-73bcb246068e",
+      "model": "gemini-3.5-flash",
+      "status": "error",
+      "error": "upload-image failed (404): Server action not found.",
+      "elapsed_ms": 2943
+    }
+  ]
+}

@@ -18,7 +18,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { ArrowsClockwise, X } from '@phosphor-icons/react';
+import { RefreshCw, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
@@ -103,7 +103,7 @@ export function FilterSheet({
                     onClick={() => onOpenChange(false)}
                     aria-label="Close filters"
                 >
-                    <X size={18} weight="bold" />
+                    <X size={18} strokeWidth={2.5} />
                 </Button>
                 <h2 className="text-base font-semibold">
                     Filters{draftActive > 0 ? ` · ${draftActive}` : ''}
@@ -116,7 +116,7 @@ export function FilterSheet({
                     onClick={() => setDraft(DEFAULT_FILTER_STATE)}
                     disabled={draftActive === 0}
                 >
-                    <ArrowsClockwise size={14} weight="bold" />
+                    <RefreshCw size={14} strokeWidth={2.5} />
                     Reset
                 </Button>
             </header>

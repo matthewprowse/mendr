@@ -1,0 +1,111 @@
+{
+    "name": "p0-bathroom-drain-blocked",
+    "trade": "Plumbing",
+    "description": "The shower drain in our main bathroom is blocked. Water stands ankle-deep when we run the shower and takes over an hour to drain by itself. Plunged it \u2014 no effect. Photo attached showing the standing water around the drain grate.",
+    "image_present": true,
+    "image_quality": "clear",
+    "mockAgentOutput": {
+        "hypotheses": [
+            {
+                "id": "h1",
+                "label": "Drain blocked by hair/soap/scum accumulation",
+                "confidence_alone": 0.88,
+                "evidence_for": [
+                    "Standing water + slow drain in a shower is the dominant blockage cause",
+                    "Plunger ineffective is consistent with a soft hair-scum mass below the grate",
+                    "Photo confirms a single fixture is affected (other drains not mentioned)"
+                ],
+                "evidence_against": []
+            },
+            {
+                "id": "h2",
+                "label": "P-trap obstruction further down the line",
+                "confidence_alone": 0.55,
+                "evidence_for": [
+                    "P-trap blockages produce similar symptoms when the trap fills with solids"
+                ],
+                "evidence_against": [
+                    "Plunger usually clears a soft P-trap blockage; persistence after plunge points closer to the grate"
+                ]
+            },
+            {
+                "id": "h3",
+                "label": "Main waste line blockage affecting this bathroom only",
+                "confidence_alone": 0.25,
+                "evidence_for": [
+                    "Possible if the bathroom drains into a partially blocked branch"
+                ],
+                "evidence_against": [
+                    "No other fixtures reported as draining slowly"
+                ]
+            }
+        ],
+        "what_we_dont_know": "Whether the blockage is at the grate or deeper in the waste pipe \u2014 affects whether the contractor can clear it manually or needs a drain machine.",
+        "why_it_matters": "Surface-level hair clogs are a quick visit; deeper P-trap or branch blockages may need machine cleaning.",
+        "chips": [
+            {
+                "id": "c1",
+                "text": "Removed the grate and can see hair/scum just below.",
+                "supports": "h1",
+                "rules_out": [
+                    "h2",
+                    "h3"
+                ]
+            },
+            {
+                "id": "c2",
+                "text": "Other drains in the house are also slow.",
+                "supports": "h3",
+                "rules_out": [
+                    "h1"
+                ]
+            },
+            {
+                "id": "c3",
+                "text": "Bad smell or gurgling from the drain.",
+                "supports": "h2",
+                "rules_out": []
+            },
+            {
+                "id": "c4",
+                "text": "Something else is happening.",
+                "supports": "",
+                "rules_out": []
+            }
+        ],
+        "round": 1,
+        "next_step_if_unresolved": "commit_low_confidence"
+    },
+    "mockFacets": {
+        "trade_confidence": 95,
+        "component_confidence": 90,
+        "cause_confidence": 85,
+        "image_sufficiency": "sufficient",
+        "committed_observations": [
+            "standing water at shower drain",
+            "plunger ineffective"
+        ],
+        "explicit_unknowns": [
+            "depth of the blockage",
+            "whether the issue is the trap or further down the line"
+        ]
+    },
+    "expected": {
+        "recommended_action": "commit",
+        "must_consider_hypotheses": [
+            "hair/soap blockage",
+            "P-trap blockage",
+            "branch line blockage"
+        ],
+        "must_not_consider": [
+            "municipal sewer blockage",
+            "septic tank full"
+        ],
+        "must_ask_about": "whether removing the grate reveals visible debris",
+        "failure_baseline_today": {
+            "observed_behaviour": "System commits to 'Blocked drain' but with confidence ~78 and a generic clarification still attached, prompting an extra round before the user can see contractors.",
+            "why_it_fails": "Drain blockage from a single fixture with standing water in a clear photo should score >85 on every facet. The single-integer confidence is being pulled down by an over-cautious 'cause is uncertain' factor."
+        },
+        "phase_6_commit_rationale": "Top hypothesis confidence_alone=0.88 (>=0.75), gap to second=0.33 (>=0.25), evidence_for has 3 entries, evidence_against empty. Photo + symptom uniquely implicate a localised blockage."
+    }
+}

@@ -1,7 +1,7 @@
 "use client";
 
 import type { RefObject } from "react";
-import { X } from "@phosphor-icons/react";
+import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -111,7 +111,7 @@ export function ScanFlowShell({
                                         className="size-10"
                                         onClick={onClose}
                                     >
-                                        <X size={20} weight="bold" className="text-foreground" />
+                                        <X size={20} strokeWidth={2.5} className="text-foreground" />
                                     </Button>
                                 ) : (
                                     <div className="h-10 w-10" aria-hidden />
@@ -130,7 +130,7 @@ export function ScanFlowShell({
                                     className="size-10"
                                     onClick={onClose}
                                 >
-                                    <X size={20} weight="bold" className="text-foreground" />
+                                    <X size={20} strokeWidth={2.5} className="text-foreground" />
                                 </Button>
                             ) : (
                                 <div className="h-10 w-10" aria-hidden />

@@ -4,11 +4,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { checkRateLimit } from '@/lib/rate-limit-config';
 
 import convert from 'heic-convert';
-import sharp from 'sharp';
-import {
-    readHeicOrientation,
-    orientationToSharpRotate,
-} from './heic-orientation';
 
 export const runtime = 'nodejs';
 export const maxDuration = 30;
@@ -35,40 +30,36 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
         const input = Buffer.from(await file.arrayBuffer());
 
-        // EXIF orientation (2026-05-23 fix): `heic-convert` decodes raw HEIC
-        // pixels and produces a JPEG with NO EXIF. iPhone HEICs are stored
-        // with sensor-orientation pixels plus an Orientation tag (typically
-        // 6 = "rotate 90° CW to display"). Without this fix, Gemini sees the
-        // photo sideways. We read the orientation via libvips' HEIF parser
-        // (sharp can read HEIC METADATA on every platform — it just can't
-        // decode HEIC pixels without libheif), then apply the rotation to
-        // the JPEG buffer via sharp after heic-convert produces it.
-        const orientation = await readHeicOrientation(input);
-
+        // `heic-convert` decodes via libheif, which already applies the HEIF
+        // rotation transform (`irot`) — so the decoded JPEG pixels are upright.
+        // We must NOT re-apply the EXIF Orientation tag here: iPhone HEICs carry
+        // both the irot transform AND a stale Orientation tag (typically
+        // 6 = "rotate 90° CW"), and rotating again left every portrait photo
+        // 90° over-rotated. The output JPEG carries no EXIF, so downstream
+        // client compression won't rotate it either.
         const decoded = await convert({
             buffer: input,
             format: 'JPEG',
             quality: 0.9,
         } as any);
-        const decodedBuffer = Buffer.isBuffer(decoded) ? decoded : Buffer.from(decoded as Uint8Array);
-
-        const { rotateDegrees, flipHorizontal, flipVertical } =
-            orientationToSharpRotate(orientation);
-
-        let outBuffer: Buffer;
-        if (rotateDegrees === 0 && !flipHorizontal && !flipVertical) {
-            outBuffer = decodedBuffer;
-        } else {
-            let pipeline = sharp(decodedBuffer);
-            if (flipHorizontal) pipeline = pipeline.flop();
-            if (flipVertical) pipeline = pipeline.flip();
-            if (rotateDegrees !== 0) pipeline = pipeline.rotate(rotateDegrees);
-            outBuffer = await pipeline.jpeg({ quality: 90 }).toBuffer();
-        }
+        const outBuffer = Buffer.isBuffer(decoded) ? decoded : Buffer.from(decoded as Uint8Array);
 
         const base64 = outBuffer.toString('base64');
         return NextResponse.json({ dataUrl: `data:image/jpeg;base64,${base64}` });
-    } catch {
-        return NextResponse.json({ error: 'Could not convert HEIC image.' }, { status: 500 });
+    } catch (err) {
+        // Log the real reason so dev can diagnose. Production still surfaces
+        // the generic message to the client.
+        const msg = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
+        console.error('[convert-heic] failed:', msg);
+        if (err instanceof Error && err.stack) {
+            console.error(err.stack);
+        }
+        return NextResponse.json(
+            {
+                error: 'Could not convert HEIC image.',
+                ...(process.env.NODE_ENV !== 'production' ? { detail: msg } : {}),
+            },
+            { status: 500 }
+        );
     }
 }

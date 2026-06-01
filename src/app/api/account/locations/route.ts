@@ -117,42 +117,106 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ location: newEntry });
 }
 
+export async function PATCH(req: NextRequest): Promise<NextResponse> {
+    try {
+        const limited = await checkRateLimit(req, 'accountLocations');
+        if (limited) return limited;
+
+        const user = await getUser();
+        if (!user) return NextResponse.json({ error: 'Unauthorized.' }, { status: 401 });
+
+        type PatchBody = { id?: unknown; label?: unknown; address?: unknown; lat?: unknown; lng?: unknown };
+        const body = (await req.json().catch(() => null)) as PatchBody | null;
+
+        const id      = typeof body?.id      === 'string' ? body.id.trim()      : '';
+        const label   = typeof body?.label   === 'string' ? body.label.trim()   : '';
+        const address = typeof body?.address === 'string' ? body.address.trim() : '';
+        const lat     = typeof body?.lat     === 'number' ? body.lat             : null;
+        const lng     = typeof body?.lng     === 'number' ? body.lng             : null;
+
+        if (!id)      return NextResponse.json({ error: 'id is required.'      }, { status: 400 });
+        if (!label)   return NextResponse.json({ error: 'label is required.'   }, { status: 400 });
+        if (!address) return NextResponse.json({ error: 'address is required.' }, { status: 400 });
+
+        const admin = await createSupabaseAdminClient();
+        const { data: profile, error: fetchError } = await admin
+            .from('profiles')
+            .select('locations')
+            .eq('id', user.id)
+            .maybeSingle();
+
+        if (fetchError) {
+            console.error('[locations PATCH] fetch error:', fetchError);
+            return NextResponse.json({ error: 'Failed to fetch profile.' }, { status: 500 });
+        }
+
+        const current: SavedLocation[] = Array.isArray(profile?.locations) ? profile.locations : [];
+        if (!current.find((l) => l.id === id)) {
+            return NextResponse.json({ error: 'Location not found.' }, { status: 404 });
+        }
+
+        const updated = current.map((l) =>
+            l.id === id ? { id, label, address, lat, lng } : l
+        );
+
+        const { error: updateError } = await admin
+            .from('profiles')
+            .update({ locations: updated })
+            .eq('id', user.id);
+
+        if (updateError) {
+            console.error('[locations PATCH] update error:', updateError);
+            return NextResponse.json({ error: 'Failed to update location.' }, { status: 500 });
+        }
+
+        return NextResponse.json({ location: { id, label, address, lat, lng } });
+    } catch (err) {
+        console.error('[locations PATCH] unhandled error:', err);
+        return NextResponse.json({ error: 'Unexpected error.' }, { status: 500 });
+    }
+}
+
 export async function DELETE(req: NextRequest): Promise<NextResponse> {
-    const limited = await checkRateLimit(req, 'accountLocations');
-    if (limited) return limited;
+    try {
+        const limited = await checkRateLimit(req, 'accountLocations');
+        if (limited) return limited;
 
-    const user = await getUser();
-    if (!user) return NextResponse.json({ error: 'Unauthorized.' }, { status: 401 });
+        const user = await getUser();
+        if (!user) return NextResponse.json({ error: 'Unauthorized.' }, { status: 401 });
 
-    const id = req.nextUrl.searchParams.get('id');
-    if (!id) {
-        return NextResponse.json({ error: 'id query parameter is required.' }, { status: 400 });
+        const id = req.nextUrl.searchParams.get('id');
+        if (!id) {
+            return NextResponse.json({ error: 'id query parameter is required.' }, { status: 400 });
+        }
+
+        const admin = await createSupabaseAdminClient();
+        const { data: profile, error: fetchError } = await admin
+            .from('profiles')
+            .select('locations')
+            .eq('id', user.id)
+            .maybeSingle();
+
+        if (fetchError) {
+            console.error('[locations DELETE] fetch error:', fetchError);
+            return NextResponse.json({ error: 'Failed to fetch profile.' }, { status: 500 });
+        }
+
+        const current: SavedLocation[] = Array.isArray(profile?.locations) ? profile.locations : [];
+        const updated = current.filter((loc) => loc.id !== id);
+
+        const { error: updateError } = await admin
+            .from('profiles')
+            .update({ locations: updated })
+            .eq('id', user.id);
+
+        if (updateError) {
+            console.error('[locations DELETE] update error:', updateError);
+            return NextResponse.json({ error: 'Failed to delete location.' }, { status: 500 });
+        }
+
+        return NextResponse.json({ ok: true });
+    } catch (err) {
+        console.error('[locations DELETE] unhandled error:', err);
+        return NextResponse.json({ error: 'Unexpected error.' }, { status: 500 });
     }
-
-    const admin = await createSupabaseAdminClient();
-    const { data: profile, error: fetchError } = await admin
-        .from('profiles')
-        .select('locations')
-        .eq('id', user.id)
-        .maybeSingle();
-
-    if (fetchError) {
-        console.error('[locations DELETE] fetch error:', fetchError);
-        return NextResponse.json({ error: 'Failed to fetch profile.' }, { status: 500 });
-    }
-
-    const current: SavedLocation[] = Array.isArray(profile?.locations) ? profile.locations : [];
-    const updated = current.filter((loc) => loc.id !== id);
-
-    const { error: updateError } = await admin
-        .from('profiles')
-        .update({ locations: updated })
-        .eq('id', user.id);
-
-    if (updateError) {
-        console.error('[locations DELETE] update error:', updateError);
-        return NextResponse.json({ error: 'Failed to delete location.' }, { status: 500 });
-    }
-
-    return NextResponse.json({ ok: true });
 }

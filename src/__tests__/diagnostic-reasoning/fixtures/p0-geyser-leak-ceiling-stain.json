@@ -1,0 +1,107 @@
+{
+    "name": "p0-geyser-leak-ceiling-stain",
+    "trade": "Plumbing",
+    "description": "There's a brown water stain on the ceiling directly below where the geyser sits in the roof space. The stain has been growing over the past two days. I cannot safely get up into the roof to inspect the geyser. Photo attached showing the stain spreading on the ceiling.",
+    "image_present": true,
+    "image_quality": "clear",
+    "hazard": true,
+    "mockAgentOutput": {
+        "hypotheses": [
+            {
+                "id": "h1",
+                "label": "Geyser tank or pressure-relief valve leaking (hot water)",
+                "confidence_alone": 0.7,
+                "evidence_for": [
+                    "Brown growing stain directly below geyser location is the classic signature of a slow hot-side leak",
+                    "Two-day progression matches developing tank corrosion or a stuck-open PRV"
+                ],
+                "evidence_against": [
+                    "Cannot confirm without seeing the geyser itself"
+                ]
+            },
+            {
+                "id": "h2",
+                "label": "Cold-side inlet leak above the geyser (flexi or isolating valve)",
+                "confidence_alone": 0.5,
+                "evidence_for": [
+                    "Cold inlet failures are common and produce an identical ceiling stain",
+                    "Often presents through an overflowing drip tray"
+                ],
+                "evidence_against": [
+                    "Cannot determine which fitting is leaking without roof access"
+                ]
+            }
+        ],
+        "what_we_dont_know": "Whether the source is the hot-water side (geyser tank or PRV) or the cold-water inlet plumbing above it. The user cannot safely enter the roof to inspect.",
+        "why_it_matters": "Both faults require an urgent plumber visit, but the contractor's first action and parts list differ \u2014 hot-side faults usually mean a geyser replacement; cold-side leaks are often a single fitting.",
+        "chips": [
+            {
+                "id": "c1",
+                "text": "I touched the wet ceiling and the water feels warm.",
+                "supports": "h1",
+                "rules_out": [
+                    "h2"
+                ]
+            },
+            {
+                "id": "c2",
+                "text": "I touched the wet ceiling and the water feels cold.",
+                "supports": "h2",
+                "rules_out": [
+                    "h1"
+                ]
+            },
+            {
+                "id": "c3",
+                "text": "I switched the geyser off at the DB and the stain stopped growing within hours.",
+                "supports": "h1",
+                "rules_out": [
+                    "h2"
+                ]
+            },
+            {
+                "id": "c4",
+                "text": "Something else is happening.",
+                "supports": "",
+                "rules_out": []
+            }
+        ],
+        "round": 1,
+        "next_step_if_unresolved": "commit_low_confidence"
+    },
+    "mockFacets": {
+        "trade_confidence": 95,
+        "component_confidence": 75,
+        "cause_confidence": 55,
+        "image_sufficiency": "partial",
+        "committed_observations": [
+            "brown water stain on ceiling below geyser",
+            "stain growing over two days"
+        ],
+        "explicit_unknowns": [
+            "exact leak source (tank, drip tray, or pressure-relief valve)",
+            "whether the cylinder is over-pressurised"
+        ]
+    },
+    "expected": {
+        "recommended_action": "commit_low_confidence",
+        "hazard_escalation": true,
+        "must_consider_hypotheses": [
+            "geyser tank leak",
+            "PRV leak",
+            "cold-inlet failure"
+        ],
+        "must_not_consider": [
+            "roof tile leak",
+            "rising damp"
+        ],
+        "must_ask_about": null,
+        "failure_baseline_today": {
+            "observed_behaviour": "System loops in clarification asking for a clearer photo of the geyser \u2014 which the user has explicitly said they cannot safely produce. No urgency framing in the response.",
+            "why_it_fails": "The system can't recognise 'further clarification would yield no actionable signal' and falls back to 'ask for a clearer photo'. There is no rubric for hazard escalation: when a leak is actively growing, the right move is to commit at low confidence with urgency, not to keep asking."
+        },
+        "phase_6_commit_low_confidence_rationale": "Top hypothesis confidence_alone=0.7 (<0.75) and gap to second=0.2 (<0.25). Even though the touch-test chips discriminate, the broader hazard signal (active growing leak, user unable to investigate safely) promotes the recommendation to commit_low_confidence with urgency rather than ask another round. Phase 6 must include a hazard-override rule alongside the pure-logic completion criteria, OR Phase 7 prose conditioning must escalate urgency on commit_low_confidence outputs for active-damage cases.",
+        "phase6_action": "ask",
+        "phase6_action_note": "Phase 6 produces ask because chips discriminate. Phase 7 prose conditioning overlays hazard escalation and switches the surfaced action to commit_low_confidence with urgency framing."
+    }
+}

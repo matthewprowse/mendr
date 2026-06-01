@@ -115,6 +115,19 @@ async function handler(req: NextRequest): Promise<NextResponse> {
             homeownerEmail = authUser.user.email;
         }
 
+        // Check notification preference (opt-out).
+        if (row.user_id) {
+            const { data: pref } = await admin
+                .from('notification_preferences')
+                .select('followup_enabled')
+                .eq('user_id', row.user_id as string)
+                .maybeSingle();
+            if (pref?.followup_enabled === false) {
+                skipped++;
+                continue;
+            }
+        }
+
         // Check suppression list.
         const { data: suppression } = await admin
             .from('email_suppressions')

@@ -24,7 +24,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { ArrowLeft, Heart, ImageSquare, Star, User } from '@phosphor-icons/react';
+import { ArrowLeft, Heart, Image, Star, User } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ContactPopover } from '@/components/contact-popover';
@@ -290,7 +290,7 @@ function ContractorClient({
                         onClick={handleBack}
                         aria-label="Go back"
                     >
-                        <ArrowLeft size={18} weight="bold" aria-hidden />
+                        <ArrowLeft size={18} strokeWidth={2.5} aria-hidden />
                     </Button>
                 }
                 rightSlot={
@@ -502,7 +502,7 @@ function ContractorClient({
                     >
                         <Heart
                             size={18}
-                            weight={saved ? 'fill' : 'regular'}
+                            fill={saved ? 'currentColor' : 'none'}
                             className={saved ? 'text-rose-500' : undefined}
                             aria-hidden
                         />
@@ -560,7 +560,7 @@ function BannerCarousel({
         return (
             <div className="flex h-48 w-full items-center justify-center rounded-3xl bg-gradient-to-br from-muted to-secondary text-muted-foreground sm:h-56 lg:h-72">
                 <div className="flex flex-col items-center gap-1">
-                    <ImageSquare size={28} weight="duotone" aria-hidden />
+                    <Image size={28} aria-hidden />
                     <p className="text-[11px] font-medium uppercase tracking-wide">No photos yet</p>
                     <p className="sr-only">{providerName}</p>
                 </div>
@@ -645,7 +645,7 @@ function AboutCard({
                     ) : null}
                     {customerSays ? (
                         <p className={`flex items-start gap-2 rounded-2xl bg-black/[0.03] px-3 py-2 text-sm italic text-muted-foreground ${hasContent ? 'mt-3' : ''}`}>
-                            <Star size={14} weight="fill" className="mt-0.5 text-yellow-500 shrink-0" aria-hidden />
+                            <Star size={14} fill="currentColor" className="mt-0.5 text-yellow-500 shrink-0" aria-hidden />
                             <span>{customerSays}</span>
                         </p>
                     ) : null}

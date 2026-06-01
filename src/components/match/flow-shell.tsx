@@ -1,9 +1,8 @@
 'use client';
 
 import type { ReactNode } from 'react';
-import { ArrowLeft } from '@phosphor-icons/react/dist/ssr/ArrowLeft';
+import { ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { INK } from '@/lib/design-tokens';
 import { cn } from '@/lib/utils';
 
 /**
@@ -47,7 +46,7 @@ export function FlowTopBar({
                                 onClick={onBack}
                                 aria-label="Go back"
                             >
-                                <ArrowLeft weight="bold" />
+                                <ArrowLeft strokeWidth={2.5} />
                             </Button>
                         ) : null
                     )}
@@ -89,8 +88,7 @@ export function FlowFooter({
 }
 
 /**
- * Centred title + subtitle used at the top of every step card. INK colour ensures
- * consistent visual weight against the warm-white background.
+ * Centred title + subtitle used at the top of every step card.
  */
 export function StepHeading({
     title,
@@ -108,7 +106,7 @@ export function StepHeading({
                 align === 'center' ? 'text-center items-center' : 'text-left'
             )}
         >
-            <h1 className="text-2xl font-semibold" style={{ color: INK }}>
+            <h1 className="text-2xl font-semibold text-foreground">
                 {title}
             </h1>
             {sub ? <p className="text-sm text-muted-foreground">{sub}</p> : null}

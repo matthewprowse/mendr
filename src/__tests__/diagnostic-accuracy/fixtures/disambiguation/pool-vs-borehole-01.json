@@ -1,0 +1,20 @@
+{
+    "id": "pool-vs-borehole-01",
+    "case_summary": "User says 'pool pump making noise' but the described unit is the borehole pump that feeds the JoJo tank, not the pool circulation pump.",
+    "verified": false,
+    "ground_truth": {
+        "trade": "Plumbing",
+        "subcategory_id": "water_pressure_supply",
+        "confidence_floor": 60,
+        "notes": "Pool pump vs borehole pump confusion is common in SA properties that have both. Tests whether the system reasons from the system's actual function (feeds household water from underground / a JoJo tank) rather than blindly accepting the 'pool pump' label. Acceptable alternative: the system requests clarification rather than commit."
+    },
+    "inputs": {
+        "user_text": "Our pool pump is making a horrible grinding noise. It's the unit that pumps water from underground up to our JoJo tank so we have water in the house when the municipal supply is off. It's been running rough for a few days and now there's a metallic grinding sound coming from inside it. Pressure in the house has dropped.",
+        "user_history": []
+    },
+    "optional_assertions": {
+        "cost_band": "medium",
+        "urgency": "soon",
+        "requires_clarification_expected": false
+    }
+}

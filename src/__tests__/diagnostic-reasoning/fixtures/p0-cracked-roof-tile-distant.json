@@ -1,0 +1,111 @@
+{
+    "name": "p0-cracked-roof-tile-distant",
+    "trade": "Roofing",
+    "description": "There's a cracked roof tile on my house. The roof is two storeys up, so I took a photo from the ground but the tile is small in frame. I can see one tile that looks cracked across the middle. Concrete tile, looks like the rest.",
+    "image_present": true,
+    "image_quality": "distant",
+    "mockAgentOutput": {
+        "hypotheses": [
+            {
+                "id": "h1",
+                "label": "Single cracked tile \u2014 direct replacement",
+                "confidence_alone": 0.45,
+                "evidence_for": [
+                    "User describes one visible crack across a single concrete tile"
+                ],
+                "evidence_against": [
+                    "Photo distance makes it impossible to rule out adjacent damage or underlayment failure"
+                ]
+            },
+            {
+                "id": "h2",
+                "label": "Cracked tile with damaged underlayment from leak",
+                "confidence_alone": 0.4,
+                "evidence_for": [
+                    "Cracked tiles commonly let water reach the underlayment and rot it over time"
+                ],
+                "evidence_against": [
+                    "Photo doesn't show interior ceiling condition or visible water staining"
+                ]
+            },
+            {
+                "id": "h3",
+                "label": "Broader sun-weathering pattern across the roof slope",
+                "confidence_alone": 0.35,
+                "evidence_for": [
+                    "Cape Town western slopes commonly show clustered tile cracking from UV exposure"
+                ],
+                "evidence_against": [
+                    "Distant photo can't confirm whether more than one tile is affected"
+                ]
+            }
+        ],
+        "what_we_dont_know": "Whether the visible crack is an isolated tile or part of a wider weathering pattern, and whether the underlayment below it has been damaged.",
+        "why_it_matters": "A single tile is a quick swap; multiple tiles with damaged underlayment is a partial re-roof \u2014 very different quote.",
+        "chips": [
+            {
+                "id": "c1",
+                "text": "Send a closer photo (drone, long lens, or from the roof itself).",
+                "supports": "h1",
+                "rules_out": []
+            },
+            {
+                "id": "c2",
+                "text": "There is a damp patch on the ceiling under that tile.",
+                "supports": "h2",
+                "rules_out": [
+                    "h1"
+                ]
+            },
+            {
+                "id": "c3",
+                "text": "Other tiles nearby look similarly weathered or cracked.",
+                "supports": "h3",
+                "rules_out": [
+                    "h1"
+                ]
+            },
+            {
+                "id": "c4",
+                "text": "Something else is happening.",
+                "supports": "",
+                "rules_out": []
+            }
+        ],
+        "round": 1,
+        "next_step_if_unresolved": "ask_again"
+    },
+    "mockFacets": {
+        "trade_confidence": 95,
+        "component_confidence": 65,
+        "cause_confidence": 55,
+        "image_sufficiency": "partial",
+        "committed_observations": [
+            "visible cracked roof tile",
+            "photo taken from ground level two storeys below"
+        ],
+        "explicit_unknowns": [
+            "exact extent of the crack",
+            "whether adjacent tiles are also affected",
+            "whether ceiling shows water damage"
+        ]
+    },
+    "expected": {
+        "recommended_action": "ask",
+        "must_consider_hypotheses": [
+            "single tile crack",
+            "underlayment damage",
+            "weathering pattern"
+        ],
+        "must_not_consider": [
+            "structural roof timber failure",
+            "wind uplift damage"
+        ],
+        "must_ask_about": "a closer photo or a check of the ceiling below the affected tile",
+        "failure_baseline_today": {
+            "observed_behaviour": "System asks generic 'send a clearer photo' without naming what specifically would resolve the uncertainty (tile-level vs ceiling-level information).",
+            "why_it_fails": "Phase 4 image_sufficiency='partial' is the missing signal \u2014 the system has a photo but the resolution at the relevant area is too low. The current prompt has no instruction to articulate what dimension of the image is insufficient."
+        },
+        "phase_6_ask_rationale": "Top hypothesis confidence_alone=0.45 (<0.75), gap to second=0.05 (<0.25). A closer photo or a ceiling check would meaningfully partition the hypothesis space \u2014 so ask, not commit_low_confidence."
+    }
+}

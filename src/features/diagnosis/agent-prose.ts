@@ -159,7 +159,7 @@ const PROSE_SCHEMA = {
         thought: {
             type: SchemaType.STRING,
             description:
-                'A 4-6 sentence reasoning trace showing how you arrived at the diagnosis, 400-700 characters total. Structure: (1) what each image actually shows in plain language, (2) what specific component appears to have failed, (3) any cascading or secondary effects of that failure, (4) why this conclusion fits the visible evidence better than alternatives. This is the homeowner-facing "How I worked this out" section — they read it to assess whether to trust the diagnosis. No em dashes. No mention of contacting specialists or next steps. Start each sentence with a capital letter.',
+                'A 4-6 sentence reasoning trace showing how you arrived at the diagnosis, 400-700 characters total. Structure: (1) a synthesised summary of what the visible evidence shows across all photos combined (treat them as a single picture of the issue — do NOT enumerate per-image), (2) what specific component appears to have failed, (3) any cascading or secondary effects of that failure, (4) why this conclusion fits the visible evidence better than alternatives. This is the homeowner-facing "How I worked this out" section — they read it to assess whether to trust the diagnosis. STRICT RULE: NEVER reference photos by number or position (no "Image 1", "the second image", "the first photo", "image two", "in the third one"). The homeowner sees a thumbnail grid, not numbered slides. Describe what the camera shows, attribute observations to components or sides (e.g. "the left torsion spring", "the underside of the lid"), never to image indices. No em dashes. No mention of contacting specialists or next steps. Start each sentence with a capital letter.',
         },
         diagnosis: {
             type: SchemaType.STRING,
@@ -196,9 +196,9 @@ const PROSE_SCHEMA = {
             items: {
                 type: SchemaType.STRING,
                 description:
-                    'One entry per image: max 2 plain-language sentences of pure visual observation — name the specific components visible and their condition. Critically: note any component that is MISSING, detached, absent, or asymmetric (e.g. spring present on one side but not the other, bent rod, displaced bracket). Each entry must reference a feature distinguishable only in THAT specific image — never copy-paste between entries. Be specific, not generic. No causal chain beyond what is directly visible.',
+                    'One entry per image: max 2 plain-language sentences of pure visual observation — name the specific components visible and their condition. Critically: note any component that is MISSING, detached, absent, or asymmetric (e.g. spring present on one side but not the other, bent rod, displaced bracket). Each entry must reference a feature distinguishable only in THAT specific image — never copy-paste between entries. Be specific, not generic. No causal chain beyond what is directly visible. STRICT RULE: NEVER start an entry with "Image N shows...", "The first photo...", "In the second image...", or any reference to the image\'s number or position. Open by naming the component or scene directly (e.g. "The left torsion spring is missing from its bracket...", "A diagonal crack runs from the top corner of the lintel...", "Water staining covers the lower third of the ceiling panel..."). The homeowner is looking at this image when they read this — describe what they\'re seeing, not which slot it occupies.',
             },
-            description: 'Exactly one entry per image provided, in order. Count must match the number of images submitted. Each entry must call out a feature visible only in THAT image.',
+            description: 'Exactly one entry per image provided, in order. Count must match the number of images submitted. Each entry must call out a feature visible only in THAT image. No entry may reference its image by number or position — describe what is shown, not which image it is.',
         },
         image_observations: {
             type: SchemaType.ARRAY,
@@ -208,7 +208,7 @@ const PROSE_SCHEMA = {
                     primary_observation: {
                         type: SchemaType.STRING,
                         description:
-                            'The single most diagnostically significant thing visible in this image, in 5-20 words. Be specific — name the component, condition, and any visible damage or absence. Bad: "a garage door". Good: "left torsion spring is missing from its bracket; the right one is intact and seated correctly".',
+                            'The single most diagnostically significant thing visible in this image, in 5-20 words. Be specific — name the component, condition, and any visible damage or absence. Bad: "a garage door". Good: "left torsion spring is missing from its bracket; the right one is intact and seated correctly". STRICT RULE: do NOT begin with "Image N shows...", "the first/second/third photo...", or any reference to image number or position — open by naming the component or condition directly.',
                     },
                     components_visible: {
                         type: SchemaType.ARRAY,
@@ -454,6 +454,7 @@ VISUAL ANCHORING (Agent 2b — thought, image_descriptions, and teaching paragra
 - Ground every concrete diagnostic claim in what is actually visible: parts, gaps, height misalignment, stains, deformation, exposed conductors, fluid, corrosion, mounting, burn marks, etc. Say what the camera shows, then tie the fault to that evidence.
 - Do NOT pad with generic encyclopaedic filler: avoid "common point of failure", "often fails here", "typical weak spot", "many homeowners see this", or statistical generalities unless the user asked for prevalence.
 - Do NOT use progressive-damage wording ("before the fault spreads", "could spread", "might spread") unless the issue is genuinely progressive. Static mechanical faults do not "spread" like mould or water.
+- NEVER refer to images by number or position in any user-facing output field (\`thought\`, \`message\`, \`image_descriptions\`, \`image_observations.primary_observation\`). The homeowner sees thumbnails, not a numbered slideshow. Forbidden openings: "Image 1 shows", "The first photo", "In the second image", "image two", "the third one". Attribute observations to components or sides (e.g. "the left spring", "the underside of the geyser") or describe them directly (e.g. "A diagonal crack runs from..."). This is a surface-text rule only — your internal per-image enumeration in the protocol below is unaffected; just don't emit "Image N" in the actual output.
 
 MULTI-IMAGE SYNTHESIS PROTOCOL (apply when more than one image is provided):
 1. Treat the full image set as a SINGLE combined evidence base, not as separate scenes to summarise independently.
@@ -1528,6 +1529,7 @@ export async function runProseGeneration(params: {
             },
         ];
 
+        const geminiStartedAt = Date.now();
         const result = await model.generateContent({
             // Only set systemInstruction when NOT using cachedContent — the
             // cache already carries it, and overriding here defeats the cache.
@@ -1568,6 +1570,7 @@ export async function runProseGeneration(params: {
             modelName: effectiveModel,
             userId: params.ctx?.userId,
             conversationId: params.ctx?.conversationId,
+            latencyMs: Date.now() - geminiStartedAt,
         });
 
         try {

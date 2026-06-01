@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { Facebook, Instagram, Linkedin, Twitter } from 'lucide-react';
-import { CheckCircle, XCircle } from '@phosphor-icons/react';
+import { CheckCircle, XCircle } from 'lucide-react';
 import { LandingHeader } from '@/components/landing-header';
 import { Placeholder } from '@/components/placeholder';
 import { Badge } from '@/components/ui/badge';
@@ -310,12 +310,11 @@ export default function ProJoinPage() {
                                             <li key={feature.label} className="flex items-start gap-3">
                                                 {feature.included ? (
                                                     <CheckCircle
-                                                        weight="fill"
+                                                        fill="currentColor"
                                                         className={['mt-0.5 h-4 w-4 shrink-0', tier.highlighted ? 'text-background' : 'text-foreground'].join(' ')}
                                                     />
                                                 ) : (
                                                     <XCircle
-                                                        weight="regular"
                                                         className={['mt-0.5 h-4 w-4 shrink-0', tier.highlighted ? 'text-background/30' : 'text-muted-foreground/30'].join(' ')}
                                                     />
                                                 )}

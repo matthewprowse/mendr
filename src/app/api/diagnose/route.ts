@@ -290,7 +290,7 @@ export async function POST(req: NextRequest) {
 
         const full = await runDiagnosePipelineNonStreaming(pipelineCommon);
         logSuccess(false);
-        return new Response(full, {
+        return new Response(full.responseText, {
             headers: {
                 'Content-Type': 'text/plain; charset=utf-8',
                 ...DIAGNOSE_RESPONSE_META_HEADERS,

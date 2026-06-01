@@ -9,6 +9,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 // heic2any is loaded lazily on first HEIC conversion — keeps it out of the initial bundle.
 import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { getSupabase } from '@/lib/auth/supabase';
 import { Badge } from '@/components/ui/badge';
@@ -39,11 +40,66 @@ import {
 } from '@/features/diagnosis/processing-orchestrator';
 import { getPendingDiagnosisImages } from '@/lib/diagnosis/pending-diagnosis-images-cache';
 import { useAuth } from '@/context/auth-context';
-import { ShareNetwork, ArrowLeft } from '@phosphor-icons/react';
+import {
+    Share2,
+    ArrowLeft,
+} from 'lucide-react';
 import { trackEvent } from '@/lib/analytics';
-import { StepHeading } from '@/components/match/flow-shell';
+import { FlowTopBar, StepHeading } from '@/components/match/flow-shell';
+import { Spinner } from '@/components/ui/spinner';
+import { toast } from 'sonner';
+import { BRAND_NAME } from '@/lib/brand-system';
+import {
+    ClarificationDrawer,
+    type ClarificationAnswerMap,
+} from './clarification-drawer';
+import { PhotoViewer } from './photo-viewer';
+import type { ClarificationQuestion } from '@/features/diagnosis/types';
+import {
+    createSelectedPhotoId,
+    isHeicLike,
+    normalizeSelectedPhoto,
+    readFileAsDataUrl,
+    uploadPhotoToStorage,
+    type SelectedPhoto,
+} from '@/lib/diagnosis/photo-upload';
 
 const DIAGNOSIS_MAX_RETRIES = 3;
+
+/** Cap used by `truncateTitleTight`. Picked to comfortably fit the sticky
+ *  header's `max-w-[60%]` slot on a typical phone without leaving the CSS
+ *  `truncate` rule any work to do — which is what was producing the
+ *  "Name …" (space before ellipsis) artefact when the browser's truncation
+ *  boundary landed on a whitespace character. */
+const STICKY_TITLE_MAX_CHARS = 32;
+
+/** Pre-truncate a title before it reaches the DOM so the browser's
+ *  `text-overflow: ellipsis` never has the chance to land on a trailing
+ *  space and render "Name …" (with a visible gap). `trimEnd()` strips any
+ *  whitespace that would otherwise sit between the last word and the
+ *  ellipsis we append. */
+function truncateTitleTight(text: string, max: number = STICKY_TITLE_MAX_CHARS): string {
+    const t = (text ?? '').trim();
+    if (t.length <= max) return t;
+    return t.slice(0, max).trimEnd() + '…';
+}
+/** Title-case English number words for the clarification footer CTA. We spell
+ *  out 1-9 ("Answer Three Questions") and fall back to the digit beyond. */
+function capitalisedNumberWord(n: number): string {
+    const words = [
+        'Zero',
+        'One',
+        'Two',
+        'Three',
+        'Four',
+        'Five',
+        'Six',
+        'Seven',
+        'Eight',
+        'Nine',
+    ];
+    return n >= 0 && n < words.length ? words[n] : String(n);
+}
 /** Inline header region (~pt-5 + h-11 + pb-2) for sticky title swap. */
 const HEADER_HEIGHT_PX = 72;
 const MIN_DESCRIPTION_CHARS = 25;
@@ -60,7 +116,7 @@ function providerHydrateSessionKey(id: string): string {
 /** Single UX for unsupported trade and unrelated / non-maintenance photos (see `isServiceBlocked`). */
 const DIAGNOSIS_REJECT_HEADLINE = "We Can't Match This Job on Mendr Yet";
 const DIAGNOSIS_REJECT_DETAIL =
-    "Either this does not look like a home repair or maintenance issue we can assess from your photo, or it is not a service on Mendr's list yet. Add a clearer photo or a few words about the job below, then tap Re-Scan Report. If we still cannot match you, you will need to reach a specialist outside Mendr.";
+    "Either this does not look like a home repair or maintenance issue we can assess from your photo, or it is not a service on Mendr's list yet. Add a clearer photo or a few words about the job below, then tap Refresh Findings. If we still cannot match you, you will need to reach a specialist outside Mendr.";
 
 function isLikelyRenderableImageSource(value: string | null | undefined): boolean {
     const src = (value ?? '').trim();
@@ -137,15 +193,28 @@ export default function DiagnosisPageClient({
     const supabase = getSupabase();
 
     const [infoText, setInfoText] = useState('');
+    // Two overlays sit on top of /diagnosis: the "Add Details" sheet (free-
+    // text note + extra photos, used when the diagnosis is right but the user
+    // wants to share more context) and the "Need More Information" sheet
+    // (structured clarification questions only, shown when the AI can't
+    // confidently diagnose without more input). Only one is open at a time.
     const [showAddInfoScreen, setShowAddInfoScreen] = useState(false);
+    const [showAnswerQuestionsScreen, setShowAnswerQuestionsScreen] =
+        useState(false);
+    const [clarificationAnswers, setClarificationAnswers] =
+        useState<ClarificationAnswerMap>({});
     // Avoid showing placeholder "Estimated Diagnosis" once we reach the /diagnosis/[id] route.
     const [diagnosisTitle, setDiagnosisTitle] = useState('Diagnosing…');
     const [customerInfoItems, setCustomerInfoItems] = useState<string[]>([]);
     const [thoughtText, setThoughtText] = useState('');
+    // imageThoughtBreakdown is kept because the fullscreen image viewer reads
+    // from it (one entry per image, surfaced when the user taps a photo). The
+    // inline "Show thinking" toggle has been removed from the page body — the
+    // synthesised `thoughtText` is the only thing displayed under the images.
     const [imageThoughtBreakdown, setImageThoughtBreakdown] = useState<string[]>([]);
-    const [showDetailedThinking, setShowDetailedThinking] = useState(false);
     const [fullscreenImageIndex, setFullscreenImageIndex] = useState<number | null>(null);
-    const fullscreenTouchStartXRef = useRef<number | null>(null);
+    // (Removed: fullscreenTouchStartXRef — PhotoViewer now owns its own touch-
+    // swipe handlers internally.)
     const [diagnosisDetailText, setDiagnosisDetailText] = useState('');
     const [hazardText, setHazardText] = useState('');
     const [tradeLabel, setTradeLabel] = useState('');
@@ -174,7 +243,13 @@ export default function DiagnosisPageClient({
     const footerRef = useRef<HTMLDivElement | null>(null);
     const scrollContainerRef = useRef<HTMLDivElement | null>(null);
     const headerTitleAnchorRef = useRef<HTMLHeadingElement | null>(null);
+    const headerBadgeAnchorRef = useRef<HTMLDivElement | null>(null);
     const [useStickyHeaderName, setUseStickyHeaderName] = useState(false);
+    const [useStickyHeaderBadge, setUseStickyHeaderBadge] = useState(false);
+    // (The earlier full-screen Need More Information overlay had its own
+    // sticky-header scroll swap. The new ClarificationDrawer is a Sheet
+    // (mobile) / Dialog (desktop) with no scroll-watched header — refs and
+    // state for that pattern have been removed.)
 
     const savedCustomerCoordsRef = useRef<{ lat: number; lng: number } | null>(null);
     const providersForDiagnoseRef = useRef<Provider[]>([]);
@@ -182,10 +257,104 @@ export default function DiagnosisPageClient({
     const [clarificationSubmitLoading, setClarificationSubmitLoading] = useState(false);
     const [clarificationCustomText, setClarificationCustomText] = useState('');
 
+    // Refine-overlay photo upload state. Mirrors the /start uploader: each tile
+    // tracks its own status, and the hosted URL (after upload to Supabase
+    // storage) is held in `refinePhotoStorageUrls` keyed by photo id. We cap
+    // the total at 4 photos overall (existing diagnosis photos + new ones),
+    // matching the cap in the diagnose pipeline.
+    const REFINE_MAX_TOTAL_PHOTOS = 4;
+    const [refinePhotos, setRefinePhotos] = useState<SelectedPhoto[]>([]);
+    const [refinePhotoStorageUrls, setRefinePhotoStorageUrls] = useState<
+        Record<string, string>
+    >({});
+    const refineUploadInputRef = useRef<HTMLInputElement | null>(null);
 
     useEffect(() => {
         currentDiagnosisRef.current = currentDiagnosis;
     }, [currentDiagnosis]);
+
+    // ── Mock-mode harness (dev only) ──────────────────────────────────────
+    // Hit /diagnosis/<id>?mockState=clarify to bypass the real diagnose
+    // pipeline and render the clarification UI against a hard-coded
+    // multi-question fixture. Used to iterate on the carousel design without
+    // round-tripping Gemini. Production builds short-circuit this immediately.
+    const mockStateParam = searchParams.get('mockState') || '';
+    const isMockClarify =
+        process.env.NODE_ENV !== 'production' && mockStateParam === 'clarify';
+    const isMockClarifyRef = useRef(isMockClarify);
+    useEffect(() => {
+        isMockClarifyRef.current = isMockClarify;
+    }, [isMockClarify]);
+    useEffect(() => {
+        if (!isMockClarify) return;
+        // Seed the page as if the diagnosis pipeline returned a clarification
+        // result. Skips the network fetch and bootstrap. Two empty placeholders
+        // so DiagnosisPhotoTile renders bg-secondary cards (no external image
+        // dependency, easy to read the layout).
+        const placeholder = '';
+        const mockImages = ['', ''];
+        // Mock previews against REAL fixture data so the drawer is sized
+        // against the actual sentence-shaped chip lengths the model produces
+        // (4-12 words, ~17-65 chars). Made-up short labels like "Today / A
+        // few days" don't stress-test the layout the same way.
+        const mockQuestionSet: ClarificationQuestion[] = [
+            {
+                id: 'mock-q1',
+                question:
+                    'Looking at the door, which best describes what you see?',
+                options: [
+                    'Cables look slack on at least one side.',
+                    'Cables look tight, only the spring is broken.',
+                    'Door makes a humming or grinding sound.',
+                    'Something else is happening.',
+                ],
+            },
+            {
+                id: 'mock-q2',
+                question:
+                    'Where is the air entering the system?',
+                options: [
+                    'The o-ring on the lid looks compressed, cracked, or out of position.',
+                    'I can hear hissing or see drips on the suction pipework.',
+                    'Pool water level is below the skimmer mouth.',
+                    'Something else is happening.',
+                ],
+            },
+            {
+                id: 'mock-q3',
+                question:
+                    'Can you lift the door manually with the motor disengaged?',
+                options: [
+                    'Too heavy to lift',
+                    'Lifts but drops fast',
+                    'Lifts and stays open',
+                ],
+            },
+        ];
+        setIsPageLoading(false);
+        setIsDetailStageReady(true);
+        setImageSrc(placeholder);
+        setUploadedImageSources(mockImages);
+        setDiagnosisTitle('Garage door spring failure');
+        setTradeLabel('Garage Doors');
+        setRequiresClarification(true);
+        setCurrentDiagnosis({
+            thinking: 'Mocked thinking.',
+            diagnosis: 'Mocked diagnosis body.',
+            trade: 'Garage Doors',
+            action_required: 'mock_action',
+            requires_clarification: true,
+            clarification_questions: mockQuestionSet.flatMap((q) => q.options),
+            clarification_question_set: mockQuestionSet,
+        } as DiagnosisData);
+        // Mock previews land directly on the new Need More Information overlay
+        // so you can iterate on the question list without an extra tap. The
+        // underlying diagnosis page is still mounted — closing the overlay
+        // reveals it (with the "Answer Three Questions" CTA in the footer).
+        setShowAnswerQuestionsScreen(true);
+        // Block the real bootstrap from blowing this state away.
+        didRunDiagnosisRef.current = 'mock';
+    }, [isMockClarify]);
 
     const getPersistedCustomerInfoItems = useCallback(
         (data: ConversationDiagnosisRow | null, fallbackPrompt: string): string[] => {
@@ -482,7 +651,6 @@ export default function DiagnosisPageClient({
             thoughtStreamGenRef.current += 1;
             setThoughtText('');
             setImageThoughtBreakdown([]);
-            setShowDetailedThinking(false);
             setIsDiagnosing(true);
             setIsImageAnalysing(true);
             setIsDiagnosingRetrying(false);
@@ -802,6 +970,9 @@ export default function DiagnosisPageClient({
         let cancelled = false;
         const bootstrap = async () => {
             if (!conversationId) return;
+            // Mock mode short-circuit: state was already seeded by the
+            // mock-mode effect above, so don't touch it.
+            if (isMockClarifyRef.current) return;
             // Reset guard when the route id changes.
             didRunDiagnosisRef.current = null;
             setCurrentDiagnosis(null);
@@ -954,16 +1125,18 @@ export default function DiagnosisPageClient({
                 setTradeLabel((existingDiagnosis.trade ?? '').trim());
                 setTradeDetailLabel((existingDiagnosis.trade_detail ?? '').trim());
                 setCurrentDiagnosis(existingDiagnosis);
+                // Read-only: do not call /api/diagnose on page load.
+                // The processing pipeline already wrote a final diagnosis to
+                // public.diagnoses; surfacing what's there is enough.
+                // Provider-context hydration (the previous behaviour) was
+                // re-running the model and rewriting prose on every visit —
+                // the "diagnosis keeps changing" bug. Regeneration now only
+                // happens via explicit user actions: refine, clarification
+                // pick, or trade candidate pick.
                 if (imageUrlForDiagnosis) {
                     const catalog = await fetchActiveServiceCatalogClient(supabase as any);
                     if (!cancelled && catalog.length > 0) {
                         setServiceCatalog(catalog);
-                        void maybeHydrateWithProviders(
-                            existingDiagnosis,
-                            imageUrlForDiagnosis,
-                            catalog,
-                            prompt
-                        );
                     }
                 }
                 return;
@@ -1117,6 +1290,16 @@ export default function DiagnosisPageClient({
         showSkeleton || !isDetailStageReady
             ? diagnosisTitle.trim() || 'Diagnosing…'
             : diagnosisHeadline;
+
+    // Single source of truth for the trade badge label. In clarification mode
+    // we have no trade yet, so this is empty — used by both the inline badge
+    // (suppressed when empty) and the sticky-header badge slot.
+    const badgeContent: string = isServiceBlocked
+        ? "Can't match"
+        : requiresClarification
+          ? ''
+          : tradeLabel || selectedTradeHint || 'Not Specified';
+    const hasBadge = badgeContent.length > 0;
     const displayThoughtText = thoughtText.trim();
     const activeFullscreenImageSrc =
         fullscreenImageIndex != null && fullscreenImageIndex >= 0
@@ -1126,6 +1309,7 @@ export default function DiagnosisPageClient({
         fullscreenImageIndex != null && fullscreenImageIndex >= 0
             ? (imageThoughtBreakdown[fullscreenImageIndex] ?? '').trim()
             : '';
+    const fullscreenHasMultiple = uploadedImageSources.length > 1;
     const goToPrevFullscreenImage = useCallback(() => {
         if (!uploadedImageSources.length || fullscreenImageIndex == null) return;
         setFullscreenImageIndex((prev) => {
@@ -1148,23 +1332,74 @@ export default function DiagnosisPageClient({
     }, [shouldAutoExpandMoreInfo]);
 
     useEffect(() => {
-        const updateStickyHeaderTitle = () => {
-            const anchor = headerTitleAnchorRef.current;
-            if (!anchor) return;
-            // getBoundingClientRect gives viewport-relative position regardless of scroll container.
-            setUseStickyHeaderName(anchor.getBoundingClientRect().bottom <= HEADER_HEIGHT_PX);
+        // Watches both the headline (h2) and the trade badge so we can move
+        // each independently into the sticky FlowTopBar as the user scrolls.
+        // getBoundingClientRect gives viewport-relative position regardless
+        // of which container is scrolling.
+        const updateStickyHeader = () => {
+            const titleAnchor = headerTitleAnchorRef.current;
+            if (titleAnchor) {
+                setUseStickyHeaderName(
+                    titleAnchor.getBoundingClientRect().bottom <= HEADER_HEIGHT_PX
+                );
+            }
+            const badgeAnchor = headerBadgeAnchorRef.current;
+            if (badgeAnchor) {
+                setUseStickyHeaderBadge(
+                    badgeAnchor.getBoundingClientRect().bottom <= HEADER_HEIGHT_PX
+                );
+            } else {
+                // No badge mounted at all (e.g. empty content suppressed it) —
+                // make sure we don't leave a stale "show in header" state.
+                setUseStickyHeaderBadge(false);
+            }
         };
 
         const scrollEl = scrollContainerRef.current;
         if (!scrollEl) return;
-        updateStickyHeaderTitle();
-        scrollEl.addEventListener('scroll', updateStickyHeaderTitle, { passive: true });
-        window.addEventListener('resize', updateStickyHeaderTitle);
+        updateStickyHeader();
+        scrollEl.addEventListener('scroll', updateStickyHeader, { passive: true });
+        window.addEventListener('resize', updateStickyHeader);
         return () => {
-            scrollEl.removeEventListener('scroll', updateStickyHeaderTitle);
-            window.removeEventListener('resize', updateStickyHeaderTitle);
+            scrollEl.removeEventListener('scroll', updateStickyHeader);
+            window.removeEventListener('resize', updateStickyHeader);
         };
     }, []);
+
+    // (Removed: scroll-swap effect for the old Need More Information overlay's
+    // sticky header. The drawer doesn't have a scroll-watched H1, so the
+    // effect has nothing to watch.)
+
+    // Keyboard navigation for the fullscreen image viewer (desktop-friendly).
+    // ←/→ paginate through the photos, Escape closes the viewer. Listener is
+    // bound to `window` only while the viewer is open so it doesn't compete
+    // with anything else on the page.
+    useEffect(() => {
+        if (fullscreenImageIndex == null) return;
+        const onKey = (e: KeyboardEvent) => {
+            if (e.key === 'ArrowLeft') {
+                if (fullscreenHasMultiple) {
+                    e.preventDefault();
+                    goToPrevFullscreenImage();
+                }
+            } else if (e.key === 'ArrowRight') {
+                if (fullscreenHasMultiple) {
+                    e.preventDefault();
+                    goToNextFullscreenImage();
+                }
+            } else if (e.key === 'Escape') {
+                e.preventDefault();
+                setFullscreenImageIndex(null);
+            }
+        };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, [
+        fullscreenImageIndex,
+        fullscreenHasMultiple,
+        goToPrevFullscreenImage,
+        goToNextFullscreenImage,
+    ]);
 
     // E2 — soft trade-suggestion chip handler. When the rejection UI surfaces
     // a chip ("Did you mean Security?"), tapping it sets the trade hint and
@@ -1186,15 +1421,159 @@ export default function DiagnosisPageClient({
         );
     };
 
+    // ── Refine-overlay photo upload ──────────────────────────────────────────
+    // Mirrors /start: stash a `pending` placeholder immediately, then run HEIC
+    // conversion + compression in the background and patch the tile to `ready`
+    // (or `error`). Uploads to Supabase storage happen in a separate effect.
+
+    const handleRefineSelectPhotos = useCallback(() => {
+        refineUploadInputRef.current?.click();
+    }, []);
+
+    const handleRefinePhotosSelected = useCallback(
+        async (incoming: FileList | null) => {
+            if (!incoming || incoming.length === 0) return;
+            const files = Array.from(incoming).filter(
+                (f) => f.type.startsWith('image/') || isHeicLike(f)
+            );
+            if (files.length === 0) return;
+            const existingTotal =
+                uploadedImageSourcesRef.current.length + refinePhotos.length;
+            const remaining = Math.max(0, REFINE_MAX_TOTAL_PHOTOS - existingTotal);
+            if (remaining === 0) {
+                toast.error(
+                    `You can attach at most ${REFINE_MAX_TOTAL_PHOTOS} photos in total.`
+                );
+                return;
+            }
+            const filesToQueue = files.slice(0, remaining);
+            const placeholders = filesToQueue.map((file) => ({
+                id: createSelectedPhotoId(),
+                file,
+                status: 'pending' as const,
+                previewSrc: null,
+                diagnosisSrc: null,
+            }));
+            const pendingIdsByFile = new Map(
+                placeholders.map((p) => [p.file, p.id])
+            );
+            setRefinePhotos((prev) => [...prev, ...placeholders]);
+            for (const file of filesToQueue) {
+                const id = pendingIdsByFile.get(file);
+                if (!id) continue;
+                try {
+                    const normalized = await normalizeSelectedPhoto(file);
+                    setRefinePhotos((prev) =>
+                        prev.map((p) =>
+                            p.id === id
+                                ? {
+                                      ...normalized,
+                                      id,
+                                      file: normalized.file,
+                                  }
+                                : p
+                        )
+                    );
+                } catch {
+                    // Fall back to a raw data URL so the photo isn't lost on
+                    // a transient HEIC-conversion failure — same pattern as
+                    // /start. If even that fails, surface an error tile.
+                    try {
+                        const fallbackSrc = await readFileAsDataUrl(file);
+                        setRefinePhotos((prev) =>
+                            prev.map((p) =>
+                                p.id === id
+                                    ? {
+                                          ...p,
+                                          status: 'ready',
+                                          previewSrc: fallbackSrc,
+                                          diagnosisSrc: fallbackSrc,
+                                          errorMessage: undefined,
+                                      }
+                                    : p
+                            )
+                        );
+                    } catch {
+                        setRefinePhotos((prev) =>
+                            prev.map((p) =>
+                                p.id === id
+                                    ? {
+                                          ...p,
+                                          status: 'error',
+                                          previewSrc: null,
+                                          diagnosisSrc: null,
+                                          errorMessage: isHeicLike(p.file)
+                                              ? 'Could not convert this HEIC image.'
+                                              : 'Could not process this image.',
+                                      }
+                                    : p
+                            )
+                        );
+                    }
+                }
+            }
+        },
+        [refinePhotos.length]
+    );
+
+    const handleRefineRemovePhoto = useCallback((photoId: string) => {
+        setRefinePhotos((prev) => prev.filter((p) => p.id !== photoId));
+        setRefinePhotoStorageUrls((prev) => {
+            const next = { ...prev };
+            delete next[photoId];
+            return next;
+        });
+    }, []);
+
+    // Upload each `ready` refine photo to storage once. Mirrors the effect in
+    // /start that uploads on `ready` if a hosted URL doesn't yet exist.
+    useEffect(() => {
+        if (!conversationId) return;
+        for (const photo of refinePhotos) {
+            if (
+                photo.status === 'ready' &&
+                !refinePhotoStorageUrls[photo.id]
+            ) {
+                void uploadPhotoToStorage(photo.file, conversationId).then((url) => {
+                    if (url) {
+                        setRefinePhotoStorageUrls((prev) => ({
+                            ...prev,
+                            [photo.id]: url,
+                        }));
+                    }
+                });
+            }
+        }
+    }, [refinePhotos, refinePhotoStorageUrls, conversationId]);
+
     const handleRescanReport = async () => {
         const trimmed = infoText.trim();
-        if (!trimmed || !imageSrc) return;
+        // New: refine can now also be "I'm adding photos" — allow rescan when
+        // either new text OR new ready photos are present.
+        const readyNewPhotos = refinePhotos.filter((p) => p.status === 'ready');
+        const newPhotoUrls = readyNewPhotos
+            .map((p) => refinePhotoStorageUrls[p.id])
+            .filter((u): u is string => typeof u === 'string' && u.length > 0);
+        if (!imageSrc) return;
+        if (!trimmed && newPhotoUrls.length === 0) return;
         setShowAddInfoScreen(false);
 
-        const nextItems = [...customerInfoItems, trimmed];
+        const nextItems = trimmed
+            ? [...customerInfoItems, trimmed]
+            : customerInfoItems;
         const joinedInfo = nextItems.join('\n\n').trim();
         setCustomerInfoItems(nextItems);
         setInfoText('');
+
+        // Append new photo URLs (deduped) to the existing photo list. The
+        // diagnose pipeline caps at 4 — we already enforce that in the upload
+        // handler, but slice defensively here too.
+        const combinedPhotoSources = [
+            ...uploadedImageSources,
+            ...newPhotoUrls.filter((u) => !uploadedImageSources.includes(u)),
+        ].slice(0, REFINE_MAX_TOTAL_PHOTOS);
+        const photosChanged =
+            combinedPhotoSources.length !== uploadedImageSources.length;
 
         if (conversationId) {
             try {
@@ -1205,6 +1584,7 @@ export default function DiagnosisPageClient({
             providersForDiagnoseRef.current = [];
             const noteSave = await patchConversation(conversationId, {
                 initial_image_description: joinedInfo || null,
+                ...(photosChanged ? { image_urls: combinedPhotoSources } : {}),
             });
             if (!noteSave.ok) {
                 setDiagnosisFailureMessage(
@@ -1214,6 +1594,15 @@ export default function DiagnosisPageClient({
             }
         }
 
+        if (photosChanged) {
+            setUploadedImageSources(combinedPhotoSources);
+        }
+
+        // Clear the refine-photo staging state — the photos are now part of
+        // the canonical uploadedImageSources list.
+        setRefinePhotos([]);
+        setRefinePhotoStorageUrls({});
+
         didRunDiagnosisRef.current = null;
         setDiagnosisTitle('Diagnosing…');
         setCustomerInfoItems(nextItems);
@@ -1221,8 +1610,55 @@ export default function DiagnosisPageClient({
             imageSrc,
             joinedInfo,
             selectedTradeHint.trim() || null,
-            uploadedImageSources
+            combinedPhotoSources
         );
+    };
+
+    /**
+     * Batched clarification submit. Called by the Need More Information
+     * overlay when the user has filled every question and tapped Refresh
+     * Findings. Reads the per-question answers from `clarificationAnswers`
+     * state (lifted above the list component), joins them into a single
+     * multi-paragraph Q&A note, and pipes that through the same re-diagnose
+     * path the single-choice handler uses.
+     */
+    const handleClarificationBatchSubmit = async (
+        questions: ClarificationQuestion[]
+    ) => {
+        // Real diagnoses need a valid source image. Mock mode runs with an
+        // empty placeholder src on purpose, so we skip that guard for it.
+        if (!isMockClarifyRef.current && !imageSrc) return;
+        if (isDiagnosing || showSkeleton) return;
+        const pairs = questions
+            .map((q, idx) => {
+                const entry = clarificationAnswers[idx];
+                if (!entry) return null;
+                const chip = entry.pickedChip?.trim() ?? '';
+                const extra = (entry.extra ?? '').trim();
+                // Combine chip + extra into one answer block. If only one of
+                // them is present, send just that. If both, list the chip
+                // first and the extra as supplemental context — keeps the
+                // structured signal intact for the model.
+                let answer = '';
+                if (chip && extra) answer = `${chip}\n(Additional: ${extra})`;
+                else if (chip) answer = chip;
+                else if (extra) answer = extra;
+                if (!answer) return null;
+                return `Q: ${q.question}\nA: ${answer}`;
+            })
+            .filter((s): s is string => Boolean(s));
+        if (pairs.length === 0) return;
+        const joinedAnswer = pairs.join('\n\n');
+        // Close the overlay and clear answers so a follow-up clarification
+        // (the model can ask for clarification again after this round) lands
+        // on a fresh slate.
+        setShowAnswerQuestionsScreen(false);
+        setClarificationAnswers({});
+        if (isMockClarifyRef.current) {
+            toast.success(`Mock submitted ${pairs.length} answers.`);
+            return;
+        }
+        await handleClarificationChoice(joinedAnswer);
     };
 
     const handleClarificationChoice = async (choice: string) => {
@@ -1308,84 +1744,104 @@ export default function DiagnosisPageClient({
         ? 'Which option best describes the issue?'
         : `Which option best describes the ${tradeForClarificationPrompt.toLowerCase()} issue?`;
 
-    // Rejected / unsupported responses still set requires_clarification on the API so users can add
-    // context, but the gate-style defaults do not apply — use "Did We Miss Something?" instead.
+    // Build the question list for the Need More Information overlay. Two
+    // sources, preference order:
+    //   1) `clarification_question_set` from the diagnosis row (new shape).
+    //   2) Legacy `clarification_questions: string[]` — wrap as ONE question
+    //      using the derived prompt, so old diagnoses still render.
+    const newClarificationSet: ClarificationQuestion[] = Array.isArray(
+        currentDiagnosis?.clarification_question_set
+    )
+        ? currentDiagnosis!.clarification_question_set!
+        : [];
+    const clarificationQuestionList: ClarificationQuestion[] =
+        newClarificationSet.length > 0
+            ? newClarificationSet
+            : clarificationOptions.length > 0
+              ? [
+                    {
+                        id: 'legacy-single',
+                        question: clarificationPrompt,
+                        options: clarificationOptions,
+                    },
+                ]
+              : [];
+    const clarificationQuestionCount = clarificationQuestionList.length;
+    const clarificationAllAnswered =
+        clarificationQuestionCount > 0 &&
+        clarificationQuestionList.every((_, idx) => {
+            const entry = clarificationAnswers[idx];
+            if (!entry) return false;
+            const chip = entry.pickedChip;
+            const extra = (entry.extra ?? '').trim();
+            return Boolean(chip) || extra.length > 0;
+        });
+
     const showClarificationFooter =
         requiresClarification && !isServiceBlocked && !(clarificationSubmitLoading && isDiagnosing);
 
-    const diagnosisFooter = showClarificationFooter ? (
-        <div className="flex flex-col gap-2">
-            <p className="text-sm font-medium text-foreground">{clarificationPrompt}</p>
-            {clarificationOptions.map((question, idx) => {
-                const letter = String.fromCharCode(65 + idx);
-                return (
-                    <div key={`${idx}-${question}`} className="flex flex-row gap-4 items-center">
-                        <Badge
-                            variant="secondary"
-                            className="size-7"
-                        >
-                            {letter}
-                        </Badge>
-                        <Button
-                            type="button"
-                            variant="outline"
-                            className="flex flex-1 h-12 justify-start rounded-xl border-black/[0.10] bg-white hover:bg-black/[0.03]"
-                            disabled={isDiagnosing || showSkeleton}
-                            onClick={() => void handleClarificationChoice(question)}
-                        >
-                            <span className="text-sm text-foreground font-normal truncate">{question}</span>
-                        </Button>
-                    </div>
-                );
-            })}
-            <div className="flex flex-row gap-4 items-start">
-                <Badge variant="secondary" className="size-7 mt-2">
-                    D
-                </Badge>
-                <div className="flex flex-1 flex-col gap-2">
-                    <input
-                        type="text"
-                        value={clarificationCustomText}
-                        onChange={(e) => setClarificationCustomText(e.target.value)}
-                        placeholder="Other: type your answer"
-                        className="h-12 w-full rounded-xl border border-black/[0.10] bg-white px-3 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-black/15"
-                        disabled={isDiagnosing || showSkeleton}
-                    />
-                    <Button
-                        type="button"
-                        variant="outline"
-                        className="h-10 w-full rounded-xl border-black/[0.10] bg-white hover:bg-black/[0.03]"
-                        disabled={
-                            isDiagnosing || showSkeleton || clarificationCustomText.trim().length === 0
-                        }
-                        onClick={() => void handleClarificationChoice(clarificationCustomText)}
-                    >
-                        Submit Answer
-                    </Button>
-                </div>
-            </div>
-        </div>
-    ) : (
+    /**
+     * Footer shape across states:
+     *
+     *   Clarification (needs more info, can still match):
+     *     Single primary CTA → "Answer Three Questions" (count in title case)
+     *     Opens the Need More Information overlay. No ghost.
+     *
+     *   Normal diagnosis (confident, can match):
+     *     Ghost "Add Details" + primary "Find Contractors".
+     *     Ghost lets the user share more context even when the diagnosis is
+     *     right.
+     *
+     *   Service-blocked (can't match, but user can add context to retry):
+     *     Ghost "Add Details" alone. No primary — nowhere to route to.
+     */
+    const answerQuestionsCtaCopy =
+        clarificationQuestionCount === 1
+            ? 'Answer One Question'
+            : `Answer ${capitalisedNumberWord(clarificationQuestionCount)} Questions`;
+    const diagnosisFooter = showSkeleton ? null : showClarificationFooter && clarificationQuestionCount > 0 ? (
         <Button
-            className="h-10 w-full"
-            disabled={!canContinueToMatch || isDiagnosing || shouldAutoExpandMoreInfo}
-            onClick={() => {
-                if (!conversationId) return;
-                const key = `pending_diagnosis_image_url:${conversationId}`;
-                const listKey = `pending_diagnosis_image_urls:${conversationId}`;
-                try { sessionStorage.removeItem(key); } catch {}
-                try { sessionStorage.removeItem(listKey); } catch {}
-                try { localStorage.removeItem(key); } catch {}
-                writeMatchTradeContextStorage(
-                    conversationId,
-                    tradeLabel || selectedTradeHint,
-                    tradeDetailLabel || tradeLabel || selectedTradeHint
-                );
-                router.push(`/match/${encodeURIComponent(conversationId)}`);
-            }}
+            type="button"
+            className="w-full"
+            disabled={isDiagnosing}
+            onClick={() => setShowAnswerQuestionsScreen(true)}
         >
-            Find Contractors
+            {answerQuestionsCtaCopy}
         </Button>
+    ) : (
+        <div className="flex flex-col gap-4">
+            <Button
+                type="button"
+                variant="ghost"
+                className="w-full text-muted-foreground"
+                disabled={isDiagnosing}
+                onClick={() => setShowAddInfoScreen(true)}
+            >
+                Add Details
+            </Button>
+            {!isServiceBlocked ? (
+                <Button
+                    className="w-full"
+                    disabled={!canContinueToMatch || isDiagnosing || shouldAutoExpandMoreInfo}
+                    onClick={() => {
+                        if (!conversationId) return;
+                        const key = `pending_diagnosis_image_url:${conversationId}`;
+                        const listKey = `pending_diagnosis_image_urls:${conversationId}`;
+                        try { sessionStorage.removeItem(key); } catch {}
+                        try { sessionStorage.removeItem(listKey); } catch {}
+                        try { localStorage.removeItem(key); } catch {}
+                        writeMatchTradeContextStorage(
+                            conversationId,
+                            tradeLabel || selectedTradeHint,
+                            tradeDetailLabel || tradeLabel || selectedTradeHint
+                        );
+                        router.push(`/match/${encodeURIComponent(conversationId)}`);
+                    }}
+                >
+                    Find Contractors
+                </Button>
+            ) : null}
+        </div>
     );
 
     return (
@@ -1397,21 +1853,38 @@ export default function DiagnosisPageClient({
             />
 
             <div className="h-dvh overflow-hidden overscroll-none flex flex-col bg-background">
-                <div className="sticky top-0 z-20 shrink-0 bg-background px-6 py-3">
-                    <Button
-                        variant="secondary"
-                        size="icon"
-                        className="size-10"
-                        onClick={() => setLeaveDialogOpen(true)}
-                        aria-label="Go Back"
-                    >
-                        <ArrowLeft weight="bold" />
-                    </Button>
-                </div>
+                <FlowTopBar
+                    className="p-4"
+                    leftSlot={
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            aria-label="Go back"
+                            onClick={() => setLeaveDialogOpen(true)}
+                        >
+                            <ArrowLeft strokeWidth={2.5} />
+                        </Button>
+                    }
+                    centerSlot={
+                        <p className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 max-w-[60%] truncate text-center text-base font-medium text-foreground">
+                            {useStickyHeaderName
+                                ? truncateTitleTight(stickyHeaderTitle || BRAND_NAME)
+                                : BRAND_NAME}
+                        </p>
+                    }
+                    rightSlot={
+                        hasBadge && useStickyHeaderBadge ? (
+                            <Badge variant="secondary" className="shrink-0">
+                                {badgeContent}
+                            </Badge>
+                        ) : null
+                    }
+                />
 
                 {/* Scrollable content */}
                 <div ref={scrollContainerRef} className="min-h-0 flex-1 overflow-y-auto">
-                    <div className="flex flex-col w-full max-w-3xl mx-auto gap-6 p-6">
+                    <div className="flex flex-col w-full max-w-xl mx-auto gap-8 p-4">
 
                 {/* Diagnosis title + badge */}
                 <div className="flex w-full flex-col gap-3">
@@ -1421,47 +1894,74 @@ export default function DiagnosisPageClient({
                             <Skeleton className="h-6 w-[62%] max-w-sm md:hidden" />
                         </div>
                     ) : (
-                        <h2 className="w-full min-w-0 text-2xl font-bold break-words">
+                        <h2
+                            ref={headerTitleAnchorRef}
+                            className="w-full min-w-0 text-2xl font-semibold break-words"
+                        >
                             {diagnosisHeadline}
                         </h2>
                     )}
                     {showSkeleton || !isDetailStageReady ? (
                         <Skeleton className="h-6 w-24 shrink-0 rounded-full" />
-                    ) : (
-                        <Badge variant="secondary" className="w-fit">
-                            {isServiceBlocked
-                                ? "Can't match"
-                                : requiresClarification
-                                  ? ''
-                                  : tradeLabel || selectedTradeHint || 'Not Specified'}
-                        </Badge>
-                    )}
+                    ) : hasBadge ? (
+                        // Wrapper div carries the scroll anchor so the badge
+                        // can fade out of the body and into the header
+                        // rightSlot without us needing to query the badge
+                        // node itself (which would re-render on every render).
+                        <div ref={headerBadgeAnchorRef} className="w-fit">
+                            <Badge variant="secondary" className="w-fit">
+                                {badgeContent}
+                            </Badge>
+                        </div>
+                    ) : null}
+                    {/* Sub-description, mirrors /start: text-sm muted, sits
+                        beneath the headline group. Hidden during skeleton so
+                        we don't reserve dead space while content streams in. */}
+                    {!showSkeleton && isDetailStageReady ? (
+                        <p className="text-sm text-muted-foreground">
+                            Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore.
+                        </p>
+                    ) : null}
                 </div>
 
                 <div className="flex flex-col gap-3">
                     {uploadedImageSources.length > 0 ? (
-                        <div className="overflow-x-auto">
-                            <div className="flex min-w-full gap-2 px-1">
-                                {uploadedImageSources.map((src, idx) => (
-                                    <button
-                                        key={`${src}-${idx}`}
-                                        type="button"
-                                        className="h-40 w-40 shrink-0 overflow-hidden rounded-lg border border-border/60 bg-background text-left sm:h-44 sm:w-44"
-                                        onClick={() => setFullscreenImageIndex(idx)}
-                                        aria-label={`Open uploaded issue photo ${idx + 1}`}
-                                    >
-                                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                                        <img
-                                            src={src}
-                                            alt={`Uploaded issue photo ${idx + 1}`}
-                                            className="h-full w-full object-cover"
-                                        />
-                                    </button>
-                                ))}
-                            </div>
+                        <div className="grid grid-cols-2 gap-2">
+                            {uploadedImageSources.map((src, idx) => (
+                                <DiagnosisPhotoTile
+                                    key={`${src}-${idx}`}
+                                    src={src}
+                                    index={idx}
+                                    showNumber={uploadedImageSources.length > 1}
+                                    onOpen={() => setFullscreenImageIndex(idx)}
+                                />
+                            ))}
+                            {/*
+                              Odd-count slot. /start fills this with an "Add
+                              Photos" trigger; here we route to the refine
+                              overlay (where users CAN attach extra photos)
+                              so the affordance is honest. Only shown for 1 or
+                              3 — 2 and 4 fill the grid cleanly. Hidden when
+                              the diagnosis is in a transient/loading state.
+                            */}
+                            {(uploadedImageSources.length === 1 ||
+                                uploadedImageSources.length === 3) &&
+                            !showSkeleton ? (
+                                <Button
+                                    type="button"
+                                    variant="secondary"
+                                    onClick={() => setShowAddInfoScreen(true)}
+                                    className="aspect-square h-auto w-full"
+                                >
+                                    Add Photos
+                                </Button>
+                            ) : null}
                         </div>
                     ) : showSkeleton ? (
-                        <Skeleton className="h-52 w-full rounded-2xl" />
+                        <div className="grid grid-cols-2 gap-2">
+                            <Skeleton className="aspect-square w-full rounded-lg" />
+                            <Skeleton className="aspect-square w-full rounded-lg" />
+                        </div>
                     ) : null}
 
                     {/* Thought text */}
@@ -1478,28 +1978,11 @@ export default function DiagnosisPageClient({
                             ) : null}
                         </div>
                     ) : displayThoughtText ? (
-                        <div className="flex flex-col gap-3">
-                            <p className="text-xs text-muted-foreground">{displayThoughtText}</p>
-                            {imageThoughtBreakdown.length > 0 ? (
-                                <button
-                                    type="button"
-                                    className="w-fit text-xs font-medium text-muted-foreground underline underline-offset-2"
-                                    onClick={() => setShowDetailedThinking((prev) => !prev)}
-                                >
-                                    {showDetailedThinking ? 'Hide thinking' : 'Show thinking'}
-                                </button>
-                            ) : null}
-                            {showDetailedThinking && imageThoughtBreakdown.length > 0 ? (
-                                <div className="flex flex-col gap-2 rounded-lg border border-border/60 bg-background p-3">
-                                    {imageThoughtBreakdown.map((perImageThought, idx) => (
-                                        <p key={`${idx}-${perImageThought}`} className="text-xs text-muted-foreground">
-                                            <span className="font-medium text-foreground">{`Image ${idx + 1}: `}</span>
-                                            {perImageThought}
-                                        </p>
-                                    ))}
-                                </div>
-                            ) : null}
-                        </div>
+                        // Thought block is now a single synthesised summary
+                        // across all images. Per-image detail is reachable by
+                        // tapping a photo — the fullscreen viewer surfaces the
+                        // breakdown for the specific image opened.
+                        <p className="text-xs text-muted-foreground">{displayThoughtText}</p>
                     ) : null}
                 </div>
 
@@ -1586,174 +2069,345 @@ export default function DiagnosisPageClient({
                     ) : null}
                 </>
 
-                {/* Did we miss something */}
-                {!showSkeleton ? (
-                    <div className="flex flex-col gap-3 text-center">
-                        <Button
-                            variant="secondary"
-                            className="h-10 w-full"
-                            onClick={() => setShowAddInfoScreen(true)}
-                        >
-                            Refine Diagnosis
-                        </Button>
-                        <p className="text-xs text-muted-foreground">
-                            Add a short note or an extra photo so the next pass can focus on the right fault.
-                        </p>
-                    </div>
-                ) : null}
+                {/*
+                  Inline "Refine Diagnosis" intentionally removed — the action
+                  now lives in the sticky footer as a ghost "Add Details"
+                  button, paired with the primary "Find Contractors" CTA.
+                */}
 
-                    </div>{/* /max-w-3xl */}
+                    </div>{/* /max-w-xl */}
                 </div>{/* /scrollable */}
 
                 {/* Fixed footer */}
                 <div
                     ref={footerRef}
-                    className="sticky bottom-0 shrink-0 bg-background px-6 py-3"
+                    className="sticky bottom-0 shrink-0 bg-background p-4"
                 >
-                    <div className="w-full max-w-sm mx-auto">
+                    <div className="w-full max-w-xl mx-auto">
                         {diagnosisFooter}
                     </div>
                 </div>
-                {/* Add info — full-screen overlay, start-page style */}
-                {showAddInfoScreen && (
-                    <div className="absolute inset-0 z-[300] flex flex-col overflow-hidden bg-background">
-                        <div className="sticky top-0 z-20 shrink-0 bg-background px-6 py-3">
-                            <div className="flex w-full items-center gap-3">
-                                <Button
-                                    type="button"
-                                    variant="secondary"
-                                    size="icon"
-                                    className="size-10"
-                                    onClick={() => setShowAddInfoScreen(false)}
-                                    aria-label="Go back"
-                                >
-                                    <ArrowLeft weight="bold" aria-hidden />
-                                </Button>
-                            </div>
-                        </div>
-                        <div className="flex-1 flex flex-col items-center justify-center p-6 min-h-0">
-                            <div className="flex flex-col gap-6 w-full max-w-sm mx-auto">
-                                <StepHeading
-                                    title="What Else Should We Know?"
-                                    sub="Anything you add here is sent with your photos on the next diagnosis run."
-                                />
-                                <div className="flex flex-col gap-3">
-                                    <Textarea
-                                        autoFocus
-                                        className="h-24 w-full"
-                                        value={infoText}
-                                        onChange={(e) => setInfoText(e.target.value)}
-                                    />
-                                    <div className="text-xs text-muted-foreground text-center">
-                                        {infoText.trim().length >= MIN_DESCRIPTION_CHARS ? (
-                                            <span>
-                                                You have entered {infoText.trim().length} characters, you can continue.
-                                            </span>
-                                        ) : (
-                                            <span>
-                                                We require at least {MIN_DESCRIPTION_CHARS - infoText.trim().length} more
-                                                characters to continue.
-                                            </span>
-                                        )}
+                {/* Add Details overlay — aligned with /start design system.
+                    Users can add a short note AND/OR attach extra photos
+                    (up to the 4-photo shared cap). Either input alone is
+                    enough to enable Refresh Findings — the text-length floor
+                    only applies when the user is going text-only. */}
+                {showAddInfoScreen && (() => {
+                    const refineReadyCount = refinePhotos.filter(
+                        (p) => p.status === 'ready'
+                    ).length;
+                    const refinePendingCount = refinePhotos.filter(
+                        (p) => p.status === 'pending'
+                    ).length;
+                    const totalPhotosAfter =
+                        uploadedImageSources.length + refinePhotos.length;
+                    const canAddMorePhotos =
+                        totalPhotosAfter < REFINE_MAX_TOTAL_PHOTOS;
+                    const hasNewText =
+                        infoText.trim().length >= MIN_DESCRIPTION_CHARS;
+                    const hasNewPhotos = refineReadyCount > 0;
+                    const canRescan =
+                        (hasNewText || hasNewPhotos) &&
+                        refinePendingCount === 0 &&
+                        !isDiagnosing &&
+                        !showSkeleton;
+                    return (
+                        <div className="absolute inset-0 z-[300] flex flex-col overflow-hidden bg-background">
+                            <FlowTopBar
+                                className="p-4"
+                                leftSlot={
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="icon"
+                                        aria-label="Go back"
+                                        onClick={() => setShowAddInfoScreen(false)}
+                                    >
+                                        <ArrowLeft strokeWidth={2.5} aria-hidden />
+                                    </Button>
+                                }
+                                centerSlot={
+                                    <p className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-base font-medium text-foreground">
+                                        Add Details
+                                    </p>
+                                }
+                            />
+                            <input
+                                ref={refineUploadInputRef}
+                                type="file"
+                                accept="image/*,.heic,.heif"
+                                multiple
+                                className="sr-only"
+                                onChange={(e) => {
+                                    void handleRefinePhotosSelected(
+                                        e.target.files
+                                    );
+                                    e.currentTarget.value = '';
+                                }}
+                            />
+                            <div className="flex-1 flex flex-col min-h-0 overflow-y-auto">
+                                <div className="flex-1 flex flex-col items-center justify-center p-4 min-h-0">
+                                    <div className="flex flex-col gap-8 w-full max-w-xl mx-auto">
+                                        <StepHeading
+                                            title="What Else Should We Know?"
+                                            sub="Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore."
+                                        />
+
+                                        {refinePhotos.length > 0 ? (
+                                            <div className="grid grid-cols-2 gap-2">
+                                                {refinePhotos.map((photo, idx) => (
+                                                    <RefinePhotoTile
+                                                        key={photo.id}
+                                                        photo={photo}
+                                                        index={idx}
+                                                        showNumber={
+                                                            refinePhotos.length > 1
+                                                        }
+                                                        onRemove={
+                                                            handleRefineRemovePhoto
+                                                        }
+                                                    />
+                                                ))}
+                                                {canAddMorePhotos &&
+                                                (refinePhotos.length === 1 ||
+                                                    refinePhotos.length === 3) ? (
+                                                    <Button
+                                                        type="button"
+                                                        variant="secondary"
+                                                        onClick={
+                                                            handleRefineSelectPhotos
+                                                        }
+                                                        className="aspect-square h-auto w-full"
+                                                    >
+                                                        Add Photos
+                                                    </Button>
+                                                ) : null}
+                                            </div>
+                                        ) : null}
+
+                                        {canAddMorePhotos &&
+                                        refinePhotos.length !== 1 &&
+                                        refinePhotos.length !== 3 ? (
+                                            <div className="flex flex-col gap-2">
+                                                <Button
+                                                    type="button"
+                                                    variant="secondary"
+                                                    onClick={handleRefineSelectPhotos}
+                                                >
+                                                    Add Photos
+                                                </Button>
+                                                <p className="text-center text-xs text-muted-foreground">
+                                                    Lorem ipsum dolor sit amet, consectetur adipiscing elit.
+                                                </p>
+                                            </div>
+                                        ) : null}
+
+                                        {!canAddMorePhotos ? (
+                                            <p className="text-center text-xs text-muted-foreground">
+                                                Lorem ipsum dolor sit amet, consectetur adipiscing elit.
+                                            </p>
+                                        ) : null}
+
+                                        {/* Note input — mirrors /start's Problem
+                                            Description block exactly: Label + char
+                                            counter, default-height Textarea (no fixed
+                                            h-N), no placeholder, helper line below. */}
+                                        <div className="flex flex-col gap-3">
+                                            <div className="flex items-center justify-between">
+                                                <Label htmlFor="adjust-note">
+                                                    Problem Description
+                                                </Label>
+                                                <span className="text-xs text-muted-foreground">
+                                                    {infoText.length} / 500
+                                                </span>
+                                            </div>
+                                            <div className="flex flex-col gap-2">
+                                                <Textarea
+                                                    id="adjust-note"
+                                                    autoFocus
+                                                    maxLength={500}
+                                                    value={infoText}
+                                                    onChange={(e) =>
+                                                        setInfoText(e.target.value)
+                                                    }
+                                                />
+                                                <p className="text-xs text-muted-foreground">
+                                                    Lorem ipsum dolor sit amet, consectetur adipiscing elit.
+                                                </p>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
-                        </div>
-                        <div className="sticky bottom-0 shrink-0 bg-background p-6">
-                            <div className="w-full max-w-sm mx-auto">
-                                <Button
-                                    type="button"
-                                    className="h-10 w-full"
-                                    disabled={
-                                        infoText.trim().length < MIN_DESCRIPTION_CHARS ||
-                                        isDiagnosing ||
-                                        showSkeleton
-                                    }
-                                    onClick={() => void handleRescanReport()}
-                                >
-                                    {isDiagnosing ? 'Re-Scanning\u2026' : 'Re-Scan Report'}
-                                </Button>
+                            <div className="sticky bottom-0 shrink-0 bg-background p-4">
+                                <div className="w-full max-w-xl mx-auto">
+                                    <Button
+                                        type="button"
+                                        className="w-full"
+                                        disabled={!canRescan}
+                                        onClick={() => void handleRescanReport()}
+                                    >
+                                        {isDiagnosing
+                                            ? 'Processing\u2026'
+                                            : 'Refresh Findings'}
+                                    </Button>
+                                </div>
                             </div>
                         </div>
-                    </div>
-                )}
+                    );
+                })()}
 
-                {activeFullscreenImageSrc ? (
-                    <div className="absolute inset-0 z-[320] flex flex-col overflow-hidden bg-background">
-                        <div className="sticky top-0 z-20 shrink-0 bg-background px-6 py-3">
-                            <div className="flex w-full items-center justify-between gap-3">
-                                <Button
-                                    type="button"
-                                    variant="secondary"
-                                    size="icon"
-                                    className="size-10"
-                                    onClick={() => setFullscreenImageIndex(null)}
-                                    aria-label="Close full screen image"
-                                >
-                                    <ArrowLeft weight="bold" aria-hidden />
-                                </Button>
-                                <p className="text-xs text-muted-foreground">
-                                    {`Image ${(fullscreenImageIndex ?? 0) + 1} of ${uploadedImageSources.length}`}
-                                </p>
-                            </div>
-                        </div>
-                        <div
-                            className="flex min-h-0 flex-1 items-center justify-center p-6"
-                            onTouchStart={(event) => {
-                                fullscreenTouchStartXRef.current = event.changedTouches[0]?.clientX ?? null;
-                            }}
-                            onTouchEnd={(event) => {
-                                const startX = fullscreenTouchStartXRef.current;
-                                const endX = event.changedTouches[0]?.clientX ?? null;
-                                fullscreenTouchStartXRef.current = null;
-                                if (startX == null || endX == null) return;
-                                const deltaX = endX - startX;
-                                const threshold = 40;
-                                if (Math.abs(deltaX) < threshold) return;
-                                if (deltaX > 0) {
-                                    goToPrevFullscreenImage();
-                                } else {
-                                    goToNextFullscreenImage();
-                                }
-                            }}
-                        >
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img
-                                src={activeFullscreenImageSrc}
-                                alt={`Full-screen uploaded issue photo ${(fullscreenImageIndex ?? 0) + 1}`}
-                                className="max-h-full max-w-full rounded-lg object-contain"
-                            />
-                        </div>
-                        <div className="sticky bottom-0 shrink-0 bg-background/95 p-6">
-                            <div className="flex flex-col items-center gap-3 text-center">
-                                {uploadedImageSources.length > 1 ? (
-                                    <div className="flex items-center justify-center gap-1.5">
-                                        {uploadedImageSources.map((_, idx) => {
-                                            const isActive = idx === fullscreenImageIndex;
-                                            return (
-                                                <span
-                                                    key={`fullscreen-dot-${idx}`}
-                                                    className={
-                                                        isActive
-                                                            ? 'h-2 w-2 rounded-full bg-foreground'
-                                                            : 'h-2 w-2 rounded-full bg-secondary'
-                                                    }
-                                                />
-                                            );
-                                        })}
-                                    </div>
-                                ) : null}
-                                <p className="text-xs text-muted-foreground">
-                                    {activeFullscreenThought ||
-                                        `No unique image thought is available yet for image ${(fullscreenImageIndex ?? 0) + 1}.`}
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-                ) : null}
+                {/* Need More Information drawer — bottom Sheet on mobile,
+                    centered Dialog on desktop. One question per page; Continue
+                    advances, Refresh Findings submits on the last. */}
+                <ClarificationDrawer
+                    open={showAnswerQuestionsScreen && clarificationQuestionList.length > 0}
+                    onOpenChange={(next) => setShowAnswerQuestionsScreen(next)}
+                    questions={clarificationQuestionList}
+                    answers={clarificationAnswers}
+                    onAnswersChange={setClarificationAnswers}
+                    onSubmit={() =>
+                        void handleClarificationBatchSubmit(
+                            clarificationQuestionList
+                        )
+                    }
+                    isSubmitting={isDiagnosing}
+                />
+
+                {/* Photo viewer — bottom Sheet on mobile, centered Dialog
+                    on desktop. Same shell primitives as ClarificationDrawer,
+                    so the two overlays animate / stack consistently. */}
+                <PhotoViewer
+                    open={activeFullscreenImageSrc !== null}
+                    onOpenChange={(next) => {
+                        if (!next) setFullscreenImageIndex(null);
+                    }}
+                    images={uploadedImageSources}
+                    descriptions={imageThoughtBreakdown}
+                    index={fullscreenImageIndex}
+                    onIndexChange={(nextIdx) => setFullscreenImageIndex(nextIdx)}
+                />
 
             </div>{/* /h-dvh */}
         </>
+    );
+}
+
+// ── Photo tiles ──────────────────────────────────────────────────────────────
+// Two tile components live here because their roles differ:
+//   * `DiagnosisPhotoTile` is read-only — it renders the already-uploaded
+//     photos that fed the current diagnosis and acts as the click target for
+//     the existing full-screen carousel.
+//   * `RefinePhotoTile` is used inside the Add Details overlay where new
+//     photos go through the same `pending` → `ready` / `error` lifecycle the
+//     /start uploader uses, plus a Remove button.
+// Keeping them separate avoids the conditional sprawl that a single component
+// would need, at the cost of a little markup duplication.
+
+function DiagnosisPhotoTile({
+    src,
+    index,
+    showNumber,
+    onOpen,
+}: {
+    /** Empty string renders a bg-secondary placeholder — used by mock mode
+     *  and any case where the row is hydrating before image URLs land. */
+    src: string;
+    index: number;
+    showNumber: boolean;
+    onOpen: () => void;
+}) {
+    const hasImage = src.trim().length > 0;
+    return (
+        <button
+            type="button"
+            onClick={onOpen}
+            aria-label={
+                hasImage
+                    ? `Open uploaded issue photo ${index + 1}`
+                    : `Photo placeholder ${index + 1}`
+            }
+            className={[
+                'relative aspect-square overflow-hidden rounded-lg border border-border',
+                hasImage ? 'bg-background' : 'bg-secondary',
+            ].join(' ')}
+        >
+            {hasImage ? (
+                /* eslint-disable-next-line @next/next/no-img-element */
+                <img
+                    src={src}
+                    alt={`Uploaded issue photo ${index + 1}`}
+                    className="h-full w-full object-cover"
+                    draggable={false}
+                />
+            ) : null}
+            {showNumber ? (
+                <Badge variant="count" className="absolute bottom-2 left-2">
+                    {index + 1}
+                </Badge>
+            ) : null}
+        </button>
+    );
+}
+
+function RefinePhotoTile({
+    photo,
+    index,
+    showNumber,
+    onRemove,
+}: {
+    photo: SelectedPhoto;
+    index: number;
+    showNumber: boolean;
+    onRemove: (photoId: string) => void;
+}) {
+    const isReady = photo.status === 'ready' && photo.previewSrc;
+    const wrapperCls = [
+        'relative aspect-square overflow-hidden rounded-lg border border-border transition-all duration-150',
+        isReady ? 'bg-background' : 'bg-secondary',
+    ].join(' ');
+    return (
+        <div className={wrapperCls}>
+            {isReady ? (
+                /* eslint-disable-next-line @next/next/no-img-element */
+                <img
+                    src={photo.previewSrc!}
+                    alt={photo.file.name || ''}
+                    className="h-full w-full object-cover"
+                    draggable={false}
+                />
+            ) : photo.status === 'pending' ? (
+                <div className="flex h-full w-full items-center justify-center">
+                    <Spinner className="size-5 text-muted-foreground" />
+                </div>
+            ) : (
+                <div className="flex h-full w-full items-center justify-center p-3 text-center">
+                    <p className="line-clamp-3 text-xs text-muted-foreground">
+                        {photo.errorMessage ?? 'Could not process this image.'}
+                    </p>
+                </div>
+            )}
+            {showNumber ? (
+                <Badge variant="count" className="absolute bottom-2 left-2">
+                    {index + 1}
+                </Badge>
+            ) : null}
+            {isReady ? (
+                <Badge asChild variant="outline">
+                    <button
+                        type="button"
+                        className="absolute right-2 top-2 cursor-pointer"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            onRemove(photo.id);
+                        }}
+                        aria-label="Remove photo"
+                    >
+                        Remove
+                    </button>
+                </Badge>
+            ) : null}
+        </div>
     );
 }
 

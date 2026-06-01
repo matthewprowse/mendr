@@ -1,0 +1,91 @@
+{
+  "ts": "2026-05-27T10-51-56-848Z",
+  "model": "gemini-3.5-flash",
+  "results": [
+    {
+      "id": "geyser-full-cues",
+      "description": "Geyser corroded tank — text describes rusty water + electricity + temperature loss",
+      "conversationId": "8a916ca2-c758-4a20-86f6-a694a398e009",
+      "model": "gemini-3.5-flash",
+      "status": "ok",
+      "diagnose_status": 200,
+      "elapsed_ms": 39127,
+      "row": {
+        "id": "8a916ca2-c758-4a20-86f6-a694a398e009",
+        "title": "New Diagnosis",
+        "image_url": "https://muzbjrtlklluitmhkcja.supabase.co/storage/v1/object/public/gallery/welcome_scans/8a916ca2-c758-4a20-86f6-a694a398e009/1779879078966-Geyser_1.jpg",
+        "customer_lat": null,
+        "customer_lng": null,
+        "customer_address": null,
+        "device": null,
+        "user_agent": null,
+        "created_at": "2026-05-27T10:51:23.065295+00:00",
+        "updated_at": "2026-05-27T10:51:23.065295+00:00",
+        "diagnosis": null,
+        "providers": null,
+        "user_id": null,
+        "diagnosis_confirmed": false,
+        "initial_image_description": null,
+        "pinned": false,
+        "trade_detail": null,
+        "urgency_key": null,
+        "requires_clarification": null,
+        "clarification_question_count": 0,
+        "is_direct_match": false,
+        "image_urls": [
+          "https://muzbjrtlklluitmhkcja.supabase.co/storage/v1/object/public/gallery/welcome_scans/8a916ca2-c758-4a20-86f6-a694a398e009/1779879078966-Geyser_1.jpg",
+          "https://muzbjrtlklluitmhkcja.supabase.co/storage/v1/object/public/gallery/welcome_scans/8a916ca2-c758-4a20-86f6-a694a398e009/1779879083267-Geyser_2.jpg",
+          "https://muzbjrtlklluitmhkcja.supabase.co/storage/v1/object/public/gallery/welcome_scans/8a916ca2-c758-4a20-86f6-a694a398e009/1779879085014-Geyser_3.jpg"
+        ],
+        "image_refinement_log": [],
+        "clarification_round": 0,
+        "hypothesis_state": null,
+        "diagnosis_critique": {
+          "failure_mode": "rubric_miscalibration",
+          "knowledge_gap": "The pipeline did not correctly interpret the strong evidence to commit to a diagnosis.",
+          "surprise_signals": [],
+          "prompt_hypothesis": "output-format.ts:confidence_definition",
+          "resolution_would_be": "No additional information or photo is needed; the existing evidence is sufficient for a confident diagnosis.",
+          "confidence_calibration": {
+            "delta_reasoning": "The agent's confidence of 0 is miscalibrated given the strong evidence. The user explicitly stated 'The geyser is leaking, the water in the drip tray is rusty brown, our electricity bill has gone up and the hot water doesn't last as long.' The first image clearly shows a geyser with rusty water in the drip tray and active dripping. These are direct, unambiguous signals for a geyser leak and internal corrosion, which the agent correctly identified in its prose. The agent's prose and diagnosis were largely correct, but the low confidence and `requires_clarification` flag contradict this strong evidence.",
+            "agent_confidence": 0,
+            "rubric_facets_used": [
+              "description_complete",
+              "symptom_unique",
+              "image_clarity",
+              "equipment_visible"
+            ],
+            "critique_confidence": 70
+          },
+          "notes_for_human_review": "The agent correctly identified the problem (geyser leak, rusty water, corrosion) and the user's symptoms. However, it set confidence to 0 and `requires_clarification` to true, which is a clear miscalibration given the strong, unambiguous evidence. The prose provided a full diagnosis, creating a contradictory output. This suggests a rubric miscalibration where the model failed to commit despite having sufficient information.",
+          "considered_alternatives": []
+        }
+      },
+      "breadcrumbs": [
+        {
+          "created_at": "2026-05-27T10:51:48.743864+00:00",
+          "action": "agent_critique_breadcrumb",
+          "payload": {
+            "step": "callback_fired",
+            "envEnabled": true
+          }
+        },
+        {
+          "created_at": "2026-05-27T10:51:53.681783+00:00",
+          "action": "agent_critique_breadcrumb",
+          "payload": {
+            "step": "runCritique_returned",
+            "resultNull": false
+          }
+        },
+        {
+          "created_at": "2026-05-27T10:51:53.876999+00:00",
+          "action": "agent_critique_breadcrumb",
+          "payload": {
+            "step": "persistCritique_completed"
+          }
+        }
+      ]
+    }
+  ]
+}

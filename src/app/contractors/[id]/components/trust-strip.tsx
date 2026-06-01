@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { ShieldCheck } from '@phosphor-icons/react';
+import { ShieldCheck } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { INK } from '@/lib/design-tokens';
 import { getCertificationBySlug } from '@/lib/certifications/catalog';
@@ -59,7 +59,7 @@ export function TrustStrip({ certifications, specialisations }: TrustStripProps)
                                     variant="secondary"
                                     className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-emerald-700 hover:bg-emerald-50"
                                 >
-                                    <ShieldCheck size={12} weight="fill" className="mr-1" aria-hidden />
+                                    <ShieldCheck size={12} fill="currentColor" className="mr-1" aria-hidden />
                                     {cat?.label ?? c.label}
                                 </Badge>
                             );

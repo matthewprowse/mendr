@@ -1,0 +1,45 @@
+{
+  "name": "security-garage-door-wont-open",
+  "trade": "Security",
+  "description": "My garage door won't open. Pressed the remote and nothing happens. The light on the remote blinks.",
+  "mockAgentOutput": {
+    "hypotheses": [
+      {
+        "id": "h1",
+        "label": "Broken torsion spring",
+        "confidence_alone": 0.8,
+        "evidence_for": ["Remote sends signal — light blinks — but door doesn't move"],
+        "evidence_against": []
+      },
+      {
+        "id": "h2",
+        "label": "Dead motor board",
+        "confidence_alone": 0.65,
+        "evidence_for": ["No movement despite remote signal suggests motor or board failure"],
+        "evidence_against": ["Spring failure is more common than PCB failure"]
+      },
+      {
+        "id": "h3",
+        "label": "Safety beam blocked or misaligned",
+        "confidence_alone": 0.55,
+        "evidence_for": ["Motor may be halting due to safety cutout"],
+        "evidence_against": ["Safety beam usually prevents closing not opening"]
+      }
+    ],
+    "what_we_dont_know": "We cannot tell whether the door makes any sound or movement at all when the remote is pressed.",
+    "why_it_matters": "Any sound or slight movement from the motor rules out a hard power or board failure and points toward a mechanical obstruction like a spring.",
+    "chips": [
+      { "id": "c1", "text": "The door makes a sound but doesn't move.", "supports": "h1", "rules_out": ["h2"] },
+      { "id": "c2", "text": "Complete silence — no sound at all.", "supports": "h2", "rules_out": ["h1", "h3"] },
+      { "id": "c3", "text": "The door moves slightly then stops.", "supports": "h3", "rules_out": ["h1"] },
+      { "id": "c4", "text": "Something else is happening.", "supports": "", "rules_out": [] }
+    ],
+    "round": 1,
+    "next_step_if_unresolved": "commit_low_confidence"
+  },
+  "expected": {
+    "must_consider_hypotheses": ["spring", "motor", "safety beam", "cable"],
+    "must_not_consider": ["gate motor", "intercom", "plumbing"],
+    "must_ask_about": "whether the door makes any sound or movement"
+  }
+}

@@ -1,0 +1,45 @@
+{
+  "name": "plumbing-geyser-leak",
+  "trade": "Plumbing",
+  "description": "Water is dripping from my geyser in the roof. Not sure if it started today or has been going on a while.",
+  "mockAgentOutput": {
+    "hypotheses": [
+      {
+        "id": "h1",
+        "label": "Failed thermostat seal",
+        "confidence_alone": 0.75,
+        "evidence_for": ["Dripping from top of unit"],
+        "evidence_against": []
+      },
+      {
+        "id": "h2",
+        "label": "Loose union fitting",
+        "confidence_alone": 0.65,
+        "evidence_for": ["Drip pattern suggests pipe joint area"],
+        "evidence_against": ["Drip appears central not at pipe ends"]
+      },
+      {
+        "id": "h3",
+        "label": "Ruptured tank",
+        "confidence_alone": 0.5,
+        "evidence_for": ["Age of unit unknown"],
+        "evidence_against": ["Volume of water is small — tank rupture usually floods"]
+      }
+    ],
+    "what_we_dont_know": "We cannot tell from the description whether the water is dripping from the top valve area, the side seam, or a pipe joint.",
+    "why_it_matters": "The location of the leak tells us which component has failed and how urgently it needs attention.",
+    "chips": [
+      { "id": "c1", "text": "Water drips from the top valve area.", "supports": "h1", "rules_out": ["h2", "h3"] },
+      { "id": "c2", "text": "Water drips from a pipe connection.", "supports": "h2", "rules_out": ["h1", "h3"] },
+      { "id": "c3", "text": "Water is running down the side of the tank.", "supports": "h3", "rules_out": ["h1", "h2"] },
+      { "id": "c4", "text": "Something else is happening.", "supports": "", "rules_out": [] }
+    ],
+    "round": 1,
+    "next_step_if_unresolved": "commit_low_confidence"
+  },
+  "expected": {
+    "must_consider_hypotheses": ["thermostat", "union fitting", "tank"],
+    "must_not_consider": ["gate motor", "electrical"],
+    "must_ask_about": "location of the leak on the geyser"
+  }
+}

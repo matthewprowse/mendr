@@ -10,7 +10,7 @@ import {
     type ReactNode,
 } from 'react';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft } from '@phosphor-icons/react';
+import { ArrowLeft } from 'lucide-react';
 
 /** Height of the fixed FlowStepHeader (h-16 = 64px). */
 const HEADER_STOP_TOP_PX = 64;
@@ -407,7 +407,7 @@ export const MatchMapSheetLayout = forwardRef<HTMLDivElement, MatchMapSheetLayou
                         onClick={onClose}
                         aria-label="Back"
                     >
-                        <ArrowLeft size={18} weight="bold" className="text-foreground" />
+                        <ArrowLeft size={18} strokeWidth={2.5} className="text-foreground" />
                     </Button>
                     <div className="min-w-0 flex-1">
                         {headerRight}

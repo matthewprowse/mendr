@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { ArrowLeft } from '@phosphor-icons/react';
+import { ArrowLeft } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 /** Total steps in the homeowner scan flow (Upload → Diagnose → Match), shown on `/start`. */
@@ -40,7 +40,7 @@ export function FlowStepHeader({
             aria-label="Go back"
             className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-black/[0.06] transition-colors active:bg-black/10"
         >
-            <ArrowLeft size={18} weight="bold" style={{ color: INK }} aria-hidden />
+            <ArrowLeft size={18} strokeWidth={2.5} style={{ color: INK }} aria-hidden />
         </Link>
     ) : onBack ? (
         <button
@@ -49,7 +49,7 @@ export function FlowStepHeader({
             aria-label="Go back"
             className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-black/[0.06] transition-colors active:bg-black/10"
         >
-            <ArrowLeft size={18} weight="bold" style={{ color: INK }} aria-hidden />
+            <ArrowLeft size={18} strokeWidth={2.5} style={{ color: INK }} aria-hidden />
         </button>
     ) : (
         <span className="h-11 w-11 shrink-0" aria-hidden />

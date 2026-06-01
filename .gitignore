@@ -54,3 +54,4 @@ next-env.d.ts
 
 # Local Claude Code agent state (per-machine)
 .claude/
+.next-preview

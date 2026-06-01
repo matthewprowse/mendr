@@ -1,0 +1,20 @@
+{
+    "id": "geyser-vs-pump-01",
+    "case_summary": "User says 'my geyser is leaking' but the cylindrical tank in the photo context is a borehole pressure vessel, not a geyser.",
+    "verified": false,
+    "ground_truth": {
+        "trade": "Plumbing",
+        "subcategory_id": "geyser_fault_plumbing",
+        "confidence_floor": 60,
+        "notes": "Phase 1 USER-NAMED EQUIPMENT guard test. When the user explicitly names equipment ('geyser') the system must anchor to that even if visual context could be misread as something else. The lower confidence floor (60) reflects the genuine ambiguity. Alternative: the system may request clarification rather than commit — that is also an acceptable resolution."
+    },
+    "inputs": {
+        "user_text": "Our geyser is leaking. There's water pooling around the base of it in the roof and one of the connections at the top is dripping steadily. We've never had this happen before. The unit is mounted horizontally above our bathroom ceiling.",
+        "user_history": []
+    },
+    "optional_assertions": {
+        "cost_band": "minor",
+        "urgency": "soon",
+        "requires_clarification_expected": false
+    }
+}

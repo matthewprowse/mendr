@@ -2,24 +2,16 @@
 
 import { useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import Link from 'next/link';
+import { ArrowLeft, Eye, EyeOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { FlowStepHeader } from '@/components/flow-header';
+import { Separator } from '@/components/ui/separator';
+import { FlowTopBar } from '@/components/match/flow-shell';
+import { BRAND_NAME } from '@/lib/brand-system';
 import { supabase } from '@/lib/auth/supabase';
 import { toast } from 'sonner';
-import Link from 'next/link';
-
-function GoogleIcon() {
-    return (
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
-            <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
-            <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05" />
-            <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
-        </svg>
-    );
-}
 
 export default function RegisterPage() {
     const router = useRouter();
@@ -29,8 +21,8 @@ export default function RegisterPage() {
     const [firstName, setFirstName] = useState('');
     const [surname, setSurname] = useState('');
     const [email, setEmail] = useState('');
-    const [address, setAddress] = useState('');
     const [password, setPassword] = useState('');
+    const [showPassword, setShowPassword] = useState(false);
     const [loading, setLoading] = useState(false);
     const [done, setDone] = useState(false);
 
@@ -56,7 +48,6 @@ export default function RegisterPage() {
                     data: {
                         first_name: firstName.trim(),
                         surname: surname.trim(),
-                        address: address.trim() || null,
                     },
                     emailRedirectTo: callbackUrl,
                 },
@@ -64,178 +55,222 @@ export default function RegisterPage() {
             if (error) throw error;
             setDone(true);
         } catch (err: unknown) {
-            toast.error((err as { message?: string })?.message || 'Could not create account. Please try again.');
+            toast.error(
+                (err as { message?: string })?.message ||
+                    'Could not create account. Please try again.'
+            );
         } finally {
             setLoading(false);
         }
     }
 
-    async function handleGoogle() {
+    async function handleOAuth(provider: 'google' | 'apple') {
         setLoading(true);
         try {
             await (supabase.auth as any).signInWithOAuth({
-                provider: 'google',
+                provider,
                 options: { redirectTo: callbackUrl },
             });
         } catch (err: unknown) {
-            toast.error((err as { message?: string })?.message || 'Google sign-in failed.');
+            toast.error(
+                (err as { message?: string })?.message ||
+                    `${provider === 'apple' ? 'Apple' : 'Google'} sign-in failed.`
+            );
             setLoading(false);
         }
     }
 
-    return (
-        <div className="flex min-h-screen flex-col bg-background">
-            <FlowStepHeader step={1} onBack={() => router.back()} />
+    const header = (
+        <FlowTopBar
+            className="p-4"
+            leftSlot={
+                <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    aria-label="Go back"
+                    onClick={() => router.back()}
+                >
+                    <ArrowLeft strokeWidth={2.5} />
+                </Button>
+            }
+            centerSlot={
+                <p className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-base font-medium text-foreground">
+                    {BRAND_NAME}
+                </p>
+            }
+            rightSlot={
+                <Button asChild variant="ghost" size="sm">
+                    <Link href={`/auth/login${next !== '/' ? `?next=${encodeURIComponent(next)}` : ''}`}>
+                        Login
+                    </Link>
+                </Button>
+            }
+        />
+    );
 
-            <div className="flex flex-1 justify-center px-4 pt-24 pb-32 sm:px-6">
-                <div className="w-full max-w-sm">
-                    {done ? (
-                        <div className="flex flex-col gap-4">
-                            <div className="flex flex-col gap-2">
-                                <h1 className="text-2xl font-bold text-foreground">Check your inbox</h1>
-                                <p className="text-sm text-muted-foreground">
-                                    We sent a confirmation link to{' '}
-                                    <span className="font-medium text-foreground">{email}</span>. Click
-                                    it to activate your account.
-                                </p>
+    if (done) {
+        return (
+            <div className="fixed inset-0 z-0 flex flex-col overflow-hidden bg-background">
+                {header}
+                <div className="flex-1 overflow-hidden">
+                    <div className="h-full overflow-y-auto">
+                        <div className="flex min-h-full flex-col">
+                            <div className="flex-1 flex flex-col items-center justify-center p-4 min-h-0">
+                                <div className="flex flex-col gap-8 w-full max-w-xl">
+                                    <div className="flex w-full flex-col items-center gap-3 text-center">
+                                        <h1 className="text-2xl font-semibold text-foreground">
+                                            Check Your Inbox
+                                        </h1>
+                                        <p className="text-sm text-muted-foreground">
+                                            We sent a confirmation link to{' '}
+                                            <span className="font-medium text-foreground">{email}</span>.
+                                            Click it to activate your account.
+                                        </p>
+                                    </div>
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        className="self-center text-muted-foreground"
+                                        onClick={() => {
+                                            setDone(false);
+                                            setEmail('');
+                                            setPassword('');
+                                        }}
+                                    >
+                                        ← Use a Different Email
+                                    </Button>
+                                </div>
                             </div>
-                            <button
-                                type="button"
-                                className="self-start text-sm text-muted-foreground hover:text-foreground transition-colors"
-                                onClick={() => { setDone(false); setEmail(''); setPassword(''); }}
-                            >
-                                ← Use a different email
-                            </button>
                         </div>
-                    ) : (
-                        <form onSubmit={handleSubmit} className="flex flex-col gap-6">
-                            <div className="flex flex-col gap-2">
-                                <h1 className="text-2xl font-bold text-foreground">Create your account.</h1>
-                                <p className="text-sm text-muted-foreground">
-                                    Get started with Mendr — free forever.
-                                </p>
-                            </div>
-
-                            <Button
-                                type="button"
-                                variant="secondary"
-                                className="h-10 w-full gap-2 text-sm"
-                                onClick={handleGoogle}
-                                disabled={loading}
-                            >
-                                <GoogleIcon />
-                                Continue with Google
-                            </Button>
-
-                            <div className="flex items-center gap-3">
-                                <div className="h-px flex-1 bg-border" />
-                                <span className="text-xs text-muted-foreground">or</span>
-                                <div className="h-px flex-1 bg-border" />
-                            </div>
-
-                            <div className="flex flex-col gap-4">
-                                <div className="grid grid-cols-2 gap-3">
-                                    <div className="flex flex-col gap-3">
-                                        <Label htmlFor="first-name">First name</Label>
-                                        <Input
-                                            id="first-name"
-                                            className="h-10 w-full text-sm"
-                                            value={firstName}
-                                            onChange={(e) => setFirstName(e.target.value)}
-                                            placeholder="Jane"
-                                            required
-                                            autoComplete="given-name"
-                                            autoFocus
-                                        />
-                                    </div>
-                                    <div className="flex flex-col gap-3">
-                                        <Label htmlFor="surname">Surname</Label>
-                                        <Input
-                                            id="surname"
-                                            className="h-10 w-full text-sm"
-                                            value={surname}
-                                            onChange={(e) => setSurname(e.target.value)}
-                                            placeholder="Smith"
-                                            required
-                                            autoComplete="family-name"
-                                        />
-                                    </div>
-                                </div>
-
-                                <div className="flex flex-col gap-3">
-                                    <Label htmlFor="email">Email</Label>
-                                    <Input
-                                        id="email"
-                                        type="email"
-                                        className="h-10 w-full text-sm"
-                                        value={email}
-                                        onChange={(e) => setEmail(e.target.value)}
-                                        placeholder="you@example.com"
-                                        required
-                                        autoComplete="email"
-                                    />
-                                </div>
-
-                                <div className="flex flex-col gap-3">
-                                    <div className="flex items-center justify-between">
-                                        <Label htmlFor="address">Your address</Label>
-                                        <span className="text-xs text-muted-foreground">Optional</span>
-                                    </div>
-                                    <Input
-                                        id="address"
-                                        className="h-10 w-full text-sm"
-                                        value={address}
-                                        onChange={(e) => setAddress(e.target.value)}
-                                        placeholder="123 Main St, Cape Town"
-                                        autoComplete="street-address"
-                                    />
-                                </div>
-
-                                <div className="flex flex-col gap-3">
-                                    <Label htmlFor="password">Password</Label>
-                                    <Input
-                                        id="password"
-                                        type="password"
-                                        className="h-10 w-full text-sm"
-                                        value={password}
-                                        onChange={(e) => setPassword(e.target.value)}
-                                        placeholder="At least 8 characters"
-                                        required
-                                        minLength={8}
-                                        autoComplete="new-password"
-                                    />
-                                </div>
-                            </div>
-
-                            <p className="text-sm text-muted-foreground">
-                                Already have an account?{' '}
-                                <Link
-                                    href={`/auth${next !== '/' ? `?next=${encodeURIComponent(next)}` : ''}`}
-                                    className="text-foreground font-medium hover:underline"
-                                >
-                                    Sign in
-                                </Link>
-                            </p>
-                        </form>
-                    )}
-                </div>
-            </div>
-
-            {/* Fixed bottom action bar */}
-            {!done && (
-                <div className="fixed inset-x-0 bottom-0 z-50 bg-background p-4">
-                    <div className="mx-auto w-full max-w-sm">
-                        <Button
-                            type="button"
-                            className="h-10 w-full"
-                            disabled={!canSubmit || loading}
-                            onClick={handleSubmit}
-                        >
-                            {loading ? 'Creating account…' : 'Create Account'}
-                        </Button>
                     </div>
                 </div>
-            )}
+            </div>
+        );
+    }
+
+    return (
+        <div className="fixed inset-0 z-0 flex flex-col overflow-hidden bg-background">
+            {header}
+            <div className="flex-1 overflow-hidden">
+                <form onSubmit={handleSubmit} className="h-full overflow-y-auto">
+                    <div className="flex min-h-full flex-col">
+                        <div className="flex-1 flex flex-col items-center justify-center p-4 min-h-0">
+                            <div className="flex flex-col gap-8 w-full max-w-xl">
+                                <div className="flex w-full flex-col items-center gap-3 text-center">
+                                    <h1 className="text-2xl font-semibold text-foreground">
+                                        Create Account
+                                    </h1>
+                                    <p className="text-sm text-muted-foreground">
+                                        Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore.
+                                    </p>
+                                </div>
+
+                                <div className="flex flex-col gap-8">
+                                    <div className="flex flex-row gap-3">
+                                        <Button
+                                            type="button"
+                                            variant="secondary"
+                                            className="flex-1"
+                                            onClick={() => void handleOAuth('google')}
+                                            disabled={loading}
+                                        >
+                                            Google
+                                        </Button>
+                                        <Button
+                                            type="button"
+                                            variant="secondary"
+                                            className="flex-1"
+                                            onClick={() => void handleOAuth('apple')}
+                                            disabled={loading}
+                                        >
+                                            Apple
+                                        </Button>
+                                    </div>
+
+                                    <Separator />
+
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div className="flex flex-col gap-3">
+                                            <Label htmlFor="first-name">First Name</Label>
+                                            <Input
+                                                id="first-name"
+                                                value={firstName}
+                                                onChange={(e) => setFirstName(e.target.value)}
+                                                required
+                                                autoComplete="given-name"
+                                                autoFocus
+                                            />
+                                        </div>
+                                        <div className="flex flex-col gap-3">
+                                            <Label htmlFor="surname">Surname</Label>
+                                            <Input
+                                                id="surname"
+                                                value={surname}
+                                                onChange={(e) => setSurname(e.target.value)}
+                                                required
+                                                autoComplete="family-name"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div className="flex flex-col gap-3">
+                                        <Label htmlFor="email">Email Address</Label>
+                                        <Input
+                                            id="email"
+                                            type="email"
+                                            value={email}
+                                            onChange={(e) => setEmail(e.target.value)}
+                                            required
+                                            autoComplete="email"
+                                        />
+                                    </div>
+
+                                    <div className="flex flex-col gap-3">
+                                        <Label htmlFor="password">Password</Label>
+                                        <div className="relative">
+                                            <Input
+                                                id="password"
+                                                type={showPassword ? 'text' : 'password'}
+                                                value={password}
+                                                onChange={(e) => setPassword(e.target.value)}
+                                                required
+                                                minLength={8}
+                                                autoComplete="new-password"
+                                                className="pr-10"
+                                            />
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowPassword((s) => !s)}
+                                                aria-label={showPassword ? 'Hide password' : 'Show password'}
+                                                className="absolute inset-y-0 right-0 flex items-center justify-center px-3 text-muted-foreground hover:text-foreground"
+                                            >
+                                                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+
+                            </div>
+                        </div>
+
+                        <div className="sticky bottom-0 shrink-0 bg-background p-4">
+                            <div className="w-full max-w-xl mx-auto flex flex-col gap-2">
+                                <Button
+                                    type="submit"
+                                    className="w-full"
+                                    disabled={!canSubmit || loading}
+                                >
+                                    {loading ? 'Creating Account…' : 'Create Account'}
+                                </Button>
+                                <p className="text-center text-xs text-muted-foreground">
+                                    Lorem ipsum dolor sit amet, consectetur adipiscing elit.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
         </div>
     );
 }

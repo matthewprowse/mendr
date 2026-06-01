@@ -1,0 +1,3 @@
+{"ts":"2026-05-28T07:14:35.583Z","track":"A","itemId":null,"branch":null,"baselinePath":null,"afterPath":null,"outcome":"bailed-kill-switch","notes":"BACKGROUND_AGENTS_ENABLED=0 — emergency kill switch is engaged","spentUsdBefore":0,"elapsedMs":1}
+{"ts":"2026-05-28T07:14:44.899Z","track":"A","itemId":null,"branch":null,"baselinePath":null,"afterPath":null,"outcome":"bailed-kill-switch","notes":"BACKGROUND_AGENTS_ENABLED=0 — emergency kill switch is engaged","spentUsdBefore":0,"elapsedMs":1}
+{"ts":"2026-05-28T07:15:25.002Z","track":"A","itemId":null,"branch":null,"baselinePath":null,"afterPath":null,"outcome":"bailed-dirty-tree","notes":"git tree is dirty — refusing to start an agent iteration","spentUsdBefore":0,"elapsedMs":80}

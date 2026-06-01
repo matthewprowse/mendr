@@ -1,0 +1,111 @@
+{
+    "name": "p0-geyser-thermostat-intermittent",
+    "trade": "Plumbing",
+    "description": "Hot water from the geyser is intermittent. Some showers are hot for an hour, others go lukewarm halfway through. I took a photo of the thermostat dial on the side of the geyser but the photo is pretty blurry \u2014 the indicator is somewhere between 50 and 65, hard to tell exactly.",
+    "image_present": true,
+    "image_quality": "blurry",
+    "mockAgentOutput": {
+        "hypotheses": [
+            {
+                "id": "h1",
+                "label": "Thermostat set too low for household demand",
+                "confidence_alone": 0.55,
+                "evidence_for": [
+                    "Intermittent hot-water symptom is consistent with under-set thermostat",
+                    "Dial appears to be sitting in the lower half of its range"
+                ],
+                "evidence_against": [
+                    "Photo too blurry to read the actual setting"
+                ]
+            },
+            {
+                "id": "h2",
+                "label": "Failing thermostat tripping under load",
+                "confidence_alone": 0.45,
+                "evidence_for": [
+                    "Hot-then-lukewarm pattern matches a thermostat cutting out before recovery"
+                ],
+                "evidence_against": [
+                    "Dial position itself does not confirm electrical failure"
+                ]
+            },
+            {
+                "id": "h3",
+                "label": "Sediment buildup reducing usable hot volume",
+                "confidence_alone": 0.35,
+                "evidence_for": [
+                    "Reduced hot-water duration is a classic sediment symptom"
+                ],
+                "evidence_against": [
+                    "No information yet about geyser age or last service"
+                ]
+            }
+        ],
+        "what_we_dont_know": "What temperature the thermostat dial is actually set to \u2014 the photo is too blurry to read.",
+        "why_it_matters": "If the dial is at 50\u00b0C, the fix is to raise the setting; if it's at 65\u00b0C, the thermostat itself is likely failing under load and needs replacing.",
+        "chips": [
+            {
+                "id": "c1",
+                "text": "Take a clearer photo of the thermostat dial.",
+                "supports": "h1",
+                "rules_out": []
+            },
+            {
+                "id": "c2",
+                "text": "The dial is set close to 50.",
+                "supports": "h1",
+                "rules_out": [
+                    "h2"
+                ]
+            },
+            {
+                "id": "c3",
+                "text": "The dial is set close to 65 or higher.",
+                "supports": "h2",
+                "rules_out": [
+                    "h1"
+                ]
+            },
+            {
+                "id": "c4",
+                "text": "Something else is happening.",
+                "supports": "",
+                "rules_out": []
+            }
+        ],
+        "round": 1,
+        "next_step_if_unresolved": "ask_again"
+    },
+    "mockFacets": {
+        "trade_confidence": 95,
+        "component_confidence": 65,
+        "cause_confidence": 55,
+        "image_sufficiency": "partial",
+        "committed_observations": [
+            "intermittent hot water",
+            "thermostat dial visible but blurry"
+        ],
+        "explicit_unknowns": [
+            "actual dial reading",
+            "whether element is also faulty"
+        ]
+    },
+    "expected": {
+        "recommended_action": "ask",
+        "must_consider_hypotheses": [
+            "thermostat setting",
+            "thermostat failure",
+            "sediment"
+        ],
+        "must_not_consider": [
+            "element burnout",
+            "anode rod"
+        ],
+        "must_ask_about": "what the thermostat dial actually reads",
+        "failure_baseline_today": {
+            "observed_behaviour": "System asks a generic 'tell us more about your hot water problem' clarification \u2014 not a specific question targeting the dial reading.",
+            "why_it_fails": "Agent 2c's discriminator is not tied to the specific blurry-image signal. The prompt has no instruction to identify and target the dominant uncertainty source (the dial)."
+        },
+        "phase_6_ask_rationale": "Top hypothesis confidence_alone=0.55 (<0.75) and gap to second=0.10 (<0.25). A discriminating chip targeting the dial reading meaningfully reduces uncertainty \u2014 so ask, not commit_low_confidence."
+    }
+}

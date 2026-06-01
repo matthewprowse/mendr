@@ -111,8 +111,21 @@ function createNextConfig(phase: string): NextConfig {
     const securityHeaders = buildSecurityHeaders(isDevelopmentServer);
 
     return {
+        // Allow the preview tool to use a separate build directory so it never
+        // shares the Turbopack persistent cache with the main dev server.
+        distDir: process.env.NEXT_DIST_DIR ?? '.next',
         outputFileTracingRoot: process.cwd(),
         transpilePackages: ['geist'],
+        // Sentry instrumentation + Turbopack: OpenTelemetry packages must be
+        // imported directly from node_modules rather than bundled — Turbopack
+        // fails to chunk their ESM builds at the instrumentation layer.
+        serverExternalPackages: [
+            '@opentelemetry/semantic-conventions',
+            '@opentelemetry/api',
+            '@opentelemetry/core',
+            '@opentelemetry/resources',
+            '@opentelemetry/sdk-trace-base',
+        ],
         allowedDevOrigins: ['192.168.101.239'],
         webpack: (config, { dev }) => {
             // Heavy routes (e.g. match + Maps) can exceed the default chunk load timeout in dev

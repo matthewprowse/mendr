@@ -1,6 +1,6 @@
 'use client';
 
-import { MapPin } from '@phosphor-icons/react';
+import { MapPin } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { INK } from '@/lib/design-tokens';
 
@@ -17,7 +17,7 @@ export function MatchNoProvidersEmpty({ onEditAddress }: MatchNoProvidersEmptyPr
         >
             <div className="flex flex-col gap-2">
                 <div className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-black/[0.03]">
-                    <MapPin size={24} weight="regular" className="text-muted-foreground" aria-hidden="true" />
+                    <MapPin size={24} className="text-muted-foreground" aria-hidden="true" />
                 </div>
                 <h3 className="text-lg font-semibold leading-tight" style={{ color: INK }}>Nothing in this search area</h3>
                 <p className="text-sm leading-relaxed text-muted-foreground">

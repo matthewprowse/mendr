@@ -39,6 +39,10 @@
         {
             "path": "/api/cron/homeowner-reengagement",
             "schedule": "0 9 * * 1"
+        },
+        {
+            "path": "/api/cron/feature-announcement",
+            "schedule": "0 10 * * *"
         }
     ]
 }

@@ -1,0 +1,20 @@
+{
+    "id": "garage-cable-snapped-01",
+    "case_summary": "Garage door hangs crooked, one side dropped; one of the lifting cables has frayed and parted.",
+    "verified": false,
+    "ground_truth": {
+        "trade": "Security",
+        "subcategory_id": "garage_door_fault",
+        "confidence_floor": 75,
+        "notes": "Frayed / snapped lifting cable case. Tests that the system correctly diagnoses cable failure rather than misdiagnosing as a spring or motor issue, since all three present with 'door won't go up properly'."
+    },
+    "inputs": {
+        "user_text": "Our garage door is hanging crooked — the left side is much lower than the right and the door tilts diagonally when we try to lift it. Looking at the corners I can see a steel cable has frayed and snapped on the left side. The door is jammed at an angle now.",
+        "user_history": []
+    },
+    "optional_assertions": {
+        "cost_band": "medium",
+        "urgency": "soon",
+        "requires_clarification_expected": false
+    }
+}

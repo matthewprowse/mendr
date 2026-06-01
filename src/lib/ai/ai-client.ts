@@ -1,6 +1,27 @@
-import { GoogleGenerativeAI, type GenerativeModel } from '@google/generative-ai';
+import {
+    GoogleGenerativeAI,
+    type CachedContent,
+    type GenerativeModel,
+} from '@google/generative-ai';
 
-export const GEMINI_MODEL_NAME = 'gemini-2.5-flash' as const;
+/**
+ * Main diagnosis pipeline model (Agent 2a classify + Agent 2b prose).
+ * Default: gemini-2.5-flash. Override via GEMINI_DIAGNOSIS_MODEL env var
+ * (e.g. flip to gemini-3.5-flash for higher diagnostic quality).
+ *
+ * NOTE: stored as a string (not a literal const) because env-driven overrides
+ * are how we switch models without code changes.
+ */
+export const GEMINI_MODEL_NAME: string =
+    process.env.GEMINI_DIAGNOSIS_MODEL || 'gemini-2.5-flash';
+
+/**
+ * Agent 3 self-critique runs on a SEPARATE model constant so it stays cheap
+ * regardless of which model the main pipeline uses. Override via
+ * GEMINI_CRITIQUE_MODEL env var. Defaults to 2.5 Flash.
+ */
+export const GEMINI_CRITIQUE_MODEL_NAME: string =
+    process.env.GEMINI_CRITIQUE_MODEL || 'gemini-2.5-flash';
 
 type GeminiModelParams = NonNullable<
     Parameters<GoogleGenerativeAI['getGenerativeModel']>[0]
@@ -42,3 +63,33 @@ export function getGeminiModelNamed(
     });
 }
 
+/**
+ * Build a GenerativeModel that uses a previously-created `CachedContent` as
+ * its system instruction. The cached content carries the model name + system
+ * prompt; per-call code just passes the dynamic `contents` and
+ * generationConfig. Used by the v3.5 classify + prose caching paths to
+ * amortise large system prompts at the cached-input rate.
+ */
+export function getGeminiModelFromCachedContent(
+    cached: CachedContent,
+    params?: Omit<GeminiModelParams, 'model'>,
+): GenerativeModel {
+    return getClientFromEnv().getGenerativeModelFromCachedContent(
+        cached,
+        params,
+    );
+}
+
+/**
+ * Expose the raw Gemini API key for helpers that need to talk to APIs the
+ * main SDK doesn't wrap directly (currently: `GoogleAICacheManager` in
+ * `gemini-cache-manager.ts`, which lives in `@google/generative-ai/server`
+ * and takes the key directly rather than via the genAI client object).
+ *
+ * Returns null when the env var is missing — callers should fall back
+ * rather than throw, since most call sites already handle the not-cached
+ * path.
+ */
+export function getGeminiApiKey(): string | null {
+    return process.env.GEMINI_API_KEY ?? null;
+}

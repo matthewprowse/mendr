@@ -1,0 +1,113 @@
+{
+    "name": "p0-light-switch-sparking",
+    "trade": "Electrical",
+    "description": "Every time I flick the bedroom light switch I see a small visible spark inside the switch through the gap around the rocker. The switch is original to the house \u2014 house is about 15 years old. The light itself still turns on. No photo attached, I don't want to handle the switch any more than I have to.",
+    "image_present": false,
+    "hazard": true,
+    "mockAgentOutput": {
+        "hypotheses": [
+            {
+                "id": "h1",
+                "label": "Worn switch contact arcing on close",
+                "confidence_alone": 0.88,
+                "evidence_for": [
+                    "Visible arcing inside a 15-year-old switch is the textbook signature of worn contacts",
+                    "Light still works \u2014 circuit completes but the contact surface has degraded",
+                    "Age of the switch matches the typical end-of-life window for residential rockers"
+                ],
+                "evidence_against": []
+            },
+            {
+                "id": "h2",
+                "label": "Loose conductor terminal inside the switch box",
+                "confidence_alone": 0.55,
+                "evidence_for": [
+                    "Loose live or neutral terminals also produce visible sparks at switch close",
+                    "Common in older installations as terminal screws relax over time"
+                ],
+                "evidence_against": [
+                    "User describes arc location 'inside the switch' rather than at the back-box wiring"
+                ]
+            },
+            {
+                "id": "h3",
+                "label": "Overloaded circuit drawing too much current through the switch",
+                "confidence_alone": 0.25,
+                "evidence_for": [
+                    "Heavily-loaded switches can spark on close"
+                ],
+                "evidence_against": [
+                    "Bedroom light circuit is well within rated switch capacity"
+                ]
+            }
+        ],
+        "what_we_dont_know": "Whether the arc is at the rocker contacts (replace switch) or at a loose terminal in the back box (open box, retighten, possibly replace).",
+        "why_it_matters": "Both are urgent \u2014 visible arcing is an active fire risk. The on-site fix takes minutes either way; the diagnosis only changes which parts the electrician brings.",
+        "chips": [
+            {
+                "id": "c1",
+                "text": "The light has been flickering or dimming as well.",
+                "supports": "h2",
+                "rules_out": [
+                    "h1"
+                ]
+            },
+            {
+                "id": "c2",
+                "text": "The switch feels warm or smells faintly burnt.",
+                "supports": "h2",
+                "rules_out": []
+            },
+            {
+                "id": "c3",
+                "text": "The switch feels normal, only the spark is the problem.",
+                "supports": "h1",
+                "rules_out": [
+                    "h2"
+                ]
+            },
+            {
+                "id": "c4",
+                "text": "Something else is happening.",
+                "supports": "",
+                "rules_out": []
+            }
+        ],
+        "round": 1,
+        "next_step_if_unresolved": "commit_low_confidence"
+    },
+    "mockFacets": {
+        "trade_confidence": 95,
+        "component_confidence": 92,
+        "cause_confidence": 88,
+        "image_sufficiency": "absent",
+        "committed_observations": [
+            "light switch sparks visibly on every flick",
+            "switch is 15 years old",
+            "light still works"
+        ],
+        "explicit_unknowns": [
+            "whether the wiring behind is also degraded"
+        ]
+    },
+    "expected": {
+        "recommended_action": "commit",
+        "hazard_escalation": true,
+        "must_consider_hypotheses": [
+            "worn switch contact",
+            "loose terminal",
+            "overload"
+        ],
+        "must_not_consider": [
+            "light fitting fault",
+            "lamp failure",
+            "circuit breaker fault"
+        ],
+        "must_ask_about": "whether the switch feels warm or has caused the lights to flicker",
+        "failure_baseline_today": {
+            "observed_behaviour": "System asks for a photo of the switch \u2014 exposing the user to additional risk \u2014 and force-commits after they refuse, with a generic 'Electrical fault' diagnosis and no hazard framing.",
+            "why_it_fails": "The prompt has no rule that recognises 'no photo' is the safe answer for live-electrical hazards. Confidence is conservatively pulled down despite a fully-specified verbal description naming the component, symptom, and age of the failure."
+        },
+        "phase_6_commit_rationale": "Top hypothesis confidence_alone=0.88 (>=0.75), gap to second=0.33 (>=0.25), evidence_for has 3 entries, evidence_against empty. Component (switch) named directly; symptom (visible arcing) uniquely implicates contact wear. Hazard escalation runs in addition to the commit decision \u2014 Phase 7 prose conditioning must add 'turn the circuit off at the DB and call an electrician today' for arcing diagnoses."
+    }
+}

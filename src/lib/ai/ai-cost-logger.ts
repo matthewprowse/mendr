@@ -10,13 +10,11 @@
  * Update these when Google changes its pricing. Values are per 1,000 tokens (not
  * per 1M) to keep the arithmetic readable.
  *
- * Current approximate Gemini 2.5 Flash pricing (May 2026):
- *   Input:  $0.30 / 1M tokens  →  $0.00030 / 1k tokens
- *   Output: $1.00 / 1M tokens  →  $0.00100 / 1k tokens
- *
- * For gemini-2.0-flash-lite:
- *   Input:  $0.075 / 1M tokens →  $0.000075 / 1k tokens
- *   Output: $0.30  / 1M tokens →  $0.00030  / 1k tokens
+ * Current pricing (June 2026):
+ *   gemini-3.5-flash:   Input $1.50 / 1M  |  Output $9.00 / 1M  |  Cached $0.15 / 1M
+ *   gemini-2.5-flash:   Input $0.30 / 1M  |  Output $1.00 / 1M
+ *   gemini-2.0-flash:   Input $0.10 / 1M  |  Output $0.40 / 1M
+ *   gemini-2.0-flash-lite: Input $0.075 / 1M  |  Output $0.30 / 1M
  */
 
 import { createSupabaseAdminClient } from '@/lib/auth/supabase-server';
@@ -25,6 +23,7 @@ import { createSupabaseAdminClient } from '@/lib/auth/supabase-server';
 // USD per 1 token. Update when Google changes pricing.
 
 const PRICING: Record<string, { input: number; output: number }> = {
+    'gemini-3.5-flash':        { input: 1.50 / 1_000_000,  output: 9.00 / 1_000_000  },
     'gemini-2.5-flash':        { input: 0.30 / 1_000_000,  output: 1.00 / 1_000_000  },
     'gemini-2.5-flash-preview':{ input: 0.30 / 1_000_000,  output: 1.00 / 1_000_000  },
     'gemini-2.0-flash':        { input: 0.10 / 1_000_000,  output: 0.40 / 1_000_000  },
@@ -53,6 +52,14 @@ export interface AiCostContext {
     modelName: string;
     userId?: string | null;
     conversationId?: string | null;
+    /**
+     * Wall-clock duration of the Gemini generateContent call in milliseconds.
+     * Used to compute rolling-average processing-time estimates on the
+     * /processing page. Measure the call site with `Date.now()` deltas around
+     * the await and pass the result. Optional — older callers will pass
+     * undefined and the row will be inserted with NULL latency.
+     */
+    latencyMs?: number | null;
 }
 
 /**
@@ -105,6 +112,7 @@ export async function logGeminiUsage(
             completion_tokens: completionTokens,
             total_tokens:      totalTokens,
             estimated_usd:     estimatedUsd,
+            latency_ms:        ctx.latencyMs ?? null,
         });
 
         if (error) {

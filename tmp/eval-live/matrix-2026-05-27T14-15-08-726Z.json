@@ -1,0 +1,268 @@
+{
+  "ts": "2026-05-27T14-15-08-726Z",
+  "rounds": 1,
+  "summaries": [
+    {
+      "cell": {
+        "tag": "A",
+        "label": "2.5 model + v2.5 prompts",
+        "model": "gemini-2.5-flash",
+        "promptVariant": "v2.5"
+      },
+      "totalChecks": 8,
+      "correct": 5,
+      "meanConfidence": 98,
+      "commitRate": 1,
+      "titleStabilityRate": 1,
+      "rescueActivations": 0,
+      "perTest": {
+        "geyser-full-cues": {
+          "titles": [
+            "Corroded Geyser Tank"
+          ],
+          "sids": [
+            "geyser_fault_plumbing"
+          ],
+          "trades": [
+            "Plumbing"
+          ],
+          "confidences": [
+            98
+          ],
+          "commits": [
+            true
+          ],
+          "h1Confidences": []
+        },
+        "garage-with-cause": {
+          "titles": [
+            ""
+          ],
+          "sids": [
+            ""
+          ],
+          "trades": [
+            ""
+          ],
+          "confidences": [
+            0
+          ],
+          "commits": [
+            true
+          ],
+          "h1Confidences": []
+        }
+      }
+    },
+    {
+      "cell": {
+        "tag": "D",
+        "label": "3.5 model + v3.5 prompts",
+        "model": "gemini-3.5-flash",
+        "promptVariant": "v3.5"
+      },
+      "totalChecks": 8,
+      "correct": 2,
+      "meanConfidence": 0,
+      "commitRate": 0,
+      "titleStabilityRate": 1,
+      "rescueActivations": 0,
+      "perTest": {
+        "geyser-full-cues": {
+          "titles": [
+            ""
+          ],
+          "sids": [
+            ""
+          ],
+          "trades": [
+            ""
+          ],
+          "confidences": [
+            0
+          ],
+          "commits": [
+            true
+          ],
+          "h1Confidences": []
+        },
+        "garage-with-cause": {
+          "titles": [
+            ""
+          ],
+          "sids": [
+            ""
+          ],
+          "trades": [
+            ""
+          ],
+          "confidences": [
+            0
+          ],
+          "commits": [
+            true
+          ],
+          "h1Confidences": []
+        }
+      }
+    }
+  ],
+  "allResults": [
+    {
+      "cell": {
+        "tag": "A",
+        "label": "2.5 model + v2.5 prompts",
+        "model": "gemini-2.5-flash",
+        "promptVariant": "v2.5"
+      },
+      "round": 1,
+      "testId": "geyser-full-cues",
+      "conversationId": "0944f8c2-b056-4682-b891-ec72dcd73576",
+      "status": "ok",
+      "elapsedMs": 28441,
+      "parsed": {
+        "thought": "The user explicitly states the geyser is leaking, the drip tray water is rusty brown, and they are experiencing higher electricity bills with reduced hot water duration. Image 1 clearly shows rusty brown water collected in a drip tray beneath a geyser, with a visible drip from a pipe connection. Image 2 provides a closer view of the pipework, showing further rust and mineral deposits on the connections. This evidence, combined with the user's description of symptoms, strongly indicates internal corrosion of the geyser tank.",
+        "thinking": "The user explicitly states the geyser is leaking, the drip tray water is rusty brown, and they are experiencing higher electricity bills with reduced hot water duration. Image 1 clearly shows rusty brown water collected in a drip tray beneath a geyser, with a visible drip from a pipe connection. Image 2 provides a closer view of the pipework, showing further rust and mineral deposits on the connections. This evidence, combined with the user's description of symptoms, strongly indicates internal corrosion of the geyser tank.",
+        "thoughts_history": [
+          {
+            "round": 0,
+            "thought": "The user explicitly states the geyser is leaking, the drip tray water is rusty brown, and they are experiencing higher electricity bills with reduced hot water duration. Image 1 clearly shows rusty brown water collected in a drip tray beneath a geyser, with a visible drip from a pipe connection. Image 2 provides a closer view of the pipework, showing further rust and mineral deposits on the connections. This evidence, combined with the user's description of symptoms, strongly indicates internal corrosion of the geyser tank.",
+            "created_at": "2026-05-27T14:14:58.599Z"
+          }
+        ],
+        "diagnosis": "Corroded Geyser Tank",
+        "estimated_diagnosis_sentence": "Corroded Geyser Tank",
+        "message": "Your geyser appears to have a corroded internal tank, as evidenced by the rusty brown water visible in the drip tray and the leak from the pipe connection. This internal corrosion is also consistent with your report of higher electricity bills and reduced hot water duration.\n\nThis issue typically develops when the geyser's sacrificial anode rod, designed to protect the tank from rust, has been fully consumed. Once the anode is gone, the tank's steel walls begin to corrode, leading to rust in the water and eventual leaks.\n\nIf left unaddressed, the corrosion will worsen, leading to a more significant leak or a catastrophic burst of the geyser tank. This could cause extensive water damage to your property and potentially lead to electrical hazards.\n\nThere is a risk of severe water damage and electrical short circuits if the geyser bursts or the leak escalates. It is advisable to switch off the geyser's electrical supply immediately to prevent further damage or hazards.",
+        "action_required": "",
+        "image_descriptions": [
+          "This image shows a black plastic drip tray with rusty brown water collected inside it, positioned beneath what appears to be a geyser or pump unit. A copper pipe with a brass fitting is visibly dripping water into the tray, indicating an active leak.",
+          "This close-up image focuses on the pipework and connections, revealing significant rust and mineral deposits around the copper pipes and fittings. White plastic pipes are also visible in the background, contrasting with the corroded metal.",
+          "This wider exterior shot provides context of the building, showing an outdoor walkway with brick walls and windows. No direct diagnostic information about the geyser fault is visible in this frame."
+        ],
+        "image_thought_breakdown": [
+          "This image shows a black plastic drip tray with rusty brown water collected inside it, positioned beneath what appears to be a geyser or pump unit. A copper pipe with a brass fitting is visibly dripping water into the tray, indicating an active leak.",
+          "This close-up image focuses on the pipework and connections, revealing significant rust and mineral deposits around the copper pipes and fittings. White plastic pipes are also visible in the background, contrasting with the corroded metal.",
+          "This wider exterior shot provides context of the building, showing an outdoor walkway with brick walls and windows. No direct diagnostic information about the geyser fault is visible in this frame."
+        ],
+        "clarification_questions": [],
+        "contractor_checklist": [
+          "Isolate the electrical supply to the geyser.",
+          "Drain the geyser and disconnect the water supply lines.",
+          "Remove the old, corroded geyser unit.",
+          "Install a new geyser, ensuring all plumbing and electrical connections are correctly made and certified."
+        ],
+        "homeowner_prep": "Switch off the geyser's circuit breaker at your main distribution board to prevent further electrical and water damage.",
+        "diy_verification": "Observe the water in the drip tray; if it continues to be rusty brown, it confirms internal tank corrosion.",
+        "photo_request": "",
+        "confidence_drivers": [
+          "User explicitly stated rusty water and increased electricity bills",
+          "Image 1 shows rusty brown water in drip tray",
+          "Image 1 shows active leak from pipe connection",
+          "Symptoms align with known failure mode for corroded geyser tank"
+        ],
+        "trade": "Plumbing",
+        "trade_detail": "Geyser Fault",
+        "confidence": 98,
+        "rejected": false,
+        "requires_clarification": false,
+        "unserviced": false,
+        "refetch_providers": false,
+        "unsupported_reason": "N/A",
+        "subcategory_id": "geyser_fault_plumbing",
+        "failed_component": "Geyser pipe connection",
+        "cascading_damage": "Water damage to surrounding area, increased electricity consumption",
+        "trade_candidates": [
+          {
+            "trade": "Plumbing",
+            "score": 98
+          },
+          {
+            "trade": "Electrical",
+            "score": 70
+          },
+          {
+            "trade": "General Handyman",
+            "score": 40
+          }
+        ],
+        "prompt_version": "v7.4",
+        "ai_model": "gemini-2.5-flash",
+        "pipeline": "v2-classify-prose",
+        "structural_confidence": {
+          "score": 100,
+          "signals": {
+            "hasImage": true,
+            "imageCount": 3,
+            "descriptionWordCount": 27,
+            "subcategoryMatched": true,
+            "failedComponentNamed": true,
+            "isCatchAllWithNoVisual": false,
+            "isRejectedOrUnserviced": false
+          }
+        }
+      },
+      "critique": {
+        "failure_mode": "none",
+        "knowledge_gap": null,
+        "surprise_signals": [],
+        "prompt_hypothesis": null,
+        "resolution_would_be": null,
+        "confidence_calibration": {
+          "delta_reasoning": "The agent's confidence was high, which is justified by the clear visual evidence of rusty water in the drip tray and a visible leak from the pipe connection. The user's description of rusty brown water, increased electricity bills, and reduced hot water duration strongly corroborates the diagnosis of a corroded geyser tank. There is no conflicting evidence, and the images directly support the primary fault.",
+          "agent_confidence": 98,
+          "rubric_facets_used": [
+            "description_complete",
+            "image_clarity",
+            "symptom_unique",
+            "equipment_visible"
+          ],
+          "critique_confidence": 95
+        },
+        "notes_for_human_review": "The agent provided a sound diagnosis based on strong visual and textual evidence. The confidence level was well-calibrated, and the explanation of the fault, its progression, and hazards was comprehensive. No failure mode was detected, indicating a successful diagnosis.",
+        "considered_alternatives": []
+      }
+    },
+    {
+      "cell": {
+        "tag": "A",
+        "label": "2.5 model + v2.5 prompts",
+        "model": "gemini-2.5-flash",
+        "promptVariant": "v2.5"
+      },
+      "round": 1,
+      "testId": "garage-with-cause",
+      "conversationId": "b9b29e69-a872-43ff-b122-b5499c7932b1",
+      "status": "error",
+      "error": "upload-image 500: Internal Server Error",
+      "elapsedMs": 1847
+    },
+    {
+      "cell": {
+        "tag": "D",
+        "label": "3.5 model + v3.5 prompts",
+        "model": "gemini-3.5-flash",
+        "promptVariant": "v3.5"
+      },
+      "round": 1,
+      "testId": "geyser-full-cues",
+      "conversationId": "1d75c265-4d64-477d-93de-0e3c5e7806c2",
+      "status": "error",
+      "error": "upload-image 500: Internal Server Error",
+      "elapsedMs": 863
+    },
+    {
+      "cell": {
+        "tag": "D",
+        "label": "3.5 model + v3.5 prompts",
+        "model": "gemini-3.5-flash",
+        "promptVariant": "v3.5"
+      },
+      "round": 1,
+      "testId": "garage-with-cause",
+      "conversationId": "373702ea-7e84-47c7-8349-292ee46f021e",
+      "status": "error",
+      "error": "upload-image 500: Internal Server Error",
+      "elapsedMs": 1038
+    }
+  ]
+}

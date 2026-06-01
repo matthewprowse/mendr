@@ -235,6 +235,18 @@ export const RATE_LIMITS = {
         max: 40,
     },
 
+    // Homeowner password change. Sensitive — tight cap to slow brute attempts.
+    accountPassword: {
+        windowMs: 60 * 60 * 1000, // 1 hour
+        max: 5,
+    },
+
+    // Homeowner account deletion. Destructive and one-way; very tight cap.
+    accountDelete: {
+        windowMs: 60 * 60 * 1000, // 1 hour
+        max: 3,
+    },
+
     // Homeowner contacts a contractor from a match/report page.
     contactContractor: {
         windowMs: 60 * 1000, // 1 minute

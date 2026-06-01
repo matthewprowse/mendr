@@ -1,0 +1,20 @@
+{
+    "id": "gate-motor-burnt-out-01",
+    "case_summary": "Driveway gate motor smells of burnt electronics after a load-shedding spike; motor will not engage.",
+    "verified": false,
+    "ground_truth": {
+        "trade": "Security",
+        "subcategory_id": "gate_motor_fault",
+        "confidence_floor": 75,
+        "notes": "Load-shedding surge damage commonly takes out gate motors. Tests that the system routes to gate_motor_fault (the equipment that failed) rather than to load_shedding_surge (Electrical) — the user-named equipment guard should anchor on the gate."
+    },
+    "inputs": {
+        "user_text": "After last night's load shedding our driveway gate motor isn't working any more. There's a strong burnt-electronics smell when you stand next to the motor housing, and the gate won't move using the remote or the wall button. Nothing visibly damaged on the gate arm itself.",
+        "user_history": []
+    },
+    "optional_assertions": {
+        "cost_band": "major",
+        "urgency": "soon",
+        "requires_clarification_expected": false
+    }
+}

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createHash } from 'crypto';
 import { checkRateLimit } from '@/lib/rate-limit-config';
 import { createSupabaseAdminClient } from '@/lib/auth/supabase-server';
+import { notifyContractorOfLead } from '@/lib/providers/notify-contractor-of-lead';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -83,7 +84,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         .update(`${providerId}:${diagnosisId}:${channel}`)
         .digest('hex');
 
-    const { error: upsertError } = await admin
+    const { data: insertedRows, error: upsertError } = await admin
         .from('provider_contact_events')
         .upsert(
             {
@@ -95,11 +96,29 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
                 diagnosis_trade: diagnosisTrade,
             },
             { onConflict: 'dedupe_key', ignoreDuplicates: true }
-        );
+        )
+        .select('id');
 
     if (upsertError) {
         console.error('[contact/contractor] upsert error:', upsertError);
         return NextResponse.json({ error: 'Failed to record contact event.' }, { status: 500 });
+    }
+
+    // With `ignoreDuplicates` (ON CONFLICT DO NOTHING), PostgREST returns the
+    // inserted rows only — a duplicate tap yields an empty array. Fire the
+    // realtime lead alert exactly once, for genuinely new contact events.
+    const isNewEvent = Array.isArray(insertedRows) && insertedRows.length > 0;
+    if (isNewEvent) {
+        // Fire-and-forget: the contractor alert must never fail the contact
+        // request. The notify helper applies its own `notify_realtime` opt-out,
+        // active/suppression checks, and never throws (returns { ok, reason }).
+        void notifyContractorOfLead({
+            contractorId: providerId,
+            diagnosisId,
+            homeownerWhatsapp,
+        }).catch((err) => {
+            console.error('[contact/contractor] lead notification error:', err);
+        });
     }
 
     return NextResponse.json({ ok: true });
