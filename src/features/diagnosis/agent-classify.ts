@@ -7,7 +7,16 @@
 
 import { SchemaType } from '@google/generative-ai';
 import type { Content as GeminiContent } from '@google/generative-ai';
-import { getDiagnosisModel, GEMINI_MODEL_NAME } from '@/lib/ai/ai-diagnosis-backend';
+import {
+    getDiagnosisModel,
+    getDiagnosisModelByName,
+    GEMINI_MODEL_NAME,
+} from '@/lib/ai/ai-diagnosis-backend';
+import {
+    getGeminiApiKey,
+    getGeminiModelFromCachedContent,
+} from '@/lib/ai/ai-client';
+import { getOrCreateCachedSystemPrompt } from '@/lib/ai/gemini-cache-manager';
 import { logGeminiUsage } from '@/lib/ai/ai-cost-logger';
 import { logPipelineStep } from '@/lib/ai/ai-logging';
 import {
@@ -17,6 +26,12 @@ import {
     TAXONOMY_NONE_ID,
 } from '@/lib/diagnosis/diagnosis-trade-taxonomy';
 import { tradeToServiceLabel } from '@/lib/services';
+import {
+    resolveVariant,
+    getClassificationSystemPrompt,
+    getClassifySamplingParams,
+    type PromptVariant,
+} from '@/features/diagnosis/prompts/variants/prompt-variant';
 
 // ── Output type ────────────────────────────────────────────────────────────────
 
@@ -157,7 +172,10 @@ const ORDERED_SCHEMA = {
     required: [...SCHEMA_PROPERTY_ORDER],
 };
 
-function buildClassificationSystemPrompt(serviceListText: string): string {
+// Exported for prompt-variant resolver (re-exported as `_v25` from
+// `prompts/variants/v2_5-builders.ts`). The variant resolver decides whether
+// to call this v2.5 baseline or a future v3.5 sibling.
+export function buildClassificationSystemPrompt(serviceListText: string): string {
     const taxonomyBlock = formatTaxonomyForClassificationPrompt();
     return `You are a home maintenance classifier for Mendr, a South African home services app. Cape Town context.
 
@@ -218,7 +236,29 @@ export function finalizeClassificationAgainstCatalogAndTaxonomy(
     let trade = typeof parsed.trade === 'string' ? parsed.trade.trim() : 'N/A';
     let detail = typeof parsed.trade_detail === 'string' ? parsed.trade_detail.trim() : '';
     const rejected = Boolean(parsed.rejected);
-    const unserviced = Boolean(parsed.unserviced);
+    let unserviced = Boolean(parsed.unserviced);
+
+    // Trust-the-taxonomy guard: if the model picked a valid subcategory_id but
+    // ALSO flagged unserviced=true, the model is self-contradicting. The
+    // taxonomy is ground truth — a valid subcategory means we DO service this.
+    // Override unserviced to false so the row lookup below proceeds and the
+    // trade is coerced from the taxonomy row. This is the root cause of the
+    // "garage door spring failure → Service Not Currently Supported" bug seen
+    // in production (e.g. subcategory_id='garage_door_fault' with unserviced=
+    // true would otherwise short-circuit to N/A).
+    if (unserviced && sid !== TAXONOMY_NONE_ID && getSubcategoryById(sid)) {
+        console.warn(
+            JSON.stringify({
+                event: 'classification.unserviced_overridden_by_taxonomy',
+                reason:
+                    'model returned unserviced=true alongside a valid subcategory_id; trusting the taxonomy',
+                subcategory_id: sid,
+                model_trade: trade,
+            }),
+        );
+        unserviced = false;
+        parsed.unserviced = false;
+    }
 
     const row = rejected || unserviced ? undefined : getSubcategoryById(sid);
 
@@ -344,8 +384,42 @@ export async function runClassification(
     contents: GeminiContent[],
     serviceListText: string,
     allowedTradeLabels: string[],
-    ctx?: { userId?: string | null; conversationId?: string | null },
+    ctx?: {
+        userId?: string | null;
+        conversationId?: string | null;
+        /**
+         * Optional prompt-variant override (used by eval / A-B). When unset,
+         * the variant is inferred from the effective model name. See
+         * `prompts/variants/prompt-variant.ts`.
+         */
+        promptVariant?: PromptVariant | null;
+        /**
+         * Optional model override (eval only — gated by
+         * ALLOW_MODEL_OVERRIDE_FROM_REQUEST=1 in the API layer). When set,
+         * this model is used instead of the env-configured one AND drives
+         * variant inference when promptVariant isn't explicit.
+         */
+        modelOverride?: string | null;
+    },
 ): Promise<ClassificationResult> {
+    const requestedModel = ctx?.modelOverride || GEMINI_MODEL_NAME;
+    const variant = resolveVariant({
+        override: ctx?.promptVariant,
+        model: requestedModel,
+    });
+    const variantCtx = { variant };
+    // ── Mixed-tier classifier (cost-cut Deliverable 1) ──────────────────────
+    // Classification output is small structured JSON (~200 tokens). The
+    // v3.5-native pipeline pays for 3.5 Flash on prose, but the classifier
+    // can run on the much cheaper 2.0 Flash Lite without quality loss
+    // (validated in the earlier 2.5 Flash → 3.5 Flash eval matrix where
+    // mixed-tier classify already produced identical confusion-matrix rows).
+    // For every OTHER variant (v2.5, v3.5, v2.5-polished) we leave behaviour
+    // unchanged so production paths are untouched.
+    const effectiveModel =
+        variant === 'v3.5-native'
+            ? 'gemini-2.0-flash-lite'
+            : requestedModel;
     const stepStart = Date.now();
     // Mock branch — used by Playwright E2E to avoid real Gemini calls.
     // Pinned fixture `01-garage-door-spring.json` matches the homeowner golden-path
@@ -379,8 +453,61 @@ export async function runClassification(
         return mock;
     }
     try {
-        const model = getDiagnosisModel();
-        const systemBlock = buildClassificationSystemPrompt(serviceListText);
+        // For v3.5-native, instantiate the cheaper Lite model explicitly
+        // rather than letting `ctx.modelOverride` decide — the variant gate
+        // above already redirected `effectiveModel` to gemini-2.0-flash-lite.
+        // For every other variant, `getDiagnosisModelByName(ctx?.modelOverride)`
+        // is unchanged, preserving production behaviour.
+        const baseModel =
+            variant === 'v3.5-native'
+                ? getDiagnosisModelByName(effectiveModel)
+                : getDiagnosisModelByName(ctx?.modelOverride);
+        const systemBlock = getClassificationSystemPrompt(serviceListText, variantCtx);
+        const sampling = getClassifySamplingParams(variantCtx);
+
+        // ── Context caching (Gemini 3.5 Flash on v3.5 variant) ────────────────
+        // The classifier's system prompt (taxonomy block + commit rules + worked
+        // example) is identical across every diagnosis for a given service
+        // catalogue — roughly 13K tokens of pure boilerplate. By caching it at
+        // the cached-input rate ($0.15/1M for 3.5 Flash, 10× cheaper than the
+        // regular $1.50/1M), we cut ~90% off the classify input cost. The
+        // user-specific images + conversation text + task hint are NOT cached
+        // and still billed at the regular rate.
+        //
+        // Only gated on:
+        //   • v3.5 variant (caching for 3.5 Flash is where the cost pressure is)
+        //   • GEMINI_CACHE_ENABLED env is not explicitly '0' (off-switch)
+        //   • Effective model is gemini-3.5-flash (the rate gap is what makes
+        //     caching worthwhile; 2.5 Flash gets a smaller benefit and we'd
+        //     pay storage/creation cost without the rate amortising it)
+        // On any failure (minimum cache size violation, API error, etc.) the
+        // helper returns null and we fall through to the un-cached call.
+        // NOTE (Deliverable 1): on v3.5-native the classify model is
+        // gemini-2.0-flash-lite. The cache create may fail (Lite has a
+        // smaller minimum-cacheable-token requirement than 3.5 Flash AND
+        // some cache features differ); we leave the existing fall-through
+        // semantics intact — when `getOrCreateCachedSystemPrompt` returns
+        // null the code path uses the un-cached `baseModel` automatically.
+        // We deliberately do NOT enable caching for v3.5-native here because
+        // the cost gap is much smaller on 2.0 Flash Lite (the cached vs
+        // un-cached input-rate spread doesn't justify the storage overhead).
+        const cacheEnabled =
+            process.env.GEMINI_CACHE_ENABLED !== '0' &&
+            variantCtx.variant === 'v3.5' &&
+            effectiveModel === 'gemini-3.5-flash';
+        const apiKey = cacheEnabled ? getGeminiApiKey() : null;
+        const cachedContent =
+            cacheEnabled && apiKey
+                ? await getOrCreateCachedSystemPrompt({
+                      apiKey,
+                      model: `models/${effectiveModel}`,
+                      systemInstruction: systemBlock,
+                      ttlSeconds: 3600,
+                  })
+                : null;
+        const model = cachedContent
+            ? getGeminiModelFromCachedContent(cachedContent)
+            : baseModel;
 
         // System instruction is passed separately from conversation history so it is
         // never accumulated into multi-turn context tokens on follow-up calls.
@@ -396,25 +523,33 @@ export async function runClassification(
             },
         ];
 
-        const result = await model.generateContent({
-            systemInstruction: { role: 'system', parts: [{ text: systemBlock }] },
+        // When we have a cached content, the system instruction is already
+        // inside it — DO NOT pass systemInstruction again or it overrides.
+        const generateRequest = {
+            // generationConfig is cast via `as any` because the Gemini SDK
+            // type doesn't include `thinkingConfig` yet, but the API accepts
+            // it (prose agent uses the same pattern). The variant resolver
+            // sets thinkingConfig only on v3.5; v2.5 path leaves it undefined.
             contents: classContents,
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             generationConfig: {
-                temperature: 0.1,
-                topK: 10,
-                topP: 0.6,
-                maxOutputTokens: 520,
+                ...sampling,
                 responseMimeType: 'application/json',
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 responseSchema: ORDERED_SCHEMA as any,
-            },
-        });
+            } as any,
+            ...(cachedContent
+                ? {}
+                : { systemInstruction: { role: 'system' as const, parts: [{ text: systemBlock }] } }),
+        };
+        const result = await model.generateContent(generateRequest);
 
         const usage = result.response.usageMetadata;
 
         // Fire-and-forget cost log — never blocks the response
         void logGeminiUsage(usage, {
             endpoint: 'diagnose/classify',
-            modelName: GEMINI_MODEL_NAME,
+            modelName: effectiveModel,
             userId: ctx?.userId,
             conversationId: ctx?.conversationId,
         });
@@ -429,7 +564,7 @@ export async function runClassification(
             logPipelineStep({
                 stepName: 'agent-classify', status: 'error', durationMs: Date.now() - stepStart,
                 conversationId: ctx?.conversationId, userId: ctx?.userId,
-                modelName: GEMINI_MODEL_NAME, errorMessage: reason,
+                modelName: effectiveModel, errorMessage: reason,
                 promptTokens: usage?.promptTokenCount, completionTokens: usage?.candidatesTokenCount,
             });
             return { ...FALLBACK_CLASSIFICATION, requestFailed: true };
@@ -438,8 +573,9 @@ export async function runClassification(
         logPipelineStep({
             stepName: 'agent-classify', status: 'ok', durationMs: Date.now() - stepStart,
             conversationId: ctx?.conversationId, userId: ctx?.userId,
-            modelName: GEMINI_MODEL_NAME,
+            modelName: effectiveModel,
             promptTokens: usage?.promptTokenCount, completionTokens: usage?.candidatesTokenCount,
+            cachedContentTokens: usage?.cachedContentTokenCount,
         });
         return out;
     } catch (e) {
@@ -447,7 +583,7 @@ export async function runClassification(
         logPipelineStep({
             stepName: 'agent-classify', status: 'error', durationMs: Date.now() - stepStart,
             conversationId: ctx?.conversationId, userId: ctx?.userId,
-            modelName: GEMINI_MODEL_NAME,
+            modelName: effectiveModel,
             errorMessage: e instanceof Error ? e.message : String(e),
         });
         return { ...FALLBACK_CLASSIFICATION, requestFailed: true };

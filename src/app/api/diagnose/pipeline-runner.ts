@@ -17,8 +17,14 @@
 
 import type { Content as GeminiContent } from '@google/generative-ai';
 import { getDiagnosisModel } from '@/lib/ai/ai-diagnosis-backend';
-import { runClassification } from '@/features/diagnosis/agent-classify';
-import { runProseGeneration, normaliseProse } from '@/features/diagnosis/agent-prose';
+import { runClassification, type ClassificationResult } from '@/features/diagnosis/agent-classify';
+import {
+    runProseGeneration,
+    normaliseProse,
+    ProseGenerationError,
+    buildSoftFallbackProse,
+    type ProseResult,
+} from '@/features/diagnosis/agent-prose';
 import { stripFillerSentenceStarts } from '@/lib/ai/prompt-utils';
 import {
     extractPartialThoughtInner,
@@ -30,6 +36,7 @@ import {
     type BuildCompatibleResponseInput,
 } from './response-builder';
 import type { ContentMessage } from './contents-builder';
+import type { PromptVariant } from '@/features/diagnosis/prompts/variants/prompt-variant';
 
 export interface RunPipelineParams {
     contents: ContentMessage[];
@@ -46,11 +53,27 @@ export interface RunPipelineParams {
         BuildCompatibleResponseInput,
         'thoughtText' | 'classification' | 'prose' | 'serviceList'
     >;
+    /** Per-request overrides forwarded from the parsed request body. */
+    conversationId?: string | null;
+    userId?: string | null;
+    promptVariant?: PromptVariant | null;
+    modelOverride?: string | null;
 }
 
 export interface PipelineEmitter {
     emitThought(text: string): void;
     emitComplete(full: string): void;
+    /**
+     * Fired after Agent 2a + Agent 2b complete but before the streaming
+     * response closes. Lets the route handler kick off fire-and-forget
+     * downstream work (Agent 3 critique). Optional; ignored when absent.
+     * Wired here in v7.5 of the Hardening Plan so streaming diagnoses
+     * also generate critique data — previously only the refine path did.
+     */
+    onAgentOutputs?: (result: {
+        classification: Awaited<ReturnType<typeof runClassification>>;
+        prose: Awaited<ReturnType<typeof runProseGeneration>>;
+    }) => void;
 }
 
 export interface StreamingResponseBuilderParams {
@@ -59,6 +82,13 @@ export interface StreamingResponseBuilderParams {
     quotaExtraHeaders: Record<string, string>;
     responseMetaHeaders: Record<string, string>;
     onSuccess: () => void;
+    /**
+     * Forwarded into the streaming pipeline's emitter as `onAgentOutputs`.
+     * Lets the route handler trigger Agent 3 critique without holding open
+     * the stream connection. The callback is invoked AFTER Agent 2a + 2b
+     * complete, BEFORE the stream closes.
+     */
+    onAgentOutputs?: PipelineEmitter['onAgentOutputs'];
 }
 
 /**
@@ -68,8 +98,14 @@ export interface StreamingResponseBuilderParams {
 export function buildStreamingNDJSONResponse(
     params: StreamingResponseBuilderParams,
 ): Response {
-    const { pipelineCommon, hasQuickThought, quotaExtraHeaders, responseMetaHeaders, onSuccess } =
-        params;
+    const {
+        pipelineCommon,
+        hasQuickThought,
+        quotaExtraHeaders,
+        responseMetaHeaders,
+        onSuccess,
+        onAgentOutputs,
+    } = params;
     return new Response(
         new ReadableStream({
             async start(controller) {
@@ -83,6 +119,7 @@ export function buildStreamingNDJSONResponse(
                         {
                             emitThought: (text) => emit({ type: 'thought', text }),
                             emitComplete: (full) => emit({ type: 'complete', full }),
+                            onAgentOutputs,
                         },
                     );
                 } catch (e) {
@@ -107,11 +144,103 @@ export function buildStreamingNDJSONResponse(
 }
 
 /**
+ * Short-circuit prose generation (cost-cut Deliverable 4) when the classifier
+ * has flagged `requires_clarification=true`. The full prose call would write
+ * a verbose narrative that gets discarded once the user clarifies and the
+ * refine round generates the real prose — running it is wasted spend.
+ *
+ * Returns a lightweight stub that carries `requires_clarification: true` and
+ * empty narrative fields. The response-builder fills in the title from the
+ * classification's subcategory taxonomy label, so the homeowner still sees a
+ * sensible diagnosis-needs-info card.
+ *
+ * Gated by the SHORT_CIRCUIT_PROSE_ON_CLARIFY env var (default ON; opt-out
+ * with `=0`). All four cost cuts are orthogonal — flipping this off does not
+ * affect mixed-tier classify, prose caching, or the 2c skip gate.
+ */
+function shouldShortCircuitProseOnClarification(
+    classification: ClassificationResult,
+): boolean {
+    if (process.env.SHORT_CIRCUIT_PROSE_ON_CLARIFY === '0') return false;
+    return classification.requires_clarification === true;
+}
+
+function buildStubProseForClarification(): ProseResult {
+    return {
+        thought: 'Diagnosis requires more information from the homeowner.',
+        // diagnosis is left blank — response-builder will fill it from
+        // classification.subcategory_id taxonomy label.
+        diagnosis: '',
+        estimated_diagnosis_sentence: '',
+        message: 'A few targeted questions will help confirm the exact fault.',
+        action_required: '',
+        image_descriptions: [],
+        image_observations: [],
+        clarification_questions: [],
+        // structured_clarification stays undefined — populated by agent 2c
+        // when it runs (refine path). The /diagnose entry call typically has
+        // no 2c sidecar, so an empty stub is correct here.
+        structured_clarification: undefined,
+        contractor_checklist: [],
+        homeowner_prep: '',
+        diy_verification: '',
+        photo_request: '',
+        confidence_drivers: [],
+        requires_clarification: true,
+        requestFailed: false,
+    };
+}
+
+/**
+ * Run Agent 2b with structured error handling. As of v7.4 `runProseGeneration`
+ * THROWS `ProseGenerationError` on parse / schema / short-thought failures
+ * instead of silently substituting a generic apology. We catch that here and
+ * surface a soft fallback (which logs `agent-prose:fallback-fired` so the
+ * failure is always visible in production telemetry), keeping pipeline flow
+ * intact while making the failure auditable rather than invisible.
+ */
+async function runProseWithFallback(args: Parameters<typeof runProseGeneration>[0]): Promise<{
+    prose: Awaited<ReturnType<typeof runProseGeneration>>;
+    failed: boolean;
+}> {
+    try {
+        const result = await runProseGeneration(args);
+        return { prose: result, failed: false };
+    } catch (e) {
+        if (e instanceof ProseGenerationError) {
+            return {
+                prose: buildSoftFallbackProse({ reason: e.kind, error: e }),
+                failed: true,
+            };
+        }
+        // Unknown error — let it bubble; the route handler will return 500.
+        throw e;
+    }
+}
+
+/**
  * Run the non-streaming pipeline. Returns the final response body string.
  */
+/**
+ * Result returned from the non-streaming pipeline. We now expose
+ * classification + prose alongside the response string so the /api/diagnose
+ * route can hand them to Agent 3 (self-critique) without re-running any
+ * Gemini calls. Previously the function returned just `string`, which forced
+ * the critique seam in route.ts to be a no-op (the comment block at
+ * route.ts:295 documented this gap).
+ */
+export interface NonStreamingPipelineResult {
+    /** Wrapped `<thought>…</thought><json>…</json>` body the client parses. */
+    readonly responseText: string;
+    /** Agent 2a output — passed to Agent 3 for critique calibration. */
+    readonly classification: Awaited<ReturnType<typeof runClassification>>;
+    /** Agent 2b output — passed to Agent 3 for critique calibration. */
+    readonly prose: Awaited<ReturnType<typeof runProseGeneration>>;
+}
+
 export async function runDiagnosePipelineNonStreaming(
     params: RunPipelineParams,
-): Promise<string> {
+): Promise<NonStreamingPipelineResult> {
     const {
         contents,
         serviceListText,
@@ -122,32 +251,52 @@ export async function runDiagnosePipelineNonStreaming(
         timings,
         pipelineStartedAt,
         responseShape,
+        conversationId,
+        userId,
+        promptVariant,
+        modelOverride,
     } = params;
+    const agentCtx = { conversationId, userId, promptVariant, modelOverride };
 
     const classification = await runClassification(
         contents as unknown as GeminiContent[],
         serviceListText,
         serviceList,
+        agentCtx,
     );
     recordStage(timings, 'agent2a_classify_ms', pipelineStartedAt);
 
-    const rawProse = await runProseGeneration({
-        contents: contents as unknown as GeminiContent[],
-        classification,
-        baseSystemInstruction: proseBaseInstruction,
-        isProviderHydration,
-        imageCount: imagesAfterTier,
-    });
+    let rawProse: ProseResult;
+    if (shouldShortCircuitProseOnClarification(classification)) {
+        console.warn(
+            JSON.stringify({
+                event: 'prose_short_circuited',
+                reason: 'requires_clarification',
+            }),
+        );
+        rawProse = buildStubProseForClarification();
+    } else {
+        ({ prose: rawProse } = await runProseWithFallback({
+            contents: contents as unknown as GeminiContent[],
+            classification,
+            baseSystemInstruction: proseBaseInstruction,
+            isProviderHydration,
+            imageCount: imagesAfterTier,
+            ctx: agentCtx,
+        }));
+    }
     const prose = normaliseProse(rawProse);
     recordStage(timings, 'agent2b_prose_ms', pipelineStartedAt);
 
-    return buildCompatibleResponseText({
+    const responseText = buildCompatibleResponseText({
         ...responseShape,
         thoughtText: prose.thought,
         classification,
         prose,
         serviceList,
     });
+
+    return { responseText, classification, prose };
 }
 
 /**
@@ -171,7 +320,12 @@ export async function runDiagnosePipelineStreaming(
         pipelineStartedAt,
         responseShape,
         hasQuickThought,
+        conversationId,
+        userId,
+        promptVariant,
+        modelOverride,
     } = params;
+    const agentCtx = { conversationId, userId, promptVariant, modelOverride };
 
     let streamedThought = '';
 
@@ -212,18 +366,31 @@ export async function runDiagnosePipelineStreaming(
                 contents as unknown as GeminiContent[],
                 serviceListText,
                 serviceList,
+                agentCtx,
             ),
         ]);
         recordStage(timings, 'agent2a_classify_ms', pipelineStartedAt);
 
-        const rawProse = await runProseGeneration({
-            contents: contents as unknown as GeminiContent[],
-            classification,
-            baseSystemInstruction: proseBaseInstruction,
-            isProviderHydration,
-            imageCount: imagesAfterTier,
-        });
-        const prose = normaliseProse(rawProse);
+        let rawProseStream: ProseResult;
+        if (shouldShortCircuitProseOnClarification(classification)) {
+            console.warn(
+                JSON.stringify({
+                    event: 'prose_short_circuited',
+                    reason: 'requires_clarification',
+                }),
+            );
+            rawProseStream = buildStubProseForClarification();
+        } else {
+            ({ prose: rawProseStream } = await runProseWithFallback({
+                contents: contents as unknown as GeminiContent[],
+                classification,
+                baseSystemInstruction: proseBaseInstruction,
+                isProviderHydration,
+                imageCount: imagesAfterTier,
+                ctx: agentCtx,
+            }));
+        }
+        const prose = normaliseProse(rawProseStream);
         recordStage(timings, 'agent2b_prose_ms', pipelineStartedAt);
 
         const full = buildCompatibleResponseText({
@@ -233,6 +400,7 @@ export async function runDiagnosePipelineStreaming(
             prose,
             serviceList,
         });
+        emitter.onAgentOutputs?.({ classification, prose });
         emitter.emitComplete(full);
         return;
     }
@@ -242,16 +410,29 @@ export async function runDiagnosePipelineStreaming(
         contents as unknown as GeminiContent[],
         serviceListText,
         serviceList,
+        agentCtx,
     );
     recordStage(timings, 'agent2a_classify_ms', pipelineStartedAt);
 
-    const rawProse = await runProseGeneration({
-        contents: contents as unknown as GeminiContent[],
-        classification,
-        baseSystemInstruction: proseBaseInstruction,
-        isProviderHydration,
-        imageCount: imagesAfterTier,
-    });
+    let rawProse: ProseResult;
+    if (shouldShortCircuitProseOnClarification(classification)) {
+        console.warn(
+            JSON.stringify({
+                event: 'prose_short_circuited',
+                reason: 'requires_clarification',
+            }),
+        );
+        rawProse = buildStubProseForClarification();
+    } else {
+        ({ prose: rawProse } = await runProseWithFallback({
+            contents: contents as unknown as GeminiContent[],
+            classification,
+            baseSystemInstruction: proseBaseInstruction,
+            isProviderHydration,
+            imageCount: imagesAfterTier,
+            ctx: agentCtx,
+        }));
+    }
     const prose = normaliseProse(rawProse);
     recordStage(timings, 'agent2b_prose_ms', pipelineStartedAt);
 
@@ -265,5 +446,6 @@ export async function runDiagnosePipelineStreaming(
         prose,
         serviceList,
     });
+    emitter.onAgentOutputs?.({ classification, prose });
     emitter.emitComplete(full);
 }
