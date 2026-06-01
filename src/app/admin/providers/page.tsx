@@ -1,8 +1,10 @@
 import { META_ADMIN_PROVIDERS } from '@/lib/site-metadata';
-import AdminProvidersClient from './client';
+import { requireAdminPage } from '@/lib/auth/admin-guard';
+import ProvidersHubClient from './hub-client';
 
 export const metadata = META_ADMIN_PROVIDERS;
 
-export default function AdminProvidersPage() {
-    return <AdminProvidersClient />;
+export default async function AdminProvidersPage() {
+    await requireAdminPage();
+    return <ProvidersHubClient />;
 }

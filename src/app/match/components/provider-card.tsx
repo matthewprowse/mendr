@@ -31,7 +31,7 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { SaveProviderButton } from '@/components/save-provider-button';
 import { cn, formatBusinessName } from '@/lib/utils';
-import { INK } from '@/lib/design-tokens';
+import { mendrTokens } from '@/lib/design-tokens';
 import type { MatchProvider } from '@/features/match/contracts';
 import { getOpenStatusTextFromWeekdayDescriptions } from '@/lib/providers/open-status';
 
@@ -129,7 +129,7 @@ export function ProviderCardCarousel({ images, providerName, onImageSwipe }: Pro
     }, [activeIdx, onImageSwipe]);
 
     return (
-        <div className="relative aspect-[16/10] w-full overflow-hidden rounded-2xl bg-muted">
+        <div className="relative aspect-[16/10] w-full overflow-hidden rounded-lg bg-muted">
             <div
                 ref={trackRef}
                 className="flex h-full w-full snap-x snap-mandatory overflow-x-auto scroll-smooth [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
@@ -204,10 +204,10 @@ export function ProviderCardCarousel({ images, providerName, onImageSwipe }: Pro
 
 function ImagePlaceholder({ providerName }: { providerName: string }) {
     return (
-        <div className="flex aspect-[16/10] w-full items-center justify-center rounded-2xl bg-gradient-to-br from-muted to-secondary text-muted-foreground">
+        <div className="flex aspect-[16/10] w-full items-center justify-center rounded-lg bg-gradient-to-br from-muted to-secondary text-muted-foreground">
             <div className="flex flex-col items-center gap-1">
                 <Image size={28} aria-hidden="true" />
-                <p className="text-[11px] font-medium uppercase tracking-wide">No photos yet</p>
+                <p className="text-xs font-medium uppercase tracking-wide">No photos yet</p>
                 <p className="sr-only">{providerName}</p>
             </div>
         </div>
@@ -320,8 +320,9 @@ export function ProviderCard({
                 onOpenProfile();
             }}
             className={cn(
-                'group flex w-full cursor-pointer flex-col gap-3 rounded-3xl bg-white p-3 text-left shadow-sm transition-shadow',
-                'border border-black/[0.06] hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/40',
+                'group flex w-full cursor-pointer flex-col gap-3 rounded-lg bg-card p-3 text-left transition-shadow',
+                mendrTokens.shadow.card,
+                'border border-border hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/40',
                 isSelected && 'ring-2 ring-foreground/70'
             )}
         >
@@ -343,10 +344,7 @@ export function ProviderCard({
 
             <div className="flex flex-col gap-3 px-2 pb-2 pt-1">
                 <div className="flex items-start justify-between gap-3">
-                    <h3
-                        className="line-clamp-2 text-base font-semibold leading-tight"
-                        style={{ color: INK }}
-                    >
+                    <h3 className="line-clamp-2 text-base font-semibold leading-tight text-foreground">
                         {formatBusinessName(provider.name)}
                     </h3>
                     {hasOpenStatus ? (
@@ -354,7 +352,7 @@ export function ProviderCard({
                             <Badge
                                 variant="secondary"
                                 className={cn(
-                                    'h-5 rounded-full px-2 text-[11px] font-medium',
+                                    'h-5 rounded-full px-2 text-xs font-medium',
                                     provider.isOpen
                                         ? 'border-green-200 bg-green-50 text-green-700'
                                         : 'border-red-200 bg-red-50 text-red-600'
@@ -363,7 +361,7 @@ export function ProviderCard({
                                 {provider.isOpen ? 'Open' : 'Closed'}
                             </Badge>
                             {openHoursText ? (
-                                <span className="whitespace-nowrap text-[10px] text-muted-foreground">
+                                <span className="whitespace-nowrap text-xs text-muted-foreground">
                                     {openHoursText}
                                 </span>
                             ) : null}
@@ -372,7 +370,7 @@ export function ProviderCard({
                 </div>
 
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
-                    <span className="inline-flex items-center gap-1 font-semibold tabular-nums" style={{ color: INK }}>
+                    <span className="inline-flex items-center gap-1 font-semibold tabular-nums text-foreground">
                         <Star size={16} fill="currentColor" className="text-yellow-500" aria-hidden="true" />
                         {provider.rating != null ? provider.rating.toFixed(1) : 'New'}
                         {reviewCount > 0 ? (
@@ -388,14 +386,14 @@ export function ProviderCard({
                         {chips.certVisible.map((chip) => (
                             <span
                                 key={chip.key}
-                                className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700"
+                                className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700"
                             >
                                 <ShieldCheck size={10} fill="currentColor" aria-hidden />
                                 {chip.label}
                             </span>
                         ))}
                         {chips.certOverflow > 0 ? (
-                            <span className="inline-flex items-center rounded-full border border-border bg-background px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+                            <span className="inline-flex items-center rounded-full border border-border bg-background px-2 py-0.5 text-xs font-medium text-muted-foreground">
                                 +{chips.certOverflow}
                             </span>
                         ) : null}
@@ -407,13 +405,13 @@ export function ProviderCard({
                         {chips.specVisible.map((chip) => (
                             <span
                                 key={chip.key}
-                                className="inline-flex items-center rounded-full border border-border bg-background px-2 py-0.5 text-[11px] font-medium text-muted-foreground"
+                                className="inline-flex items-center rounded-full border border-border bg-background px-2 py-0.5 text-xs font-medium text-muted-foreground"
                             >
                                 {chip.label}
                             </span>
                         ))}
                         {chips.specOverflow > 0 ? (
-                            <span className="inline-flex items-center rounded-full border border-border bg-background px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+                            <span className="inline-flex items-center rounded-full border border-border bg-background px-2 py-0.5 text-xs font-medium text-muted-foreground">
                                 +{chips.specOverflow}
                             </span>
                         ) : null}

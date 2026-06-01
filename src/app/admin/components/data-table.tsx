@@ -22,7 +22,7 @@ export function AdminDataTable({
     const hasChildren = Boolean(children);
 
     return (
-        <div className="rounded-md border">
+        <div className="overflow-x-auto rounded-md border">
             <Table className="[&_th]:h-12 [&_th]:px-4 [&_td]:px-4 [&_td]:py-3">
                 <TableHeader>
                     <TableRow>

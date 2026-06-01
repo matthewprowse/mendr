@@ -1,16 +1,18 @@
 'use client';
 
+import { Button } from '@/components/ui/button';
+
 export function SignOutButton() {
     return (
-        <button
+        <Button
             type="button"
-            className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+            variant="ghost"
             onClick={async () => {
                 await fetch('/api/admin/login', { method: 'DELETE' });
                 window.location.href = '/admin/login';
             }}
         >
-            Sign out
-        </button>
+            Log out
+        </Button>
     );
 }

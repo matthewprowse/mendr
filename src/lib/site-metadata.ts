@@ -68,8 +68,8 @@ export const META_DIAGNOSIS_INDEX: Metadata = {
 };
 
 export const META_MATCH_INDEX: Metadata = {
-    title: 'Find providers',
-    description: 'Match with local home maintenance providers based on your Mendr diagnosis.',
+    title: 'Pro Results',
+    description: 'Match with local Mendr Pros based on your Mendr diagnosis.',
     robots: { index: false, follow: false },
 };
 
@@ -84,12 +84,11 @@ export function buildDiagnosisMeta(diagnosisTitle: string | null): Metadata {
     };
 }
 
-/** Build metadata for /match/[id] */
-export function buildMatchMeta(diagnosisTitle: string | null): Metadata {
-    const label = diagnosisTitle ? diagnosisTitle.slice(0, 55) : 'Provider results';
+/** Build metadata for /match/[id]. Title is fixed so the browser tab always reads "Mendr: Pro Results". */
+export function buildMatchMeta(_diagnosisTitle: string | null): Metadata {
     return {
-        title: `Providers — ${label}`,
-        description: 'Find and contact local home maintenance specialists matched to your Mendr diagnosis.',
+        title: 'Pro Results',
+        description: 'Find and contact local Mendr Pros matched to your Mendr diagnosis.',
     };
 }
 
@@ -192,7 +191,7 @@ export const META_DESIGN_PREVIEW: Metadata = {
 
 const ADMIN_ROBOTS = { index: false, follow: false } as const;
 
-export const META_ADMIN: Metadata = { title: 'Dashboard', robots: ADMIN_ROBOTS };
+export const META_ADMIN: Metadata = { title: 'Mendr Admin', robots: ADMIN_ROBOTS };
 export const META_ADMIN_LOGIN: Metadata = { title: 'Admin sign in', robots: ADMIN_ROBOTS };
 export const META_ADMIN_ANALYTICS: Metadata = { title: 'Analytics', robots: ADMIN_ROBOTS };
 export const META_ADMIN_CONTACT: Metadata = { title: 'Contact messages', robots: ADMIN_ROBOTS };

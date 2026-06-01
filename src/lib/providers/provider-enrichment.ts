@@ -28,7 +28,7 @@
 
 import { SchemaType } from '@google/generative-ai';
 import { createSupabaseAdminClient } from '@/lib/auth/supabase-server';
-import { getGeminiModel } from '@/lib/ai/ai-client';
+import { getGeminiEnrichmentModel } from '@/lib/ai/ai-client';
 import { aiConfig } from '@/lib/ai/ai-config';
 import { sanitizeCustomerSummary } from '@/lib/providers/review-summary';
 import { formatBusinessName } from '@/lib/utils';
@@ -358,7 +358,7 @@ Rules (British English throughout):
 - narrative: combine context from both website and reviews. Don't echo bio word-for-word.${params.strictSuffix ? `\n\n${params.strictSuffix}` : ''}`.trim();
 
     try {
-        const model = getGeminiModel();
+        const model = getGeminiEnrichmentModel();
         const result = await withTimeout(
             model.generateContent({
                 contents: [{ role: 'user', parts: [{ text: prompt }] }],
@@ -366,11 +366,19 @@ Rules (British English throughout):
                     temperature: 0.3,
                     topK: 20,
                     topP: 0.75,
-                    maxOutputTokens: 1400,
+                    // gemini-2.5-flash is a thinking model and counts thinking
+                    // tokens against maxOutputTokens. Thinking is disabled below
+                    // (enrichment is structured extraction, not reasoning) and the
+                    // budget is raised for headroom, so the JSON response no longer
+                    // truncates mid-string ("Unterminated string in JSON").
+                    maxOutputTokens: 2048,
                     responseMimeType: 'application/json',
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                     
                     responseSchema: COMBINED_ENRICHMENT_SCHEMA as any,
-                },
+                    // Disable model thinking so it does not consume the output budget.
+                    thinkingConfig: { thinkingBudget: 0 },
+                     
+                } as any,
             }),
             AI_ENRICH_TIMEOUT
         );
@@ -1149,7 +1157,7 @@ ${reviewsText}`.trim();
 
     let reviewSummary: string | null = null;
     try {
-        const model = getGeminiModel();
+        const model = getGeminiEnrichmentModel();
         const result = await withTimeout(
             model.generateContent({
                 contents: [{ role: 'user', parts: [{ text: prompt }] }],
@@ -1169,7 +1177,11 @@ ${reviewsText}`.trim();
                         },
                         required: ['review_summary'],
                     },
-                },
+                    // Disable thinking — see runCombinedEnrichment. Without this the
+                    // thinking tokens consume maxOutputTokens and truncate the JSON.
+                    thinkingConfig: { thinkingBudget: 0 },
+                     
+                } as any,
             }),
             FAST_REVIEW_SUMMARY_AI_MS
         );

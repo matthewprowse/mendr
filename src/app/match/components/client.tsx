@@ -7,7 +7,8 @@ import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { toWhatsAppPhone } from '@/lib/utils';
 import { setLastConversationIdForWhatsApp, resolveWhatsAppPrefill } from '@/lib/whatsapp-prefill';
-import { INK } from '@/lib/design-tokens';
+import { mendrTokens } from '@/lib/design-tokens';
+import { PRO_TERM, proCount } from '@/lib/brand-system';
 import { Loader, Crosshair, Filter } from 'lucide-react';
 import { toast } from 'sonner';
 import { MatchMapSheetLayout } from '@/app/match/components/match-map-sheet-layout';
@@ -1021,7 +1022,7 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
                     <div className="pointer-events-none absolute inset-0 z-[1] flex items-center justify-center bg-background/70">
                         <p className="px-4 text-center text-xs text-muted-foreground">
                             {isLoading || isProvidersLoading
-                                ? 'Finding service providers…'
+                                ? 'Finding Pros…'
                                 : 'Add your address or use current location'}
                         </p>
                     </div>
@@ -1031,8 +1032,8 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
                 <div className="flex flex-col gap-1 text-center">
                     <p className="text-sm font-semibold text-foreground">
                         {!showBottomSkeleton && sheetProviders.length > 0
-                            ? `${sheetProviders.length} Service Provider${sheetProviders.length === 1 ? '' : 's'}`
-                            : 'Providers'}
+                            ? proCount(sheetProviders.length)
+                            : PRO_TERM.many}
                     </p>
                     {!showBottomSkeleton && userLocation ? (
                         <p className="text-xs text-muted-foreground">
@@ -1047,12 +1048,12 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
 
                 {showBottomSkeleton ? (
                     <>
-                        <h3 className="text-lg font-semibold leading-snug" style={{ color: INK }}>Top Recommendrtions</h3>
+                        <h3 className="text-lg font-semibold leading-snug text-foreground">Recommended for you</h3>
                         <div className="flex flex-col gap-4">
                             {Array.from({ length: 3 }).map((_, i) => (
                                 <div
                                     key={`sk-${i}`}
-                                    className="flex flex-col gap-4 rounded-3xl border border-black/[0.07] bg-white p-6 shadow-sm"
+                                    className={`flex flex-col gap-4 rounded-lg border border-border bg-card p-6 ${mendrTokens.shadow.card}`}
                                 >
                                     <div className="space-y-2">
                                         <Skeleton className="h-6 w-56" />
@@ -1099,11 +1100,8 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
                             return (
                                 <Fragment key={provider.placeId}>
                                     {idx === 0 ? (
-                                        <h3
-                                            className="text-lg font-semibold leading-snug"
-                                            style={{ color: INK }}
-                                        >
-                                            Top Recommendrtions
+                                        <h3 className="text-lg font-semibold leading-snug text-foreground">
+                                            Recommended for you
                                         </h3>
                                     ) : null}
                                     <ProviderCard

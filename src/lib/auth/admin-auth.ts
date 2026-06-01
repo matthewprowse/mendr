@@ -12,6 +12,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 const COOKIE_NAME = 'admin_session';
+
+/**
+ * Name of the admin session cookie. Exported so server components / layouts
+ * can read it via `next/headers` cookies() without duplicating the literal.
+ */
+export const ADMIN_COOKIE_NAME = COOKIE_NAME;
 const SESSION_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24 hours
 const SESSION_MAX_AGE_S = SESSION_MAX_AGE_MS / 1000;
 
@@ -60,14 +66,17 @@ export async function createAdminSession(): Promise<string | null> {
 }
 
 /**
- * Verify the admin_session cookie on the incoming request.
+ * Verify a raw admin session token string (no request/cookie-store dependency).
  * Returns true only if the token is present, unexpired, and HMAC-valid.
+ *
+ * This is the pure core shared by `verifyAdminCookie` (API routes, which read
+ * from a NextRequest) and server-component guards (which read the cookie via
+ * `next/headers`). Keeping it free of next/server and next/headers imports
+ * means it stays usable from the Edge runtime too.
  */
-export async function verifyAdminCookie(req: NextRequest): Promise<boolean> {
+export async function verifyAdminToken(token: string | undefined): Promise<boolean> {
     const password = process.env.ADMIN_PASSWORD;
     if (!password) return false;
-
-    const token = req.cookies.get(COOKIE_NAME)?.value;
     if (!token) return false;
 
     const dotIndex = token.indexOf('.');
@@ -81,6 +90,14 @@ export async function verifyAdminCookie(req: NextRequest): Promise<boolean> {
 
     const expectedSig = await hmacHex(expiry, password);
     return safeEqual(expectedSig, sig);
+}
+
+/**
+ * Verify the admin_session cookie on the incoming request.
+ * Returns true only if the token is present, unexpired, and HMAC-valid.
+ */
+export async function verifyAdminCookie(req: NextRequest): Promise<boolean> {
+    return verifyAdminToken(req.cookies.get(COOKIE_NAME)?.value);
 }
 
 /**

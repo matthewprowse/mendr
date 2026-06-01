@@ -8,7 +8,6 @@ import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Spinner } from '@/components/ui/spinner';
 import { FlowTopBar } from '@/components/match/flow-shell';
 import { AccountTabBar } from '@/components/account-tab-bar';
 import { BRAND_NAME } from '@/lib/brand-system';

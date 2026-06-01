@@ -10,6 +10,7 @@
  */
 
 import { greatCircleDistanceKm } from './handler-distance';
+import { PROVIDER_RATING_FLOOR } from './ranking';
 import { isProviderRelevantForTrade } from './relevance';
 import { normalizeProviderName } from './provider-display-name';
 import { getPlaceServices } from './place-services';
@@ -127,6 +128,13 @@ export function mapPlacesToFastProviders(params: MapPlacesParams): FastProvider[
             const ratingCount = place.userRatingCount ?? 0;
 
             if (ratingCount < minRatingCount) return null;
+
+            // Hard quality floor: drop providers rated below the floor so they
+            // never enter the candidate pool or get written to the search cache.
+            // Unrated (null) providers are exempt.
+            if (typeof place.rating === 'number' && place.rating < PROVIDER_RATING_FLOOR) {
+                return null;
+            }
 
             const services = getPlaceServices(place.types);
             const weekdayDescriptionsRaw = (

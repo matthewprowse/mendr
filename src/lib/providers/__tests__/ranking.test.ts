@@ -88,6 +88,14 @@ describe('compositeScore', () => {
         const incomplete = makeProvider({ profileCompleteness: 0 });
         expect(compositeScore(complete)).toBeGreaterThan(compositeScore(incomplete));
     });
+
+    it('demotes bare profiles (completeness 0) below minimally-enriched ones', () => {
+        // A completeness=0 provider takes a real penalty, while completeness=1
+        // only loses the bonus — the gap should exceed the 0.01 sort threshold.
+        const bare = makeProvider({ profileCompleteness: 0 });
+        const minimal = makeProvider({ profileCompleteness: 1 });
+        expect(compositeScore(minimal) - compositeScore(bare)).toBeGreaterThan(0.01);
+    });
 });
 
 // ---------------------------------------------------------------------------

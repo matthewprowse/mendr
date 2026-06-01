@@ -1,8 +1,10 @@
 import { META_ADMIN_ANALYTICS } from '@/lib/site-metadata';
-import AdminAnalyticsClient from './client';
+import { requireAdminPage } from '@/lib/auth/admin-guard';
+import AnalyticsTabsClient from './tabs-client';
 
 export const metadata = META_ADMIN_ANALYTICS;
 
-export default function AdminAnalyticsPage() {
-    return <AdminAnalyticsClient />;
+export default async function AdminAnalyticsPage() {
+    await requireAdminPage();
+    return <AnalyticsTabsClient />;
 }

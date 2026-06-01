@@ -7,6 +7,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { AdminPageHeader } from '../components/page-header';
+import { AdminDataTable } from '../components/data-table';
+import { TableCell, TableRow } from '@/components/ui/table';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -17,11 +19,23 @@ type FunnelStage = {
     conversionFromPrior: number | null;
 };
 
+type TradeBreakdownRow = {
+    trade: string;
+    started: number;
+    contacted: number;
+    conversion: number | null;
+};
+
 type FunnelResponse = {
     from: string;
     to: string;
+    requestedFrom: string;
+    trackingSince: string | null;
     stages: FunnelStage[];
-    totalSessions: number;
+    totalDiagnoses: number;
+    overallConversion: number | null;
+    medianMinutesToContact: number | null;
+    tradeBreakdown: TradeBreakdownRow[];
 };
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -44,13 +58,22 @@ function formatPercent(value: number | null): string {
     return `${value.toFixed(1)}%`;
 }
 
+function formatMinutes(mins: number | null): string {
+    if (mins === null) return '—';
+    if (mins < 1) return `${Math.round(mins * 60)}s`;
+    if (mins < 60) return `${Math.round(mins)}m`;
+    const h = Math.floor(mins / 60);
+    const m = Math.round(mins % 60);
+    return m > 0 ? `${h}h ${m}m` : `${h}h`;
+}
+
 function defaultRange(): { from: string; to: string } {
     const to = new Date();
     const from = new Date();
     from.setDate(from.getDate() - 30);
     return {
         from: from.toISOString().slice(0, 10),
-        to:   to.toISOString().slice(0, 10),
+        to: to.toISOString().slice(0, 10),
     };
 }
 
@@ -70,21 +93,15 @@ function SummaryCard({
     return (
         <Card>
             <CardHeader className="pb-2">
-                <CardTitle className="text-xs font-medium text-muted-foreground">
-                    {label}
-                </CardTitle>
+                <CardTitle className="text-xs font-medium text-muted-foreground">{label}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-1">
                 {loading ? (
                     <Skeleton className="h-8 w-20" />
                 ) : (
-                    <p className="text-3xl font-bold tracking-tight text-foreground">
-                        {value}
-                    </p>
+                    <p className="text-3xl font-bold text-foreground">{value}</p>
                 )}
-                {!loading && sub ? (
-                    <p className="text-xs text-muted-foreground">{sub}</p>
-                ) : null}
+                {!loading && sub ? <p className="text-xs text-muted-foreground">{sub}</p> : null}
             </CardContent>
         </Card>
     );
@@ -133,11 +150,11 @@ function FunnelBars({ stages }: { stages: FunnelStage[] }) {
 
 export default function AdminFunnelClient() {
     const initial = useMemo(defaultRange, []);
-    const [from, setFrom]     = useState(initial.from);
-    const [to, setTo]         = useState(initial.to);
-    const [data, setData]     = useState<FunnelResponse | null>(null);
-    const [loading, setLoad]  = useState(true);
-    const [error, setError]   = useState<string | null>(null);
+    const [from, setFrom] = useState(initial.from);
+    const [to, setTo] = useState(initial.to);
+    const [data, setData] = useState<FunnelResponse | null>(null);
+    const [loading, setLoad] = useState(true);
+    const [error, setError] = useState<string | null>(null);
 
     const load = useCallback(async (rangeFrom: string, rangeTo: string) => {
         setLoad(true);
@@ -145,8 +162,7 @@ export default function AdminFunnelClient() {
         try {
             const params = new URLSearchParams({
                 from: new Date(rangeFrom).toISOString(),
-                // Include the full "to" day by setting end-of-day.
-                to:   new Date(`${rangeTo}T23:59:59.999Z`).toISOString(),
+                to: new Date(`${rangeTo}T23:59:59.999Z`).toISOString(),
             });
             const res = await fetch(`/api/admin/funnel?${params.toString()}`);
             if (!res.ok) {
@@ -154,8 +170,7 @@ export default function AdminFunnelClient() {
                 setData(null);
                 return;
             }
-            const json: FunnelResponse = await res.json();
-            setData(json);
+            setData((await res.json()) as FunnelResponse);
         } catch {
             setError('Could not load funnel data.');
             setData(null);
@@ -169,30 +184,20 @@ export default function AdminFunnelClient() {
     }, [initial.from, initial.to, load]);
 
     const stages = data?.stages ?? [];
-    const firstCount = stages[0]?.count ?? 0;
-    const lastCount  = stages[stages.length - 1]?.count ?? 0;
-
-    const overallConversion: number | null =
-        firstCount > 0 ? (lastCount / firstCount) * 100 : null;
-
-    const interStageConversions = stages
-        .map((s) => s.conversionFromPrior)
-        .filter((v): v is number => v !== null);
-
-    const avgStageConversion: number | null =
-        interStageConversions.length > 0
-            ? interStageConversions.reduce((a, b) => a + b, 0) / interStageConversions.length
+    const dateRangeLabel = data ? formatDateRange(data.from, data.to) : '…';
+    const trackingNote =
+        data?.trackingSince && data.trackingSince > (data.requestedFrom ?? '')
+            ? `Funnel tracking started ${new Date(data.trackingSince).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' })}; earlier diagnoses are excluded.`
             : null;
 
-    const dateRangeLabel = data ? formatDateRange(data.from, data.to) : '…';
-
     return (
-        <div className="mx-auto w-full max-w-7xl px-4 pb-8 pt-4 sm:px-6 lg:px-8">
+        <div className="mx-auto w-full max-w-3xl px-4 pb-8 pt-4 sm:px-6 lg:px-8">
             <div className="mb-6">
-                <AdminPageHeader title="Onboarding Funnel" />
-                <p className="mt-1 text-sm text-muted-foreground">
-                    Showing data for {dateRangeLabel}
-                </p>
+                <AdminPageHeader title="Diagnosis Funnel" />
+                <p className="mt-1 text-sm text-muted-foreground">Showing data for {dateRangeLabel}</p>
+                {trackingNote ? (
+                    <p className="mt-1 text-xs text-muted-foreground">{trackingNote}</p>
+                ) : null}
             </div>
 
             {/* ── Date range controls ─────────────────────────────────── */}
@@ -221,10 +226,7 @@ export default function AdminFunnelClient() {
                             className="w-44"
                         />
                     </div>
-                    <Button
-                        onClick={() => void load(from, to)}
-                        disabled={loading || !from || !to}
-                    >
+                    <Button onClick={() => void load(from, to)} disabled={loading || !from || !to}>
                         {loading ? 'Loading…' : 'Apply'}
                     </Button>
                     <Button
@@ -251,27 +253,27 @@ export default function AdminFunnelClient() {
             {/* ── Summary stats ─────────────────────────────────────── */}
             <div className="mb-6 grid gap-4 sm:grid-cols-3">
                 <SummaryCard
-                    label="Total sessions"
-                    value={(data?.totalSessions ?? 0).toLocaleString('en-ZA')}
-                    sub="Distinct session IDs in range"
+                    label="Total diagnoses"
+                    value={(data?.totalDiagnoses ?? 0).toLocaleString('en-ZA')}
+                    sub="Started in range"
                     loading={loading}
                 />
                 <SummaryCard
                     label="Overall conversion"
-                    value={formatPercent(overallConversion)}
-                    sub="Welcome start → Provider contact"
+                    value={formatPercent(data?.overallConversion ?? null)}
+                    sub="Started → Contacted"
                     loading={loading}
                 />
                 <SummaryCard
-                    label="Average stage conversion"
-                    value={formatPercent(avgStageConversion)}
-                    sub="Mean of inter-stage rates"
+                    label="Median time to contact"
+                    value={formatMinutes(data?.medianMinutesToContact ?? null)}
+                    sub="Diagnosis start → first contact"
                     loading={loading}
                 />
             </div>
 
             {/* ── Funnel bars ───────────────────────────────────────── */}
-            <Card>
+            <Card className="mb-6">
                 <CardHeader>
                     <CardTitle className="text-base">Stages</CardTitle>
                 </CardHeader>
@@ -287,6 +289,32 @@ export default function AdminFunnelClient() {
                     ) : (
                         <FunnelBars stages={stages} />
                     )}
+                </CardContent>
+            </Card>
+
+            {/* ── Trade breakdown ───────────────────────────────────── */}
+            <Card>
+                <CardHeader>
+                    <CardTitle className="text-base">By trade</CardTitle>
+                </CardHeader>
+                <CardContent>
+                    <AdminDataTable
+                        headers={['Trade', 'Started', 'Contacted', 'Conversion']}
+                        loading={loading}
+                        emptyText="No diagnoses in this range."
+                        colSpan={4}
+                    >
+                        {(data?.tradeBreakdown ?? []).map((row) => (
+                            <TableRow key={row.trade}>
+                                <TableCell className="font-medium text-foreground">{row.trade}</TableCell>
+                                <TableCell className="text-muted-foreground">{row.started}</TableCell>
+                                <TableCell className="text-muted-foreground">{row.contacted}</TableCell>
+                                <TableCell className="text-muted-foreground">
+                                    {formatPercent(row.conversion)}
+                                </TableCell>
+                            </TableRow>
+                        ))}
+                    </AdminDataTable>
                 </CardContent>
             </Card>
         </div>

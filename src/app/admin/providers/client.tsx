@@ -25,14 +25,6 @@ import {
 import { AdminPageHeader } from '../components/page-header';
 import { AdminDataTable } from '../components/data-table';
 import { TableCell, TableRow } from '@/components/ui/table';
-import { CERTIFICATION_CATALOG } from '@/lib/certifications/catalog';
-
-const COMPANY_SIZE_OPTIONS: { value: 'solo' | 'small' | 'mid' | 'large'; label: string }[] = [
-    { value: 'solo', label: 'Solo (1)' },
-    { value: 'small', label: 'Small (2-5)' },
-    { value: 'mid', label: 'Mid (6-20)' },
-    { value: 'large', label: 'Large (20+)' },
-];
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -82,12 +74,6 @@ type RawProviderApplication = Omit<ProviderApplication, 'status'> & {
     status?: unknown;
 };
 
-type LiveProviderCertification = {
-    slug: string;
-    label: string;
-    source: string;
-};
-
 type LiveProviderRow = {
     id: string;
     name: string;
@@ -104,15 +90,13 @@ type LiveProviderRow = {
     specialisations: string[];
     highlights: string[];
     key_person: string;
-    company_size: 'solo' | 'small' | 'mid' | 'large' | null;
-    company_size_source: string | null;
-    years_in_business: number | null;
-    years_in_business_source: string | null;
-    certifications: LiveProviderCertification[];
+    /** Free-text certification labels stored in providers.certifications (text[]). */
+    certifications: string[];
     enrichment_review_required: boolean;
     enrichment_last_failure: string | null;
     enrichment_last_failure_at: string | null;
-    output_count: number;
+    /** Times surfaced to users — not tracked per provider yet (null). */
+    output_count: number | null;
     contact_count: number;
     profile_view_count: number;
     avg_output_position: number | null;
@@ -426,7 +410,6 @@ export default function AdminProvidersPage() {
     }
     async function saveLiveProviderEdit() {
         if (!editLiveProvider) return;
-        const certificationSlugs = (editLiveProvider.certifications ?? []).map((c) => c.slug);
         const res = await fetch('/api/admin/providers/live', {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
@@ -443,26 +426,14 @@ export default function AdminProvidersPage() {
                 key_person: editLiveProvider.key_person,
                 specialisations: editLiveProvider.specialisations,
                 highlights: editLiveProvider.highlights,
-                company_size: editLiveProvider.company_size,
-                years_in_business: editLiveProvider.years_in_business,
-                certifications: certificationSlugs,
+                certifications: editLiveProvider.certifications,
             }),
         });
         if (!res.ok) {
             toast.error('Failed to save live provider');
             return;
         }
-        // Sources are now 'admin' for whatever fields we set (sticky vs enrichment).
-        const patched: LiveProviderRow = {
-            ...editLiveProvider,
-            company_size_source: editLiveProvider.company_size != null ? 'admin' : null,
-            years_in_business_source:
-                editLiveProvider.years_in_business != null ? 'admin' : null,
-            certifications: (editLiveProvider.certifications ?? []).map((c) => ({
-                ...c,
-                source: 'admin',
-            })),
-        };
+        const patched: LiveProviderRow = { ...editLiveProvider };
         setLiveProviders((prev) => prev.map((r) => (r.id === patched.id ? patched : r)));
         setSelectedLiveProvider((prev) => (prev?.id === patched.id ? patched : prev));
         setEditLiveProvider(null);
@@ -601,7 +572,7 @@ export default function AdminProvidersPage() {
     }
 
     return (
-        <div className="mx-auto w-full max-w-7xl px-4 pb-8 pt-4 sm:px-6 lg:px-8">
+        <div className="mx-auto w-full max-w-3xl px-4 pb-8 pt-4 sm:px-6 lg:px-8">
             <div className="mb-6">
                 <AdminPageHeader title="Providers" />
             </div>
@@ -682,7 +653,7 @@ export default function AdminProvidersPage() {
                                     <span className="text-xs text-muted-foreground">—</span>
                                 )}
                             </TableCell>
-                            <TableCell className="text-muted-foreground">{p.output_count}</TableCell>
+                            <TableCell className="text-muted-foreground">{p.output_count ?? 'Not tracked yet'}</TableCell>
                             <TableCell className="text-muted-foreground">{p.contact_count}</TableCell>
                             <TableCell className="text-muted-foreground">{p.profile_view_count}</TableCell>
                             <TableCell className="text-muted-foreground">
@@ -1278,7 +1249,7 @@ export default function AdminProvidersPage() {
                                 <div className="mt-2 grid grid-cols-3 gap-2 text-xs">
                                     <div className="rounded border bg-background p-2">
                                         <p className="text-muted-foreground">Outputs</p>
-                                        <p className="font-medium text-foreground">{selectedLiveProvider.output_count}</p>
+                                        <p className="font-medium text-foreground">{selectedLiveProvider.output_count ?? '—'}</p>
                                     </div>
                                     <div className="rounded border bg-background p-2">
                                         <p className="text-muted-foreground">Contacts</p>
@@ -1478,114 +1449,23 @@ export default function AdminProvidersPage() {
                                 />
                             </div>
 
-                            <div className="rounded-md border bg-muted/10 p-3 space-y-3">
-                                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                                    Filter v2 — admin overrides (sticky)
+                            <div>
+                                <Label className="text-xs">Certifications (one per line)</Label>
+                                <Textarea
+                                    className="mt-1 text-sm font-sans"
+                                    rows={4}
+                                    value={editLiveProvider.certifications.join('\n')}
+                                    onChange={(e) =>
+                                        setEditLiveProvider({
+                                            ...editLiveProvider,
+                                            certifications: linesToList(e.target.value),
+                                        })
+                                    }
+                                    placeholder="e.g. PIRB Licensed Plumbers"
+                                />
+                                <p className="mt-1 text-[11px] text-muted-foreground">
+                                    Free-text labels shown on the customer profile. Stored in providers.certifications.
                                 </p>
-                                <div className="grid grid-cols-2 gap-3">
-                                    <div>
-                                        <Label className="text-xs">Company size</Label>
-                                        <Select
-                                            value={editLiveProvider.company_size ?? '__none__'}
-                                            onValueChange={(v) =>
-                                                setEditLiveProvider({
-                                                    ...editLiveProvider,
-                                                    company_size:
-                                                        v === '__none__'
-                                                            ? null
-                                                            : (v as 'solo' | 'small' | 'mid' | 'large'),
-                                                })
-                                            }
-                                        >
-                                            <SelectTrigger className="mt-1 h-9 text-sm">
-                                                <SelectValue placeholder="Unset" />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="__none__">Unset</SelectItem>
-                                                {COMPANY_SIZE_OPTIONS.map((o) => (
-                                                    <SelectItem key={o.value} value={o.value}>
-                                                        {o.label}
-                                                    </SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
-                                        {editLiveProvider.company_size_source ? (
-                                            <p className="mt-1 text-[11px] text-muted-foreground">
-                                                Source: {editLiveProvider.company_size_source}
-                                            </p>
-                                        ) : null}
-                                    </div>
-                                    <div>
-                                        <Label className="text-xs">Years in business</Label>
-                                        <Input
-                                            className="mt-1"
-                                            type="number"
-                                            min={0}
-                                            max={200}
-                                            value={editLiveProvider.years_in_business ?? ''}
-                                            onChange={(e) =>
-                                                setEditLiveProvider({
-                                                    ...editLiveProvider,
-                                                    years_in_business:
-                                                        e.target.value === ''
-                                                            ? null
-                                                            : Number(e.target.value),
-                                                })
-                                            }
-                                            placeholder="e.g. 8"
-                                        />
-                                        {editLiveProvider.years_in_business_source ? (
-                                            <p className="mt-1 text-[11px] text-muted-foreground">
-                                                Source: {editLiveProvider.years_in_business_source}
-                                            </p>
-                                        ) : null}
-                                    </div>
-                                </div>
-
-                                <div>
-                                    <Label className="text-xs">Certifications</Label>
-                                    <div className="mt-1.5 flex flex-wrap gap-1.5">
-                                        {CERTIFICATION_CATALOG.map((cert) => {
-                                            const active = (editLiveProvider.certifications ?? [])
-                                                .map((c) => c.slug)
-                                                .includes(cert.slug);
-                                            return (
-                                                <button
-                                                    key={cert.slug}
-                                                    type="button"
-                                                    onClick={() => {
-                                                        const current = editLiveProvider.certifications ?? [];
-                                                        const next = active
-                                                            ? current.filter((c) => c.slug !== cert.slug)
-                                                            : [
-                                                                  ...current,
-                                                                  {
-                                                                      slug: cert.slug,
-                                                                      label: cert.label,
-                                                                      source: 'admin',
-                                                                  },
-                                                              ];
-                                                        setEditLiveProvider({
-                                                            ...editLiveProvider,
-                                                            certifications: next,
-                                                        });
-                                                    }}
-                                                    className={`rounded-full border px-2.5 py-1 text-xs transition-colors ${
-                                                        active
-                                                            ? 'border-foreground bg-foreground text-background'
-                                                            : 'border-border text-muted-foreground hover:bg-muted'
-                                                    }`}
-                                                    title={`${cert.issuer} • slug: ${cert.slug}`}
-                                                >
-                                                    {cert.label}
-                                                </button>
-                                            );
-                                        })}
-                                    </div>
-                                    <p className="mt-2 text-[11px] text-muted-foreground">
-                                        Toggling a cert here marks the row source = admin and is never overwritten by enrichment.
-                                    </p>
-                                </div>
                             </div>
 
                             <div className="flex gap-2 pt-2">

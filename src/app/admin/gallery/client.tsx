@@ -79,7 +79,9 @@ export default function AdminGalleryPage() {
     const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
 
     useEffect(() => {
-        setPage((p) => Math.min(p, totalPages - 1));
+        // Deferred so the setState runs outside the effect body (cascading-render lint).
+        const id = window.setTimeout(() => setPage((p) => Math.min(p, totalPages - 1)), 0);
+        return () => window.clearTimeout(id);
     }, [totalPages]);
 
     const paged = filtered.slice(page * pageSize, (page + 1) * pageSize);
@@ -125,7 +127,7 @@ export default function AdminGalleryPage() {
     }
 
     return (
-        <div className="mx-auto w-full max-w-7xl px-4 pb-8 pt-4 sm:px-6 lg:px-8">
+        <div className="mx-auto w-full max-w-3xl px-4 pb-8 pt-4 sm:px-6 lg:px-8">
             <div className="mb-6">
                 <AdminPageHeader title="Gallery" />
             </div>

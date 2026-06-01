@@ -76,9 +76,17 @@ function makeAdminClient() {
                 };
                 return proxy;
             },
-            upsert(rows: Array<Record<string, unknown>>, _opts: unknown) {
-                state.calls.push({ table, op: 'upsert', args: [rows.length] });
-                state.upsertedRows = rows;
+            upsert(rows: Array<Record<string, unknown>> | Record<string, unknown>, _opts: unknown) {
+                // provider_cache upserts a single object and is awaited directly
+                // (no chained .select()); reviews upserts an array and chains .select().
+                if (table === 'provider_cache') {
+                    state.calls.push({ table, op: 'upsert', args: [1] });
+                    state.cacheUpdatePayload = rows as Record<string, unknown>;
+                    return Promise.resolve({ error: state.cacheUpdateError });
+                }
+                const arr = rows as Array<Record<string, unknown>>;
+                state.calls.push({ table, op: 'upsert', args: [arr.length] });
+                state.upsertedRows = arr;
                 return {
                     select(_cols?: string) {
                         return Promise.resolve(state.upsertResult);

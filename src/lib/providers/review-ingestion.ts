@@ -137,8 +137,14 @@ export async function ingestDataForSEOReviews(
         }
     }
 
-    // Update provider_cache tracking columns
+    // Update provider_cache tracking columns. Upsert (not update) so providers
+    // that have no cache row yet still get last_review_count / needs_enrichment
+    // recorded — a plain update would silently affect zero rows for them, and
+    // they are exactly the providers most in need of enrichment. A freshly
+    // created row gets safe column defaults (scrape_status='pending').
     const cacheUpdate: Record<string, unknown> = {
+        provider_id:       providerId,
+        google_place_id:   googlePlaceId ?? '',
         last_review_count: reviewCountAfter,
         updated_at:        now,
     };
@@ -148,8 +154,7 @@ export async function ingestDataForSEOReviews(
 
     const { error: cacheErr } = await admin
         .from('provider_cache')
-        .update(cacheUpdate)
-        .eq('provider_id', providerId);
+        .upsert(cacheUpdate, { onConflict: 'provider_id' });
 
     if (cacheErr) {
         console.warn(JSON.stringify({

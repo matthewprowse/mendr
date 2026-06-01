@@ -7,6 +7,14 @@ import type { ProviderItem } from '@/lib/providers/contracts';
 const BAYESIAN_C = 10;
 const BAYESIAN_PRIOR = 4.0; // global mean rating assumption
 
+/**
+ * Hard floor on Google star rating. Providers rated below this are never shown,
+ * even in sparse areas — a sub-3.5 average across real reviews is a poor track
+ * record that the Bayesian smoothing alone should not rescue. Unrated providers
+ * (rating == null) are exempt: they are new, not bad.
+ */
+export const PROVIDER_RATING_FLOOR = 3.5;
+
 // Mendr-rating blending constants.
 // Mendr outcomes are treated as ~2× more credible per review than a Google
 // review, so each Mendr review contributes 2 "phantom" Google-equivalent
@@ -175,30 +183,38 @@ function recencyScore(lastMatchedAt?: string | null): number {
 
 /**
  * Composite score: Relevance 40%, Bayesian rating 30%, Proximity 20%, Recency 10%,
- * plus a small completeness bonus (max +0.02) for providers with richer profiles. (R9)
+ * plus a completeness adjustment that rewards richer profiles and demotes bare
+ * ones. (R9, revised)
  *
  * Weights are intentional:
  *  - Relevance is the strongest signal — a specialist beats a generalist.
  *  - Bayesian rating rewards genuine track records over inflated scores.
  *  - Proximity is a tiebreaker, not the primary driver (15 km cap).
  *  - Recency nudges dormant providers down without fully excluding them.
- *  - Completeness bonus: enriched providers with work photos/certs edge ahead
- *    at equal competitive scores, incentivising complete profiles. Bounded at
- *    +0.02 so it never overrides the primary signals.
+ *  - Completeness adjustment: enriched providers (1–3) get a small edge
+ *    (max +0.02), while bare providers (completeness 0 — no website content
+ *    and no enrichment) take a real demotion (−0.05) so they don't surface as
+ *    empty cards above providers with usable detail. Both are bounded so they
+ *    never override the primary relevance/rating signals.
  */
+const BARE_PROFILE_PENALTY = -0.05;
+
 export function compositeScore(
     p: ProviderItem,
     tradeDetail?: string,
     trade?: string
 ): number {
-    // R9: Fractional completeness bonus replaces the blunt integer tiebreaker.
-    const completenessBonus = ((p.profileCompleteness ?? 0) / 3) * 0.02;
+    const completeness = p.profileCompleteness ?? 0;
+    // Bare profiles (no usable content) are demoted; enriched profiles keep the
+    // small fractional bonus that breaks ties between comparable providers.
+    const completenessAdjustment =
+        completeness === 0 ? BARE_PROFILE_PENALTY : (completeness / 3) * 0.02;
     return (
         0.4 * relevanceScore(p, tradeDetail, trade) +
         0.3 * bayesianRatingScore(p.rating, p.ratingCount ?? 0, p.mendrRating, p.mendrRatingCount) +
         0.2 * proximityScore(p.distanceKm) +
         0.1 * recencyScore((p as any).lastMatchedAt) +
-        completenessBonus
+        completenessAdjustment
     );
 }
 
@@ -220,11 +236,17 @@ export function rankProviders(
 ): ProviderItem[] {
     const { tradeDetail, trade, customerLat, customerLng } = options ?? {};
 
+    // Hard quality floor: never surface providers rated below the floor. Not
+    // relaxed in sparse areas. Unrated providers (rating == null) are kept.
+    const aboveFloor = providers.filter(
+        (p) => !(typeof p.rating === 'number' && p.rating < PROVIDER_RATING_FLOOR),
+    );
+
     // Apply service-area filter only when both customer coordinates are available.
     const filtered =
         customerLat != null && customerLng != null
-            ? providers.filter((p) => isProviderInServiceArea(p, customerLat, customerLng))
-            : providers;
+            ? aboveFloor.filter((p) => isProviderInServiceArea(p, customerLat, customerLng))
+            : aboveFloor;
 
     return [...filtered]
         .sort((a, b) => {

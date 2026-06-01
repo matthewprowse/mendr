@@ -106,6 +106,36 @@ describe('isProviderRelevantForTrade — banned keywords', () => {
         });
         expect(result).toBe(false);
     });
+
+    it('rejects a standalone "bar" (drinking establishment)', () => {
+        expect(call({ place: { displayName: { text: 'The Wine Bar' } } })).toBe(false);
+    });
+
+    it('does NOT reject "rebar" via the bar word-boundary check', () => {
+        // Previously the substring "bar " falsely rejected "Rebar Construction".
+        const result = call({
+            place: { displayName: { text: 'Rebar Construction' } },
+            mode: 'strict',
+        });
+        expect(result).toBe(true);
+    });
+
+    it('rejects a beauty salon by keyword even with a service keyword present', () => {
+        const result = call({
+            place: { displayName: { text: 'Beauty Salon Builders' } },
+            mode: 'strict',
+        });
+        expect(result).toBe(false);
+    });
+
+    it('does NOT reject a trade whose name merely contains "beauty"', () => {
+        // Narrowed keyword 'beauty salon' should no longer catch this.
+        const result = call({
+            place: { displayName: { text: 'Beauty Touch Painting' } },
+            mode: 'strict',
+        });
+        expect(result).toBe(true);
+    });
 });
 
 // ---------------------------------------------------------------------------

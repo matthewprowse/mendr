@@ -23,6 +23,17 @@ export const GEMINI_MODEL_NAME: string =
 export const GEMINI_CRITIQUE_MODEL_NAME: string =
     process.env.GEMINI_CRITIQUE_MODEL || 'gemini-2.5-flash';
 
+/**
+ * Provider enrichment model. Enrichment is bulk text extraction (bio,
+ * specialisations, review summary) — NOT diagnostic reasoning — so it runs on a
+ * cheaper model than the diagnosis pipeline. Diagnosis uses gemini-3.5-flash
+ * specifically for its thinking capability; enrichment does not need that and
+ * disables thinking at the call site (thinkingConfig.thinkingBudget = 0).
+ * Override via GEMINI_ENRICHMENT_MODEL env var. Defaults to gemini-2.5-flash.
+ */
+export const GEMINI_ENRICHMENT_MODEL_NAME: string =
+    process.env.GEMINI_ENRICHMENT_MODEL || 'gemini-2.5-flash';
+
 type GeminiModelParams = NonNullable<
     Parameters<GoogleGenerativeAI['getGenerativeModel']>[0]
 >;
@@ -48,6 +59,17 @@ function getClientFromEnv(): GoogleGenerativeAI {
 export function getGeminiModel(params?: Omit<GeminiModelParams, 'model'>): GenerativeModel {
     return getClientFromEnv().getGenerativeModel({
         model: GEMINI_MODEL_NAME,
+        ...(params ?? {}),
+    });
+}
+
+/**
+ * Get the provider-enrichment model (GEMINI_ENRICHMENT_MODEL_NAME). Kept separate
+ * from getGeminiModel so enrichment never inherits the pricier diagnosis model.
+ */
+export function getGeminiEnrichmentModel(params?: Omit<GeminiModelParams, 'model'>): GenerativeModel {
+    return getClientFromEnv().getGenerativeModel({
+        model: GEMINI_ENRICHMENT_MODEL_NAME,
         ...(params ?? {}),
     });
 }

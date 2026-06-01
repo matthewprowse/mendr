@@ -53,12 +53,12 @@ const BANNED_KEYWORDS = [
     'adult',
     'escort',
     'massage parlour',
-    'bar ',
-    ' bar',
     'cocktail',
     'nail bar',
     'hair salon',
-    'beauty',
+    // Narrowed from 'beauty' — the bare substring falsely rejected legitimate
+    // trades like "Beautiful Home Renovations".
+    'beauty salon',
 ];
 
 // R8: Expanded to cover trades that were incorrectly rejected by the service keyword gate.
@@ -181,6 +181,9 @@ export function isProviderRelevantForTrade(params: {
     if (/\b(fuck|f\*+k|shit|bitch|cunt|porn|sex shop)\b/i.test(haystack)) return false;
 
     if (BANNED_KEYWORDS.some((kw) => haystack.includes(kw))) return false;
+    // "bar" as a standalone word (drinking establishment). Word boundaries avoid
+    // false positives from substrings like "rebar" and "handlebar".
+    if (/\bbar\b/i.test(haystack)) return false;
     if (mode === 'strict' && !SERVICE_KEYWORDS.some((kw) => haystack.includes(kw))) return false;
     if (
         mode === 'relaxed' &&

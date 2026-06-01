@@ -127,7 +127,7 @@ function MetricCard({
             {loading ? (
                 <Skeleton className="h-9 w-16" />
             ) : (
-                <p className={`text-3xl font-bold tracking-tight ${highlight ? 'text-green-700' : 'text-foreground'}`}>
+                <p className={`text-3xl font-bold ${highlight ? 'text-green-700' : 'text-foreground'}`}>
                     {value == null ? '—' : value}
                 </p>
             )}
@@ -444,7 +444,7 @@ export default function AdminAnalyticsPage() {
     }
 
     return (
-        <div className="mx-auto w-full max-w-7xl px-4 pb-8 pt-4 sm:px-6 lg:px-8">
+        <div className="mx-auto w-full max-w-3xl px-4 pb-8 pt-4 sm:px-6 lg:px-8">
             <div className="mb-6">
                 <AdminPageHeader title="Analytics" />
             </div>
@@ -459,7 +459,7 @@ export default function AdminAnalyticsPage() {
                 <TabsContent value={period} className="space-y-8">
 
                     {/* ── Key metrics ─────────────────────────────────── */}
-                    <div className="grid gap-4 sm:grid-cols-5">
+                    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                         <MetricCard
                             label="Sessions Started"
                             value={metrics.startSessions}

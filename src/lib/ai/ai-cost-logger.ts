@@ -1,47 +1,115 @@
 /**
  * Gemini AI cost logging.
  *
- * Wraps a generateContent result, extracts usageMetadata, and inserts a row into
- * the ai_cost_events Supabase table.  All writes are fire-and-forget — a logging
- * failure never surfaces to the caller.
+ * Wraps a generateContent result, extracts usageMetadata, prices it from the
+ * `ai_model_pricing` table (admin-editable, cached in-memory with a short TTL),
+ * and inserts a row into `ai_cost_events`. All writes are fire-and-forget — a
+ * logging failure never surfaces to the caller. When the pricing table is
+ * unreachable we fall back to FALLBACK_PRICING so cost rows are never lost.
  *
- * PRICING CONSTANTS
- * -----------------
- * Update these when Google changes its pricing. Values are per 1,000 tokens (not
- * per 1M) to keep the arithmetic readable.
- *
- * Current pricing (June 2026):
- *   gemini-3.5-flash:   Input $1.50 / 1M  |  Output $9.00 / 1M  |  Cached $0.15 / 1M
- *   gemini-2.5-flash:   Input $0.30 / 1M  |  Output $1.00 / 1M
- *   gemini-2.0-flash:   Input $0.10 / 1M  |  Output $0.40 / 1M
- *   gemini-2.0-flash-lite: Input $0.075 / 1M  |  Output $0.30 / 1M
+ * Rates live in the DB (per 1,000,000 tokens) and are converted to per-token
+ * here. Update them via the admin AI pricing UI / `/api/admin/ai-pricing`, which
+ * calls invalidatePricingCache() so new rates are observed immediately.
  */
 
 import { createSupabaseAdminClient } from '@/lib/auth/supabase-server';
 
-// ─── Pricing table ────────────────────────────────────────────────────────────
-// USD per 1 token. Update when Google changes pricing.
+// ─── Pricing types ──────────────────────────────────────────────────────────
+/** Per-token USD rates for one model. `cachedInput` is omitted when the model has no cache tier. */
+export type ModelRate = { input: number; output: number; cachedInput?: number };
+export type PricingTable = Record<string, ModelRate>;
 
-const PRICING: Record<string, { input: number; output: number }> = {
-    'gemini-3.5-flash':        { input: 1.50 / 1_000_000,  output: 9.00 / 1_000_000  },
-    'gemini-2.5-flash':        { input: 0.30 / 1_000_000,  output: 1.00 / 1_000_000  },
-    'gemini-2.5-flash-preview':{ input: 0.30 / 1_000_000,  output: 1.00 / 1_000_000  },
-    'gemini-2.0-flash':        { input: 0.10 / 1_000_000,  output: 0.40 / 1_000_000  },
-    'gemini-2.0-flash-lite':   { input: 0.075 / 1_000_000, output: 0.30 / 1_000_000  },
+/**
+ * Per-token fallback rates, used only when `ai_model_pricing` is unreachable.
+ * Keep roughly in sync with the seeded DB rows; the DB is always authoritative.
+ */
+export const FALLBACK_PRICING: PricingTable = {
+    'gemini-3.5-flash':         { input: 1.50 / 1_000_000, output: 9.00 / 1_000_000, cachedInput: 0.15 / 1_000_000 },
+    'gemini-2.5-flash':         { input: 0.30 / 1_000_000, output: 1.00 / 1_000_000 },
+    'gemini-2.5-flash-preview': { input: 0.30 / 1_000_000, output: 1.00 / 1_000_000 },
+    'gemini-2.0-flash':         { input: 0.10 / 1_000_000, output: 0.40 / 1_000_000 },
+    'gemini-2.0-flash-lite':    { input: 0.075 / 1_000_000, output: 0.30 / 1_000_000 },
 };
 
-/** Fallback pricing for unknown model names (use 2.5 Flash as a conservative estimate). */
-const DEFAULT_PRICING = PRICING['gemini-2.5-flash'];
+/** Default per-token rate when a model name matches nothing in the table (≈ 2.5 Flash). */
+const DEFAULT_RATE: ModelRate = { input: 0.30 / 1_000_000, output: 1.00 / 1_000_000 };
 
-function estimateUsd(
+function resolveRate(table: PricingTable, modelName: string): ModelRate {
+    // Prefix match so revision suffixes ('-001', '-exp-0205', '-preview') resolve.
+    const key = Object.keys(table).find((k) => modelName.startsWith(k));
+    return key ? table[key] : DEFAULT_RATE;
+}
+
+/**
+ * Compute the USD cost of a single call from a per-token pricing table.
+ * When the model has a `cachedInput` rate, `cachedTokens` of the prompt are
+ * billed at that rate and the remainder at the regular input rate; otherwise
+ * `cachedTokens` is ignored.
+ */
+export function estimateUsdWithTable(
+    table: PricingTable,
     modelName: string,
     promptTokens: number,
     completionTokens: number,
+    cachedTokens: number = 0,
 ): number {
-    // Normalise: strip revision suffixes like '-001' or '-exp-0205'
-    const key = Object.keys(PRICING).find((k) => modelName.startsWith(k)) ?? '';
-    const rate = PRICING[key] ?? DEFAULT_PRICING;
+    const rate = resolveRate(table, modelName);
+    if (typeof rate.cachedInput === 'number') {
+        const cached = Math.max(0, Math.min(cachedTokens, promptTokens));
+        const regular = promptTokens - cached;
+        return regular * rate.input + cached * rate.cachedInput + completionTokens * rate.output;
+    }
     return promptTokens * rate.input + completionTokens * rate.output;
+}
+
+// ─── DB-backed pricing with in-memory cache ─────────────────────────────────
+const PRICING_TTL_MS = 5 * 60 * 1000;
+let cachedPricing: PricingTable | null = null;
+let cachedAt = 0;
+
+/** Drop the cached pricing table so the next cost log reloads from the DB. */
+export function invalidatePricingCache(): void {
+    cachedPricing = null;
+    cachedAt = 0;
+}
+
+/** Load the active pricing rows and convert per-1M USD rates to per-token. Throws on error or empty. */
+export async function loadPricingFromDb(): Promise<PricingTable> {
+    const admin = await createSupabaseAdminClient();
+    const { data, error } = await admin
+        .from('ai_model_pricing')
+        .select('model_name, input_per_1m_usd, output_per_1m_usd, cached_input_per_1m_usd')
+        .is('effective_until', null);
+
+    if (error) throw new Error(error.message);
+    if (!data || data.length === 0) throw new Error('ai_model_pricing has no active rows');
+
+    const table: PricingTable = {};
+    for (const row of data as Array<{
+        model_name: string;
+        input_per_1m_usd: number;
+        output_per_1m_usd: number;
+        cached_input_per_1m_usd: number | null;
+    }>) {
+        const rate: ModelRate = {
+            input: Number(row.input_per_1m_usd) / 1_000_000,
+            output: Number(row.output_per_1m_usd) / 1_000_000,
+        };
+        if (row.cached_input_per_1m_usd != null) {
+            rate.cachedInput = Number(row.cached_input_per_1m_usd) / 1_000_000;
+        }
+        table[row.model_name] = rate;
+    }
+    return table;
+}
+
+async function getPricingTable(): Promise<PricingTable> {
+    const now = Date.now();
+    if (cachedPricing && now - cachedAt < PRICING_TTL_MS) return cachedPricing;
+    const table = await loadPricingFromDb();
+    cachedPricing = table;
+    cachedAt = now;
+    return table;
 }
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -52,43 +120,24 @@ export interface AiCostContext {
     modelName: string;
     userId?: string | null;
     conversationId?: string | null;
-    /**
-     * Wall-clock duration of the Gemini generateContent call in milliseconds.
-     * Used to compute rolling-average processing-time estimates on the
-     * /processing page. Measure the call site with `Date.now()` deltas around
-     * the await and pass the result. Optional — older callers will pass
-     * undefined and the row will be inserted with NULL latency.
-     */
+    /** Wall-clock duration of the Gemini call in ms (optional). */
     latencyMs?: number | null;
 }
 
-/**
- * usageMetadata shape from @google/generative-ai SDK.
- * Partial because older SDK versions may omit some fields.
- */
+/** usageMetadata shape from @google/generative-ai SDK. Partial across SDK versions. */
 export interface GeminiUsageMetadata {
     promptTokenCount?: number;
     candidatesTokenCount?: number;
     totalTokenCount?: number;
+    cachedContentTokenCount?: number;
 }
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 /**
- * Log the token usage from a Gemini generateContent response.
- *
- * Call this after every generateContent / generateContentStream call in the
- * diagnosis pipeline.  It is fire-and-forget — awaiting is optional but
- * recommended if you want the row written before the serverless function exits.
- *
- * @example
- * const result = await model.generateContent({ ... });
- * void logGeminiUsage(result.response.usageMetadata, {
- *     endpoint: 'diagnose/classify',
- *     modelName: GEMINI_MODEL_NAME,
- *     userId,
- *     conversationId,
- * });
+ * Log the token usage from a Gemini generateContent response. Fire-and-forget;
+ * awaiting is optional but recommended so the row is written before a serverless
+ * function exits. Pricing comes from the DB (cached), with a fallback table.
  */
 export async function logGeminiUsage(
     usageMetadata: GeminiUsageMetadata | null | undefined,
@@ -96,10 +145,31 @@ export async function logGeminiUsage(
 ): Promise<void> {
     if (!usageMetadata) return;
 
-    const promptTokens     = usageMetadata.promptTokenCount     ?? 0;
-    const completionTokens = usageMetadata.candidatesTokenCount ?? 0;
-    const totalTokens      = usageMetadata.totalTokenCount      ?? promptTokens + completionTokens;
-    const estimatedUsd     = estimateUsd(ctx.modelName, promptTokens, completionTokens);
+    const promptTokens     = usageMetadata.promptTokenCount        ?? 0;
+    const completionTokens = usageMetadata.candidatesTokenCount    ?? 0;
+    const totalTokens      = usageMetadata.totalTokenCount         ?? promptTokens + completionTokens;
+    const cachedTokens     = usageMetadata.cachedContentTokenCount ?? 0;
+
+    let table: PricingTable;
+    try {
+        table = await getPricingTable();
+    } catch (err) {
+        console.warn(JSON.stringify({
+            type: 'ai_cost_log',
+            event: 'pricing_db_unavailable_using_fallback',
+            endpoint: ctx.endpoint,
+            error: err instanceof Error ? err.message : String(err),
+        }));
+        table = FALLBACK_PRICING;
+    }
+
+    const estimatedUsd = estimateUsdWithTable(
+        table,
+        ctx.modelName,
+        promptTokens,
+        completionTokens,
+        cachedTokens,
+    );
 
     try {
         const admin = await createSupabaseAdminClient();
@@ -116,7 +186,6 @@ export async function logGeminiUsage(
         });
 
         if (error) {
-            // Structured log — don't let a logging failure crash the request
             console.warn(JSON.stringify({
                 type: 'ai_cost_log_error',
                 endpoint: ctx.endpoint,
@@ -135,9 +204,6 @@ export async function logGeminiUsage(
 /**
  * Query daily AI cost totals, grouped by date, for the admin dashboard.
  * Returns rows newest-first.
- *
- * @example
- * const rows = await getAiCostDailyTotals(30);
  */
 export async function getAiCostDailyTotals(
     days: number = 7,
@@ -155,7 +221,6 @@ export async function getAiCostDailyTotals(
 
         if (error || !data) return [];
 
-        // Aggregate client-side — avoids needing a Postgres RPC for a simple pivot
         const byDate = new Map<string, { total_usd: number; total_tokens: number; calls: number }>();
         for (const row of data) {
             const date = row.created_at.slice(0, 10); // 'YYYY-MM-DD'

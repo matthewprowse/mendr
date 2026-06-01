@@ -1,9 +1,10 @@
 'use client';
 
-import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { ArrowRight } from 'lucide-react';
+import { Users, Activity, Mail, Star, Image as ImageIcon } from 'lucide-react';
 import { AdminPageHeader } from './components/page-header';
+import { AdminStatTile } from './components/stat-tile';
+import AnalyticsTabsClient from './analytics/tabs-client';
 
 type Stats = {
     newProviders: number;
@@ -13,102 +14,84 @@ type Stats = {
     pendingGallery: number;
 };
 
-function StatCard({
-    label,
-    value,
-    sub,
-    href,
-}: {
-    label: string;
-    value: number;
-    sub: string;
-    href: string;
-}) {
-    return (
-        <Link
-            href={href}
-            className="group flex flex-col gap-4 rounded-xl border border-border/50 bg-background p-6 transition-all hover:border-border hover:shadow-sm"
-        >
-            <div className="flex items-start justify-between">
-                <p className="text-sm font-medium text-muted-foreground">{label}</p>
-                <ArrowRight className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
-            </div>
-            <p className="text-4xl font-bold tracking-tight text-foreground">{value}</p>
-            <p className="text-xs text-muted-foreground">{sub}</p>
-        </Link>
-    );
-}
-
-export default function AdminDashboard() {
+export default function AdminHome() {
     const [stats, setStats] = useState<Stats | null>(null);
     const [loading, setLoading] = useState(true);
 
-    async function load() {
-        const res = await fetch('/api/admin/stats');
-        if (res.ok) setStats(await res.json());
-        setLoading(false);
-    }
-
     useEffect(() => {
-        const tick = () => {
-            window.setTimeout(() => {
-                void load();
-            }, 0);
+        let active = true;
+        const load = () =>
+            fetch('/api/admin/stats')
+                .then((r) => (r.ok ? r.json() : null))
+                .then((d) => {
+                    if (active && d) setStats(d);
+                    if (active) setLoading(false);
+                })
+                .catch(() => {
+                    if (active) setLoading(false);
+                });
+        load();
+        const iv = setInterval(load, 60_000);
+        return () => {
+            active = false;
+            clearInterval(iv);
         };
-        tick();
-        const iv = setInterval(tick, 60_000);
-        return () => clearInterval(iv);
-    }, [load]);
+    }, []);
 
     return (
-        <div className="mx-auto w-full max-w-7xl px-4 pb-8 pt-4 sm:px-6 lg:px-8">
-            <div className="mb-8">
-                <AdminPageHeader title="Home" />
-            </div>
-
-            {loading ? (
-                <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-5">
-                    {[1, 2, 3, 4, 5].map((i) => (
-                        <div
-                            key={i}
-                            className="h-40 animate-pulse rounded-xl border border-border/50 bg-muted/40"
-                        />
-                    ))}
+        <>
+            <div className="mx-auto w-full max-w-3xl px-4 pb-2 pt-4 sm:px-6 lg:px-8">
+                <div className="mb-6">
+                    <AdminPageHeader
+                        title="Mendr Admin: Home"
+                        description="Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt."
+                    />
                 </div>
-            ) : (
-                <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-5">
-                    <StatCard
-                        label="Provider Waitlist"
+
+                <div className="grid gap-4 sm:grid-cols-2">
+                    <AdminStatTile
+                        label="Provider waitlist"
                         value={stats?.newProviders ?? 0}
                         sub="New uncontacted applicants"
                         href="/admin/providers"
+                        icon={Users}
+                        loading={loading}
                     />
-                    <StatCard
-                        label="Today's Diagnoses"
+                    <AdminStatTile
+                        label="Today's diagnoses"
                         value={stats?.todayStarts ?? 0}
-                        sub="welcome_start events today"
+                        sub="Started today"
                         href="/admin/analytics"
+                        icon={Activity}
+                        loading={loading}
                     />
-                    <StatCard
-                        label="Contact Messages"
+                    <AdminStatTile
+                        label="Contact messages"
                         value={stats?.unreadMessages ?? 0}
-                        sub="Unread messages"
+                        sub="Unread"
                         href="/admin/contact"
+                        icon={Mail}
+                        loading={loading}
                     />
-                    <StatCard
-                        label="Pending Reviews"
+                    <AdminStatTile
+                        label="Pending reviews"
                         value={stats?.pendingReviews ?? 0}
                         sub="Needs moderation"
                         href="/admin/reviews"
+                        icon={Star}
+                        loading={loading}
                     />
-                    <StatCard
-                        label="Pending Gallery"
+                    <AdminStatTile
+                        label="Pending gallery"
                         value={stats?.pendingGallery ?? 0}
-                        sub="Images awaiting approval"
+                        sub="Awaiting approval"
                         href="/admin/gallery"
+                        icon={ImageIcon}
+                        loading={loading}
                     />
                 </div>
-            )}
-        </div>
+            </div>
+            <AnalyticsTabsClient />
+        </>
     );
 }

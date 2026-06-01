@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { supabase } from '@/lib/auth/supabase';
 import { sanitizeAiContent } from '@/lib/utils';
 import { Spinner } from '@/components/ui/spinner';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import {
@@ -471,10 +472,74 @@ export function ReportDetailContent({ reportId, serverResult }: ReportDetailCont
     }
 
     if (loading || (!reportData && !error)) {
+        /*
+         * SKELETON — mirrors the loaded report layout in the main return below.
+         * It reuses the exact same <main> wrapper (flex-col gap-6 p-4 pt-22
+         * pb-22) and renders the real fixed top header, so there is zero
+         * layout shift when the report data arrives. Blocks, top to bottom:
+         *   Fixed header: real back button + "Mendr Report" title (static —
+         *     available immediately, so it is NOT skeletoned).
+         *   Banner image: h-56 w-full rounded-lg (matches the real banner).
+         *   Title row: title bar (h-8 w-2/3) + trade badge (h-6 w-16).
+         *   Two subtitle lines (trade detail / customer address).
+         *   "What's Wrong": section label + 4 body lines (100/95/90/70%).
+         *   Typical Cost card: h-24 rounded-lg.
+         *   "How I worked this out" card: h-20 rounded-lg.
+         * ⚠️ This skeleton MUST track the loaded layout in the main return
+         * below. If you add, remove, or reorder a section, resize the banner
+         * (h-56), or change the <main> wrapper spacing (gap-6 / pt-22 / pb-22),
+         * update this skeleton to match so the page does not jump when the
+         * report finishes loading.
+         */
         return (
-            <div className="flex min-h-screen items-center justify-center bg-background">
-                <Spinner className="size-8 text-muted-foreground" />
-            </div>
+            <main className="flex flex-col gap-6 p-4 pt-22 pb-22 bg-background min-h-screen">
+                {/* Fixed top header — identical to the loaded view */}
+                <div className="no-print flex flex-row justify-between items-center p-4 h-18 bg-background w-full fixed inset-x-0 top-0 z-50">
+                    <Button
+                        variant="secondary"
+                        size="icon"
+                        className="h-10 w-10 shrink-0"
+                        onClick={() => router.back()}
+                        aria-label="Back"
+                    >
+                        <ArrowLeft className="size-5" aria-hidden />
+                    </Button>
+                    <h3 className="text-lg text-foreground font-semibold truncate max-w-[min(280px,55vw)] text-center">
+                        Mendr Report
+                    </h3>
+                    <div className="h-10 w-10 shrink-0" aria-hidden />
+                </div>
+
+                {/* Banner image */}
+                <Skeleton className="h-56 w-full rounded-lg" />
+
+                {/* Title + trade badge */}
+                <div className="flex flex-col gap-2">
+                    <div className="flex flex-row justify-between items-start gap-3">
+                        <Skeleton className="h-8 w-2/3 rounded" />
+                        <Skeleton className="h-6 w-16 shrink-0 rounded-full" />
+                    </div>
+                    <Skeleton className="h-4 w-1/2 rounded" />
+                    <Skeleton className="h-4 w-3/5 rounded" />
+                </div>
+
+                {/* What's Wrong */}
+                <div className="flex flex-col gap-2">
+                    <Skeleton className="h-4 w-28 rounded" />
+                    <div className="flex flex-col gap-3">
+                        <Skeleton className="h-4 w-full rounded" />
+                        <Skeleton className="h-4 w-[95%] rounded" />
+                        <Skeleton className="h-4 w-[90%] rounded" />
+                        <Skeleton className="h-4 w-[70%] rounded" />
+                    </div>
+                </div>
+
+                {/* Typical Cost card */}
+                <Skeleton className="h-24 w-full rounded-lg" />
+
+                {/* How I worked this out card */}
+                <Skeleton className="h-20 w-full rounded-lg" />
+            </main>
         );
     }
 
