@@ -1,55 +1,24 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Instagram, Mail, ChevronDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { Separator } from '@/components/ui/separator';
+import { FlowTopBar } from '@/components/match/flow-shell';
+import { BRAND_NAME } from '@/lib/brand-system';
 
-// ── Audience card ─────────────────────────────────────────────────────────────
+// ── Page ──────────────────────────────────────────────────────────────────────
+// Standard app shell (same as /settings, /start, /login): a sticky top bar and a
+// single scrolling content column. Launching-soon hero + early-access code, then
+// a request-access form.
 
-function AudienceCard({
-    zIndex,
-    chipLabel,
-    chipClass,
-    heading,
-    points,
-}: {
-    zIndex:     string;
-    chipLabel:  string;
-    chipClass:  string;
-    heading:    string;
-    points:     string[];
-}) {
-    return (
-        <div className={`sticky top-0 h-screen ${zIndex} flex items-center justify-center bg-background px-6`}>
-            <div className="flex flex-col gap-8 w-full max-w-xs">
-                <div className="flex flex-col gap-3">
-                    <span className={`inline-flex self-start rounded-full px-2.5 py-0.5 text-[10px] font-semibold tracking-widest uppercase ${chipClass}`}>
-                        {chipLabel}
-                    </span>
-                    <p className="text-sm font-medium">{heading}</p>
-                </div>
-                <div className="flex flex-col gap-6">
-                    {points.map((point, i) => (
-                        <div key={i} className="flex flex-col gap-0.5">
-                            <span className="text-[10px] uppercase tracking-widest text-muted-foreground">
-                                {String(i + 1).padStart(2, '0')}
-                            </span>
-                            <p className="text-sm leading-snug">{point}</p>
-                        </div>
-                    ))}
-                </div>
-            </div>
-        </div>
-    );
-}
-
-// ── Contact + access card ────────────────────────────────────────────────────
-
-function Card4() {
+export function ComingSoonClient() {
     const router = useRouter();
+
+    // Contact / request-access form.
     const [name, setName]       = useState('');
     const [email, setEmail]     = useState('');
     const [message, setMessage] = useState('');
@@ -57,10 +26,11 @@ function Card4() {
     const [sent, setSent]       = useState(false);
     const [contactErr, setContactErr] = useState('');
 
-    const [code, setCode]           = useState('');
-    const [codeErr, setCodeErr]     = useState('');
+    // Early-access code form.
+    const [code, setCode]               = useState('');
+    const [codeErr, setCodeErr]         = useState('');
     const [codeLoading, setCodeLoading] = useState(false);
-    const codeRef                   = useRef<HTMLInputElement>(null);
+    const codeRef                       = useRef<HTMLInputElement>(null);
 
     async function handleContact(e: React.FormEvent) {
         e.preventDefault();
@@ -94,8 +64,8 @@ function Card4() {
                 body:    JSON.stringify({ password: code.trim() }),
             });
             if (res.ok) {
-                // Use Next router so we keep client-side routing + cookies set
-                // by /api/beta-access take effect immediately on the next render.
+                // Next router keeps client-side routing + lets the cookie set by
+                // /api/beta-access take effect on the next render.
                 router.push('/');
                 router.refresh();
             } else {
@@ -111,149 +81,138 @@ function Card4() {
     }
 
     return (
-        <div className="sticky top-0 h-screen z-40 flex flex-col bg-card">
-            <div className="flex flex-1 flex-col items-center justify-center">
-                <div className="flex flex-col gap-6 w-full p-6 max-w-lg">
-
-                    <div className="flex flex-col gap-3 text-center">
-                        <span className="text-2xl text-foreground font-semibold">
-                            Get Early Access
-                        </span>
-                        <p className="text-sm text-muted-foreground leading-relaxed">Lorem ipsum dolor sit amet consectetur adipisicing elit. Quisquam, quos.</p>
-                    </div>
-
-                    {sent ? (
-                        <p className="text-sm text-muted-foreground">...</p>
-                    ) : (
-                        <form onSubmit={handleContact} className="flex flex-col gap-3">
-                            <Input
-                                value={name}
-                                onChange={(e) => setName(e.target.value)}
-                                placeholder="Full Name"
-                                required
-                                disabled={sending}
-                                className="text-sm text-foreground h-11 px-3 py-2 border-input rounded-lg"
-                            />
-                            <Input
-                                type="email"
-                                value={email}
-                                onChange={(e) => setEmail(e.target.value)}
-                                placeholder="Email Address"
-                                required
-                                disabled={sending}
-                                className="text-sm text-foreground h-11 px-3 py-2 border-input rounded-lg"
-                            />
-                            <Textarea
-                                value={message}
-                                onChange={(e) => setMessage(e.target.value)}
-                                placeholder="Message"
-                                rows={3}
-                                required
-                                disabled={sending}
-                                className="text-sm text-foreground h-18 p-3 border-input rounded-lg"
-                            />
-                            {contactErr ? <p className="text-xs text-destructive">{contactErr}</p> : null}
-                            <Button type="submit" disabled={sending || !name || !email || !message} className="w-full h-11 rounded-lg">
-                                {sending ? 'Sending...' : 'Send Message'}
-                            </Button>
-                        </form>
-                    )}
-
-                    <div className="h-px bg-border" />
-
-                    <form onSubmit={handleCode} className="flex flex-col gap-2">
-                        <Input
-                            ref={codeRef}
-                            type="password"
-                            value={code}
-                            onChange={(e) => setCode(e.target.value)}
-                            placeholder="Early access code"
-                            autoComplete="current-password"
-                            disabled={codeLoading}
-                        />
-                        {codeErr ? <p className="text-xs text-destructive">{codeErr}</p> : null}
-                        <Button type="submit" variant="outline" disabled={codeLoading || !code.trim()} className="w-full">
-                            {codeLoading ? 'Checking...' : 'Continue'}
-                        </Button>
-                    </form>
-
-                </div>
-            </div>
-
-            <footer className="flex items-center justify-between border-t border-border py-4 text-xs text-muted-foreground">
-                <span>© {new Date().getFullYear()} Mendr</span>
-                <div className="flex items-center gap-4">
-                    <a
-                        href="https://www.instagram.com/mendrapp"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        aria-label="Mendr on Instagram"
-                        className="hover:text-foreground transition-colors"
-                    >
-                        <Instagram size={15} />
-                    </a>
-                    <a
-                        href="mailto:hello@mendr.co.za"
-                        aria-label="Email Mendr"
-                        className="hover:text-foreground transition-colors"
-                    >
-                        <Mail size={15} />
-                    </a>
-                </div>
-            </footer>
-        </div>
-    );
-}
-
-// ── Page ─────────────────────────────────────────────────────────────────────
-
-export function ComingSoonClient() {
-    return (
-        <>
-            {/* Card 1 — Hero */}
-            <div className="sticky top-0 h-screen z-10 flex flex-col items-center justify-center bg-[#131312] text-[#FAFAFA] px-6">
-                <div className="flex flex-col items-center gap-4 text-center max-w-xs">
-                    <h1 className="text-5xl font-bold tracking-tight">Mendr</h1>
-                    <p className="text-sm text-white/50 leading-relaxed">
-                        Home fault diagnosis for Western Cape homeowners.
+        <div className="fixed inset-0 z-0 flex flex-col overflow-hidden bg-background">
+            <FlowTopBar
+                className="p-4"
+                leftSlot={<span aria-hidden className="block size-10" />}
+                centerSlot={
+                    <p className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-base font-medium text-foreground">
+                        {BRAND_NAME}
                     </p>
-                </div>
-                <div className="absolute bottom-8 flex flex-col items-center gap-1.5 text-white/20">
-                    <span className="text-[10px] uppercase tracking-widest">Scroll</span>
-                    <ChevronDown size={13} />
+                }
+            />
+
+            <div className="flex-1 overflow-hidden">
+                <div className="h-full overflow-y-auto">
+                    <div className="flex min-h-full flex-col">
+                        <div className="flex flex-1 flex-col items-center justify-center p-4">
+                            <div className="flex w-full max-w-xl flex-col gap-8 py-8">
+
+                                {/* Hero */}
+                                <div className="flex w-full flex-col items-center gap-3 text-center">
+                                    <h1 className="text-2xl font-semibold text-foreground">Launching Soon</h1>
+                                    <p className="text-sm text-muted-foreground">
+                                        Mendr is home fault diagnosis for Western Cape homeowners. Enter your early access code to step inside, or request one below.
+                                    </p>
+                                </div>
+
+                                {/* Early-access code */}
+                                <form onSubmit={handleCode} className="flex flex-col gap-3">
+                                    <div className="flex flex-col gap-3">
+                                        <Label htmlFor="access-code">Early Access Code</Label>
+                                        <Input
+                                            id="access-code"
+                                            ref={codeRef}
+                                            type="password"
+                                            value={code}
+                                            onChange={(e) => setCode(e.target.value)}
+                                            autoComplete="current-password"
+                                            disabled={codeLoading}
+                                        />
+                                    </div>
+                                    {codeErr ? <p className="text-sm text-destructive">{codeErr}</p> : null}
+                                    <Button type="submit" className="w-full" disabled={codeLoading || !code.trim()}>
+                                        {codeLoading ? 'Checking…' : 'Continue'}
+                                    </Button>
+                                </form>
+
+                                <Separator />
+
+                                {/* Request access / contact */}
+                                {sent ? (
+                                    <p className="text-center text-sm text-muted-foreground">
+                                        Thanks, we&apos;ve got it. We&apos;ll be in touch soon.
+                                    </p>
+                                ) : (
+                                    <form onSubmit={handleContact} className="flex flex-col gap-6">
+                                        <div className="flex flex-col gap-3">
+                                            <Label htmlFor="ra-name">Full Name</Label>
+                                            <Input
+                                                id="ra-name"
+                                                value={name}
+                                                onChange={(e) => setName(e.target.value)}
+                                                required
+                                                disabled={sending}
+                                            />
+                                        </div>
+                                        <div className="flex flex-col gap-3">
+                                            <Label htmlFor="ra-email">Email Address</Label>
+                                            <Input
+                                                id="ra-email"
+                                                type="email"
+                                                value={email}
+                                                onChange={(e) => setEmail(e.target.value)}
+                                                required
+                                                disabled={sending}
+                                            />
+                                        </div>
+                                        <div className="flex flex-col gap-3">
+                                            <Label htmlFor="ra-message">Message</Label>
+                                            <Textarea
+                                                id="ra-message"
+                                                value={message}
+                                                onChange={(e) => setMessage(e.target.value)}
+                                                rows={4}
+                                                required
+                                                disabled={sending}
+                                            />
+                                        </div>
+                                        {contactErr ? <p className="text-sm text-destructive">{contactErr}</p> : null}
+                                        <Button
+                                            type="submit"
+                                            variant="secondary"
+                                            className="w-full"
+                                            disabled={sending || !name || !email || !message}
+                                        >
+                                            {sending ? 'Sending…' : 'Send Message'}
+                                        </Button>
+                                    </form>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Footer — contact email on the left, socials on the right. */}
+                        <footer className="h-18 shrink-0 px-4 py-1">
+                            <div className="mx-auto flex h-full w-full max-w-xl items-center justify-between">
+                                <a
+                                    href="mailto:hello@mendr.co.za"
+                                    className="text-sm text-muted-foreground transition-colors hover:text-foreground"
+                                >
+                                    hello@mendr.co.za
+                                </a>
+                                <div className="flex items-center gap-4">
+                                    <a
+                                        href="https://www.instagram.com"
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="text-sm text-muted-foreground transition-colors hover:text-foreground"
+                                    >
+                                        Instagram
+                                    </a>
+                                    <a
+                                        href="https://www.facebook.com"
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="text-sm text-muted-foreground transition-colors hover:text-foreground"
+                                    >
+                                        Facebook
+                                    </a>
+                                </div>
+                            </div>
+                        </footer>
+                    </div>
                 </div>
             </div>
-
-            {/* Card 2 — Homeowners */}
-            <AudienceCard
-                zIndex="z-20"
-                chipLabel="For homeowners"
-                chipClass="bg-[#DCF763] text-[#131312]"
-                heading="Know what is wrong before you call anyone."
-                points={[
-                    'Upload a photo of any fault and get a written diagnosis in under 60 seconds',
-                    'Understand the problem in plain language, not trade jargon',
-                    'Compare vetted local contractors matched to your specific fault',
-                    'Free to use, no account required',
-                ]}
-            />
-
-            {/* Card 3 — Contractors */}
-            <AudienceCard
-                zIndex="z-30"
-                chipLabel="For contractors"
-                chipClass="bg-[#131312] text-[#FAFAFA]"
-                heading="Leads who already understand their problem."
-                points={[
-                    'Get matched to homeowners with a written diagnosis in hand',
-                    'No commission on jobs you win',
-                    'Build a verified profile with real, structured reviews',
-                    'Only relevant enquiries in your trade and service area',
-                ]}
-            />
-
-            {/* Card 4 — Contact + access */}
-            <Card4 />
-        </>
+        </div>
     );
 }

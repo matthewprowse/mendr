@@ -147,12 +147,15 @@ function createNextConfig(phase: string): NextConfig {
             return [
                 // /welcome → /start (301 permanent)
                 { source: '/welcome', destination: '/start', permanent: true },
-                // /pro/* → /contractors/* (301 permanent)
+                // Contractor portal moved to /contractors/* (301 permanent).
+                // NOTE: do not redirect /pro/:id — the public Pro profile is
+                // canonical at /pro/[id]; /contractors/[id] redirects forward to
+                // it. Adding a /pro/:id → /contractors/:id rule here creates an
+                // infinite redirect loop.
                 { source: '/pro',                    destination: '/contractors',                    permanent: true },
                 { source: '/pro/join',               destination: '/contractors',                    permanent: true },
                 { source: '/pro/onboard',            destination: '/contractors/network',            permanent: true },
                 { source: '/pro/application/edit',   destination: '/contractors/application/edit',   permanent: true },
-                { source: '/pro/:id',                destination: '/contractors/:id',                permanent: true },
                 // /api/pro/* → /api/contractors/*
                 { source: '/api/pro/application/edit', destination: '/api/contractors/application/edit', permanent: true },
             ];

@@ -1,5 +1,4 @@
 import type { MendrPublicReview, MendrRatingSummary } from '@/lib/providers/contractor-profile-server';
-import { INK } from '@/lib/design-tokens';
 
 /**
  * Public-facing Mendr-side rating + reviews block on the contractor profile.
@@ -54,25 +53,25 @@ function ReviewItem({
     businessName: string;
 }) {
     return (
-        <li className="flex flex-col gap-2 border-t border-black/[0.06] py-3 first:border-t-0 first:pt-0 last:pb-0">
+        <li className="flex flex-col gap-2 border-t border-border py-3 first:border-t-0 first:pt-0 last:pb-0">
             <div className="flex items-center justify-between gap-3">
                 <StarRow rating={review.rating} />
-                <span className="text-xs text-gray-500">{formatDate(review.createdAt)}</span>
+                <span className="text-xs text-muted-foreground">{formatDate(review.createdAt)}</span>
             </div>
             {review.outcome ? (
-                <p className="text-sm text-gray-800">{review.outcome}</p>
+                <p className="text-sm text-foreground">{review.outcome}</p>
             ) : (
-                <p className="text-sm italic text-gray-500">Verified outcome via Mendr.</p>
+                <p className="text-sm italic text-muted-foreground">Verified outcome via Mendr.</p>
             )}
             {review.contractorReply ? (
-                <div className="ml-4 rounded-lg border border-black/[0.06] bg-gray-50 p-3">
-                    <p className="text-xs font-semibold text-gray-700">
+                <div className="ml-4 rounded-lg border border-border bg-muted p-3">
+                    <p className="text-xs font-semibold text-foreground">
                         {businessName} replied
                         {review.contractorReplyAt
                             ? ` · ${formatDate(review.contractorReplyAt)}`
                             : null}
                     </p>
-                    <p className="mt-1 text-sm text-gray-800">{review.contractorReply}</p>
+                    <p className="mt-1 text-sm text-foreground">{review.contractorReply}</p>
                 </div>
             ) : null}
         </li>
@@ -90,19 +89,18 @@ export function MendrReviewsBlock({
 
     return (
         <section
-            className="rounded-3xl border border-black/[0.07] bg-white p-4 sm:p-5"
+            className="rounded-lg border border-border bg-card p-4"
             aria-labelledby="mendr-reviews-heading"
         >
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                 <h2
                     id="mendr-reviews-heading"
-                    className="text-base font-semibold"
-                    style={{ color: INK }}
+                    className="text-lg font-semibold text-foreground"
                 >
                     Mendr verified reviews
                 </h2>
                 {enoughForAverage && mendr.rating != null ? (
-                    <span className="inline-flex items-center gap-1.5 text-sm font-medium text-gray-700">
+                    <span className="inline-flex items-center gap-1.5 text-sm font-medium text-foreground">
                         <StarRow rating={mendr.rating} />
                         <span>
                             {mendr.rating.toFixed(1)} ({mendr.count}{' '}

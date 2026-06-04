@@ -1,28 +1,19 @@
-// Required env vars: GOOGLE_MAPS_API_KEY, UPSTASH_REDIS_REST_URL, UPSTASH_REDIS_REST_TOKEN
+// Required env vars: UPSTASH_REDIS_REST_URL, UPSTASH_REDIS_REST_TOKEN
+//
+// Onboarding business search. Searches the Mendr `providers` table (our own
+// scraped/known businesses) by name so a contractor can find and claim their
+// existing listing. Returns self-contained results (address, phone, website,
+// coordinates) so selection pre-fills the form with no second request.
+//
+// Google Places is intentionally NOT used here — it added an external
+// dependency that failed (502) when the Places key/billing was unavailable. A
+// Google fallback can be layered on later for businesses not yet in our DB.
 
 import { NextRequest, NextResponse } from 'next/server';
 import { checkRateLimit } from '@/lib/rate-limit-config';
-import { RETAIL_TYPES } from '@/lib/providers/constants';
-import { normalizePlaceId } from '@/lib/providers/place-id';
+import { createSupabaseAdminClient } from '@/lib/auth/supabase-server';
 
-const DEFAULT_LAT = -33.9249;
-const DEFAULT_LNG = 18.4241;
-const BIAS_RADIUS_M = 85_000;
-
-function getPlacesApiKey(): string | null {
-    return (
-        process.env.GOOGLE_PLACES_API_KEY ||
-        process.env.NEXT_PUBLIC_GOOGLE_PLACES_API_KEY ||
-        process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ||
-        null
-    );
-}
-
-type SearchBody = {
-    query?: string;
-    lat?: number;
-    lng?: number;
-};
+type SearchBody = { query?: string };
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
     const limited = await checkRateLimit(req, 'onboardingSearch');
@@ -43,72 +34,40 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         return NextResponse.json({ error: 'Search query is too long.' }, { status: 400 });
     }
 
-    const lat = typeof body.lat === 'number' && Number.isFinite(body.lat) ? body.lat : DEFAULT_LAT;
-    const lng = typeof body.lng === 'number' && Number.isFinite(body.lng) ? body.lng : DEFAULT_LNG;
+    // Escape ilike wildcards so the user's input matches literally.
+    const pattern = `%${q.replace(/[\\%_]/g, '\\$&')}%`;
 
-    const apiKey = getPlacesApiKey();
-    if (!apiKey) {
-        return NextResponse.json({ error: 'Places search is not configured.' }, { status: 500 });
+    try {
+        const admin = await createSupabaseAdminClient();
+        const { data, error } = await admin
+            .from('providers')
+            .select('id, google_place_id, name, address, phone, website, latitude, longitude, rating, rating_count')
+            .ilike('name', pattern)
+            .eq('is_active', true)
+            .order('rating_count', { ascending: false, nullsFirst: false })
+            .limit(15);
+
+        if (error) {
+            console.error('[onboarding/search] providers query error:', error.message);
+            return NextResponse.json({ error: 'Could not search businesses. Try again in a moment.' }, { status: 500 });
+        }
+
+        const rows = (data ?? []) as Array<Record<string, unknown>>;
+        const results = rows.map((p) => ({
+            placeId: typeof p.google_place_id === 'string' && p.google_place_id ? p.google_place_id : String(p.id),
+            name: typeof p.name === 'string' ? p.name : 'Business',
+            address: typeof p.address === 'string' ? p.address : '',
+            phone: typeof p.phone === 'string' ? p.phone : null,
+            website: typeof p.website === 'string' ? p.website : null,
+            lat: typeof p.latitude === 'number' ? p.latitude : null,
+            lng: typeof p.longitude === 'number' ? p.longitude : null,
+            rating: typeof p.rating === 'number' ? p.rating : null,
+            userRatingCount: typeof p.rating_count === 'number' ? p.rating_count : null,
+        }));
+
+        return NextResponse.json({ results });
+    } catch (err) {
+        console.error('[onboarding/search] error:', err instanceof Error ? err.message : String(err));
+        return NextResponse.json({ error: 'Could not search businesses. Try again in a moment.' }, { status: 500 });
     }
-
-    const url = 'https://places.googleapis.com/v1/places:searchText';
-    const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'X-Goog-Api-Key': apiKey,
-            'X-Goog-FieldMask':
-                'places.id,places.displayName,places.formattedAddress,places.types,places.location,places.rating,places.userRatingCount',
-        },
-        body: JSON.stringify({
-            textQuery: q,
-            regionCode: 'ZA',
-            locationBias: {
-                circle: {
-                    center: { latitude: lat, longitude: lng },
-                    radius: BIAS_RADIUS_M,
-                },
-            },
-            pageSize: 15,
-        }),
-    });
-
-    if (!response.ok) {
-        const errorText = await response.text().catch(() => '');
-        console.error('[onboarding/search] Places error:', response.status, errorText);
-        return NextResponse.json({ error: 'Could not search businesses. Try again in a moment.' }, { status: 502 });
-    }
-
-    const data = (await response.json()) as { places?: unknown[] };
-    const rawPlaces = Array.isArray(data.places) ? data.places : [];
-
-    const results: Array<{
-        placeId: string;
-        name: string;
-        address: string;
-        types: string[];
-        rating: number | null;
-        userRatingCount: number | null;
-    }> = [];
-
-    for (const p of rawPlaces as any[]) {
-        const types = (p?.types || []) as string[];
-        if (types.some((t) => RETAIL_TYPES.has(t))) continue;
-
-        const rawId = typeof p?.id === 'string' ? p.id : '';
-        if (!rawId) continue;
-        const placeId = normalizePlaceId(rawId);
-        const name = (p?.displayName?.text as string) || (p?.displayName as string) || 'Business';
-        const address = (p?.formattedAddress as string) || '';
-        results.push({
-            placeId,
-            name,
-            address,
-            types,
-            rating: typeof p?.rating === 'number' ? p.rating : null,
-            userRatingCount: typeof p?.userRatingCount === 'number' ? p.userRatingCount : null,
-        });
-    }
-
-    return NextResponse.json({ results });
 }

@@ -2,18 +2,31 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { FlowTopBar, FlowFooter, StepHeading } from '@/components/match/flow-shell';
+import { PREFERRED_CONTACT_OPTIONS, RESPONSE_TIME_OPTIONS } from '../../network/steps/types';
 
 type EditPayload = {
-    applicationId:  string;
-    contactName:    string;
-    businessName:   string | null;
-    trade:          string;
+    applicationId: string;
+    contactName: string;
+    businessName: string | null;
+    trade: string;
     currentSummary: string;
-    geminiSummary:  string | null;
-    hasEdited:      boolean;
+    geminiSummary: string | null;
+    hasEdited: boolean;
+    highlights: string;
+    specialisations: string;
+    insuranceCover: string;
+    typicalResponseTime: string;
+    pricingModel: string;
+    calloutFee: string;
+    preferredContactChannel: string;
 };
 
 type PageState =
@@ -22,16 +35,22 @@ type PageState =
     | { phase: 'form'; payload: EditPayload }
     | { phase: 'saved' };
 
+const MAX_CHARS = 2000;
+
 export default function ApplicationEditClient() {
     const searchParams = useSearchParams();
-    const token        = searchParams.get('token') ?? '';
+    const token = searchParams.get('token') ?? '';
 
-    const [state,   setState]   = useState<PageState>({ phase: 'loading' });
+    const [state, setState] = useState<PageState>({ phase: 'loading' });
     const [summary, setSummary] = useState('');
-    const [saving,  setSaving]  = useState(false);
-    const [charCount, setCharCount] = useState(0);
-
-    const MAX_CHARS = 2000;
+    const [highlights, setHighlights] = useState('');
+    const [specialisations, setSpecialisations] = useState('');
+    const [insuranceCover, setInsuranceCover] = useState('');
+    const [typicalResponseTime, setTypicalResponseTime] = useState('');
+    const [pricingModel, setPricingModel] = useState('');
+    const [calloutFee, setCalloutFee] = useState('');
+    const [preferredContactChannel, setPreferredContactChannel] = useState('');
+    const [saving, setSaving] = useState(false);
 
     const load = useCallback(async () => {
         if (!token) {
@@ -41,33 +60,51 @@ export default function ApplicationEditClient() {
         try {
             const res = await fetch(`/api/contractors/application/edit?token=${encodeURIComponent(token)}`);
             if (!res.ok) {
-                const d = await res.json().catch(() => ({})) as { error?: string };
+                const d = (await res.json().catch(() => ({}))) as { error?: string };
                 setState({ phase: 'error', message: d.error ?? 'This link is invalid or has expired.' });
                 return;
             }
-            const payload = await res.json() as EditPayload;
+            const payload = (await res.json()) as EditPayload;
             setState({ phase: 'form', payload });
             setSummary(payload.currentSummary);
-            setCharCount(payload.currentSummary.length);
+            setHighlights(payload.highlights);
+            setSpecialisations(payload.specialisations);
+            setInsuranceCover(payload.insuranceCover);
+            setTypicalResponseTime(payload.typicalResponseTime);
+            setPricingModel(payload.pricingModel);
+            setCalloutFee(payload.calloutFee);
+            setPreferredContactChannel(payload.preferredContactChannel);
         } catch {
             setState({ phase: 'error', message: 'Something went wrong. Please try again.' });
         }
     }, [token]);
 
-    useEffect(() => { void load(); }, [load]);
+    useEffect(() => {
+        void load();
+    }, [load]);
 
     async function handleSave() {
         if (state.phase !== 'form' || !summary.trim() || saving) return;
         setSaving(true);
         try {
             const res = await fetch('/api/contractors/application/edit', {
-                method:  'POST',
+                method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body:    JSON.stringify({ token, summary: summary.trim() }),
+                body: JSON.stringify({
+                    token,
+                    summary: summary.trim(),
+                    highlights,
+                    specialisations,
+                    insuranceCover,
+                    typicalResponseTime,
+                    pricingModel,
+                    calloutFee,
+                    preferredContactChannel,
+                }),
             });
             if (!res.ok) {
-                const d = await res.json().catch(() => ({})) as { error?: string };
-                alert(d.error ?? 'Failed to save. Please try again.');
+                const d = (await res.json().catch(() => ({}))) as { error?: string };
+                toast.error(d.error ?? 'Failed to save. Please try again.');
                 return;
             }
             setState({ phase: 'saved' });
@@ -76,18 +113,11 @@ export default function ApplicationEditClient() {
         }
     }
 
-    function handleReset() {
-        if (state.phase !== 'form') return;
-        const orig = state.payload.geminiSummary ?? '';
-        setSummary(orig);
-        setCharCount(orig.length);
-    }
-
     // ── Render ────────────────────────────────────────────────────────────────
 
     if (state.phase === 'loading') {
         return (
-            <div className="mx-auto max-w-xl px-4 py-20">
+            <div className="mx-auto max-w-xl px-6 py-20">
                 <Skeleton className="mb-4 h-8 w-48" />
                 <Skeleton className="mb-3 h-4 w-full" />
                 <Skeleton className="h-48 w-full" />
@@ -97,7 +127,7 @@ export default function ApplicationEditClient() {
 
     if (state.phase === 'error') {
         return (
-            <div className="mx-auto max-w-xl px-4 py-20 text-center">
+            <div className="mx-auto max-w-xl px-6 py-20 text-center">
                 <h1 className="text-xl font-semibold text-foreground">Link unavailable</h1>
                 <p className="mt-3 text-sm text-muted-foreground">{state.message}</p>
                 <p className="mt-6 text-sm text-muted-foreground">
@@ -109,100 +139,173 @@ export default function ApplicationEditClient() {
 
     if (state.phase === 'saved') {
         return (
-            <div className="mx-auto max-w-xl px-4 py-20 text-center">
-                <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-green-100">
-                    <svg className="h-6 w-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            <div className="mx-auto flex max-w-xl flex-col items-center px-6 py-20 text-center">
+                <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-foreground">
+                    <svg
+                        className="h-6 w-6 text-background"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                        strokeWidth={2.5}
+                    >
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                     </svg>
                 </div>
                 <h1 className="text-xl font-semibold text-foreground">Profile saved</h1>
                 <p className="mt-3 text-sm text-muted-foreground">
-                    Your profile summary has been saved. We will review it and let you know when your profile is live.
+                    Your profile is updated and locked from automated changes. We will review it before it goes live.
                 </p>
-                <p className="mt-4 text-sm text-muted-foreground">
-                    You can close this page.
-                </p>
+                <p className="mt-4 text-sm text-muted-foreground">You can close this page.</p>
             </div>
         );
     }
 
     const { payload } = state;
+    const overLimit = summary.length > MAX_CHARS;
+    const firstName = payload.contactName?.split(' ')[0] ?? '';
 
     return (
-        <div className="mx-auto max-w-xl px-4 py-16">
-            {/* Header */}
-            <div className="mb-8">
-                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Mendr</p>
-                <h1 className="mt-2 text-2xl font-bold text-foreground">Review your profile</h1>
-                <p className="mt-2 text-sm text-muted-foreground">
-                    Hi {payload.contactName.split(' ')[0]}. Below is the profile summary we put together
-                    {payload.businessName ? ` for ${payload.businessName}` : ''} based on your application.
-                    Read through it, make any changes, and save when you are happy.
-                </p>
-            </div>
+        <div className="flex h-dvh flex-col overflow-hidden overscroll-none bg-background">
+            <FlowTopBar
+                centerSlot={<span className="block text-center text-lg font-bold text-foreground">Mendr</span>}
+            />
+            <main className="flex min-h-0 flex-1 items-start justify-center overflow-y-auto px-6 pb-28">
+                <div className="flex w-full min-w-0 max-w-xl flex-col gap-8 py-2">
+                    <StepHeading
+                        title="Review your profile"
+                        sub={`Hi ${firstName}. This is the profile homeowners see${
+                            payload.businessName ? ` for ${payload.businessName}` : ''
+                        }. Edit anything below — your changes replace what we generated and won't be overwritten.`}
+                    />
 
-            {/* Context strip */}
-            <div className="mb-6 flex gap-4 rounded-lg border border-border/50 bg-muted/20 p-4 text-sm">
-                {payload.businessName && (
-                    <div>
-                        <p className="text-xs text-muted-foreground">Business</p>
-                        <p className="font-medium text-foreground">{payload.businessName}</p>
+                    <div className="flex flex-col gap-6">
+                        <div className="flex flex-col gap-2">
+                            <div className="flex items-center justify-between">
+                                <Label htmlFor="summary-editor">Profile summary</Label>
+                                <span className={`text-xs ${overLimit ? 'text-destructive' : 'text-muted-foreground'}`}>
+                                    {summary.length} / {MAX_CHARS}
+                                </span>
+                            </div>
+                            <Textarea
+                                id="summary-editor"
+                                rows={8}
+                                value={summary}
+                                onChange={(e) => setSummary(e.target.value)}
+                                placeholder="Tell homeowners what you do and why they should trust you…"
+                                className="text-sm leading-relaxed"
+                            />
+                        </div>
+
+                        <div className="flex flex-col gap-2">
+                            <Label htmlFor="highlights-editor">Highlights</Label>
+                            <Textarea
+                                id="highlights-editor"
+                                rows={3}
+                                value={highlights}
+                                onChange={(e) => setHighlights(e.target.value)}
+                                placeholder="Warranty, speed, materials — comma separated"
+                                className="text-sm leading-relaxed"
+                            />
+                        </div>
+
+                        <div className="flex flex-col gap-2">
+                            <Label htmlFor="specialisations-editor">Specialisations</Label>
+                            <Input
+                                id="specialisations-editor"
+                                value={specialisations}
+                                onChange={(e) => setSpecialisations(e.target.value)}
+                                placeholder="e.g. burst pipes, geysers, leak detection"
+                                className="h-10 text-sm"
+                            />
+                        </div>
+
+                        <div className="flex flex-col gap-2">
+                            <Label htmlFor="insurance-editor">Insurance cover</Label>
+                            <Input
+                                id="insurance-editor"
+                                value={insuranceCover}
+                                onChange={(e) => setInsuranceCover(e.target.value)}
+                                placeholder="e.g. Public liability up to R5m"
+                                className="h-10 text-sm"
+                            />
+                        </div>
+
+                        <div className="flex flex-col gap-2">
+                            <Label htmlFor="response-editor">Typical response time</Label>
+                            <Select value={typicalResponseTime} onValueChange={setTypicalResponseTime}>
+                                <SelectTrigger
+                                    id="response-editor"
+                                    className="h-10 min-h-10 w-full data-[size=default]:h-10"
+                                >
+                                    <SelectValue placeholder="How fast do you usually respond?" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {RESPONSE_TIME_OPTIONS.map((opt) => (
+                                        <SelectItem key={opt.value} value={opt.value}>
+                                            {opt.label}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="flex flex-col gap-2">
+                                <Label htmlFor="pricing-editor">Pricing model</Label>
+                                <Input
+                                    id="pricing-editor"
+                                    value={pricingModel}
+                                    onChange={(e) => setPricingModel(e.target.value)}
+                                    placeholder="Fixed callout, then quoted"
+                                    className="h-10 text-sm"
+                                />
+                            </div>
+                            <div className="flex flex-col gap-2">
+                                <Label htmlFor="callout-editor">Call-out fee (R)</Label>
+                                <Input
+                                    id="callout-editor"
+                                    type="number"
+                                    inputMode="numeric"
+                                    min="0"
+                                    value={calloutFee}
+                                    onChange={(e) => setCalloutFee(e.target.value.replace(/[^\d]/g, ''))}
+                                    placeholder="450"
+                                    className="h-10 text-sm"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="flex flex-col gap-2">
+                            <Label htmlFor="channel-editor">Preferred contact channel</Label>
+                            <Select value={preferredContactChannel} onValueChange={setPreferredContactChannel}>
+                                <SelectTrigger
+                                    id="channel-editor"
+                                    className="h-10 min-h-10 w-full data-[size=default]:h-10"
+                                >
+                                    <SelectValue placeholder="How should we send you leads?" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {PREFERRED_CONTACT_OPTIONS.map((opt) => (
+                                        <SelectItem key={opt.value} value={opt.value}>
+                                            {opt.label}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
                     </div>
-                )}
-                <div>
-                    <p className="text-xs text-muted-foreground">Trade</p>
-                    <p className="font-medium text-foreground">{payload.trade}</p>
                 </div>
-            </div>
-
-            {/* Summary editor */}
-            <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                    <label className="text-sm font-medium text-foreground" htmlFor="summary-editor">
-                        Profile summary
-                    </label>
-                    <span className={`text-xs ${charCount > MAX_CHARS ? 'text-red-500' : 'text-muted-foreground'}`}>
-                        {charCount} / {MAX_CHARS}
-                    </span>
-                </div>
-                <Textarea
-                    id="summary-editor"
-                    rows={10}
-                    value={summary}
-                    onChange={(e) => {
-                        setSummary(e.target.value);
-                        setCharCount(e.target.value.length);
-                    }}
-                    placeholder="Your profile summary..."
-                    className="text-sm leading-relaxed"
-                />
-                {payload.hasEdited && (
-                    <p className="text-xs text-muted-foreground">
-                        You have previously saved edits. The text above reflects your last saved version.
-                    </p>
-                )}
-            </div>
-
-            {/* Actions */}
-            <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+            </main>
+            <FlowFooter className="border-t border-border">
                 <Button
+                    type="button"
+                    className="h-10 w-full"
+                    disabled={saving || !summary.trim() || overLimit}
                     onClick={() => void handleSave()}
-                    disabled={saving || !summary.trim() || charCount > MAX_CHARS}
-                    className="flex-1"
                 >
-                    {saving ? 'Saving...' : 'Save and submit'}
+                    {saving ? 'Saving…' : 'Save and submit'}
                 </Button>
-                {payload.geminiSummary && summary !== payload.geminiSummary && (
-                    <Button variant="outline" onClick={handleReset} disabled={saving}>
-                        Reset to original
-                    </Button>
-                )}
-            </div>
-
-            <p className="mt-6 text-xs text-muted-foreground">
-                Once you save, your profile will be reviewed by our team before going live.
-                If you need to make further changes, reply to your invitation email.
-            </p>
+            </FlowFooter>
         </div>
     );
 }

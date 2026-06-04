@@ -40,7 +40,6 @@ import {
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
@@ -48,6 +47,7 @@ import { Spinner } from '@/components/ui/spinner';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { FlowTopBar, StepHeading } from '@/components/match/flow-shell';
 import { useAuth } from '@/context/auth-context';
+import { BRAND_NAME } from '@/lib/brand-system';
 
 type FlowStep = 1 | 2;
 type LocationMode = 'choose' | 'gps-loading' | 'gps-done' | 'manual';
@@ -136,7 +136,10 @@ function Step1({
     const uploadInputRef = useRef<HTMLInputElement>(null);
     const hasPendingPhotos = selectedPhotos.some((p) => p.status === 'pending');
     const hasReadyPhoto = selectedPhotos.some((p) => p.status === 'ready');
-    const canContinue = hasReadyPhoto && !hasPendingPhotos;
+    // A photo OR a meaningful description is enough to proceed. The 15-char floor
+    // mirrors the text-only minimum enforced in the processing pipeline.
+    const hasEnoughText = description.trim().length >= 15;
+    const canContinue = (hasReadyPhoto || hasEnoughText) && !hasPendingPhotos;
 
     const handleSelectPhotos = () => uploadInputRef.current?.click();
 
@@ -345,10 +348,7 @@ function Step1({
                                 What&apos;s Happening?
                             </h1>
                             <p className="text-sm text-muted-foreground">
-                                Lorem ipsum dolor sit amet, consectetur
-                                adipiscing elit. Sed do eiusmod tempor
-                                incididunt ut labore et dolore.
-                            </p>
+                                Add a few photos and tell us what&apos;s happening. We&apos;ll work out what&apos;s wrong and roughly what it&apos;ll take to fix.</p>
                         </div>
 
                         {/* Photo upload */}
@@ -402,6 +402,12 @@ function Step1({
                             </div>
                         ) : null}
 
+                        {selectedPhotos.length > 1 ? (
+                            <p className="-mt-4 text-center text-xs text-muted-foreground">
+                                Drag and drop to reorder your photos, with the most relevant first.
+                            </p>
+                        ) : null}
+
                         {selectedPhotos.length !== 1 && selectedPhotos.length !== 3 && selectedPhotos.length < MAX_PHOTOS ? (
                             <div className="flex flex-col gap-2">
                                 <Button
@@ -412,8 +418,7 @@ function Step1({
                                     Add Photos
                                 </Button>
                                 <p className="text-center text-xs text-muted-foreground">
-                                    Lorem ipsum dolor sit amet, consectetur adipiscing elit.
-                                </p>
+                                    Add up to four photos. Clear, well lit ones work best.</p>
                             </div>
                         ) : null}
 
@@ -433,8 +438,7 @@ function Step1({
                                     onChange={(e) => setDescription(e.target.value)}
                                 />
                                 <p className="text-xs text-muted-foreground">
-                                    Lorem ipsum dolor sit amet, consectetur adipiscing elit.
-                                </p>
+                                    Tell us what&apos;s happening and when it first started here.</p>
                             </div>
                         </div>
                     </div>
@@ -459,8 +463,7 @@ function Step1({
                             )}
                         </Button>
                         <p className="text-center text-xs text-muted-foreground">
-                            Lorem ipsum dolor sit amet, consectetur adipiscing elit.
-                        </p>
+                            It is free to use, and you don&apos;t need an account yet.</p>
                     </div>
                 </div>
             </div>
@@ -550,8 +553,8 @@ function Step2({
                         ) : (
                             <>
                                 <StepHeading
-                                    title="Get Nearby Contractors"
-                                    sub="Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore."
+                                    title="Get Nearby Pros"
+                                    sub="We'll use the property's location to find specialists nearby. Tell us where it is and we'll show who can help."
                                 />
 
                                 <div className="flex flex-col gap-2">
@@ -567,37 +570,45 @@ function Step2({
                                         {isGettingLocation ? 'Getting Location…' : 'Use My Location'}
                                     </Button>
                                     <p className="text-center text-xs text-muted-foreground">
-                                        Lorem ipsum dolor sit amet, consectetur adipiscing elit.
-                                    </p>
+                                        We only use this to find specialists nearby, nothing else.</p>
                                 </div>
 
                                 {savedAddresses.length > 0 && (
-                                    <div className="flex flex-col gap-2">
-                                        {savedAddresses.map((addr) => {
+                                    <div className="flex flex-col">
+                                        {savedAddresses.map((addr, index) => {
                                             const select = () => {
                                                 setLocationValue(addr.address);
                                                 setLocationMode('gps-done');
                                             };
                                             return (
-                                                <Card
-                                                    key={addr.id}
-                                                    size="sm"
-                                                    role="button"
-                                                    tabIndex={0}
-                                                    onClick={select}
-                                                    onKeyDown={(e) => {
-                                                        if (e.key === 'Enter' || e.key === ' ') {
-                                                            e.preventDefault();
-                                                            select();
-                                                        }
-                                                    }}
-                                                    className="cursor-pointer hover:bg-accent"
-                                                >
-                                                    <CardContent className="flex flex-col gap-1">
-                                                        <p className="text-sm font-medium">{addr.label}</p>
-                                                        <p className="truncate text-xs text-muted-foreground">{addr.address}</p>
-                                                    </CardContent>
-                                                </Card>
+                                                <div key={addr.id}>
+                                                    {index > 0 && <Separator />}
+                                                    <div
+                                                        role="button"
+                                                        tabIndex={0}
+                                                        onClick={select}
+                                                        onKeyDown={(e) => {
+                                                            if (e.key === 'Enter' || e.key === ' ') {
+                                                                e.preventDefault();
+                                                                select();
+                                                            }
+                                                        }}
+                                                        className="flex cursor-pointer items-center gap-3 py-3"
+                                                    >
+                                                        <Button
+                                                            type="button"
+                                                            variant="secondary"
+                                                            size="icon"
+                                                            className="size-12 shrink-0"
+                                                            tabIndex={-1}
+                                                            aria-hidden="true"
+                                                        />
+                                                        <div className="flex flex-1 flex-col gap-0.5 min-w-0">
+                                                            <p className="text-sm font-medium">{addr.label}</p>
+                                                            <p className="line-clamp-1 text-xs text-muted-foreground">{addr.address}</p>
+                                                        </div>
+                                                    </div>
+                                                </div>
                                             );
                                         })}
                                     </div>
@@ -615,8 +626,7 @@ function Step2({
                                             onChange={(e) => setLocationValue(e.target.value)}
                                         />
                                         <p className="text-xs text-muted-foreground">
-                                            Lorem ipsum dolor sit amet, consectetur adipiscing elit.
-                                        </p>
+                                            Start typing your address and then pick it from the list.</p>
                                     </div>
                                 </div>
                             </>
@@ -633,7 +643,7 @@ function Step2({
                             disabled={!hasLocation || isSubmitting}
                             onClick={() => void onSkip()}
                         >
-                            Find Contractors Now
+                            Find Pros Now
                         </Button>
                         <div className="flex flex-col gap-2">
                             <Button
@@ -652,8 +662,7 @@ function Step2({
                                 )}
                             </Button>
                             <p className="text-center text-xs text-muted-foreground">
-                                Lorem ipsum dolor sit amet, consectetur adipiscing elit.
-                            </p>
+                                We&apos;ll diagnose the fault first, then show you specialists.</p>
                         </div>
                     </div>
                 </div>
@@ -917,11 +926,9 @@ export function StartPageClient() {
                     </Button>
                 }
                 centerSlot={
-                    headerTitle ? (
-                        <p className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-base font-medium text-foreground">
-                            {headerTitle}
-                        </p>
-                    ) : null
+                    <p className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-base font-medium text-foreground">
+                        {headerTitle ?? BRAND_NAME}
+                    </p>
                 }
                 rightSlot={
                     isLoggedIn ? (
@@ -946,6 +953,9 @@ export function StartPageClient() {
                                 </button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
+                                <DropdownMenuItem asChild>
+                                    <Link href="/home">Home</Link>
+                                </DropdownMenuItem>
                                 <DropdownMenuItem asChild>
                                     <Link href="/diagnoses">History</Link>
                                 </DropdownMenuItem>

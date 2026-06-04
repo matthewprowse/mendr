@@ -1,4 +1,5 @@
 export const BRAND_NAME = 'Mendr' as const;
+export const BRAND_NAME_PRO = 'Mendr Pro' as const;
 export const BRAND_LEGACY_NAME = 'Scandio' as const;
 
 export const BRAND_TAGLINE = 'Clarity first home diagnostics' as const;

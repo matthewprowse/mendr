@@ -35,7 +35,7 @@ import {
 } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { getSupabase } from '@/lib/auth/supabase';
+import { fetchActiveServiceCatalogClient } from '@/lib/services-catalog';
 import { geocodeApi } from '@/features/match/api/client';
 import { createClientId } from '@/lib/client-random-id';
 import { isValidSaRegistrationNumber } from '../sa-registration';
@@ -48,7 +48,6 @@ import {
     SESSION_KEY,
     STEP,
     TOTAL_STEPS,
-    WILLINGNESS_OPTIONS,
     certificationCaption,
     isReservedUploadCaption,
     maxServiceRadiiForType,
@@ -66,6 +65,7 @@ import {
     formatSaPhoneDisplay,
     isValidEmail,
     normalizeWebsiteToHttps,
+    shortenSaAddress,
     toSaE164,
     toTitleCaseWords,
     tokenizeCsv,
@@ -270,30 +270,18 @@ export function WizardProvider({ children }: { children: ReactNode }) {
     ]);
 
     // Lazy-load the trade catalogue when we arrive at the TRADE step.
+    // The `services` DB table was removed — this resolves to the canonical
+    // SERVICE_LABELS catalogue (via /api/service-catalog with a static fallback).
     useEffect(() => {
         if (step !== STEP.TRADE || services.length > 0) return;
         setServicesLoading(true);
-        const supabase = getSupabase();
-        supabase
-            .from('services')
-            .select('id, label')
-            .eq('active', true)
-            .then(({ data: rows }: { data: Service[] | null }) => {
-                setServices(rows ?? []);
+        fetchActiveServiceCatalogClient()
+            .then((labels) => {
+                setServices(labels.map((label) => ({ id: label, label })));
                 setServicesLoading(false);
             })
             .catch(() => setServicesLoading(false));
     }, [step, services.length]);
-
-    // Seed one service-area row with the contact address when we land on SERVICE.
-    useEffect(() => {
-        if (step !== STEP.SERVICE) return;
-        setRadii((prev) => {
-            if (prev.length > 0) return prev;
-            const seed = data.address.trim();
-            return [{ id: createClientId(), address: seed, lat: 0, lng: 0, radiusKm: DEFAULT_SERVICE_RADIUS_KM }];
-        });
-    }, [step, data.address]);
 
     // Always scroll to the top when the step changes.
     useEffect(() => {
@@ -332,7 +320,7 @@ export function WizardProvider({ children }: { children: ReactNode }) {
             toast.error(geo?.error || 'Please provide a specific address.');
             return false;
         }
-        patch({ address: geo.address });
+        patch({ address: shortenSaAddress(geo.address) });
         return true;
     }, [data.address, patch]);
 
@@ -340,7 +328,7 @@ export function WizardProvider({ children }: { children: ReactNode }) {
         (details: PlaceDetailsPayload) => {
             patch({
                 businessName: toTitleCaseWords(details.businessName),
-                address: details.address,
+                address: shortenSaAddress(details.address),
                 phone: details.phone ? formatSaPhoneDisplay(details.phone) : '',
                 website: details.website ? normalizeWebsiteToHttps(details.website) : '',
                 applicantGooglePlaceId: details.placeId,
@@ -354,7 +342,7 @@ export function WizardProvider({ children }: { children: ReactNode }) {
                 setRadii([
                     {
                         id: createClientId(),
-                        address: details.address,
+                        address: shortenSaAddress(details.address),
                         lat: details.lat,
                         lng: details.lng,
                         radiusKm: DEFAULT_SERVICE_RADIUS_KM,
@@ -411,14 +399,15 @@ export function WizardProvider({ children }: { children: ReactNode }) {
                 app.contractor_type === 'individual' || app.contractor_type === 'team' || app.contractor_type === 'enterprise'
                     ? app.contractor_type
                     : '',
-            willingnessToPayBand: app.willingness_to_pay_band || '',
             applicantGooglePlaceId: app.applicant_google_place_id || '',
             businessName: app.business_name || '',
-            contactPerson: app.contact_name || '',
+            firstName: (app.contact_name || '').trim().split(/\s+/)[0] || '',
+            surname: (app.contact_name || '').trim().split(/\s+/).slice(1).join(' ') || '',
             emailAddress: app.email || '',
             address: app.address || '',
             phone: app.phone ? formatSaPhoneDisplay(app.phone) : '',
             whatsappAvailable: app.whatsapp_available === true,
+            preferredContactChannel: app.preferred_contact_channel || '',
             website: app.website || '',
             trade: app.trade || '',
             specialisations: app.trade_description || '',
@@ -428,6 +417,10 @@ export function WizardProvider({ children }: { children: ReactNode }) {
             bio: typeof app.about === 'string' ? app.about : '',
             certifications: app.certifications || '',
             highlights: app.highlights || '',
+            insuranceCover: app.insurance_cover || '',
+            typicalResponseTime: app.typical_response_time || '',
+            pricingModel: app.pricing_model || '',
+            calloutFee: typeof app.callout_fee === 'number' ? String(app.callout_fee) : '',
             referralSource: app.referral || '',
             referralOther: '',
         });
@@ -518,8 +511,7 @@ export function WizardProvider({ children }: { children: ReactNode }) {
                 r.lat !== 0 &&
                 r.lng !== 0 &&
                 r.address.trim().length > 0 &&
-                r.radiusKm >= 1 &&
-                r.radiusKm <= 100
+                r.radiusKm >= 1
         );
     }
 
@@ -531,16 +523,13 @@ export function WizardProvider({ children }: { children: ReactNode }) {
                 data.contractorType === 'enterprise'
             );
         }
-        if (step === STEP.WILLINGNESS_TO_PAY) {
-            return WILLINGNESS_OPTIONS.some((o) => o.value === data.willingnessToPayBand);
-        }
         if (step === STEP.COMPANY_SEARCH) return true;
         if (step === STEP.BASICS) {
             return (
                 data.businessName.trim().length >= 2 &&
                 data.businessName.trim().length <= 90 &&
-                data.contactPerson.trim().length >= 3 &&
-                data.contactPerson.trim().length <= 90 &&
+                data.firstName.trim().length > 0 &&
+                data.surname.trim().length > 0 &&
                 isValidEmail(data.emailAddress)
             );
         }
@@ -608,18 +597,18 @@ export function WizardProvider({ children }: { children: ReactNode }) {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     contractorType: data.contractorType,
-                    willingnessToPayBand: data.willingnessToPayBand,
                     applicantGooglePlaceId: data.applicantGooglePlaceId.trim() || undefined,
                     kycDocuments: {
                         ...(kycId ? { idDocument: { path: kycId.path, bucket: kycId.bucket } } : {}),
                         ...(kycSelfie ? { selfie: { path: kycSelfie.path, bucket: kycSelfie.bucket } } : {}),
                     },
                     businessName: data.businessName,
-                    contactPerson: data.contactPerson,
+                    contactPerson: `${data.firstName} ${data.surname}`.trim(),
                     emailAddress: data.emailAddress,
                     address: data.address,
                     phone: toSaE164(data.phone),
                     whatsappAvailable: data.whatsappAvailable,
+                    preferredContactChannel: data.preferredContactChannel,
                     website: data.website,
                     trade: data.trade,
                     specialisations: tokenizeCsv(data.specialisations).join(', '),
@@ -629,6 +618,10 @@ export function WizardProvider({ children }: { children: ReactNode }) {
                     certifications: tokenizeCsv(data.certifications).join(', '),
                     bio: data.bio,
                     highlights: data.highlights,
+                    insuranceCover: data.insuranceCover,
+                    typicalResponseTime: data.typicalResponseTime,
+                    pricingModel: data.pricingModel,
+                    calloutFee: data.calloutFee,
                     referralSource: data.referralSource,
                     referralOther: data.referralOther,
                     serviceAreas: radii.map((r) => `${r.address} (${r.radiusKm}km)`).join(', '),

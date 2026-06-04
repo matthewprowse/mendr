@@ -1,12 +1,8 @@
 import { redirect } from 'next/navigation';
-import { META_ADMIN_LOGIN } from '@/lib/site-metadata';
-import { hasValidAdminSession } from '@/lib/auth/admin-guard';
-import AdminLoginClient from './client';
-
-export const metadata = META_ADMIN_LOGIN;
 
 export default async function AdminLoginPage() {
-    // Already authenticated admins skip the password form.
-    if (await hasValidAdminSession()) redirect('/admin');
-    return <AdminLoginClient />;
+    // The standalone admin password login is retired. Admin access is now tied to
+    // the signed-in account (profiles.is_admin). Send through to /admin, which
+    // gates via requireAdminPage — admins pass, everyone else goes to /home.
+    redirect('/admin');
 }

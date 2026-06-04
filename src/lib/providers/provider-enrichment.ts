@@ -37,12 +37,6 @@ import {
     FAST_SUMMARY_MIN_REVIEWS,
     parseFastReviewSummaryModelJson,
 } from '@/lib/providers/fast-review-summary';
-import {
-    CERTIFICATION_CATALOG,
-    extractCertificationsFromText,
-    getCertificationBySlug,
-    type CertificationEntry,
-} from '@/lib/certifications/catalog';
 import { validateLlmContentSafe } from '@/lib/ai/llm-content-guard';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -481,153 +475,6 @@ async function runCombinedEnrichmentGuarded(
     return { safe, droppedFields: dropped, failureSummary, attempts };
 }
 
-// ── Structured attributes (heuristic-only, no Gemini call) ───────────────────
-
-type CompanySize = 'solo' | 'small' | 'mid' | 'large';
-
-interface StructuredAttributes {
-    companySize: CompanySize | null;
-    companySizeConfidence: number;
-    yearsInBusiness: number | null;
-    yearsInBusinessConfidence: number;
-    certifications: CertificationEntry[];
-}
-
-function bucketCompanySizeFromRatingCount(ratingCount: number | null | undefined): CompanySize | null {
-    if (typeof ratingCount !== 'number' || !Number.isFinite(ratingCount) || ratingCount < 0) return null;
-    if (ratingCount <= 30) return 'solo';
-    if (ratingCount <= 150) return 'small';
-    if (ratingCount <= 500) return 'mid';
-    return 'large';
-}
-
-function detectTeamCountFromText(text: string): number | null {
-    if (!text) return null;
-    const patterns = [
-        /\bteam of\s+(\d{1,3})\b/i,
-        /\b(\d{1,3})\s+(?:technicians|electricians|plumbers|installers|tradesmen|tradespeople|staff|employees|engineers)\b/i,
-        /\bemploys\s+(\d{1,3})\b/i,
-        /\bover\s+(\d{1,3})\s+(?:technicians|electricians|plumbers|staff|employees)\b/i,
-    ];
-    let best: number | null = null;
-    for (const re of patterns) {
-        const m = text.match(re);
-        if (!m) continue;
-        const n = parseInt(m[1], 10);
-        if (Number.isFinite(n) && n >= 1 && n <= 999) {
-            best = best == null ? n : Math.max(best, n);
-        }
-    }
-    return best;
-}
-
-function companySizeFromHeadcount(n: number | null): CompanySize | null {
-    if (n == null) return null;
-    if (n <= 1) return 'solo';
-    if (n <= 5) return 'small';
-    if (n <= 20) return 'mid';
-    return 'large';
-}
-
-/**
- * Heuristic-only structured attribute extraction.
- * The previous Gemini call for company_size/years/certifications added marginal
- * signal over these heuristics — removed to save one Gemini call per provider.
- */
-function extractStructuredAttributes(params: {
-    providerName: string;
-    websiteText: string;
-    bio: string | null;
-    ratingCount: number | null;
-}): StructuredAttributes {
-    const combinedText = `${params.websiteText}\n${params.bio ?? ''}`;
-    const headcount = detectTeamCountFromText(combinedText);
-    const heuristicSize =
-        companySizeFromHeadcount(headcount) ?? bucketCompanySizeFromRatingCount(params.ratingCount);
-    const heuristicCerts = extractCertificationsFromText(combinedText);
-
-    return {
-        companySize: heuristicSize ?? null,
-        companySizeConfidence: heuristicSize ? (headcount ? 0.65 : 0.4) : 0,
-        yearsInBusiness: null,
-        yearsInBusinessConfidence: 0,
-        certifications: heuristicCerts,
-    };
-}
-
-async function persistStructuredAttributes(params: {
-    admin: Awaited<ReturnType<typeof createSupabaseAdminClient>>;
-    providerId: string;
-    attrs: StructuredAttributes;
-}): Promise<void> {
-    const { admin, providerId, attrs } = params;
-    const now = new Date().toISOString();
-
-    const { data: existing } = await admin
-        .from('providers')
-        .select('company_size, company_size_source, years_in_business, years_in_business_source')
-        .eq('id', providerId)
-        .maybeSingle();
-
-    const patch: Record<string, unknown> = {};
-    if (attrs.companySize) {
-        const csSource =
-            typeof (existing as { company_size_source?: string } | null)?.company_size_source === 'string'
-                ? (existing as { company_size_source?: string }).company_size_source
-                : null;
-        if (csSource !== 'admin') {
-            patch.company_size = attrs.companySize;
-            patch.company_size_source = 'enrichment';
-        }
-    }
-    if (attrs.yearsInBusiness != null) {
-        const yibSource =
-            typeof (existing as { years_in_business_source?: string } | null)?.years_in_business_source === 'string'
-                ? (existing as { years_in_business_source?: string }).years_in_business_source
-                : null;
-        if (yibSource !== 'admin') {
-            patch.years_in_business = attrs.yearsInBusiness;
-            patch.years_in_business_source = 'enrichment';
-        }
-    }
-    if (Object.keys(patch).length > 0) {
-        patch.updated_at = now;
-        await admin.from('providers').update(patch).eq('id', providerId);
-    }
-
-    if (attrs.certifications.length > 0) {
-        await admin
-            .from('provider_certifications')
-            .delete()
-            .eq('provider_id', providerId)
-            .eq('source', 'enrichment');
-
-        const { data: adminCerts } = await admin
-            .from('provider_certifications')
-            .select('slug')
-            .eq('provider_id', providerId)
-            .eq('source', 'admin');
-        const adminSlugs = new Set<string>(
-            (adminCerts as { slug: string }[] | null)?.map((c) => c.slug) ?? []
-        );
-
-        const rows = attrs.certifications
-            .filter((c) => !adminSlugs.has(c.slug))
-            .map((c) => ({
-                provider_id: providerId,
-                slug: c.slug,
-                label: c.label,
-                issuer: c.issuer || null,
-                source: 'enrichment' as const,
-            }));
-        if (rows.length > 0) {
-            await admin
-                .from('provider_certifications')
-                .upsert(rows, { onConflict: 'provider_id,slug' });
-        }
-    }
-}
-
 // ── Public API ────────────────────────────────────────────────────────────────
 
 export interface EnrichProviderResult {
@@ -649,7 +496,7 @@ export async function enrichProvider(
     const { data: provider, error: provErr } = await admin
         .from('providers')
         .select(
-            'id, google_place_id, website, name, summary, rating, rating_count, address, specialisations, latitude, longitude, google_generative_summary'
+            'id, google_place_id, website, name, summary, rating, rating_count, address, specialisations, latitude, longitude, google_generative_summary, field_sources'
         )
         .eq('id', providerId)
         .eq('is_active', true)
@@ -933,23 +780,16 @@ export async function enrichProvider(
         return { ok: false, reason: `Cache write failed: ${cacheErr.message}` };
     }
 
-    // ── Stage 4b: Structured attributes (heuristic-only) ─────────────────────
-    // No Gemini call — heuristics cover company_size and certifications adequately.
-    try {
-        const attrs = extractStructuredAttributes({
-            providerName: provider.name ?? 'Provider',
-            websiteText,
-            bio: combined?.bio ?? null,
-            ratingCount: provider.rating_count ?? 0,
-        });
-        await persistStructuredAttributes({ admin, providerId, attrs });
-    } catch (err) {
-        console.error(
-            JSON.stringify({ type: 'enrichment_structured_attrs_error', provider_id: providerId, error: err instanceof Error ? err.message : String(err) })
-        );
-    }
-
     // ── Stage 5: Update provider profile copy ─────────────────────────────────
+    // Two-tier protection: fields a contractor has claimed (field_sources[field]
+    // === 'contractor') are their own words and must NOT be overwritten by
+    // enrichment. Enrichment still BACKFILLS any field the contractor left blank.
+    // `summary` (review-derived "Mendr Summary"), rating, and hours are Tier 2
+    // observational data and are always refreshed.
+    const fieldSources =
+        ((provider as { field_sources?: Record<string, string> | null }).field_sources ?? {}) as Record<string, string>;
+    const ownedByContractor = (field: string): boolean => fieldSources[field] === 'contractor';
+
     try {
         const narrative = combined?.narrative?.trim() ?? '';
 
@@ -966,18 +806,18 @@ export async function enrichProvider(
         const cleanedName = typeof provider.name === 'string' && provider.name.trim()
             ? formatBusinessName(provider.name.trim()) || provider.name.trim()
             : null;
-        const patch: Record<string, unknown> = {
-            about: narrative || null,
-            past_work: null,
-            summary_long: narrative || null,
-            specialisations: enrichment?.specialisations ?? [],
-            highlights: normalizedHighlights.length ? normalizedHighlights : null,
-            key_person: null,
-            updated_at: now,
-            ...(cleanedName ? { name: cleanedName } : {}),
-        };
+
+        const patch: Record<string, unknown> = { updated_at: now };
+        if (!ownedByContractor('about')) patch.about = narrative || null;
+        if (!ownedByContractor('past_work')) patch.past_work = null;
+        if (!ownedByContractor('summary_long')) patch.summary_long = narrative || null;
+        if (!ownedByContractor('specialisations')) patch.specialisations = enrichment?.specialisations ?? [];
+        if (!ownedByContractor('highlights')) patch.highlights = normalizedHighlights.length ? normalizedHighlights : null;
+        if (!ownedByContractor('key_person')) patch.key_person = null;
+        if (cleanedName && !ownedByContractor('name')) patch.name = cleanedName;
 
         // Always refresh summary from the latest review enrichment — don't preserve stale copy.
+        // This is observational (review-derived), so it stays enrichment-owned even after a claim.
         if (reviewSummary) {
             patch.summary = sanitizeCustomerSummary(reviewSummary);
         }
@@ -990,7 +830,8 @@ export async function enrichProvider(
             JSON.stringify({ type: 'enrichment_providers_update_error', provider_id: providerId, error: err instanceof Error ? err.message : String(err) })
         );
         // Non-fatal: cache row already written. Attempt minimal fallback.
-        if (enrichment?.bio?.trim()) {
+        // Skip if the contractor has claimed summary_long (their words win).
+        if (enrichment?.bio?.trim() && !ownedByContractor('summary_long')) {
             await admin
                 .from('providers')
                 .update({ summary_long: enrichment.bio.slice(0, 12_000), updated_at: now })

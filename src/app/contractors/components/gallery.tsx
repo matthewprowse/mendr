@@ -114,7 +114,7 @@ export function ProGalleryTab(props: {
                                     />
                                     <Badge
                                         variant="outline"
-                                        className="pointer-events-none absolute bottom-2 right-2 bg-white"
+                                        className="pointer-events-none absolute bottom-2 right-2 bg-background"
                                     >
                                         {galleryImageSourceLabel(img.source, img.path)}
                                     </Badge>

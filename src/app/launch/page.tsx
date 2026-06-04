@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import { ComingSoonClient } from './client';
 
 export const metadata: Metadata = {
-    title: 'Mendr — Launching Soon',
+    title: { absolute: 'Mendr: Launching Soon' },
     description:
         'Home fault diagnosis for Western Cape homeowners. Launching soon.',
     robots: { index: false, follow: false },

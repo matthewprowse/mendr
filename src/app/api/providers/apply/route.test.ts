@@ -26,7 +26,6 @@ beforeEach(() => {
 
 const fullBody = {
     contractorType: 'individual',
-    willingnessToPayBand: 'R500-R1000',
     businessName: 'Pro Co',
     contactPerson: 'Ada Lovelace',
     emailAddress: 'ada@example.com',
@@ -53,14 +52,6 @@ describe('POST /api/providers/apply — validation', () => {
         const { POST } = await import('./route');
         const res = await POST(
             makeRequest({ method: 'POST', body: { ...fullBody, contractorType: 'wizard' } }),
-        );
-        expect(res.status).toBe(400);
-    });
-
-    it('returns 400 when willingnessToPayBand missing', async () => {
-        const { POST } = await import('./route');
-        const res = await POST(
-            makeRequest({ method: 'POST', body: { ...fullBody, willingnessToPayBand: '' } }),
         );
         expect(res.status).toBe(400);
     });

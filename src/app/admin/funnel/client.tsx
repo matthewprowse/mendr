@@ -191,7 +191,7 @@ export default function AdminFunnelClient() {
             : null;
 
     return (
-        <div className="mx-auto w-full max-w-3xl px-4 pb-8 pt-4 sm:px-6 lg:px-8">
+        <div className="mx-auto w-full max-w-xl px-4 pb-8 pt-4 sm:px-6 lg:px-8">
             <div className="mb-6">
                 <AdminPageHeader title="Diagnosis Funnel" />
                 <p className="mt-1 text-sm text-muted-foreground">Showing data for {dateRangeLabel}</p>

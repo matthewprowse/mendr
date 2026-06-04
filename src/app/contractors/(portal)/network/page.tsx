@@ -12,7 +12,7 @@ export default async function ProOnboardPage() {
     } = await supabase.auth.getUser();
 
     if (!user) {
-        redirect('/contractors/auth?next=/contractors/network');
+        redirect('/pro/auth/login?next=/contractors/network');
     }
 
     return <ProOnboardPageClient />;

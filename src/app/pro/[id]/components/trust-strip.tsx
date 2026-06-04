@@ -3,7 +3,6 @@
 import { useState } from 'react';
 import { ShieldCheck } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
-import { INK } from '@/lib/design-tokens';
 import { getCertificationBySlug } from '@/lib/certifications/catalog';
 import type { MatchProviderCertification } from '@/features/match/contracts';
 
@@ -44,10 +43,10 @@ export function TrustStrip({ certifications, specialisations }: TrustStripProps)
         <div className="flex flex-col gap-3">
             {hasCerts ? (
                 <section
-                    className="rounded-3xl border border-black/[0.07] bg-white p-4 sm:p-5"
+                    className="rounded-lg border border-border bg-card p-4"
                     aria-label="Certifications"
                 >
-                    <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide" style={{ color: INK }}>
+                    <h2 className="mb-3 text-lg font-semibold text-foreground">
                         Certifications
                     </h2>
                     <div className="flex flex-wrap gap-2">
@@ -70,10 +69,10 @@ export function TrustStrip({ certifications, specialisations }: TrustStripProps)
 
             {hasSpecs ? (
                 <section
-                    className="rounded-3xl border border-black/[0.07] bg-white p-4 sm:p-5"
+                    className="rounded-lg border border-border bg-card p-4"
                     aria-label="Trades and specialities"
                 >
-                    <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide" style={{ color: INK }}>
+                    <h2 className="mb-3 text-lg font-semibold text-foreground">
                         Trades & specialities
                     </h2>
                     <div className="flex flex-wrap gap-2">
@@ -86,7 +85,7 @@ export function TrustStrip({ certifications, specialisations }: TrustStripProps)
                             <button
                                 type="button"
                                 onClick={() => setSpecsExpanded(true)}
-                                className="rounded-full border border-black/[0.08] bg-white px-3 py-1 text-xs font-medium text-muted-foreground transition hover:bg-black/[0.04]"
+                                className="rounded-full border border-border bg-card px-3 py-1 text-xs font-medium text-muted-foreground transition hover:bg-secondary"
                             >
                                 +{hiddenSpecCount} more
                             </button>
@@ -95,7 +94,7 @@ export function TrustStrip({ certifications, specialisations }: TrustStripProps)
                             <button
                                 type="button"
                                 onClick={() => setSpecsExpanded(false)}
-                                className="rounded-full border border-black/[0.08] bg-white px-3 py-1 text-xs font-medium text-muted-foreground transition hover:bg-black/[0.04]"
+                                className="rounded-full border border-border bg-card px-3 py-1 text-xs font-medium text-muted-foreground transition hover:bg-secondary"
                             >
                                 Show less
                             </button>

@@ -392,8 +392,7 @@ export default function ProcessingPageClient({ conversationId }: { conversationI
                                             Something Went Wrong
                                         </h1>
                                         <p className="text-sm text-muted-foreground">
-                                            Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore.
-                                        </p>
+                                            Something went wrong and we couldn&apos;t finish your diagnosis. Your photos are safe, so please do try again now.</p>
                                     </div>
                                     <p className="text-center text-xs text-muted-foreground">
                                         {fatalError}
@@ -420,8 +419,7 @@ export default function ProcessingPageClient({ conversationId }: { conversationI
                                             Retry
                                         </Button>
                                         <p className="text-center text-xs text-muted-foreground">
-                                            Lorem ipsum dolor sit amet, consectetur adipiscing elit.
-                                        </p>
+                                            We&apos;ll try again with the same photos and details you sent.</p>
                                     </div>
                                 </div>
                             </div>
@@ -445,8 +443,7 @@ export default function ProcessingPageClient({ conversationId }: { conversationI
                                         Processing
                                     </h1>
                                     <p className="text-sm text-muted-foreground">
-                                        Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore.
-                                    </p>
+                                        Hang tight while we look over your photos. We&apos;re working out what&apos;s wrong and which local specialists can help.</p>
                                 </div>
 
                                 <div className="flex flex-col items-center gap-3">

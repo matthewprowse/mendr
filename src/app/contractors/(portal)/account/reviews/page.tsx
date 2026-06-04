@@ -60,7 +60,7 @@ export default async function ContractorReviewsPage() {
     } = await supabase.auth.getUser();
 
     if (!user) {
-        redirect('/contractors/auth?next=/contractors/account/reviews');
+        redirect('/pro/auth/login?next=/contractors/account/reviews');
     }
 
     const providerId = await resolveProviderForUser(user.id);

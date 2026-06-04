@@ -116,7 +116,7 @@ export default function AccountClient({ applications }: { applications: Applicat
                             Your profile is live.{' '}
                             {application.matched_provider_id ? (
                                 <a
-                                    href={`/contractors/${application.matched_provider_id}`}
+                                    href={`/pro/${application.matched_provider_id}`}
                                     className="underline underline-offset-2"
                                 >
                                     View your profile

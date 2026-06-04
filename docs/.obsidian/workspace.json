@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "research/sa-market-2026-05-29.md",
+                "file": "Contractor Expansion.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "sa-market-2026-05-29"
+              "title": "Contractor Expansion"
             }
           }
         ]
@@ -78,7 +78,8 @@
       }
     ],
     "direction": "horizontal",
-    "width": 300
+    "width": 300,
+    "collapsed": true
   },
   "right": {
     "id": "99e485fedddcc97f",
@@ -185,6 +186,9 @@
   },
   "active": "86e2722cdb783099",
   "lastOpenFiles": [
+    "background-agents.md",
+    "Contractor Expansion.md",
+    "cost-accuracy.md",
     "prompt-improvement-backlog.md",
     "Diagnostic-Reasoning-Plan.md",
     "01062026/04-growth-to-revenue.md",

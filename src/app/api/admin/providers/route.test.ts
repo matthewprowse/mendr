@@ -1,5 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { makeRequest, mockSupabaseClient, type MockSupabaseClient } from '@/__tests__/helpers/route-test';
+import {
+    makeRequest,
+    mockSupabaseClient,
+    type MockSupabaseClient,
+} from '@/__tests__/helpers/route-test';
 
 let supabase: MockSupabaseClient;
 let denyAdmin = false;
@@ -45,6 +49,49 @@ describe('GET /api/admin/providers', () => {
         });
         const { GET } = await import('./route');
         const res = await GET(makeRequest({ path: '/api/admin/providers' }));
+        expect(res.status).toBe(500);
+    });
+});
+
+describe('POST /api/admin/providers — manual application', () => {
+    const validBody = {
+        business_name: 'Acme Plumbing',
+        contact_name: 'Jane Doe',
+        email: 'jane@acme.test',
+        phone: '0210000000',
+        address: '1 Main Rd, Cape Town',
+        trade: 'Plumbing',
+    };
+
+    it('returns 401 when not admin', async () => {
+        denyAdmin = true;
+        const { POST } = await import('./route');
+        const res = await POST(makeRequest({ method: 'POST', body: validBody }));
+        expect(res.status).toBe(401);
+    });
+
+    it('returns 400 when required fields are missing', async () => {
+        const { POST } = await import('./route');
+        const res = await POST(
+            makeRequest({ method: 'POST', body: { business_name: 'Acme' } }),
+        );
+        expect(res.status).toBe(400);
+        expect((await res.json()).error).toMatch(/Missing required fields/);
+    });
+
+    it('creates an application and returns 201', async () => {
+        const { POST } = await import('./route');
+        const res = await POST(makeRequest({ method: 'POST', body: validBody }));
+        expect(res.status).toBe(201);
+        expect((await res.json()).ok).toBe(true);
+    });
+
+    it('returns 500 when the insert errors', async () => {
+        supabase = mockSupabaseClient({
+            tables: { provider_applications: { data: null, error: { message: 'db' } } },
+        });
+        const { POST } = await import('./route');
+        const res = await POST(makeRequest({ method: 'POST', body: validBody }));
         expect(res.status).toBe(500);
     });
 });

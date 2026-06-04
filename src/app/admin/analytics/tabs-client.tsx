@@ -16,9 +16,9 @@ import AdminAnalyticsEvents from './client';
 export default function AnalyticsTabsClient() {
     return (
         <Tabs defaultValue="funnel" className="w-full">
-            <div className="mx-auto w-full max-w-3xl px-4 pt-4 sm:px-6 lg:px-8">
+            <div className="mx-auto w-full max-w-xl px-4 pt-4 sm:px-6 lg:px-8">
                 <div className="mb-4">
-                    <AdminPageHeader title="Analytics" />
+                    <AdminPageHeader title="Analytics" description="Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt." />
                 </div>
                 <TabsList>
                     <TabsTrigger value="funnel">Funnel</TabsTrigger>

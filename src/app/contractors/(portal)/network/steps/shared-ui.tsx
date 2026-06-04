@@ -5,7 +5,6 @@
  */
 
 import { Label } from '@/components/ui/label';
-import { Badge } from '@/components/ui/badge';
 
 export function RequiredLabel({
     htmlFor,
@@ -14,10 +13,11 @@ export function RequiredLabel({
     htmlFor?: string;
     children: React.ReactNode;
 }) {
+    // Required fields get a small muted "Required" note on the far right.
     return (
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-2">
             <Label htmlFor={htmlFor}>{children}</Label>
-            <Badge variant="secondary">Required</Badge>
+            <span className="shrink-0 text-xs text-muted-foreground">Required</span>
         </div>
     );
 }
@@ -29,12 +29,8 @@ export function OptionalLabel({
     htmlFor?: string;
     children: React.ReactNode;
 }) {
-    return (
-        <div className="flex items-center justify-between">
-            <Label htmlFor={htmlFor}>{children}</Label>
-            <Badge variant="secondary">Optional</Badge>
-        </div>
-    );
+    // Optional fields show just the label, no badge or note.
+    return <Label htmlFor={htmlFor}>{children}</Label>;
 }
 
 export function StepHeader({
@@ -44,10 +40,17 @@ export function StepHeader({
     title: string;
     description: string;
 }) {
+    // Matches the centred StepHeading used across /start, /diagnosis, /match:
+    // text-2xl semibold title + muted subtitle, centre-aligned, gap-3.
     return (
-        <div className="flex flex-col gap-2">
-            <h1 className="text-3xl font-semibold text-foreground">{title}</h1>
+        <div className="flex w-full flex-col items-center gap-3 text-center">
+            <h1 className="text-2xl font-semibold text-foreground">{title}</h1>
             <p className="text-sm text-muted-foreground">{description}</p>
         </div>
     );
+}
+
+/** In-step section heading — matches the `text-lg font-semibold` section pattern. */
+export function SectionLabel({ children }: { children: React.ReactNode }) {
+    return <h2 className="text-lg font-semibold text-foreground">{children}</h2>;
 }

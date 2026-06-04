@@ -21,7 +21,7 @@ import { TableCell, TableRow } from '@/components/ui/table';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
-type CostTotals = { usd: number; calls: number; tokens: number };
+type CostTotals = { usd: number; calls: number; tokens: number; cachedTokens: number };
 
 type AiCostSummary = {
     monthToDate: CostTotals;
@@ -112,7 +112,11 @@ export default function AiCostsClient() {
         if (summaryRes.ok) setSummary(await summaryRes.json());
         if (dailyRes.ok) {
             const rows = (await dailyRes.json()) as DailyRow[];
-            setDaily(Array.isArray(rows) ? [...rows].sort((a, b) => a.date.localeCompare(b.date)) : []);
+            setDaily(
+                Array.isArray(rows)
+                    ? [...rows].sort((a, b) => a.date.localeCompare(b.date))
+                    : [],
+            );
         }
         if (budgetRes.ok) {
             const b = (await budgetRes.json()) as { monthlyBudgetUsd: number | null };
@@ -185,7 +189,7 @@ export default function AiCostsClient() {
     const projectedOverBudget = budget != null && projected != null && projected > budget;
 
     return (
-        <div className="mx-auto w-full max-w-3xl px-4 pb-8 pt-4 sm:px-6 lg:px-8">
+        <div className="mx-auto w-full max-w-xl px-4 pb-8 pt-4 sm:px-6 lg:px-8">
             <div className="mb-6">
                 <AdminPageHeader title="AI Costs" />
                 <p className="mt-1 text-sm text-muted-foreground">
@@ -195,7 +199,12 @@ export default function AiCostsClient() {
 
             {/* ── KPI row ──────────────────────────────────────────── */}
             <div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                <Kpi label="Spend (this month)" value={usd(mtd?.usd ?? 0)} sub={`${mtd?.calls ?? 0} calls`} loading={loading} />
+                <Kpi
+                    label="Spend (this month)"
+                    value={usd(mtd?.usd ?? 0)}
+                    sub={`${mtd?.calls ?? 0} calls`}
+                    loading={loading}
+                />
                 <Kpi
                     label="Projected month-end"
                     value={usd(projected)}
@@ -203,17 +212,32 @@ export default function AiCostsClient() {
                     loading={loading}
                     highlight={projectedOverBudget ? 'bad' : undefined}
                 />
-                <Kpi label="Last month" value={usd(summary?.lastMonth.usd ?? 0)} sub={`${summary?.lastMonth.calls ?? 0} calls`} loading={loading} />
-                <Kpi label="Cost / diagnosis" value={usd(summary?.costPerDiagnosis ?? null)} sub="This month" loading={loading} />
+                <Kpi
+                    label="Last month"
+                    value={usd(summary?.lastMonth.usd ?? 0)}
+                    sub={`${summary?.lastMonth.calls ?? 0} calls`}
+                    loading={loading}
+                />
+                <Kpi
+                    label="Cost / diagnosis"
+                    value={usd(summary?.costPerDiagnosis ?? null)}
+                    sub="This month"
+                    loading={loading}
+                />
                 <Kpi
                     label="Calls / diagnosis"
-                    value={summary?.callsPerDiagnosis != null ? summary.callsPerDiagnosis.toFixed(1) : '—'}
+                    value={
+                        summary?.callsPerDiagnosis != null
+                            ? summary.callsPerDiagnosis.toFixed(1)
+                            : '—'
+                    }
                     sub="This month"
                     loading={loading}
                 />
                 <Kpi
                     label="Tokens (this month)"
                     value={(mtd?.tokens ?? 0).toLocaleString('en-ZA')}
+                    sub={`${(mtd?.cachedTokens ?? 0).toLocaleString('en-ZA')} cached`}
                     loading={loading}
                 />
             </div>
@@ -223,7 +247,9 @@ export default function AiCostsClient() {
                 <h2 className="mb-3 text-base font-semibold text-foreground">Monthly budget</h2>
                 <div className="flex flex-wrap items-end gap-3">
                     <div className="flex flex-col gap-1.5">
-                        <Label htmlFor="ai-budget" className="text-xs">Budget (USD)</Label>
+                        <Label htmlFor="ai-budget" className="text-xs">
+                            Budget (USD)
+                        </Label>
                         <Input
                             id="ai-budget"
                             type="number"
@@ -241,11 +267,16 @@ export default function AiCostsClient() {
                     {budget != null ? (
                         <div className="flex flex-wrap gap-6 pb-1 text-sm">
                             <span className="text-muted-foreground">
-                                Consumed: <span className="font-medium text-foreground">{pct(mtd?.usd ?? 0, budget)}</span>
+                                Consumed:{' '}
+                                <span className="font-medium text-foreground">
+                                    {pct(mtd?.usd ?? 0, budget)}
+                                </span>
                             </span>
                             <span className="text-muted-foreground">
                                 Projected:{' '}
-                                <span className={`font-medium ${projectedOverBudget ? 'text-red-600' : 'text-foreground'}`}>
+                                <span
+                                    className={`font-medium ${projectedOverBudget ? 'text-red-600' : 'text-foreground'}`}
+                                >
                                     {pct(projected, budget)} of budget
                                 </span>
                             </span>
@@ -260,15 +291,26 @@ export default function AiCostsClient() {
 
             {/* ── Daily spend chart ────────────────────────────────── */}
             <div className="mb-8 rounded-xl border border-border/50 bg-background p-5">
-                <h2 className="mb-4 text-base font-semibold text-foreground">Daily spend (last 30 days)</h2>
+                <h2 className="mb-4 text-base font-semibold text-foreground">
+                    Daily spend (last 30 days)
+                </h2>
                 {loading ? (
                     <Skeleton className="h-56 w-full" />
                 ) : daily.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">No cost events in the last 30 days.</p>
+                    <p className="text-sm text-muted-foreground">
+                        No cost events in the last 30 days.
+                    </p>
                 ) : (
                     <ResponsiveContainer width="100%" height={240}>
-                        <BarChart data={daily} margin={{ left: -10, right: 0, top: 0, bottom: 0 }}>
-                            <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="var(--border)" />
+                        <BarChart
+                            data={daily}
+                            margin={{ left: -10, right: 0, top: 0, bottom: 0 }}
+                        >
+                            <CartesianGrid
+                                vertical={false}
+                                strokeDasharray="3 3"
+                                stroke="var(--border)"
+                            />
                             <XAxis
                                 dataKey="date"
                                 tick={{ fontSize: 10 }}
@@ -291,25 +333,51 @@ export default function AiCostsClient() {
             {/* ── Breakdowns ───────────────────────────────────────── */}
             <div className="mb-8 grid gap-6 lg:grid-cols-2">
                 <div>
-                    <h2 className="mb-3 text-base font-semibold text-foreground">By model (this month)</h2>
-                    <AdminDataTable headers={['Model', 'Spend', 'Calls']} loading={loading} emptyText="No spend this month." colSpan={3}>
+                    <h2 className="mb-3 text-base font-semibold text-foreground">
+                        By model (this month)
+                    </h2>
+                    <AdminDataTable
+                        headers={['Model', 'Spend', 'Calls']}
+                        loading={loading}
+                        emptyText="No spend this month."
+                        colSpan={3}
+                    >
                         {(summary?.byModel ?? []).map((r) => (
                             <TableRow key={r.model}>
-                                <TableCell className="font-medium text-foreground">{r.model}</TableCell>
-                                <TableCell className="text-muted-foreground">{usd(r.usd)}</TableCell>
-                                <TableCell className="text-muted-foreground">{r.calls}</TableCell>
+                                <TableCell className="font-medium text-foreground">
+                                    {r.model}
+                                </TableCell>
+                                <TableCell className="text-muted-foreground">
+                                    {usd(r.usd)}
+                                </TableCell>
+                                <TableCell className="text-muted-foreground">
+                                    {r.calls}
+                                </TableCell>
                             </TableRow>
                         ))}
                     </AdminDataTable>
                 </div>
                 <div>
-                    <h2 className="mb-3 text-base font-semibold text-foreground">By pipeline stage (this month)</h2>
-                    <AdminDataTable headers={['Endpoint', 'Spend', 'Calls']} loading={loading} emptyText="No spend this month." colSpan={3}>
+                    <h2 className="mb-3 text-base font-semibold text-foreground">
+                        By pipeline stage (this month)
+                    </h2>
+                    <AdminDataTable
+                        headers={['Endpoint', 'Spend', 'Calls']}
+                        loading={loading}
+                        emptyText="No spend this month."
+                        colSpan={3}
+                    >
                         {(summary?.byEndpoint ?? []).map((r) => (
                             <TableRow key={r.endpoint}>
-                                <TableCell className="font-medium text-foreground">{r.endpoint}</TableCell>
-                                <TableCell className="text-muted-foreground">{usd(r.usd)}</TableCell>
-                                <TableCell className="text-muted-foreground">{r.calls}</TableCell>
+                                <TableCell className="font-medium text-foreground">
+                                    {r.endpoint}
+                                </TableCell>
+                                <TableCell className="text-muted-foreground">
+                                    {usd(r.usd)}
+                                </TableCell>
+                                <TableCell className="text-muted-foreground">
+                                    {r.calls}
+                                </TableCell>
                             </TableRow>
                         ))}
                     </AdminDataTable>
@@ -320,7 +388,8 @@ export default function AiCostsClient() {
             <div>
                 <h2 className="mb-1 text-base font-semibold text-foreground">Model pricing</h2>
                 <p className="mb-3 text-xs text-muted-foreground">
-                    Per 1,000,000 tokens. Saving a rate creates a new active row and drives all future cost estimates.
+                    Per 1,000,000 tokens. Saving a rate creates a new active row and drives all
+                    future cost estimates.
                 </p>
                 <AdminDataTable
                     headers={['Model', 'Input', 'Output', 'Cached input', '']}
@@ -330,7 +399,9 @@ export default function AiCostsClient() {
                 >
                     {pricing.map((row, idx) => (
                         <TableRow key={row.id || row.model_name}>
-                            <TableCell className="font-medium text-foreground">{row.model_name}</TableCell>
+                            <TableCell className="font-medium text-foreground">
+                                {row.model_name}
+                            </TableCell>
                             <TableCell>
                                 <Input
                                     type="number"
@@ -338,7 +409,16 @@ export default function AiCostsClient() {
                                     value={row.input_per_1m_usd}
                                     onChange={(e) =>
                                         setPricing((prev) =>
-                                            prev.map((p, i) => (i === idx ? { ...p, input_per_1m_usd: Number(e.target.value) } : p)),
+                                            prev.map((p, i) =>
+                                                i === idx
+                                                    ? {
+                                                          ...p,
+                                                          input_per_1m_usd: Number(
+                                                              e.target.value,
+                                                          ),
+                                                      }
+                                                    : p,
+                                            ),
                                         )
                                     }
                                     className="h-8 w-24 text-sm"
@@ -351,7 +431,16 @@ export default function AiCostsClient() {
                                     value={row.output_per_1m_usd}
                                     onChange={(e) =>
                                         setPricing((prev) =>
-                                            prev.map((p, i) => (i === idx ? { ...p, output_per_1m_usd: Number(e.target.value) } : p)),
+                                            prev.map((p, i) =>
+                                                i === idx
+                                                    ? {
+                                                          ...p,
+                                                          output_per_1m_usd: Number(
+                                                              e.target.value,
+                                                          ),
+                                                      }
+                                                    : p,
+                                            ),
                                         )
                                     }
                                     className="h-8 w-24 text-sm"
@@ -367,7 +456,13 @@ export default function AiCostsClient() {
                                         setPricing((prev) =>
                                             prev.map((p, i) =>
                                                 i === idx
-                                                    ? { ...p, cached_input_per_1m_usd: e.target.value === '' ? null : Number(e.target.value) }
+                                                    ? {
+                                                          ...p,
+                                                          cached_input_per_1m_usd:
+                                                              e.target.value === ''
+                                                                  ? null
+                                                                  : Number(e.target.value),
+                                                      }
                                                     : p,
                                             ),
                                         )
@@ -376,7 +471,13 @@ export default function AiCostsClient() {
                                 />
                             </TableCell>
                             <TableCell>
-                                <Button size="sm" variant="secondary" className="h-7 text-xs" disabled={savingModel === row.model_name} onClick={() => void savePricing(row)}>
+                                <Button
+                                    size="sm"
+                                    variant="secondary"
+                                    className="h-7 text-xs"
+                                    disabled={savingModel === row.model_name}
+                                    onClick={() => void savePricing(row)}
+                                >
                                     {savingModel === row.model_name ? 'Saving…' : 'Save'}
                                 </Button>
                             </TableCell>

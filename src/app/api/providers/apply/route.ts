@@ -12,7 +12,6 @@ const CONTRACTOR_TYPES = new Set(['individual', 'team', 'enterprise']);
 
 type ApplyBody = {
     contractorType?: string;
-    willingnessToPayBand?: string;
     applicantGooglePlaceId?: string;
     kycDocuments?: {
         idDocument?: { path?: string; bucket?: string };
@@ -25,6 +24,7 @@ type ApplyBody = {
     serviceAreas?: string;
     phone?: string;
     whatsappAvailable?: boolean;
+    preferredContactChannel?: string;
     website?: string;
     trade?: string;
     specialisations?: string;
@@ -34,6 +34,10 @@ type ApplyBody = {
     certifications?: string;
     highlights?: string;
     bio?: string;
+    insuranceCover?: string;
+    typicalResponseTime?: string;
+    pricingModel?: string;
+    calloutFee?: string;
     referralSource?: string;
     referralOther?: string;
     uploads?: Array<{ path?: string; bucket?: string; caption?: string | null }>;
@@ -74,8 +78,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
     const contractorType =
         typeof body?.contractorType === 'string' ? body.contractorType.trim().toLowerCase() : '';
-    const willingnessToPayBand =
-        typeof body?.willingnessToPayBand === 'string' ? body.willingnessToPayBand.trim() : '';
     const applicantGooglePlaceId =
         typeof body?.applicantGooglePlaceId === 'string' ? body.applicantGooglePlaceId.trim().slice(0, 512) : '';
 
@@ -102,9 +104,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     if (!contractorType || !CONTRACTOR_TYPES.has(contractorType)) {
         return NextResponse.json({ error: 'Select whether you work as an individual, team, or enterprise.' }, { status: 400 });
     }
-    if (!willingnessToPayBand || willingnessToPayBand.length > 64) {
-        return NextResponse.json({ error: 'Select what you would be comfortable paying per month.' }, { status: 400 });
-    }
     if (!businessName || !contactPerson || !emailRaw || !address || !serviceAreas || !phone || !trade || !specialisations || !foundedYearRaw) {
         return NextResponse.json({ error: 'Missing required onboarding fields.' }, { status: 400 });
     }
@@ -115,6 +114,17 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     const teamRaw    = typeof body?.teamSize === 'string' ? body.teamSize.trim() : '';
     const foundedYear = foundedYearRaw ? parseInt(foundedYearRaw, 10) : null;
     const teamSize    = teamRaw ? parseInt(teamRaw, 10) : null;
+
+    const calloutFeeRaw = typeof body?.calloutFee === 'string' ? body.calloutFee.trim() : '';
+    const calloutFee    = calloutFeeRaw ? parseInt(calloutFeeRaw, 10) : null;
+    const preferredContactChannel =
+        typeof body?.preferredContactChannel === 'string' ? body.preferredContactChannel.trim() || null : null;
+    const insuranceCover =
+        typeof body?.insuranceCover === 'string' ? body.insuranceCover.trim().slice(0, 280) || null : null;
+    const typicalResponseTime =
+        typeof body?.typicalResponseTime === 'string' ? body.typicalResponseTime.trim().slice(0, 64) || null : null;
+    const pricingModel =
+        typeof body?.pricingModel === 'string' ? body.pricingModel.trim().slice(0, 280) || null : null;
 
     const uploads = Array.isArray(body?.uploads)
         ? body.uploads
@@ -166,7 +176,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
             .from('provider_applications')
             .insert({
                 contractor_type:           contractorType,
-                willingness_to_pay_band:   willingnessToPayBand,
                 applicant_google_place_id: applicantGooglePlaceId || null,
                 kyc_documents,
                 business_name:       businessName,
@@ -176,6 +185,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
                 areas:               serviceAreas,
                 phone,
                 whatsapp_available:  body?.whatsappAvailable === true,
+                preferred_contact_channel: preferredContactChannel,
                 website:             typeof body?.website === 'string' ? body.website.trim() || null : null,
                 trade,
                 trade_description:   specialisations,
@@ -185,6 +195,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
                 certifications:      typeof body?.certifications === 'string' ? body.certifications.trim() || null : null,
                 highlights:          typeof body?.highlights === 'string' ? body.highlights.trim() || null : null,
                 about:               typeof body?.bio === 'string' ? body.bio.trim() || null : null,
+                insurance_cover:           insuranceCover,
+                typical_response_time:     typicalResponseTime,
+                pricing_model:             pricingModel,
+                callout_fee:               Number.isFinite(calloutFee) ? calloutFee : null,
                 referral,
                 application_images:  uploads.length > 0 ? uploads : null,
                 service_areas:       serviceAreaRadii.length > 0 ? serviceAreaRadii : null,

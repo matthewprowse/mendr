@@ -1,7 +1,6 @@
 'use client';
 
 import type { ReactNode } from 'react';
-import { INK } from '@/lib/design-tokens';
 
 /**
  * Section wrapper for the de-tabbed gallery block. Photo grid, lightbox and
@@ -19,10 +18,10 @@ export function GallerySection({
 }) {
     return (
         <section
-            className="rounded-3xl border border-black/[0.07] bg-white p-4 sm:p-5"
+            className="rounded-lg border border-border bg-card p-4"
             aria-labelledby={headingId}
         >
-            <h2 id={headingId} className="mb-3 text-base font-semibold" style={{ color: INK }}>
+            <h2 id={headingId} className="mb-3 text-lg font-semibold text-foreground">
                 {title}
             </h2>
             <div className="-mx-1">{children}</div>

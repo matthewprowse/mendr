@@ -34,6 +34,7 @@ export async function GET(request: NextRequest) {
                         first_name: user.user_metadata?.first_name ?? '',
                         surname: user.user_metadata?.surname ?? '',
                         address: user.user_metadata?.address ?? null,
+                        profile_type: user.user_metadata?.profile_type === 'pro' ? 'pro' : 'customer',
                     },
                     { onConflict: 'id', ignoreDuplicates: true }
                 );

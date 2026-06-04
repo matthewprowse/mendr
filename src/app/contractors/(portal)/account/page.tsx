@@ -14,7 +14,7 @@ export default async function ContractorAccountPage() {
     } = await supabase.auth.getUser();
 
     if (!user) {
-        redirect('/contractors/auth?next=/contractors/account');
+        redirect('/pro/auth/login?next=/contractors/account');
     }
 
     const admin = await createSupabaseAdminClient();

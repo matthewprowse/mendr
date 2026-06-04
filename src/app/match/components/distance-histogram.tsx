@@ -1,30 +1,31 @@
 'use client';
 
 /**
- * Airbnb-style distance picker for /match filters.
+ * Distance filter for /match.
  *
- *  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐  ← bar per bucket
- *  │ ▒▒▒▒▒    │ │ ▓▓▓▓▓▓▓▓ │ │ ▓▓▓▓▓▓▓▓ │ │ ▓▓▓▓     │ │ ▒▒       │     (live count)
- *  └──────────┘ └──────────┘ └──────────┘ └──────────┘ └──────────┘
- *  ╞════════════●═══════════════════════════●═════════════════════════╡   range slider
- *  Min  [ 0  ] km                                              Max [ 50 ] km
- *
- * The histogram visualizes the live distribution of providers across distance buckets so users can
- * eyeball "where the supply is". Bars within the active min/max range are highlighted; out-of-range
- * bars dim. The slider drives `state.distanceMin/MaxKm`; numeric inputs allow exact entry. When `min`
- * crosses the 25/50 km threshold we hint upstream that the search radius might need to grow — the
- * caller decides whether to widen `searchRadiusMeters`.
+ * A shadcn/recharts bar chart of provider density per distance band — hover a
+ * bar to see how many providers fall within that band — plus a dual-handle range
+ * slider and exact Minimum/Maximum km inputs. Bars inside the selected min/max
+ * range render at full opacity; out-of-range bars dim.
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import * as SliderPrimitive from '@radix-ui/react-slider';
+import { Bar, BarChart, Cell } from 'recharts';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { cn } from '@/lib/utils';
+import {
+    ChartContainer,
+    ChartTooltip,
+    ChartTooltipContent,
+    type ChartConfig,
+} from '@/components/ui/chart';
 
 const BUCKET_COUNT = 12;
-const BUCKET_MIN_HEIGHT_PX = 4;
-const BUCKET_MAX_HEIGHT_PX = 64;
+
+const chartConfig = {
+    providers: { label: 'Providers', color: 'var(--primary)' },
+} satisfies ChartConfig;
 
 export type DistanceHistogramProps = {
     /** Distances of all providers (km). null/undefined entries are ignored. */
@@ -54,19 +55,23 @@ export function DistanceHistogram({
             const idx = Math.min(BUCKET_COUNT - 1, Math.floor(clamped / stride));
             counts[idx] += 1;
         });
-        const peak = Math.max(1, ...counts);
-        return counts.map((c, idx) => {
-            const heightPx =
-                BUCKET_MIN_HEIGHT_PX +
-                (BUCKET_MAX_HEIGHT_PX - BUCKET_MIN_HEIGHT_PX) * (c / peak);
-            const start = idx * stride;
-            const end = (idx + 1) * stride;
-            return { idx, count: c, heightPx, start, end };
-        });
+        return counts.map((c, idx) => ({
+            idx,
+            count: c,
+            start: idx * stride,
+            end: (idx + 1) * stride,
+        }));
     }, [distancesKm, maxKm]);
 
     const safeMin = Math.max(0, Math.min(minKm, selectedMaxKm));
     const safeMax = Math.max(safeMin, Math.min(selectedMaxKm, maxKm));
+
+    const chartData = buckets.map((b) => ({
+        bucket: `${Math.round(b.start)}`,
+        range: `${Math.round(b.start)}–${Math.round(b.end)} km`,
+        providers: b.count,
+        inRange: b.end > safeMin && b.start < safeMax,
+    }));
 
     /**
      * Track the slider as a controlled tuple. We mirror the parent state into local state so users
@@ -89,59 +94,71 @@ export function DistanceHistogram({
     };
 
     return (
-        <div className="flex flex-col gap-3">
-            <div className="flex items-end gap-1 px-1" aria-hidden="true">
-                {buckets.map((bucket) => {
-                    const inRange = bucket.end > safeMin && bucket.start < safeMax;
-                    return (
-                        <div
-                            key={bucket.idx}
-                            title={`${Math.round(bucket.start)}–${Math.round(bucket.end)} km · ${bucket.count} provider${bucket.count === 1 ? '' : 's'}`}
-                            className={cn(
-                                'flex-1 rounded-t-sm transition-colors',
-                                inRange ? 'bg-foreground/80' : 'bg-foreground/15'
-                            )}
-                            style={{ height: `${bucket.heightPx}px` }}
+        <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-2">
+                <ChartContainer config={chartConfig} className="aspect-auto h-32 w-full">
+                    <BarChart
+                        data={chartData}
+                        margin={{ top: 4, right: 0, bottom: 0, left: 0 }}
+                        barCategoryGap={2}
+                    >
+                        <ChartTooltip
+                            cursor={false}
+                            content={
+                                <ChartTooltipContent
+                                    hideIndicator
+                                    labelFormatter={(_label, items) =>
+                                        items?.[0]?.payload?.range ?? ''
+                                    }
+                                />
+                            }
                         />
-                    );
-                })}
+                        <Bar dataKey="providers" radius={4} isAnimationActive={false}>
+                            {chartData.map((entry, i) => (
+                                <Cell
+                                    key={i}
+                                    fill="var(--color-providers)"
+                                    fillOpacity={entry.inRange ? 1 : 0.25}
+                                />
+                            ))}
+                        </Bar>
+                    </BarChart>
+                </ChartContainer>
+
+                <SliderPrimitive.Root
+                    min={0}
+                    max={Math.max(1, maxKm)}
+                    step={1}
+                    minStepsBetweenThumbs={1}
+                    value={draft}
+                    onValueChange={(next) => {
+                        if (next.length !== 2) return;
+                        setDraft([next[0]!, next[1]!]);
+                    }}
+                    onValueCommit={(next) => {
+                        if (next.length !== 2) return;
+                        flush([next[0]!, next[1]!]);
+                    }}
+                    className="relative flex w-full touch-none select-none items-center"
+                >
+                    <SliderPrimitive.Track className="relative h-1.5 w-full grow overflow-hidden rounded-full bg-secondary">
+                        <SliderPrimitive.Range className="absolute h-full bg-foreground" />
+                    </SliderPrimitive.Track>
+                    <SliderPrimitive.Thumb
+                        aria-label="Minimum distance"
+                        className="block size-5 rounded-full border-2 border-foreground bg-background shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/40"
+                    />
+                    <SliderPrimitive.Thumb
+                        aria-label="Maximum distance"
+                        className="block size-5 rounded-full border-2 border-foreground bg-background shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/40"
+                    />
+                </SliderPrimitive.Root>
             </div>
 
-            <SliderPrimitive.Root
-                min={0}
-                max={Math.max(1, maxKm)}
-                step={1}
-                minStepsBetweenThumbs={1}
-                value={draft}
-                onValueChange={(next) => {
-                    if (next.length !== 2) return;
-                    setDraft([next[0]!, next[1]!]);
-                }}
-                onValueCommit={(next) => {
-                    if (next.length !== 2) return;
-                    flush([next[0]!, next[1]!]);
-                }}
-                className="relative flex w-full touch-none select-none items-center"
-            >
-                <SliderPrimitive.Track className="relative h-1.5 w-full grow overflow-hidden rounded-full bg-secondary">
-                    <SliderPrimitive.Range className="absolute h-full bg-foreground" />
-                </SliderPrimitive.Track>
-                <SliderPrimitive.Thumb
-                    aria-label="Minimum distance"
-                    className="block size-5 rounded-full border-2 border-foreground bg-background shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/40"
-                />
-                <SliderPrimitive.Thumb
-                    aria-label="Maximum distance"
-                    className="block size-5 rounded-full border-2 border-foreground bg-background shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/40"
-                />
-            </SliderPrimitive.Root>
-
-            <div className="flex items-end gap-3">
-                <div className="flex-1">
-                    <Label htmlFor="distance-min" className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                        Minimum
-                    </Label>
-                    <div className="mt-1 flex items-center gap-1 rounded-md border border-input px-2 py-1">
+            <div className="flex gap-3">
+                <div className="flex flex-1 flex-col gap-3">
+                    <Label htmlFor="distance-min">Minimum</Label>
+                    <div className="flex items-center gap-1 rounded-md border border-input px-2 py-1">
                         <Input
                             id="distance-min"
                             type="number"
@@ -163,11 +180,9 @@ export function DistanceHistogram({
                         <span className="text-xs text-muted-foreground">km</span>
                     </div>
                 </div>
-                <div className="flex-1">
-                    <Label htmlFor="distance-max" className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                        Maximum
-                    </Label>
-                    <div className="mt-1 flex items-center gap-1 rounded-md border border-input px-2 py-1">
+                <div className="flex flex-1 flex-col gap-3">
+                    <Label htmlFor="distance-max">Maximum</Label>
+                    <div className="flex items-center gap-1 rounded-md border border-input px-2 py-1">
                         <Input
                             id="distance-max"
                             type="number"

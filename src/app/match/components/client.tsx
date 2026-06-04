@@ -1,17 +1,15 @@
 'use client';
 
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { trackEvent } from '@/lib/analytics';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { toWhatsAppPhone } from '@/lib/utils';
 import { setLastConversationIdForWhatsApp, resolveWhatsAppPrefill } from '@/lib/whatsapp-prefill';
-import { mendrTokens } from '@/lib/design-tokens';
-import { PRO_TERM, proCount } from '@/lib/brand-system';
-import { Loader, Crosshair, Filter } from 'lucide-react';
+import { Loader, Crosshair } from 'lucide-react';
 import { toast } from 'sonner';
-import { MatchMapSheetLayout } from '@/app/match/components/match-map-sheet-layout';
+import { MatchResultsLayout } from '@/app/match/components/match-map-sheet-layout';
 import { ProviderCard } from '@/app/match/components/provider-card';
 import dynamic from 'next/dynamic';
 
@@ -41,7 +39,6 @@ import type { EnrichmentCacheEntry } from '@/features/match/contracts';
 import { toGooglePlaceId } from '@/lib/providers/persistence';
 import { useMatchConversationContext } from '@/features/match/hooks/use-match-conversation-context';
 import { useMatchProviders } from '@/features/match/hooks/use-match-providers';
-import { useMatchMap } from '@/features/match/hooks/use-match-map';
 import { loadMatchPageCache, saveMatchPageCache } from '@/features/match/cache/match-page-cache';
 import { MatchNoProvidersEmpty } from '@/app/match/components/empty';
 import { fetchConversationDiagnosis } from '@/lib/diagnosis/diagnoses-api';
@@ -255,7 +252,6 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
         companyIndex,
         setCompanyIndex,
         isProvidersLoading,
-        isRefreshingProvidersInBackground,
         refreshProvidersForLocation,
         providersFromViewportCache,
     } = useMatchProviders({
@@ -302,8 +298,6 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
     });
     // Deduplicate provider_contact analytics per provider per session.
     const providerContactFiredForProviderIdRef = useRef<string | null>(null);
-    const providerCardRefs = useRef<Record<string, HTMLDivElement | null>>({});
-    const [mapExpandRequestId, setMapExpandRequestId] = useState(0);
     const [searchRadiusMeters, setSearchRadiusMeters] = useState(DEFAULT_SEARCH_RADIUS_METERS);
     const [cachedDiagnosisVersion, setCachedDiagnosisVersion] = useState<string | undefined>(undefined);
     const lastProviderFetchKeyRef = useRef('');
@@ -314,7 +308,17 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
      * count against the *unfiltered* superset while the cards/markers reflect the filtered view.
      */
     const sortedProviders = useMemo(() => {
-        return [...providers].sort((a, b) =>
+        // Dedupe first so the same company is never listed twice (provider id, else
+        // place id, else normalised name as the identity key).
+        const seen = new Set<string>();
+        const deduped: MatchProvider[] = [];
+        for (const p of providers) {
+            const key = (p.providerId || p.placeId || p.name || '').toLowerCase().trim();
+            if (!key || seen.has(key)) continue;
+            seen.add(key);
+            deduped.push(p);
+        }
+        return deduped.sort((a, b) =>
             compareForSort(filterState.sort, a, b, providerPriorityScore)
         );
     }, [providers, filterState.sort]);
@@ -324,22 +328,6 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
     );
     const sheetProviders = filteredProviders;
 
-    /** Specialisation chips for the filter sheet — deduped + alphabetical, drawn from loaded providers. */
-    const availableSpecialisations = useMemo(() => {
-        const toTitleCase = (s: string) =>
-            s.replace(/\w\S*/g, (w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
-        const map = new Map<string, string>(); // normalized key → display label
-        sortedProviders.forEach((p) => {
-            (p.specialisations ?? []).forEach((s) => {
-                const t = String(s || '').trim();
-                if (!t) return;
-                const key = t.toLowerCase();
-                if (!map.has(key)) map.set(key, toTitleCase(t));
-            });
-        });
-        return Array.from(map.values()).sort((a, b) => a.localeCompare(b));
-    }, [sortedProviders]);
-    const totalCompanies = Math.max(sheetProviders.length, 1);
     const selectedProvider = useMemo(() => {
         const idx = Math.min(Math.max(companyIndex - 1, 0), Math.max(sheetProviders.length - 1, 0));
         return sheetProviders[idx] || null;
@@ -686,36 +674,6 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
         };
     }, [selectedProvider?.providerId, scandioReviewCountByProviderId]);
 
-    const normalizePlaceKey = useCallback((id: string) => id.replace(/^places\//, '').trim(), []);
-
-    const handleMapMarkerClick = useCallback(
-        (placeId: string) => {
-            const target = normalizePlaceKey(placeId);
-            const idx = sheetProviders.findIndex((p) => normalizePlaceKey(p.placeId) === target);
-            if (idx >= 0) {
-                setCompanyIndex(idx + 1);
-                setMapExpandRequestId((n) => n + 1);
-                trackEvent('match_marker_tap', {
-                    diagnosis_id: conversationId || undefined,
-                    provider_id: sheetProviders[idx]?.providerId || undefined,
-                    place_id: placeId,
-                });
-            }
-        },
-        [conversationId, normalizePlaceKey, setCompanyIndex, sheetProviders]
-    );
-
-    const { mapHostRef } = useMatchMap({
-        userLocation,
-        providers: filteredProviders,
-        onMarkerClick: handleMapMarkerClick,
-        showSearchRadius: true,
-        searchRadiusMeters,
-        showUserPin: true,
-        selectedPlaceId: selectedProvider?.placeId ?? null,
-        viewportSearch: false,
-    });
-
     useEffect(() => {
         if (sheetProviders.length === 0) return;
         setCompanyIndex((prev) => Math.min(Math.max(prev, 1), sheetProviders.length));
@@ -848,9 +806,6 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
         setAddressInput(userLocation.address || `${userLocation.lat}, ${userLocation.lng}`);
     }, [userLocation]);
 
-    const goPrev = () => setCompanyIndex((v) => Math.max(1, v - 1));
-    const goNext = () => setCompanyIndex((v) => Math.min(totalCompanies, v + 1));
-
     const focusAddressSearch = useCallback(() => {
         const el = document.getElementById('match-address-input');
         if (el instanceof HTMLInputElement) {
@@ -928,12 +883,288 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
             }).catch(() => {});
         }
         const cid = conversationId ? `?conversationId=${encodeURIComponent(conversationId)}` : '';
-        router.push(`/contractors/${encodeURIComponent(targetProvider.providerId)}${cid}`);
+        router.push(`/pro/${encodeURIComponent(targetProvider.providerId)}${cid}`);
     }, [conversationId, enrichmentCache, resolveTradeContext, router]);
+
+    const addressField = (
+        <div className="relative w-full">
+            <Input
+                id="match-address-input"
+                placeholder="Search address"
+                className="h-10 w-full pr-10 text-sm"
+                value={addressInput}
+                onChange={(e) => setAddressInput(e.target.value)}
+                onKeyDown={(e) => {
+                    if (e.key !== 'Enter') return;
+                    void updateLocationFromAddress(addressInput);
+                }}
+                disabled={isUpdatingLocation || isLoading}
+            />
+            <button
+                type="button"
+                aria-label="Use current location"
+                className="absolute inset-y-0 right-0 inline-flex w-9 items-center justify-center rounded-r-md text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
+                disabled={isUpdatingLocation || isLoading || isLocatingUser}
+                onClick={() => {
+                    void handleUseCurrentLocation();
+                }}
+            >
+                {isLocatingUser ? (
+                    <Loader size={16} className="animate-spin" />
+                ) : (
+                    <Crosshair size={16} />
+                )}
+            </button>
+        </div>
+    );
+
+    const openSortFilter = () => {
+        setIsFilterSheetOpen(true);
+        trackEvent('match_filter_open', {
+            diagnosis_id: conversationId || undefined,
+            active_filter_count: activeFilterCount,
+        });
+    };
+
+    const sortFilterControls = (
+        <Button type="button" variant="secondary" className="w-full" onClick={openSortFilter}>
+            Filters{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}
+        </Button>
+    );
+
+    const renderContactSlot = (provider: MatchProvider, idx: number) => (
+        <Popover
+            open={contactOpen && companyIndex - 1 === idx}
+            onOpenChange={(open) => {
+                if (open) setCompanyIndex(idx + 1);
+                setContactOpen(open);
+                if (open) trackProviderContactOnceOnOpen();
+            }}
+        >
+            <PopoverTrigger asChild>
+                <Button
+                    type="button"
+                    variant="secondary"
+                    className="h-10 w-full"
+                    onClick={(e) => e.stopPropagation()}
+                >
+                    Contact
+                </Button>
+            </PopoverTrigger>
+            <PopoverContent
+                className="w-64 rounded-md border-input/75 p-3"
+                align="start"
+                side="top"
+                sideOffset={4}
+                onClick={(e) => e.stopPropagation()}
+            >
+                <div className="flex flex-col gap-3">
+                    <div className="flex flex-col gap-2">
+                        <Button
+                            type="button"
+                            className="w-full"
+                            onClick={async () => {
+                                const waPhone = toWhatsAppPhone(provider.phone);
+                                if (waPhone) {
+                                    trackContactIntent('whatsapp');
+                                    const profileUrl = provider.providerId
+                                        ? `${window.location.origin}/pro/${provider.providerId}`
+                                        : window.location.href;
+                                    const prefill = await resolveWhatsAppPrefill(profileUrl);
+
+                                    // Template fallback, only used if the AI generator is unavailable.
+                                    let text = [
+                                        `Hi${provider.name ? ` ${provider.name}` : ''}, I found you on Mendr.`,
+                                        prefill.diagnosis &&
+                                        prefill.diagnosis !== 'Home repair or maintenance'
+                                            ? `Mendr diagnosed my issue: ${prefill.diagnosis}.`
+                                            : `I have a home repair issue I'd like your help with.`,
+                                        prefill.report_url
+                                            ? `You can view my full Mendr report here: ${prefill.report_url}`
+                                            : '',
+                                        `Are you available to assist?`,
+                                    ]
+                                        .filter(Boolean)
+                                        .join('\n\n');
+
+                                    // Prefer the Gemini-generated, human-sounding message (it is
+                                    // prompted with the diagnosis and instructed to include the
+                                    // report link verbatim).
+                                    try {
+                                        const res = await fetch('/api/whatsapp-message', {
+                                            method: 'POST',
+                                            headers: { 'Content-Type': 'application/json' },
+                                            body: JSON.stringify({
+                                                diagnosis: prefill.diagnosis,
+                                                provider_name: provider.name,
+                                                trade: prefill.trade,
+                                                report_url: prefill.report_url,
+                                                profile_url: prefill.profile_url,
+                                            }),
+                                        });
+                                        const data = (await res.json().catch(() => ({}))) as {
+                                            message?: string;
+                                        };
+                                        if (res.ok && data.message?.trim()) {
+                                            text = data.message.trim();
+                                        }
+                                    } catch {
+                                        // Network/endpoint failure — keep the template fallback.
+                                    }
+
+                                    window.open(
+                                        `https://wa.me/${waPhone}?text=${encodeURIComponent(text)}`,
+                                        '_blank',
+                                        'noopener,noreferrer'
+                                    );
+                                }
+                                setContactOpen(false);
+                            }}
+                            disabled={!toWhatsAppPhone(provider.phone)}
+                        >
+                            WhatsApp
+                        </Button>
+                        <p className="text-xs text-muted-foreground">
+                            Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do
+                            eiusmod tempor incididunt.
+                        </p>
+                    </div>
+                    <div className="flex gap-2">
+                        <Button
+                            type="button"
+                            variant="secondary"
+                            className="flex-1"
+                            onClick={() => {
+                                if (provider.phone) {
+                                    trackContactIntent('phone');
+                                    window.location.href = `tel:${provider.phone}`;
+                                }
+                                setContactOpen(false);
+                            }}
+                            disabled={!provider.phone}
+                        >
+                            Phone
+                        </Button>
+                        <Button
+                            type="button"
+                            variant="secondary"
+                            className="flex-1"
+                            onClick={() => {
+                                if (provider.website) {
+                                    trackContactIntent('email');
+                                    window.location.href = `mailto:${provider.website}`;
+                                }
+                                setContactOpen(false);
+                            }}
+                            disabled={!provider.website}
+                        >
+                            Email
+                        </Button>
+                    </div>
+                </div>
+            </PopoverContent>
+        </Popover>
+    );
+
+    const renderProviderCard = (provider: MatchProvider, idx: number) => {
+        const enrich = enrichmentEntryForProvider(enrichmentCache, provider);
+        const scandioSummary = (enrich?.reviewSummary ?? '').trim();
+        const googleSummary = (provider.summary ?? '').trim();
+        const providerAiSummary = (provider.enrichmentReviewSummary ?? '').trim();
+        const displaySummary = scandioSummary || googleSummary || providerAiSummary;
+        const reviewCount = totalReviewCountForProvider(provider, scandioReviewCountByProviderId);
+        const enrichmentResolved = matchCardEnrichmentResolved(enrichmentCache, provider);
+        const showSummarySkeleton =
+            !displaySummary && !enrichmentResolved && isEnrichmentLoading && !summarySkeletonLongWait;
+        const summaryText = displaySummary
+            ? formatCustomerSummary(displaySummary, provider.name)
+            : null;
+        return (
+            <ProviderCard
+                key={provider.placeId}
+                provider={provider}
+                reviewCount={reviewCount}
+                summary={summaryText}
+                summaryLoading={showSummarySkeleton}
+                onSelect={() => setCompanyIndex(idx + 1)}
+                onViewMore={() => {
+                    void openProviderDetails(provider);
+                }}
+                contactSlot={renderContactSlot(provider, idx)}
+            />
+        );
+    };
+
+    /** Drop companies that resolved enrichment with no review summary; keep pending ones (skeleton). */
+    const providerHasSummary = (p: MatchProvider) => {
+        const enrich = enrichmentEntryForProvider(enrichmentCache, p);
+        const summary =
+            (enrich?.reviewSummary ?? '').trim() ||
+            (p.summary ?? '').trim() ||
+            (p.enrichmentReviewSummary ?? '').trim();
+        if (summary.length > 0) return true;
+        return isEnrichmentLoading && !matchCardEnrichmentResolved(enrichmentCache, p);
+    };
+    const visibleProviders = sheetProviders.filter(providerHasSummary);
+
+    const listContent = showBottomSkeleton ? (
+        <div className="flex flex-col gap-4">
+            {Array.from({ length: 3 }).map((_, i) => (
+                <div
+                    key={`sk-${i}`}
+                    className="flex flex-col gap-4 rounded-lg border border-border bg-card p-4"
+                >
+                    <div className="flex flex-col gap-2">
+                        <div className="flex items-start justify-between gap-2">
+                            <Skeleton className="h-6 w-3/5" />
+                            <Skeleton className="size-8 rounded-md" />
+                        </div>
+                        <Skeleton className="h-4 w-2/5" />
+                    </div>
+                    <div className="flex flex-col gap-2">
+                        <Skeleton className="h-4 w-24" />
+                        <Skeleton className="h-3.5 w-full" />
+                        <Skeleton className="h-3.5 w-[92%]" />
+                        <Skeleton className="h-3.5 w-[70%]" />
+                    </div>
+                    <div className="flex gap-2">
+                        <Skeleton className="h-10 flex-1" />
+                        <Skeleton className="h-10 flex-1" />
+                    </div>
+                </div>
+            ))}
+        </div>
+    ) : noProviders ? (
+        <MatchNoProvidersEmpty onEditAddress={focusAddressSearch} />
+    ) : visibleProviders.length === 0 ? (
+        <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed border-border bg-background p-4 text-center">
+            <p className="text-sm font-medium">No matches with these filters</p>
+            <p className="text-xs text-muted-foreground">
+                Try clearing some filters or expanding the distance range.
+            </p>
+            <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                onClick={() => {
+                    resetFilters();
+                    trackEvent('match_filter_clear', {
+                        diagnosis_id: conversationId || undefined,
+                    });
+                }}
+            >
+                Clear filters
+            </Button>
+        </div>
+    ) : (
+        <div className="flex flex-col gap-4">
+            {visibleProviders.map((provider, idx) => renderProviderCard(provider, idx))}
+        </div>
+    );
 
     return (
         <>
-        <MatchMapSheetLayout
+        <MatchResultsLayout
             onClose={() => {
                 if (!conversationId) {
                     router.back();
@@ -941,355 +1172,11 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
                 }
                 router.push(`/diagnosis/${encodeURIComponent(conversationId)}`);
             }}
-            expandRequestId={mapExpandRequestId}
-            expandToMode="full"
-            peekProviderCount={filteredProviders.length}
-            onSheetModeChange={(next, prev) => {
-                trackEvent('match_sheet_snap', {
-                    diagnosis_id: conversationId || undefined,
-                    from: prev,
-                    to: next,
-                });
-            }}
-            scrollToKey={selectedProvider?.placeId ?? null}
-            getScrollTarget={() =>
-                selectedProvider
-                    ? providerCardRefs.current[selectedProvider.placeId] ?? null
-                    : null
-            }
-            mapSlot={<div ref={mapHostRef} className="absolute inset-0 h-full w-full" />}
-            mapLoadingOverlay={
-                showBottomSkeleton || !userLocation ? (
-                    <div className="pointer-events-none absolute inset-0 z-[1] flex items-center justify-center bg-background/70">
-                        <p className="px-4 text-center text-xs text-muted-foreground">
-                            {isLoading || isProvidersLoading
-                                ? 'Finding Pros…'
-                                : 'Add your address or use current location'}
-                        </p>
-                    </div>
-                ) : null
-            }
+            addressSlot={addressField}
+            controlsSlot={sortFilterControls}
         >
-                {/* Address search + sort/filter — top of the results list (moved out of the header). */}
-                <div className="flex w-full min-w-0 items-center gap-2">
-                    <div className="relative min-w-0 flex-1">
-                        <Input
-                            id="match-address-input"
-                            placeholder="Search address"
-                            className="h-10 w-full pr-10 text-sm"
-                            value={addressInput}
-                            onChange={(e) => setAddressInput(e.target.value)}
-                            onKeyDown={(e) => {
-                                if (e.key !== 'Enter') return;
-                                void updateLocationFromAddress(addressInput);
-                            }}
-                            disabled={isUpdatingLocation || isLoading}
-                        />
-                        <button
-                            type="button"
-                            aria-label="Use current location"
-                            className="absolute inset-y-0 right-0 inline-flex w-9 items-center justify-center rounded-r-md text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
-                            disabled={isUpdatingLocation || isLoading || isLocatingUser}
-                            onClick={() => {
-                                void handleUseCurrentLocation();
-                            }}
-                        >
-                            {isLocatingUser ? (
-                                <Loader size={16} className="animate-spin" />
-                            ) : (
-                                <Crosshair size={16} />
-                            )}
-                        </button>
-                    </div>
-                    <button
-                        type="button"
-                        aria-label={
-                            activeFilterCount > 0
-                                ? `Sort and filter (${activeFilterCount} active)`
-                                : 'Sort and filter'
-                        }
-                        className="relative inline-flex size-10 shrink-0 items-center justify-center rounded-md border border-input bg-background text-foreground transition-colors hover:bg-secondary disabled:opacity-50"
-                        onClick={() => {
-                            setIsFilterSheetOpen(true);
-                            trackEvent('match_filter_open', {
-                                diagnosis_id: conversationId || undefined,
-                                active_filter_count: activeFilterCount,
-                            });
-                        }}
-                    >
-                        <Filter size={18} strokeWidth={2.5} />
-                        {activeFilterCount > 0 ? (
-                            <span
-                                className="absolute -right-1 -top-1 inline-flex min-w-[18px] items-center justify-center rounded-full bg-foreground px-1 py-0.5 text-[10px] font-semibold leading-none text-background"
-                                aria-hidden="true"
-                            >
-                                {activeFilterCount}
-                            </span>
-                        ) : null}
-                    </button>
-                </div>
-
-                <div className="flex flex-col gap-1 text-center">
-                    <p className="text-sm font-semibold text-foreground">
-                        {!showBottomSkeleton && sheetProviders.length > 0
-                            ? proCount(sheetProviders.length)
-                            : PRO_TERM.many}
-                    </p>
-                    {!showBottomSkeleton && userLocation ? (
-                        <p className="text-xs text-muted-foreground">
-                            Within {searchRadiusMeters >= EXTENDED_SEARCH_RADIUS_METERS ? 50 : 25} km of your
-                            address
-                        </p>
-                    ) : null}
-                    {!showBottomSkeleton && isRefreshingProvidersInBackground ? (
-                        <p className="text-xs text-muted-foreground">Updating results for this view…</p>
-                    ) : null}
-                </div>
-
-                {showBottomSkeleton ? (
-                    <>
-                        <h3 className="text-lg font-semibold leading-snug text-foreground">Recommended for you</h3>
-                        <div className="flex flex-col gap-4">
-                            {Array.from({ length: 3 }).map((_, i) => (
-                                <div
-                                    key={`sk-${i}`}
-                                    className={`flex flex-col gap-4 rounded-lg border border-border bg-card p-6 ${mendrTokens.shadow.card}`}
-                                >
-                                    <div className="space-y-2">
-                                        <Skeleton className="h-6 w-56" />
-                                        <Skeleton className="h-4 w-44" />
-                                    </div>
-                                    <Skeleton className="h-4 w-full" />
-                                    <Skeleton className="h-4 w-[92%]" />
-                                    <div className="flex gap-4">
-                                        <Skeleton className="h-10 flex-1" />
-                                        <Skeleton className="h-10 flex-1" />
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    </>
-                ) : noProviders ? (
-                    <MatchNoProvidersEmpty onEditAddress={focusAddressSearch} />
-                ) : (
-                    <div className="flex flex-col gap-4">
-                        {sheetProviders.map((provider, idx) => {
-                            const enrich = enrichmentEntryForProvider(enrichmentCache, provider);
-                            const scandioSummary = (enrich?.reviewSummary ?? '').trim();
-                            const googleSummary = (provider.summary ?? '').trim();
-                            const providerAiSummary = (provider.enrichmentReviewSummary ?? '').trim();
-                            const displaySummary =
-                                scandioSummary || googleSummary || providerAiSummary;
-                            const reviewCount = totalReviewCountForProvider(
-                                provider,
-                                scandioReviewCountByProviderId
-                            );
-                            const enrichmentResolved = matchCardEnrichmentResolved(
-                                enrichmentCache,
-                                provider
-                            );
-                            const showSummarySkeleton =
-                                !displaySummary &&
-                                !enrichmentResolved &&
-                                isEnrichmentLoading &&
-                                !summarySkeletonLongWait;
-                            const summaryText = displaySummary
-                                ? formatCustomerSummary(displaySummary, provider.name)
-                                : null;
-
-                            return (
-                                <Fragment key={provider.placeId}>
-                                    {idx === 0 ? (
-                                        <h3 className="text-lg font-semibold leading-snug text-foreground">
-                                            Recommended for you
-                                        </h3>
-                                    ) : null}
-                                    <ProviderCard
-                                        provider={provider}
-                                        isSelected={companyIndex - 1 === idx}
-                                        reviewCount={reviewCount}
-                                        summary={summaryText}
-                                        summaryLoading={showSummarySkeleton}
-                                        longWaitSummaryFallback={
-                                            isEnrichmentLoading && summarySkeletonLongWait
-                                        }
-                                        certifications={provider.certifications}
-                                        onSelect={() => setCompanyIndex(idx + 1)}
-                                        onOpenProfile={() => {
-                                            void openProviderDetails(provider);
-                                        }}
-                                        onImageSwipe={(toIndex) => {
-                                            trackEvent('match_card_image_swipe', {
-                                                diagnosis_id: conversationId || undefined,
-                                                provider_id: provider.providerId || undefined,
-                                                place_id: provider.placeId,
-                                                to_index: toIndex,
-                                            });
-                                        }}
-                                        cardRef={(el) => {
-                                            providerCardRefs.current[provider.placeId] = el;
-                                        }}
-                                        contactSlot={
-                                            <Popover
-                                                open={contactOpen && companyIndex - 1 === idx}
-                                                onOpenChange={(open) => {
-                                                    if (open) setCompanyIndex(idx + 1);
-                                                    setContactOpen(open);
-                                                    if (open) trackProviderContactOnceOnOpen();
-                                                }}
-                                            >
-                                                <PopoverTrigger asChild>
-                                                    <Button
-                                                        type="button"
-                                                        size="sm"
-                                                        className="h-9 w-full"
-                                                        onClick={(e) => e.stopPropagation()}
-                                                    >
-                                                        Contact
-                                                    </Button>
-                                                </PopoverTrigger>
-                                                <PopoverContent
-                                                    className="w-64 rounded-md border-input p-3 shadow-xl"
-                                                    align="start"
-                                                    side="top"
-                                                    sideOffset={4}
-                                                    onClick={(e) => e.stopPropagation()}
-                                                >
-                                                    <div className="flex flex-col gap-3">
-                                                        <Button
-                                                            variant="secondary"
-                                                            className="w-full"
-                                                            onClick={async () => {
-                                                                const phone = toWhatsAppPhone(
-                                                                    provider.phone
-                                                                );
-                                                                if (phone) {
-                                                                    trackContactIntent('whatsapp');
-                                                                    const profileUrl = provider.providerId
-                                                                        ? `${window.location.origin}/contractors/${provider.providerId}`
-                                                                        : window.location.href;
-                                                                    const prefill = await resolveWhatsAppPrefill(profileUrl);
-
-                                                                    // Build a template fallback up front so the button
-                                                                    // always opens a usable message even if the AI
-                                                                    // generator is unavailable.
-                                                                    const fallbackParts: string[] = [
-                                                                        `Hi! I found you on Mendr.`,
-                                                                        prefill.diagnosis && prefill.diagnosis !== 'Home repair or maintenance'
-                                                                            ? `I have a ${prefill.trade ? prefill.trade.toLowerCase() + ' issue' : 'home repair issue'}: ${prefill.diagnosis}.`
-                                                                            : `I have a home repair issue I'd like your help with.`,
-                                                                        prefill.report_url
-                                                                            ? `Here's my Mendr report: ${prefill.report_url}`
-                                                                            : '',
-                                                                        `Are you available to assist?`,
-                                                                    ].filter(Boolean);
-                                                                    let text = fallbackParts.join(' ');
-
-                                                                    // Prefer the AI-generated message (same endpoint
-                                                                    // the contact popover uses) so messages are
-                                                                    // consistent across the app. Fall back to the
-                                                                    // template on any failure.
-                                                                    try {
-                                                                        const msgRes = await fetch('/api/whatsapp-message', {
-                                                                            method: 'POST',
-                                                                            headers: { 'Content-Type': 'application/json' },
-                                                                            body: JSON.stringify({
-                                                                                diagnosis: prefill.diagnosis,
-                                                                                provider_name: provider.name,
-                                                                                trade: prefill.trade,
-                                                                                report_url: prefill.report_url,
-                                                                                profile_url: prefill.profile_url,
-                                                                            }),
-                                                                        });
-                                                                        const msgData = (await msgRes
-                                                                            .json()
-                                                                            .catch(() => ({}))) as { message?: string };
-                                                                        if (msgRes.ok && msgData.message?.trim()) {
-                                                                            text = msgData.message.trim();
-                                                                        }
-                                                                    } catch {
-                                                                        // Network/endpoint failure — keep the template fallback.
-                                                                    }
-
-                                                                    window.open(
-                                                                        `https://wa.me/${phone}?text=${encodeURIComponent(text)}`,
-                                                                        '_blank',
-                                                                        'noopener,noreferrer'
-                                                                    );
-                                                                }
-                                                                setContactOpen(false);
-                                                            }}
-                                                            disabled={!toWhatsAppPhone(provider.phone)}
-                                                        >
-                                                            WhatsApp
-                                                        </Button>
-                                                        <p className="text-center text-xs text-muted-foreground">
-                                                            Start on WhatsApp, call them, or send an
-                                                            email.
-                                                        </p>
-                                                        <div className="flex flex-row gap-2">
-                                                            <Button
-                                                                variant="ghost"
-                                                                className="h-9 flex-1"
-                                                                onClick={() => {
-                                                                    if (provider.phone) {
-                                                                        trackContactIntent('phone');
-                                                                        window.location.href = `tel:${provider.phone}`;
-                                                                    }
-                                                                    setContactOpen(false);
-                                                                }}
-                                                                disabled={!provider.phone}
-                                                            >
-                                                                Phone
-                                                            </Button>
-                                                            <Button
-                                                                variant="ghost"
-                                                                className="h-9 flex-1"
-                                                                onClick={() => {
-                                                                    if (provider.website) {
-                                                                        trackContactIntent('email');
-                                                                        window.location.href = `mailto:${provider.website}`;
-                                                                    }
-                                                                    setContactOpen(false);
-                                                                }}
-                                                                disabled={!provider.website}
-                                                            >
-                                                                Email
-                                                            </Button>
-                                                        </div>
-                                                    </div>
-                                                </PopoverContent>
-                                            </Popover>
-                                        }
-                                    />
-                                </Fragment>
-                            );
-                        })}
-                    </div>
-                )}
-
-                {!showBottomSkeleton && !noProviders && filteredProviders.length === 0 ? (
-                    <div className="flex flex-col items-center gap-2 rounded-2xl border border-dashed border-border bg-background/60 p-4 text-center">
-                        <p className="text-sm font-medium">No matches with these filters</p>
-                        <p className="text-xs text-muted-foreground">
-                            Try clearing some filters or expanding the distance range.
-                        </p>
-                        <Button
-                            type="button"
-                            size="sm"
-                            variant="secondary"
-                            onClick={() => {
-                                resetFilters();
-                                trackEvent('match_filter_clear', {
-                                    diagnosis_id: conversationId || undefined,
-                                });
-                            }}
-                        >
-                            Clear filters
-                        </Button>
-                    </div>
-                ) : null}
-        </MatchMapSheetLayout>
+                {listContent}
+        </MatchResultsLayout>
 
         <FilterSheet
             open={isFilterSheetOpen}
@@ -1322,7 +1209,6 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
                 });
             }}
             providers={sortedProviders}
-            availableSpecialisations={availableSpecialisations}
             maxDistanceKm={50}
         />
         </>

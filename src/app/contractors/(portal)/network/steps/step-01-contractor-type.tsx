@@ -1,42 +1,50 @@
 'use client';
 
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Separator } from '@/components/ui/separator';
 import { useWizard } from './wizard-context';
 import { StepHeader } from './shared-ui';
 import type { ContractorType } from './types';
 
+const SUB = 'Lorem ipsum dolor sit amet, consectetur adipiscing elit.';
+const OPTIONS: { v: ContractorType; label: string; sub: string }[] = [
+    { v: 'individual', label: 'Individual', sub: SUB },
+    { v: 'team', label: 'Team', sub: SUB },
+    { v: 'enterprise', label: 'Enterprise', sub: SUB },
+];
+
 export function StepContractorType() {
     const { data, patch } = useWizard();
-    const setType = (t: ContractorType) => patch({ contractorType: t });
 
     return (
         <div className="flex flex-col gap-8">
             <StepHeader
-                title="How do you work?"
-                description="We use this to set how many service areas you can add and to understand our network."
+                title="How Do You Work?"
+                description="Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore."
             />
-            <div className="flex flex-col gap-3">
-                {(
-                    [
-                        { v: 'individual' as const, label: 'Individual', sub: 'Solo operator — one primary service radius.' },
-                        { v: 'team' as const, label: 'Team', sub: 'Small crew — up to three coverage zones.' },
-                        { v: 'enterprise' as const, label: 'Enterprise', sub: 'Larger business — up to six coverage zones.' },
-                    ] as const
-                ).map((opt) => (
-                    <button
-                        key={opt.v}
-                        type="button"
-                        onClick={() => setType(opt.v)}
-                        className={`flex flex-col items-start gap-1 rounded-lg border p-4 text-left transition-colors ${
-                            data.contractorType === opt.v
-                                ? 'border-primary bg-primary/5'
-                                : 'border-border hover:bg-muted/40'
-                        }`}
-                    >
-                        <span className="font-medium text-foreground">{opt.label}</span>
-                        <span className="text-sm text-muted-foreground">{opt.sub}</span>
-                    </button>
+            <RadioGroup
+                aria-label="How you work"
+                value={data.contractorType}
+                onValueChange={(v) => patch({ contractorType: v as ContractorType })}
+                className="flex flex-col gap-0"
+            >
+                {OPTIONS.map((opt, index) => (
+                    <div key={opt.v}>
+                        {index > 0 ? <Separator /> : null}
+                        <label
+                            htmlFor={`contractor-type-${opt.v}`}
+                            className="flex w-full cursor-pointer items-center gap-3 py-3"
+                        >
+                            <span className="size-12 shrink-0 rounded-md bg-secondary" aria-hidden="true" />
+                            <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                                <span className="text-sm font-medium text-foreground">{opt.label}</span>
+                                <span className="text-xs text-muted-foreground">{opt.sub}</span>
+                            </span>
+                            <RadioGroupItem id={`contractor-type-${opt.v}`} value={opt.v} />
+                        </label>
+                    </div>
                 ))}
-            </div>
+            </RadioGroup>
         </div>
     );
 }

@@ -63,7 +63,6 @@ function renderSheet(stateOverride: Partial<MatchFilterState> = {}) {
             state={state}
             onApply={onApply}
             providers={PROVIDERS}
-            availableSpecialisations={['Geyser', 'Drain']}
         />,
     );
     return { ...utils, onApply, onOpenChange, state };
@@ -78,19 +77,18 @@ describe('FilterSheet', () => {
                 state={DEFAULT_FILTER_STATE}
                 onApply={() => {}}
                 providers={PROVIDERS}
-                availableSpecialisations={[]}
             />,
         );
         // The portal is only mounted when open — container should be empty.
         expect(container.firstChild).toBeNull();
     });
 
-    it('shows the sort chips and clicking one updates the draft', async () => {
+    it('shows the sort options and clicking one updates the draft', async () => {
         const user = userEvent.setup();
         const { onApply } = renderSheet();
 
-        const ratingChip = screen.getByRole('button', { name: /rating \(high → low\)/i });
-        await user.click(ratingChip);
+        const ratingOption = screen.getByRole('radio', { name: /rating/i });
+        await user.click(ratingOption);
 
         // Draft updated but not yet applied.
         expect(onApply).not.toHaveBeenCalled();
@@ -155,15 +153,11 @@ describe('FilterSheet', () => {
         const user = userEvent.setup();
         renderSheet();
 
-        // Scope the click to the Minimum row of the Rating Range section
-        // (the Maximum row also has a 4.0+ chip).
-        const ratingHeading = screen.getByRole('heading', { name: /rating range/i });
-        const ratingSection = ratingHeading.closest('section') as HTMLElement;
-        const minRow = within(ratingSection).getByText(/^minimum$/i).parentElement as HTMLElement;
-        const fourPlus = within(minRow).getByRole('button', { name: /^4\.0\+$/ });
-        await user.click(fourPlus);
+        // Toggle "Open Now" — only the two open providers (p1 + p3) remain.
+        const openNowRow = screen.getByText('Open Now').closest('div')!;
+        const toggle = within(openNowRow.parentElement!).getAllByRole('switch')[0];
+        await user.click(toggle);
 
-        // After filter to 4.0+, only providers with rating ≥4 remain (p1 + p3 = 2).
         const showBtn = screen.getByRole('button', { name: /show 2 result/i });
         expect(showBtn).toBeInTheDocument();
     });

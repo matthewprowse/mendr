@@ -1,8 +1,8 @@
 /**
- * Opt the coming-soon route out of the root layout's flex-col wrapper.
- * Sticky card stacks require a block-level scroll container —
- * a flex-col parent can interfere with the sticky stacking behaviour.
+ * The /launch page renders as a full-viewport `fixed inset-0` shell (the same
+ * pattern as /auth/login and /start), so it opts out of the root layout's
+ * flex-col wrapper to avoid any interaction with that fixed overlay.
  */
-export default function ComingSoonLayout({ children }: { children: React.ReactNode }) {
+export default function LaunchLayout({ children }: { children: React.ReactNode }) {
     return <div className="block">{children}</div>;
 }

@@ -1,6 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { Search } from 'lucide-react';
 import { toast } from 'sonner';
 import { getAppOrigin } from '@/lib/site-url';
 import { Badge } from '@/components/ui/badge';
@@ -30,7 +31,14 @@ import { TableCell, TableRow } from '@/components/ui/table';
 type Status = 'new' | 'contacted' | 'approved' | 'rejected';
 
 type ConfirmEmailStatus = 'pending' | 'sent' | 'failed';
-type EnrichmentStatus  = 'pending' | 'queued' | 'running' | 'matched' | 'no_match' | 'failed' | 'complete';
+type EnrichmentStatus =
+    | 'pending'
+    | 'queued'
+    | 'running'
+    | 'matched'
+    | 'no_match'
+    | 'failed'
+    | 'complete';
 type InviteEmailStatus = 'pending' | 'sent' | 'failed' | null;
 
 type ProviderApplication = {
@@ -57,16 +65,16 @@ type ProviderApplication = {
     sendgrid_sent_at: string | null;
     source: string | null;
     // Pipeline fields
-    confirmation_email_status:  ConfirmEmailStatus | null;
-    confirmation_email_error:   string | null;
-    enrichment_status:          EnrichmentStatus | null;
-    enrichment_error:           string | null;
-    matched_provider_id:        string | null;
-    match_score:                number | null;
-    gemini_summary:             string | null;
-    applicant_summary:          string | null;
-    invitation_email_status:    InviteEmailStatus;
-    invitation_email_error:     string | null;
+    confirmation_email_status: ConfirmEmailStatus | null;
+    confirmation_email_error: string | null;
+    enrichment_status: EnrichmentStatus | null;
+    enrichment_error: string | null;
+    matched_provider_id: string | null;
+    match_score: number | null;
+    gemini_summary: string | null;
+    applicant_summary: string | null;
+    invitation_email_status: InviteEmailStatus;
+    invitation_email_error: string | null;
 };
 
 type RawProviderApplication = Omit<ProviderApplication, 'status'> & {
@@ -91,9 +99,32 @@ type LiveProviderRow = {
     key_person: string;
     /** Free-text certification labels stored in providers.certifications (text[]). */
     certifications: string[];
+    phone: string | null;
+    website: string | null;
+    mendr_rating: number | null;
+    mendr_rating_count: number;
+    service_areas: string[];
+    google_generative_summary: string;
+    google_editorial_summary: string;
+    is_active: boolean;
+    is_verified: boolean;
+    created_at: string | null;
+    updated_at: string | null;
+    last_updated: string | null;
+    last_matched_at: string | null;
+    reviews_synced_at: string | null;
     enrichment_review_required: boolean;
     enrichment_last_failure: string | null;
     enrichment_last_failure_at: string | null;
+    /** Enrichment lifecycle, derived from provider_cache. */
+    enrichment_first_at: string | null;
+    enrichment_last_at: string | null;
+    enrichment_last_scraped_at: string | null;
+    enrichment_scrape_status: string | null;
+    enrichment_quality: string | null;
+    enrichment_next_at: string | null;
+    enrichment_next_scheduled: boolean;
+    enrichment_next_basis: string;
     /** Times surfaced to users — not tracked per provider yet (null). */
     output_count: number | null;
     contact_count: number;
@@ -104,10 +135,10 @@ type LiveProviderRow = {
 // ── Status badge ──────────────────────────────────────────────────────────────
 
 const STATUS_STYLES: Record<Status, string> = {
-    new:       'bg-blue-100 text-blue-700 border-blue-200',
+    new: 'bg-blue-100 text-blue-700 border-blue-200',
     contacted: 'bg-amber-100 text-amber-700 border-amber-200',
-    approved:  'bg-green-100 text-green-700 border-green-200',
-    rejected:  'bg-red-100 text-red-600 border-red-200',
+    approved: 'bg-green-100 text-green-700 border-green-200',
+    rejected: 'bg-red-100 text-red-600 border-red-200',
 };
 const STATUSES: Status[] = ['new', 'contacted', 'approved', 'rejected'];
 
@@ -146,7 +177,11 @@ function StatusBadge({ status, onChange }: { status: Status; onChange: (s: Statu
             >
                 {status}
                 <svg className="h-3 w-3 opacity-60" viewBox="0 0 20 20" fill="currentColor">
-                    <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+                    <path
+                        fillRule="evenodd"
+                        d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"
+                        clipRule="evenodd"
+                    />
                 </svg>
             </button>
             {open && (
@@ -155,7 +190,10 @@ function StatusBadge({ status, onChange }: { status: Status; onChange: (s: Statu
                         <button
                             key={s}
                             type="button"
-                            onClick={() => { onChange(s); setOpen(false); }}
+                            onClick={() => {
+                                onChange(s);
+                                setOpen(false);
+                            }}
                             className={`flex w-full items-center rounded-md px-2 py-1 text-left text-xs capitalize transition-colors hover:bg-muted ${s === status ? 'font-medium' : ''}`}
                         >
                             {s}
@@ -195,12 +233,22 @@ const EMAIL_TEMPLATES = [
 
 // ── Inline notes editor ───────────────────────────────────────────────────────
 
-function NotesCell({ id, initial, onSaved }: { id: string; initial: string | null; onSaved: (v: string) => void }) {
+function NotesCell({
+    id,
+    initial,
+    onSaved,
+}: {
+    id: string;
+    initial: string | null;
+    onSaved: (v: string) => void;
+}) {
     const [editing, setEditing] = useState(false);
     const [value, setValue] = useState(initial ?? '');
     const ref = useRef<HTMLTextAreaElement>(null);
 
-    useEffect(() => { if (editing) ref.current?.focus(); }, [editing]);
+    useEffect(() => {
+        if (editing) ref.current?.focus();
+    }, [editing]);
 
     async function save() {
         setEditing(false);
@@ -221,7 +269,12 @@ function NotesCell({ id, initial, onSaved }: { id: string; initial: string | nul
                 value={value}
                 onChange={(e) => setValue(e.target.value)}
                 onBlur={() => void save()}
-                onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void save(); } }}
+                onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        void save();
+                    }
+                }}
                 rows={2}
                 className="w-full rounded border border-border bg-background p-1 text-xs resize-none focus:outline-none focus:ring-1 focus:ring-ring"
             />
@@ -236,6 +289,44 @@ function NotesCell({ id, initial, onSaved }: { id: string; initial: string | nul
         >
             {value || <span className="italic opacity-50">Add note</span>}
         </button>
+    );
+}
+
+// ── Formatting helpers ────────────────────────────────────────────────────────
+
+function fmtDateTime(value: string | null | undefined): string {
+    if (!value) return '—';
+    const d = new Date(value);
+    return Number.isNaN(d.getTime()) ? '—' : d.toLocaleString();
+}
+
+/** Compact "in 3 days" / "5 hours ago" relative label, or '' when unknown. */
+function fmtRelative(value: string | null | undefined): string {
+    if (!value) return '';
+    const t = new Date(value).getTime();
+    if (Number.isNaN(t)) return '';
+    const diffMs = t - Date.now();
+    const abs = Math.abs(diffMs);
+    const future = diffMs >= 0;
+    const mins = Math.round(abs / 60000);
+    const hours = Math.round(abs / 3_600_000);
+    const days = Math.round(abs / 86_400_000);
+    let label: string;
+    if (mins < 60) label = `${mins} min`;
+    else if (hours < 48) label = `${hours} hr`;
+    else label = `${days} day${days === 1 ? '' : 's'}`;
+    return future ? `in ${label}` : `${label} ago`;
+}
+
+/** One labelled detail row for the provider modal. */
+function DetailRow({ label, value }: { label: string; value: ReactNode }) {
+    return (
+        <div className="flex items-start justify-between gap-4 border-b border-border py-2.5 last:border-0">
+            <span className="shrink-0 text-sm text-muted-foreground">{label}</span>
+            <span className="break-words text-right text-sm font-medium text-foreground">
+                {value === '' || value == null ? '—' : value}
+            </span>
+        </div>
     );
 }
 
@@ -259,14 +350,42 @@ export default function AdminProvidersPage() {
     const [applicationsPage, setApplicationsPage] = useState(0);
     const [livePage, setLivePage] = useState(0);
     const [pageSize, setPageSize] = useState(25);
-    const [selectedApplication, setSelectedApplication] = useState<ProviderApplication | null>(null);
+    const [selectedApplication, setSelectedApplication] = useState<ProviderApplication | null>(
+        null,
+    );
     const [editApplication, setEditApplication] = useState<ProviderApplication | null>(null);
-    const [selectedLiveProvider, setSelectedLiveProvider] = useState<LiveProviderRow | null>(null);
+    const [selectedLiveProvider, setSelectedLiveProvider] = useState<LiveProviderRow | null>(
+        null,
+    );
     const [editLiveProvider, setEditLiveProvider] = useState<LiveProviderRow | null>(null);
     const [refreshingGoogle, setRefreshingGoogle] = useState(false);
     const [resendingConfirmation, setResendingConfirmation] = useState<string | null>(null);
     const [sendingInvitation, setSendingInvitation] = useState<string | null>(null);
     const [needsReviewOnly, setNeedsReviewOnly] = useState(false);
+    const [deletingProvider, setDeletingProvider] = useState(false);
+    const [addOpen, setAddOpen] = useState(false);
+    const [addPlaceId, setAddPlaceId] = useState('');
+    const [addingProvider, setAddingProvider] = useState(false);
+    const [applyOpen, setApplyOpen] = useState(false);
+    const [submittingApplication, setSubmittingApplication] = useState(false);
+    const emptyApplyForm = {
+        business_name: '',
+        contact_name: '',
+        email: '',
+        phone: '',
+        address: '',
+        trade: '',
+        trade_description: '',
+        areas: '',
+        website: '',
+        registration_number: '',
+        certifications: '',
+        highlights: '',
+        referral: '',
+        notes: '',
+        whatsapp_available: false,
+    };
+    const [applyForm, setApplyForm] = useState(emptyApplyForm);
 
     const load = useCallback(async () => {
         const [applicationsRes, liveProvidersRes] = await Promise.all([
@@ -283,7 +402,9 @@ export default function AdminProvidersPage() {
         setLiveLoading(false);
     }, []);
 
-    useEffect(() => { void load(); }, [load]);
+    useEffect(() => {
+        void load();
+    }, [load]);
 
     // Sync template into email body when template or target changes.
     useEffect(() => {
@@ -301,7 +422,10 @@ export default function AdminProvidersPage() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ id, status }),
         });
-        if (!res.ok) { toast.error('Failed to update status'); void load(); }
+        if (!res.ok) {
+            toast.error('Failed to update status');
+            void load();
+        }
     }
 
     async function handleSendEmail() {
@@ -328,8 +452,8 @@ export default function AdminProvidersPage() {
                 prev.map((e) =>
                     e.id === emailTarget.id
                         ? { ...e, sendgrid_sent_at: new Date().toISOString() }
-                        : e
-                )
+                        : e,
+                ),
             );
             toast.success(`Email sent to ${emailTarget.email}`);
             setEmailTarget(null);
@@ -361,14 +485,14 @@ export default function AdminProvidersPage() {
     const liveFiltered = liveProviders.filter((p) => {
         if (needsReviewOnly && !p.enrichment_review_required) return false;
         if (!q) return true;
-        return (
-            p.name.toLowerCase().includes(q) ||
-            (p.address ?? '').toLowerCase().includes(q)
-        );
+        return p.name.toLowerCase().includes(q) || (p.address ?? '').toLowerCase().includes(q);
     });
     const needsReviewCount = liveProviders.filter((p) => p.enrichment_review_required).length;
     const applicationsTotalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
-    const applicationsPageRows = filtered.slice(applicationsPage * pageSize, (applicationsPage + 1) * pageSize);
+    const applicationsPageRows = filtered.slice(
+        applicationsPage * pageSize,
+        (applicationsPage + 1) * pageSize,
+    );
     const liveTotalPages = Math.max(1, Math.ceil(liveFiltered.length / pageSize));
     const livePageRows = liveFiltered.slice(livePage * pageSize, (livePage + 1) * pageSize);
     async function saveApplicationEdit() {
@@ -377,33 +501,35 @@ export default function AdminProvidersPage() {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                id:                  editApplication.id,
-                contact_name:        editApplication.contact_name,
-                business_name:       editApplication.business_name,
-                trade:               editApplication.trade,
-                trade_description:   editApplication.trade_description,
-                phone:               editApplication.phone,
-                email:               editApplication.email,
-                address:             editApplication.address,
-                areas:               editApplication.areas,
-                founded_year:        editApplication.founded_year,
-                website:             editApplication.website,
-                whatsapp_available:  editApplication.whatsapp_available,
+                id: editApplication.id,
+                contact_name: editApplication.contact_name,
+                business_name: editApplication.business_name,
+                trade: editApplication.trade,
+                trade_description: editApplication.trade_description,
+                phone: editApplication.phone,
+                email: editApplication.email,
+                address: editApplication.address,
+                areas: editApplication.areas,
+                website: editApplication.website,
+                whatsapp_available: editApplication.whatsapp_available,
                 registration_number: editApplication.registration_number,
-                certifications:      editApplication.certifications,
-                highlights:          editApplication.highlights,
-                referral:            editApplication.referral,
-                team_size:           editApplication.team_size,
-                status:              editApplication.status,
-                notes:               editApplication.notes,
+                certifications: editApplication.certifications,
+                highlights: editApplication.highlights,
+                referral: editApplication.referral,
+                status: editApplication.status,
+                notes: editApplication.notes,
             }),
         });
         if (!res.ok) {
             toast.error('Failed to save provider application');
             return;
         }
-        setEntries((prev) => prev.map((r) => (r.id === editApplication.id ? { ...r, ...editApplication } : r)));
-        setSelectedApplication((prev) => (prev?.id === editApplication.id ? { ...prev, ...editApplication } : prev));
+        setEntries((prev) =>
+            prev.map((r) => (r.id === editApplication.id ? { ...r, ...editApplication } : r)),
+        );
+        setSelectedApplication((prev) =>
+            prev?.id === editApplication.id ? { ...prev, ...editApplication } : prev,
+        );
         setEditApplication(null);
         toast.success('Provider application updated');
     }
@@ -443,17 +569,26 @@ export default function AdminProvidersPage() {
         setResendingConfirmation(id);
         try {
             const res = await fetch('/api/admin/provider-applications/resend-confirmation', {
-                method:  'POST',
+                method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body:    JSON.stringify({ id }),
+                body: JSON.stringify({ id }),
             });
-            const d = await res.json().catch(() => ({})) as { error?: string };
-            if (!res.ok) { toast.error(d.error || 'Failed to resend'); return; }
+            const d = (await res.json().catch(() => ({}))) as { error?: string };
+            if (!res.ok) {
+                toast.error(d.error || 'Failed to resend');
+                return;
+            }
             setEntries((prev) =>
-                prev.map((e) => e.id === id
-                    ? { ...e, confirmation_email_status: 'sent', confirmation_email_error: null, confirmation_email_sent_at: new Date().toISOString() } as any
-                    : e
-                )
+                prev.map((e) =>
+                    e.id === id
+                        ? ({
+                              ...e,
+                              confirmation_email_status: 'sent',
+                              confirmation_email_error: null,
+                              confirmation_email_sent_at: new Date().toISOString(),
+                          } as any)
+                        : e,
+                ),
             );
             toast.success('Confirmation email resent');
         } finally {
@@ -465,20 +600,30 @@ export default function AdminProvidersPage() {
         setSendingInvitation(id);
         try {
             const res = await fetch('/api/admin/provider-applications/send-invitation', {
-                method:  'POST',
+                method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body:    JSON.stringify({ id }),
+                body: JSON.stringify({ id }),
             });
-            const d = await res.json().catch(() => ({})) as { error?: string };
-            if (!res.ok) { toast.error(d.error || 'Failed to send invitation'); return; }
+            const d = (await res.json().catch(() => ({}))) as { error?: string };
+            if (!res.ok) {
+                toast.error(d.error || 'Failed to send invitation');
+                return;
+            }
             setEntries((prev) =>
-                prev.map((e) => e.id === id
-                    ? { ...e, invitation_email_status: 'sent', invitation_email_error: null } as any
-                    : e
-                )
+                prev.map((e) =>
+                    e.id === id
+                        ? ({
+                              ...e,
+                              invitation_email_status: 'sent',
+                              invitation_email_error: null,
+                          } as any)
+                        : e,
+                ),
             );
             if (selectedApplication?.id === id) {
-                setSelectedApplication((prev) => prev ? { ...prev, invitation_email_status: 'sent' } : prev);
+                setSelectedApplication((prev) =>
+                    prev ? { ...prev, invitation_email_status: 'sent' } : prev,
+                );
             }
             toast.success('Invitation email sent');
         } finally {
@@ -518,12 +663,106 @@ export default function AdminProvidersPage() {
                 ...(typeof data.summary === 'string' ? { summary: data.summary } : {}),
             };
             setLiveProviders((prev) =>
-                prev.map((r) => (r.id === selectedLiveProvider.id ? { ...r, ...patch } : r))
+                prev.map((r) => (r.id === selectedLiveProvider.id ? { ...r, ...patch } : r)),
             );
-            setSelectedLiveProvider((prev) => (prev?.id === selectedLiveProvider.id ? { ...prev, ...patch } : prev));
+            setSelectedLiveProvider((prev) =>
+                prev?.id === selectedLiveProvider.id ? { ...prev, ...patch } : prev,
+            );
             toast.success('Rating and review count updated from Google');
         } finally {
             setRefreshingGoogle(false);
+        }
+    }
+
+    async function deleteProvider() {
+        if (!selectedLiveProvider) return;
+        if (
+            !window.confirm(
+                `Delete "${selectedLiveProvider.name}"? This permanently removes the provider and all of its reviews, images, contacts, and profile views. This cannot be undone.`,
+            )
+        )
+            return;
+        setDeletingProvider(true);
+        try {
+            const res = await fetch(
+                `/api/admin/providers/live?id=${encodeURIComponent(selectedLiveProvider.id)}`,
+                { method: 'DELETE' },
+            );
+            if (!res.ok) {
+                const data = (await res.json().catch(() => ({}))) as { error?: string };
+                toast.error(data.error || 'Could not delete provider');
+                return;
+            }
+            setLiveProviders((prev) => prev.filter((r) => r.id !== selectedLiveProvider.id));
+            setSelectedLiveProvider(null);
+            toast.success('Provider deleted');
+        } finally {
+            setDeletingProvider(false);
+        }
+    }
+
+    async function addProvider() {
+        const placeId = addPlaceId.trim();
+        if (!placeId) {
+            toast.error('Enter a Google place id');
+            return;
+        }
+        setAddingProvider(true);
+        try {
+            const res = await fetch('/api/admin/providers/live', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ place_id: placeId }),
+            });
+            const data = (await res.json().catch(() => ({}))) as {
+                error?: string;
+                name?: string | null;
+            };
+            if (!res.ok) {
+                toast.error(data.error || 'Could not add provider');
+                return;
+            }
+            toast.success(`Added ${data.name || 'provider'}`);
+            setAddPlaceId('');
+            setAddOpen(false);
+            await load();
+        } finally {
+            setAddingProvider(false);
+        }
+    }
+
+    async function submitApplication() {
+        const required: Array<[keyof typeof applyForm, string]> = [
+            ['business_name', 'Business name'],
+            ['contact_name', 'Contact name'],
+            ['email', 'Email'],
+            ['phone', 'Phone'],
+            ['address', 'Address'],
+            ['trade', 'Trade'],
+        ];
+        const firstMissing = required.find(([k]) => !String(applyForm[k]).trim());
+        if (firstMissing) {
+            toast.error(`${firstMissing[1]} is required`);
+            return;
+        }
+        setSubmittingApplication(true);
+        try {
+            const res = await fetch('/api/admin/providers', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(applyForm),
+            });
+            const data = (await res.json().catch(() => ({}))) as { error?: string };
+            if (!res.ok) {
+                toast.error(data.error || 'Could not create application');
+                return;
+            }
+            toast.success('Application created');
+            setApplyOpen(false);
+            setApplyForm(emptyApplyForm);
+            await load();
+        } finally {
+            setSubmittingApplication(false);
         }
     }
 
@@ -571,9 +810,29 @@ export default function AdminProvidersPage() {
     }
 
     return (
-        <div className="mx-auto w-full max-w-3xl px-4 pb-8 pt-4 sm:px-6 lg:px-8">
-            {/* Filter bar */}
-            <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center">
+        <div className="mx-auto w-full max-w-xl px-4 pb-8 pt-4 sm:px-6 lg:px-8">
+            {/* Add provider → search → status filters (stacked, customer-style) */}
+            <div className="mb-6 flex flex-col gap-3">
+                <div className="grid grid-cols-2 gap-2">
+                    <Button type="button" onClick={() => setAddOpen(true)}>
+                        Add Provider
+                    </Button>
+                    <Button type="button" variant="outline" onClick={() => setApplyOpen(true)}>
+                        Add Application
+                    </Button>
+                </div>
+                <div className="relative">
+                    <Search
+                        size={16}
+                        className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+                    />
+                    <Input
+                        placeholder="Search Providers"
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                        className="pl-9"
+                    />
+                </div>
                 <div className="flex flex-wrap gap-1">
                     {FILTER_STATUSES.map((s) => (
                         <button
@@ -590,17 +849,13 @@ export default function AdminProvidersPage() {
                         </button>
                     ))}
                 </div>
-                <Input
-                    placeholder="Search name, email, trade…"
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    className="h-8 max-w-xs text-sm"
-                />
             </div>
 
             <div className="mb-8 flex flex-col gap-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                    <h2 className="text-base font-semibold text-foreground">Live Providers (Shown To Users)</h2>
+                    <h2 className="text-base font-semibold text-foreground">
+                        Live Providers (Shown To Users)
+                    </h2>
                     <button
                         type="button"
                         onClick={() => {
@@ -625,22 +880,44 @@ export default function AdminProvidersPage() {
                     </button>
                 </div>
                 <AdminDataTable
-                    headers={['Provider', 'Address', 'Rating', 'Review', 'Outputs', 'Contacts', 'Profile Views', 'Avg Position']}
+                    headers={[
+                        'Provider',
+                        'Address',
+                        'Rating',
+                        'Review',
+                        'Outputs',
+                        'Contacts',
+                        'Profile Views',
+                        'Avg Position',
+                    ]}
                     loading={liveLoading}
                     emptyText="No live providers found."
                 >
                     {livePageRows.map((p) => (
-                        <TableRow key={p.id} className="cursor-pointer" onClick={() => setSelectedLiveProvider(p)}>
-                            <TableCell className="font-medium text-foreground">{p.name}</TableCell>
-                            <TableCell className="max-w-[260px] text-muted-foreground">{p.address ?? '—'}</TableCell>
+                        <TableRow
+                            key={p.id}
+                            className="cursor-pointer"
+                            onClick={() => setSelectedLiveProvider(p)}
+                        >
+                            <TableCell className="font-medium text-foreground">
+                                {p.name}
+                            </TableCell>
+                            <TableCell className="max-w-[260px] text-muted-foreground">
+                                {p.address ?? '—'}
+                            </TableCell>
                             <TableCell className="text-muted-foreground">
-                                {p.rating != null ? `${p.rating.toFixed(1)} (${p.rating_count})` : '—'}
+                                {p.rating != null
+                                    ? `${p.rating.toFixed(1)} (${p.rating_count})`
+                                    : '—'}
                             </TableCell>
                             <TableCell>
                                 {p.enrichment_review_required ? (
                                     <span
                                         className="inline-flex items-center rounded-full border border-amber-300 bg-amber-100 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-amber-800"
-                                        title={p.enrichment_last_failure ?? 'Enrichment failed leak gate'}
+                                        title={
+                                            p.enrichment_last_failure ??
+                                            'Enrichment failed leak gate'
+                                        }
                                     >
                                         Needs review
                                     </span>
@@ -648,11 +925,19 @@ export default function AdminProvidersPage() {
                                     <span className="text-xs text-muted-foreground">—</span>
                                 )}
                             </TableCell>
-                            <TableCell className="text-muted-foreground">{p.output_count ?? 'Not tracked yet'}</TableCell>
-                            <TableCell className="text-muted-foreground">{p.contact_count}</TableCell>
-                            <TableCell className="text-muted-foreground">{p.profile_view_count}</TableCell>
                             <TableCell className="text-muted-foreground">
-                                {p.avg_output_position != null ? p.avg_output_position.toFixed(2) : 'Not tracked yet'}
+                                {p.output_count ?? 'Not tracked yet'}
+                            </TableCell>
+                            <TableCell className="text-muted-foreground">
+                                {p.contact_count}
+                            </TableCell>
+                            <TableCell className="text-muted-foreground">
+                                {p.profile_view_count}
+                            </TableCell>
+                            <TableCell className="text-muted-foreground">
+                                {p.avg_output_position != null
+                                    ? p.avg_output_position.toFixed(2)
+                                    : 'Not tracked yet'}
                             </TableCell>
                         </TableRow>
                     ))}
@@ -660,7 +945,12 @@ export default function AdminProvidersPage() {
                 {liveTotalPages > 1 ? (
                     <div className="mt-3 flex items-center justify-end gap-2">
                         <div className="mr-2 flex items-center gap-2">
-                            <Label htmlFor="providers-page-size-live" className="text-xs text-muted-foreground">Rows</Label>
+                            <Label
+                                htmlFor="providers-page-size-live"
+                                className="text-xs text-muted-foreground"
+                            >
+                                Rows
+                            </Label>
                             <Input
                                 id="providers-page-size-live"
                                 type="number"
@@ -677,70 +967,138 @@ export default function AdminProvidersPage() {
                                 className="h-8 w-20 text-sm"
                             />
                         </div>
-                        <Button size="sm" variant="outline" disabled={livePage === 0} onClick={() => setLivePage((p) => p - 1)}>Previous</Button>
-                        <span className="text-xs text-muted-foreground">{livePage + 1} / {liveTotalPages}</span>
-                        <Button size="sm" variant="outline" disabled={livePage >= liveTotalPages - 1} onClick={() => setLivePage((p) => p + 1)}>Next</Button>
+                        <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={livePage === 0}
+                            onClick={() => setLivePage((p) => p - 1)}
+                        >
+                            Previous
+                        </Button>
+                        <span className="text-xs text-muted-foreground">
+                            {livePage + 1} / {liveTotalPages}
+                        </span>
+                        <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={livePage >= liveTotalPages - 1}
+                            onClick={() => setLivePage((p) => p + 1)}
+                        >
+                            Next
+                        </Button>
                     </div>
                 ) : null}
             </div>
 
             <div className="flex flex-col gap-3">
-                <h2 className="text-base font-semibold text-foreground">Provider Applications</h2>
+                <h2 className="text-base font-semibold text-foreground">
+                    Provider Applications
+                </h2>
                 <AdminDataTable
-                    headers={['Date', 'Contact', 'Business', 'Trade', 'Status', 'Confirm', 'Enrichment', 'Invite', 'Notes', 'Actions']}
+                    headers={[
+                        'Date',
+                        'Contact',
+                        'Business',
+                        'Trade',
+                        'Status',
+                        'Confirm',
+                        'Enrichment',
+                        'Invite',
+                        'Notes',
+                        'Actions',
+                    ]}
                     loading={loading}
                     emptyText="No entries found."
                     colSpan={10}
                 >
                     {applicationsPageRows.map((e) => {
                         const confirmStatus = e.confirmation_email_status;
-                        const enrichStatus  = e.enrichment_status;
-                        const inviteStatus  = e.invitation_email_status;
-                        const hasMatch      = !!e.matched_provider_id;
-                        const hasSummary    = !!(e.applicant_summary || e.gemini_summary);
+                        const enrichStatus = e.enrichment_status;
+                        const inviteStatus = e.invitation_email_status;
+                        const hasMatch = !!e.matched_provider_id;
+                        const hasSummary = !!(e.applicant_summary || e.gemini_summary);
                         return (
-                            <TableRow key={e.id} className="cursor-pointer" onClick={() => setSelectedApplication(e)}>
+                            <TableRow
+                                key={e.id}
+                                className="cursor-pointer"
+                                onClick={() => setSelectedApplication(e)}
+                            >
                                 <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
-                                    {new Date(e.created_at).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short' })}
+                                    {new Date(e.created_at).toLocaleDateString('en-ZA', {
+                                        day: 'numeric',
+                                        month: 'short',
+                                    })}
                                 </TableCell>
-                                <TableCell className="font-medium text-foreground">{e.contact_name}</TableCell>
-                                <TableCell className="text-muted-foreground">{e.business_name ?? '—'}</TableCell>
-                                <TableCell className="text-muted-foreground">{e.trade}</TableCell>
+                                <TableCell className="font-medium text-foreground">
+                                    {e.contact_name}
+                                </TableCell>
+                                <TableCell className="text-muted-foreground">
+                                    {e.business_name ?? '—'}
+                                </TableCell>
+                                <TableCell className="text-muted-foreground">
+                                    {e.trade}
+                                </TableCell>
                                 <TableCell>
-                                    <StatusBadge status={e.status} onChange={(s) => void updateStatus(e.id, s)} />
+                                    <StatusBadge
+                                        status={e.status}
+                                        onChange={(s) => void updateStatus(e.id, s)}
+                                    />
                                 </TableCell>
                                 {/* Confirmation email status */}
                                 <TableCell>
-                                    <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
-                                        confirmStatus === 'sent'   ? 'bg-green-100 text-green-700' :
-                                        confirmStatus === 'failed' ? 'bg-red-100 text-red-600' :
-                                        'bg-muted text-muted-foreground'
-                                    }`} title={e.confirmation_email_error ?? undefined}>
+                                    <span
+                                        className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
+                                            confirmStatus === 'sent'
+                                                ? 'bg-green-100 text-green-700'
+                                                : confirmStatus === 'failed'
+                                                  ? 'bg-red-100 text-red-600'
+                                                  : 'bg-muted text-muted-foreground'
+                                        }`}
+                                        title={e.confirmation_email_error ?? undefined}
+                                    >
                                         {confirmStatus ?? 'pending'}
                                     </span>
                                 </TableCell>
                                 {/* Enrichment status */}
                                 <TableCell>
-                                    <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
-                                        enrichStatus === 'complete'  ? 'bg-green-100 text-green-700' :
-                                        enrichStatus === 'no_match'  ? 'bg-amber-100 text-amber-700' :
-                                        enrichStatus === 'failed'    ? 'bg-red-100 text-red-600' :
-                                        enrichStatus === 'running'   ? 'bg-blue-100 text-blue-700' :
-                                        enrichStatus === 'queued'    ? 'bg-sky-100 text-sky-700' :
-                                        'bg-muted text-muted-foreground'
-                                    }`} title={e.enrichment_error ?? (hasMatch ? `Score: ${e.match_score?.toFixed(2)}` : undefined)}>
+                                    <span
+                                        className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
+                                            enrichStatus === 'complete'
+                                                ? 'bg-green-100 text-green-700'
+                                                : enrichStatus === 'no_match'
+                                                  ? 'bg-amber-100 text-amber-700'
+                                                  : enrichStatus === 'failed'
+                                                    ? 'bg-red-100 text-red-600'
+                                                    : enrichStatus === 'running'
+                                                      ? 'bg-blue-100 text-blue-700'
+                                                      : enrichStatus === 'queued'
+                                                        ? 'bg-sky-100 text-sky-700'
+                                                        : 'bg-muted text-muted-foreground'
+                                        }`}
+                                        title={
+                                            e.enrichment_error ??
+                                            (hasMatch
+                                                ? `Score: ${e.match_score?.toFixed(2)}`
+                                                : undefined)
+                                        }
+                                    >
                                         {enrichStatus ?? 'pending'}
                                         {hasMatch && enrichStatus === 'complete' ? ' ✓' : ''}
                                     </span>
                                 </TableCell>
                                 {/* Invitation email status */}
                                 <TableCell>
-                                    <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
-                                        inviteStatus === 'sent'   ? 'bg-green-100 text-green-700' :
-                                        inviteStatus === 'failed' ? 'bg-red-100 text-red-600' :
-                                        hasSummary                ? 'bg-muted/50 text-muted-foreground' :
-                                        'bg-muted text-muted-foreground'
-                                    }`}>
+                                    <span
+                                        className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
+                                            inviteStatus === 'sent'
+                                                ? 'bg-green-100 text-green-700'
+                                                : inviteStatus === 'failed'
+                                                  ? 'bg-red-100 text-red-600'
+                                                  : hasSummary
+                                                    ? 'bg-muted/50 text-muted-foreground'
+                                                    : 'bg-muted text-muted-foreground'
+                                        }`}
+                                    >
                                         {inviteStatus ?? (hasSummary ? 'ready' : 'waiting')}
                                     </span>
                                 </TableCell>
@@ -750,7 +1108,9 @@ export default function AdminProvidersPage() {
                                         initial={e.notes}
                                         onSaved={(v) =>
                                             setEntries((prev) =>
-                                                prev.map((x) => (x.id === e.id ? { ...x, notes: v } : x))
+                                                prev.map((x) =>
+                                                    x.id === e.id ? { ...x, notes: v } : x,
+                                                ),
                                             )
                                         }
                                     />
@@ -776,7 +1136,12 @@ export default function AdminProvidersPage() {
                 {applicationsTotalPages > 1 ? (
                     <div className="mt-3 flex items-center justify-end gap-2">
                         <div className="mr-2 flex items-center gap-2">
-                            <Label htmlFor="providers-page-size-applications" className="text-xs text-muted-foreground">Rows</Label>
+                            <Label
+                                htmlFor="providers-page-size-applications"
+                                className="text-xs text-muted-foreground"
+                            >
+                                Rows
+                            </Label>
                             <Input
                                 id="providers-page-size-applications"
                                 type="number"
@@ -793,9 +1158,25 @@ export default function AdminProvidersPage() {
                                 className="h-8 w-20 text-sm"
                             />
                         </div>
-                        <Button size="sm" variant="outline" disabled={applicationsPage === 0} onClick={() => setApplicationsPage((p) => p - 1)}>Previous</Button>
-                        <span className="text-xs text-muted-foreground">{applicationsPage + 1} / {applicationsTotalPages}</span>
-                        <Button size="sm" variant="outline" disabled={applicationsPage >= applicationsTotalPages - 1} onClick={() => setApplicationsPage((p) => p + 1)}>Next</Button>
+                        <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={applicationsPage === 0}
+                            onClick={() => setApplicationsPage((p) => p - 1)}
+                        >
+                            Previous
+                        </Button>
+                        <span className="text-xs text-muted-foreground">
+                            {applicationsPage + 1} / {applicationsTotalPages}
+                        </span>
+                        <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={applicationsPage >= applicationsTotalPages - 1}
+                            onClick={() => setApplicationsPage((p) => p + 1)}
+                        >
+                            Next
+                        </Button>
                     </div>
                 ) : null}
             </div>
@@ -813,9 +1194,13 @@ export default function AdminProvidersPage() {
                         <div className="flex flex-col gap-4">
                             {/* Recipient */}
                             <div className="rounded-lg border border-border/50 bg-muted/20 p-3 text-sm">
-                                <p className="font-medium text-foreground">{emailTarget.contact_name}</p>
+                                <p className="font-medium text-foreground">
+                                    {emailTarget.contact_name}
+                                </p>
                                 <p className="text-muted-foreground">{emailTarget.email}</p>
-                                <p className="text-xs text-muted-foreground">{emailTarget.trade}</p>
+                                <p className="text-xs text-muted-foreground">
+                                    {emailTarget.trade}
+                                </p>
                             </div>
 
                             {/* Template selector */}
@@ -823,7 +1208,9 @@ export default function AdminProvidersPage() {
                                 <Label>Template</Label>
                                 <Select
                                     value={emailTemplate}
-                                    onValueChange={(v) => setEmailTemplate(v as typeof emailTemplate)}
+                                    onValueChange={(v) =>
+                                        setEmailTemplate(v as typeof emailTemplate)
+                                    }
                                 >
                                     <SelectTrigger className="h-9 text-sm">
                                         <SelectValue />
@@ -879,12 +1266,16 @@ export default function AdminProvidersPage() {
                     )}
                 </DialogContent>
             </Dialog>
-            <Dialog open={!!selectedApplication} onOpenChange={(open) => !open && setSelectedApplication(null)}>
+            <Dialog
+                open={!!selectedApplication}
+                onOpenChange={(open) => !open && setSelectedApplication(null)}
+            >
                 <DialogContent className="max-w-2xl max-h-[92vh]">
                     <DialogHeader>
                         <DialogTitle>Provider Application</DialogTitle>
                         <DialogDescription>
-                            Review key application details, then update status or open the full edit form.
+                            Review key application details, then update status or open the full
+                            edit form.
                         </DialogDescription>
                     </DialogHeader>
                     {selectedApplication ? (
@@ -893,11 +1284,15 @@ export default function AdminProvidersPage() {
                             <div className="grid gap-3 rounded-md border bg-muted/20 p-3 sm:grid-cols-2">
                                 <div>
                                     <p className="text-xs text-muted-foreground">Contact</p>
-                                    <p className="text-sm font-medium">{selectedApplication.contact_name}</p>
+                                    <p className="text-sm font-medium">
+                                        {selectedApplication.contact_name}
+                                    </p>
                                 </div>
                                 <div>
                                     <p className="text-xs text-muted-foreground">Business</p>
-                                    <p className="text-sm">{selectedApplication.business_name || '—'}</p>
+                                    <p className="text-sm">
+                                        {selectedApplication.business_name || '—'}
+                                    </p>
                                 </div>
                                 <div>
                                     <p className="text-xs text-muted-foreground">Trade</p>
@@ -909,7 +1304,9 @@ export default function AdminProvidersPage() {
                                         status={selectedApplication.status}
                                         onChange={(s) => {
                                             void updateStatus(selectedApplication.id, s);
-                                            setSelectedApplication((prev) => (prev ? { ...prev, status: s } : prev));
+                                            setSelectedApplication((prev) =>
+                                                prev ? { ...prev, status: s } : prev,
+                                            );
                                         }}
                                     />
                                 </div>
@@ -918,7 +1315,12 @@ export default function AdminProvidersPage() {
                                     <button
                                         type="button"
                                         className="text-sm text-primary underline-offset-2 hover:underline"
-                                        onClick={() => void copyToClipboard(selectedApplication.email, 'Email')}
+                                        onClick={() =>
+                                            void copyToClipboard(
+                                                selectedApplication.email,
+                                                'Email',
+                                            )
+                                        }
                                     >
                                         {selectedApplication.email}
                                     </button>
@@ -928,19 +1330,28 @@ export default function AdminProvidersPage() {
                                     <button
                                         type="button"
                                         className="text-sm text-primary underline-offset-2 hover:underline"
-                                        onClick={() => void copyToClipboard(selectedApplication.phone, 'Phone')}
+                                        onClick={() =>
+                                            void copyToClipboard(
+                                                selectedApplication.phone,
+                                                'Phone',
+                                            )
+                                        }
                                     >
                                         {selectedApplication.phone}
                                     </button>
                                 </div>
                                 <div className="sm:col-span-2">
                                     <p className="text-xs text-muted-foreground">Areas</p>
-                                    <p className="text-sm">{selectedApplication.areas || '—'}</p>
+                                    <p className="text-sm">
+                                        {selectedApplication.areas || '—'}
+                                    </p>
                                 </div>
                                 {selectedApplication.notes ? (
                                     <div className="sm:col-span-2">
                                         <p className="text-xs text-muted-foreground">Notes</p>
-                                        <p className="text-sm whitespace-pre-wrap">{selectedApplication.notes}</p>
+                                        <p className="text-sm whitespace-pre-wrap">
+                                            {selectedApplication.notes}
+                                        </p>
                                     </div>
                                 ) : null}
                             </div>
@@ -950,31 +1361,48 @@ export default function AdminProvidersPage() {
                                 {/* Confirmation email row */}
                                 <div className="flex items-center justify-between gap-3 p-3">
                                     <div className="min-w-0">
-                                        <p className="text-xs font-medium text-foreground">Confirmation email</p>
+                                        <p className="text-xs font-medium text-foreground">
+                                            Confirmation email
+                                        </p>
                                         <p className="text-xs text-muted-foreground mt-0.5">
-                                            {selectedApplication.confirmation_email_status === 'sent'
+                                            {selectedApplication.confirmation_email_status ===
+                                            'sent'
                                                 ? 'Sent successfully'
-                                                : selectedApplication.confirmation_email_status === 'failed'
-                                                ? `Failed: ${selectedApplication.confirmation_email_error ?? 'unknown error'}`
-                                                : 'Not yet sent'}
+                                                : selectedApplication.confirmation_email_status ===
+                                                    'failed'
+                                                  ? `Failed: ${selectedApplication.confirmation_email_error ?? 'unknown error'}`
+                                                  : 'Not yet sent'}
                                         </p>
                                     </div>
                                     <div className="flex items-center gap-2 shrink-0">
-                                        <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
-                                            selectedApplication.confirmation_email_status === 'sent'   ? 'bg-green-100 text-green-700' :
-                                            selectedApplication.confirmation_email_status === 'failed' ? 'bg-red-100 text-red-600' :
-                                            'bg-muted text-muted-foreground'
-                                        }`}>
-                                            {selectedApplication.confirmation_email_status ?? 'pending'}
+                                        <span
+                                            className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
+                                                selectedApplication.confirmation_email_status ===
+                                                'sent'
+                                                    ? 'bg-green-100 text-green-700'
+                                                    : selectedApplication.confirmation_email_status ===
+                                                        'failed'
+                                                      ? 'bg-red-100 text-red-600'
+                                                      : 'bg-muted text-muted-foreground'
+                                            }`}
+                                        >
+                                            {selectedApplication.confirmation_email_status ??
+                                                'pending'}
                                         </span>
                                         <Button
                                             size="sm"
                                             variant="outline"
                                             className="h-7 text-xs"
-                                            disabled={resendingConfirmation === selectedApplication.id}
-                                            onClick={() => void resendConfirmation(selectedApplication.id)}
+                                            disabled={
+                                                resendingConfirmation === selectedApplication.id
+                                            }
+                                            onClick={() =>
+                                                void resendConfirmation(selectedApplication.id)
+                                            }
                                         >
-                                            {resendingConfirmation === selectedApplication.id ? 'Sending…' : 'Resend'}
+                                            {resendingConfirmation === selectedApplication.id
+                                                ? 'Sending…'
+                                                : 'Resend'}
                                         </Button>
                                     </div>
                                 </div>
@@ -983,29 +1411,49 @@ export default function AdminProvidersPage() {
                                 <div className="p-3 space-y-2">
                                     <div className="flex items-center justify-between gap-3">
                                         <div className="min-w-0">
-                                            <p className="text-xs font-medium text-foreground">Enrichment</p>
+                                            <p className="text-xs font-medium text-foreground">
+                                                Enrichment
+                                            </p>
                                             <p className="text-xs text-muted-foreground mt-0.5">
-                                                {selectedApplication.enrichment_status === 'complete' && selectedApplication.matched_provider_id
+                                                {selectedApplication.enrichment_status ===
+                                                    'complete' &&
+                                                selectedApplication.matched_provider_id
                                                     ? `Matched provider — score ${selectedApplication.match_score?.toFixed(2) ?? '?'}`
-                                                    : selectedApplication.enrichment_status === 'no_match'
-                                                    ? 'No provider match found — summary still generated'
-                                                    : selectedApplication.enrichment_status === 'failed'
-                                                    ? `Failed: ${selectedApplication.enrichment_error ?? 'unknown error'}`
-                                                    : selectedApplication.enrichment_status === 'running'
-                                                    ? 'Processing…'
-                                                    : selectedApplication.enrichment_status === 'queued'
-                                                    ? 'Queued — next cron run picks this up'
-                                                    : 'Pending — cron will queue on next run'}
+                                                    : selectedApplication.enrichment_status ===
+                                                        'no_match'
+                                                      ? 'No provider match found — summary still generated'
+                                                      : selectedApplication.enrichment_status ===
+                                                          'failed'
+                                                        ? `Failed: ${selectedApplication.enrichment_error ?? 'unknown error'}`
+                                                        : selectedApplication.enrichment_status ===
+                                                            'running'
+                                                          ? 'Processing…'
+                                                          : selectedApplication.enrichment_status ===
+                                                              'queued'
+                                                            ? 'Queued — next cron run picks this up'
+                                                            : 'Pending — cron will queue on next run'}
                                             </p>
                                         </div>
-                                        <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium shrink-0 ${
-                                            selectedApplication.enrichment_status === 'complete' ? 'bg-green-100 text-green-700' :
-                                            selectedApplication.enrichment_status === 'no_match' ? 'bg-amber-100 text-amber-700' :
-                                            selectedApplication.enrichment_status === 'failed'   ? 'bg-red-100 text-red-600' :
-                                            selectedApplication.enrichment_status === 'running'  ? 'bg-blue-100 text-blue-700' :
-                                            selectedApplication.enrichment_status === 'queued'   ? 'bg-sky-100 text-sky-700' :
-                                            'bg-muted text-muted-foreground'
-                                        }`}>
+                                        <span
+                                            className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium shrink-0 ${
+                                                selectedApplication.enrichment_status ===
+                                                'complete'
+                                                    ? 'bg-green-100 text-green-700'
+                                                    : selectedApplication.enrichment_status ===
+                                                        'no_match'
+                                                      ? 'bg-amber-100 text-amber-700'
+                                                      : selectedApplication.enrichment_status ===
+                                                          'failed'
+                                                        ? 'bg-red-100 text-red-600'
+                                                        : selectedApplication.enrichment_status ===
+                                                            'running'
+                                                          ? 'bg-blue-100 text-blue-700'
+                                                          : selectedApplication.enrichment_status ===
+                                                              'queued'
+                                                            ? 'bg-sky-100 text-sky-700'
+                                                            : 'bg-muted text-muted-foreground'
+                                            }`}
+                                        >
                                             {selectedApplication.enrichment_status ?? 'pending'}
                                         </span>
                                     </div>
@@ -1015,19 +1463,28 @@ export default function AdminProvidersPage() {
                                             <button
                                                 type="button"
                                                 className="font-sans text-primary underline-offset-2 hover:underline"
-                                                onClick={() => void copyToClipboard(selectedApplication.matched_provider_id!, 'Provider ID')}
+                                                onClick={() =>
+                                                    void copyToClipboard(
+                                                        selectedApplication.matched_provider_id!,
+                                                        'Provider ID',
+                                                    )
+                                                }
                                             >
                                                 {selectedApplication.matched_provider_id}
                                             </button>
                                         </p>
                                     ) : null}
-                                    {(selectedApplication.applicant_summary ?? selectedApplication.gemini_summary) ? (
+                                    {(selectedApplication.applicant_summary ??
+                                    selectedApplication.gemini_summary) ? (
                                         <div className="rounded border border-border/50 bg-muted/20 p-2">
                                             <p className="text-[11px] uppercase tracking-wide text-muted-foreground mb-1">
-                                                {selectedApplication.applicant_summary ? 'Applicant-edited summary' : 'Gemini-generated summary'}
+                                                {selectedApplication.applicant_summary
+                                                    ? 'Applicant-edited summary'
+                                                    : 'Gemini-generated summary'}
                                             </p>
                                             <p className="text-xs text-foreground leading-relaxed line-clamp-5">
-                                                {selectedApplication.applicant_summary ?? selectedApplication.gemini_summary}
+                                                {selectedApplication.applicant_summary ??
+                                                    selectedApplication.gemini_summary}
                                             </p>
                                         </div>
                                     ) : null}
@@ -1036,25 +1493,44 @@ export default function AdminProvidersPage() {
                                 {/* Invitation row */}
                                 <div className="flex items-start justify-between gap-3 p-3">
                                     <div className="min-w-0">
-                                        <p className="text-xs font-medium text-foreground">Invitation email</p>
+                                        <p className="text-xs font-medium text-foreground">
+                                            Invitation email
+                                        </p>
                                         <p className="text-xs text-muted-foreground mt-0.5">
-                                            {selectedApplication.invitation_email_status === 'sent'
+                                            {selectedApplication.invitation_email_status ===
+                                            'sent'
                                                 ? 'Sent — applicant has a profile edit link'
-                                                : selectedApplication.invitation_email_status === 'failed'
-                                                ? `Failed: ${selectedApplication.invitation_email_error ?? 'unknown error'}`
-                                                : !(selectedApplication.applicant_summary ?? selectedApplication.gemini_summary)
-                                                ? 'Waiting for enrichment summary before sending'
-                                                : 'Ready to send'}
+                                                : selectedApplication.invitation_email_status ===
+                                                    'failed'
+                                                  ? `Failed: ${selectedApplication.invitation_email_error ?? 'unknown error'}`
+                                                  : !(
+                                                          selectedApplication.applicant_summary ??
+                                                          selectedApplication.gemini_summary
+                                                      )
+                                                    ? 'Waiting for enrichment summary before sending'
+                                                    : 'Ready to send'}
                                         </p>
                                     </div>
                                     <div className="flex items-center gap-2 shrink-0">
-                                        <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
-                                            selectedApplication.invitation_email_status === 'sent'   ? 'bg-green-100 text-green-700' :
-                                            selectedApplication.invitation_email_status === 'failed' ? 'bg-red-100 text-red-600' :
-                                            (selectedApplication.applicant_summary ?? selectedApplication.gemini_summary) ? 'bg-muted/50 text-muted-foreground' :
-                                            'bg-muted text-muted-foreground'
-                                        }`}>
-                                            {selectedApplication.invitation_email_status ?? ((selectedApplication.applicant_summary ?? selectedApplication.gemini_summary) ? 'ready' : 'waiting')}
+                                        <span
+                                            className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
+                                                selectedApplication.invitation_email_status ===
+                                                'sent'
+                                                    ? 'bg-green-100 text-green-700'
+                                                    : selectedApplication.invitation_email_status ===
+                                                        'failed'
+                                                      ? 'bg-red-100 text-red-600'
+                                                      : (selectedApplication.applicant_summary ??
+                                                          selectedApplication.gemini_summary)
+                                                        ? 'bg-muted/50 text-muted-foreground'
+                                                        : 'bg-muted text-muted-foreground'
+                                            }`}
+                                        >
+                                            {selectedApplication.invitation_email_status ??
+                                                ((selectedApplication.applicant_summary ??
+                                                selectedApplication.gemini_summary)
+                                                    ? 'ready'
+                                                    : 'waiting')}
                                         </span>
                                         <Button
                                             size="sm"
@@ -1062,12 +1538,21 @@ export default function AdminProvidersPage() {
                                             className="h-7 text-xs"
                                             disabled={
                                                 sendingInvitation === selectedApplication.id ||
-                                                !(selectedApplication.applicant_summary ?? selectedApplication.gemini_summary)
+                                                !(
+                                                    selectedApplication.applicant_summary ??
+                                                    selectedApplication.gemini_summary
+                                                )
                                             }
-                                            onClick={() => void sendInvitation(selectedApplication.id)}
+                                            onClick={() =>
+                                                void sendInvitation(selectedApplication.id)
+                                            }
                                         >
-                                            {sendingInvitation === selectedApplication.id ? 'Sending…' :
-                                             selectedApplication.invitation_email_status === 'sent' ? 'Resend' : 'Send Invitation'}
+                                            {sendingInvitation === selectedApplication.id
+                                                ? 'Sending…'
+                                                : selectedApplication.invitation_email_status ===
+                                                    'sent'
+                                                  ? 'Resend'
+                                                  : 'Send Invitation'}
                                         </Button>
                                     </div>
                                 </div>
@@ -1084,145 +1569,340 @@ export default function AdminProvidersPage() {
                                 >
                                     Send Custom Email
                                 </Button>
-                                <Button variant="secondary" onClick={() => setEditApplication({ ...selectedApplication })}>Edit Details</Button>
+                                <Button
+                                    variant="secondary"
+                                    onClick={() =>
+                                        setEditApplication({ ...selectedApplication })
+                                    }
+                                >
+                                    Edit Details
+                                </Button>
                                 <Button
                                     variant="outline"
-                                    onClick={() => window.open(`mailto:${selectedApplication.email}`, '_blank')}
+                                    onClick={() =>
+                                        window.open(
+                                            `mailto:${selectedApplication.email}`,
+                                            '_blank',
+                                        )
+                                    }
                                 >
                                     Open In Mail
                                 </Button>
-                                <Button variant="outline" onClick={() => setSelectedApplication(null)}>Close</Button>
+                                <Button
+                                    variant="outline"
+                                    onClick={() => setSelectedApplication(null)}
+                                >
+                                    Close
+                                </Button>
                             </div>
                         </div>
                     ) : null}
                 </DialogContent>
             </Dialog>
-            <Dialog open={!!editApplication} onOpenChange={(open) => !open && setEditApplication(null)}>
+            <Dialog
+                open={!!editApplication}
+                onOpenChange={(open) => !open && setEditApplication(null)}
+            >
                 <DialogContent className="max-w-2xl max-h-[92vh]">
                     <DialogHeader>
                         <DialogTitle>Edit Provider Application</DialogTitle>
                         <DialogDescription>
-                            Full application details — contact info, trade, service area, and notes.
+                            Full application details — contact info, trade, service area, and
+                            notes.
                         </DialogDescription>
                     </DialogHeader>
                     {editApplication ? (
                         <div className="max-h-[72vh] overflow-y-auto space-y-4 pr-1">
-
                             {/* Contact */}
                             <div>
-                                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Contact</p>
+                                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                                    Contact
+                                </p>
                                 <div className="grid gap-3 sm:grid-cols-2">
                                     <div>
                                         <Label className="text-xs">Contact name</Label>
-                                        <Input className="mt-1" value={editApplication.contact_name} onChange={(e) => setEditApplication({ ...editApplication, contact_name: e.target.value })} placeholder="Contact name" />
+                                        <Input
+                                            className="mt-1"
+                                            value={editApplication.contact_name}
+                                            onChange={(e) =>
+                                                setEditApplication({
+                                                    ...editApplication,
+                                                    contact_name: e.target.value,
+                                                })
+                                            }
+                                            placeholder="Contact name"
+                                        />
                                     </div>
                                     <div>
                                         <Label className="text-xs">Business name</Label>
-                                        <Input className="mt-1" value={editApplication.business_name ?? ''} onChange={(e) => setEditApplication({ ...editApplication, business_name: e.target.value })} placeholder="Business name" />
+                                        <Input
+                                            className="mt-1"
+                                            value={editApplication.business_name ?? ''}
+                                            onChange={(e) =>
+                                                setEditApplication({
+                                                    ...editApplication,
+                                                    business_name: e.target.value,
+                                                })
+                                            }
+                                            placeholder="Business name"
+                                        />
                                     </div>
                                     <div>
                                         <Label className="text-xs">Phone</Label>
-                                        <Input className="mt-1" value={editApplication.phone} onChange={(e) => setEditApplication({ ...editApplication, phone: e.target.value })} placeholder="Phone" />
+                                        <Input
+                                            className="mt-1"
+                                            value={editApplication.phone}
+                                            onChange={(e) =>
+                                                setEditApplication({
+                                                    ...editApplication,
+                                                    phone: e.target.value,
+                                                })
+                                            }
+                                            placeholder="Phone"
+                                        />
                                     </div>
                                     <div>
                                         <Label className="text-xs">Email</Label>
-                                        <Input className="mt-1" value={editApplication.email} onChange={(e) => setEditApplication({ ...editApplication, email: e.target.value })} placeholder="Email" />
+                                        <Input
+                                            className="mt-1"
+                                            value={editApplication.email}
+                                            onChange={(e) =>
+                                                setEditApplication({
+                                                    ...editApplication,
+                                                    email: e.target.value,
+                                                })
+                                            }
+                                            placeholder="Email"
+                                        />
                                     </div>
                                     <div>
                                         <Label className="text-xs">Website</Label>
-                                        <Input className="mt-1" value={editApplication.website ?? ''} onChange={(e) => setEditApplication({ ...editApplication, website: e.target.value || null })} placeholder="https://" />
+                                        <Input
+                                            className="mt-1"
+                                            value={editApplication.website ?? ''}
+                                            onChange={(e) =>
+                                                setEditApplication({
+                                                    ...editApplication,
+                                                    website: e.target.value || null,
+                                                })
+                                            }
+                                            placeholder="https://"
+                                        />
                                     </div>
                                     <div className="flex items-center gap-2 pt-5">
                                         <input
                                             type="checkbox"
                                             id="edit-whatsapp"
-                                            checked={editApplication.whatsapp_available ?? false}
-                                            onChange={(e) => setEditApplication({ ...editApplication, whatsapp_available: e.target.checked })}
+                                            checked={
+                                                editApplication.whatsapp_available ?? false
+                                            }
+                                            onChange={(e) =>
+                                                setEditApplication({
+                                                    ...editApplication,
+                                                    whatsapp_available: e.target.checked,
+                                                })
+                                            }
                                             className="h-4 w-4 rounded border-border"
                                         />
-                                        <Label htmlFor="edit-whatsapp" className="text-xs cursor-pointer">WhatsApp available</Label>
+                                        <Label
+                                            htmlFor="edit-whatsapp"
+                                            className="text-xs cursor-pointer"
+                                        >
+                                            WhatsApp available
+                                        </Label>
                                     </div>
                                 </div>
                             </div>
 
                             {/* Trade */}
                             <div>
-                                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Trade</p>
+                                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                                    Trade
+                                </p>
                                 <div className="grid gap-3 sm:grid-cols-2">
                                     <div>
                                         <Label className="text-xs">Trade</Label>
-                                        <Input className="mt-1" value={editApplication.trade} onChange={(e) => setEditApplication({ ...editApplication, trade: e.target.value })} placeholder="e.g. Plumbing" />
-                                    </div>
-                                    <div>
-                                        <Label className="text-xs">Founded year</Label>
-                                        <Input className="mt-1" type="number" value={editApplication.founded_year ?? ''} onChange={(e) => setEditApplication({ ...editApplication, founded_year: e.target.value ? Number(e.target.value) : null })} placeholder="e.g. 2015" />
-                                    </div>
-                                    <div>
-                                        <Label className="text-xs">Team size</Label>
-                                        <Input className="mt-1" type="number" value={editApplication.team_size ?? ''} onChange={(e) => setEditApplication({ ...editApplication, team_size: e.target.value ? Number(e.target.value) : null })} placeholder="e.g. 5" />
+                                        <Input
+                                            className="mt-1"
+                                            value={editApplication.trade}
+                                            onChange={(e) =>
+                                                setEditApplication({
+                                                    ...editApplication,
+                                                    trade: e.target.value,
+                                                })
+                                            }
+                                            placeholder="e.g. Plumbing"
+                                        />
                                     </div>
                                     <div>
                                         <Label className="text-xs">Registration number</Label>
-                                        <Input className="mt-1" value={editApplication.registration_number ?? ''} onChange={(e) => setEditApplication({ ...editApplication, registration_number: e.target.value || null })} placeholder="Reg / CIPC number" />
+                                        <Input
+                                            className="mt-1"
+                                            value={editApplication.registration_number ?? ''}
+                                            onChange={(e) =>
+                                                setEditApplication({
+                                                    ...editApplication,
+                                                    registration_number: e.target.value || null,
+                                                })
+                                            }
+                                            placeholder="Reg / CIPC number"
+                                        />
                                     </div>
                                 </div>
                                 <div className="mt-3">
-                                    <Label className="text-xs">Specialisations / trade description</Label>
-                                    <Textarea className="mt-1" rows={3} value={editApplication.trade_description ?? ''} onChange={(e) => setEditApplication({ ...editApplication, trade_description: e.target.value || null })} placeholder="What they specialise in..." />
+                                    <Label className="text-xs">
+                                        Specialisations / trade description
+                                    </Label>
+                                    <Textarea
+                                        className="mt-1"
+                                        rows={3}
+                                        value={editApplication.trade_description ?? ''}
+                                        onChange={(e) =>
+                                            setEditApplication({
+                                                ...editApplication,
+                                                trade_description: e.target.value || null,
+                                            })
+                                        }
+                                        placeholder="What they specialise in..."
+                                    />
                                 </div>
                                 <div className="mt-3">
                                     <Label className="text-xs">Certifications</Label>
-                                    <Textarea className="mt-1" rows={2} value={editApplication.certifications ?? ''} onChange={(e) => setEditApplication({ ...editApplication, certifications: e.target.value || null })} placeholder="Any relevant certifications..." />
+                                    <Textarea
+                                        className="mt-1"
+                                        rows={2}
+                                        value={editApplication.certifications ?? ''}
+                                        onChange={(e) =>
+                                            setEditApplication({
+                                                ...editApplication,
+                                                certifications: e.target.value || null,
+                                            })
+                                        }
+                                        placeholder="Any relevant certifications..."
+                                    />
                                 </div>
                                 <div className="mt-3">
                                     <Label className="text-xs">Highlights</Label>
-                                    <Textarea className="mt-1" rows={2} value={editApplication.highlights ?? ''} onChange={(e) => setEditApplication({ ...editApplication, highlights: e.target.value || null })} placeholder="Key highlights..." />
+                                    <Textarea
+                                        className="mt-1"
+                                        rows={2}
+                                        value={editApplication.highlights ?? ''}
+                                        onChange={(e) =>
+                                            setEditApplication({
+                                                ...editApplication,
+                                                highlights: e.target.value || null,
+                                            })
+                                        }
+                                        placeholder="Key highlights..."
+                                    />
                                 </div>
                             </div>
 
                             {/* Location */}
                             <div>
-                                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Location</p>
+                                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                                    Location
+                                </p>
                                 <div>
                                     <Label className="text-xs">Business address</Label>
-                                    <Input className="mt-1" value={editApplication.address ?? ''} onChange={(e) => setEditApplication({ ...editApplication, address: e.target.value || null })} placeholder="Street address" />
+                                    <Input
+                                        className="mt-1"
+                                        value={editApplication.address ?? ''}
+                                        onChange={(e) =>
+                                            setEditApplication({
+                                                ...editApplication,
+                                                address: e.target.value || null,
+                                            })
+                                        }
+                                        placeholder="Street address"
+                                    />
                                 </div>
                                 <div className="mt-3">
                                     <Label className="text-xs">Service areas</Label>
-                                    <Textarea className="mt-1" rows={2} value={editApplication.areas} onChange={(e) => setEditApplication({ ...editApplication, areas: e.target.value })} />
+                                    <Textarea
+                                        className="mt-1"
+                                        rows={2}
+                                        value={editApplication.areas}
+                                        onChange={(e) =>
+                                            setEditApplication({
+                                                ...editApplication,
+                                                areas: e.target.value,
+                                            })
+                                        }
+                                    />
                                 </div>
                             </div>
 
                             {/* Admin */}
                             <div>
-                                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Admin</p>
+                                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                                    Admin
+                                </p>
                                 <div className="grid gap-3 sm:grid-cols-2">
                                     <div>
                                         <Label className="text-xs">Status</Label>
                                         <div className="mt-1">
-                                            <StatusBadge status={editApplication.status} onChange={(s) => setEditApplication({ ...editApplication, status: s })} />
+                                            <StatusBadge
+                                                status={editApplication.status}
+                                                onChange={(s) =>
+                                                    setEditApplication({
+                                                        ...editApplication,
+                                                        status: s,
+                                                    })
+                                                }
+                                            />
                                         </div>
                                     </div>
                                     <div>
                                         <Label className="text-xs">Referral source</Label>
-                                        <Input className="mt-1" value={editApplication.referral ?? ''} onChange={(e) => setEditApplication({ ...editApplication, referral: e.target.value || null })} placeholder="How they heard about us" />
+                                        <Input
+                                            className="mt-1"
+                                            value={editApplication.referral ?? ''}
+                                            onChange={(e) =>
+                                                setEditApplication({
+                                                    ...editApplication,
+                                                    referral: e.target.value || null,
+                                                })
+                                            }
+                                            placeholder="How they heard about us"
+                                        />
                                     </div>
                                 </div>
                                 <div className="mt-3">
                                     <Label className="text-xs">Internal notes</Label>
-                                    <Textarea className="mt-1" rows={3} value={editApplication.notes ?? ''} onChange={(e) => setEditApplication({ ...editApplication, notes: e.target.value || null })} />
+                                    <Textarea
+                                        className="mt-1"
+                                        rows={3}
+                                        value={editApplication.notes ?? ''}
+                                        onChange={(e) =>
+                                            setEditApplication({
+                                                ...editApplication,
+                                                notes: e.target.value || null,
+                                            })
+                                        }
+                                    />
                                 </div>
                             </div>
 
                             <div className="flex gap-2 pt-1 sticky bottom-0 bg-background pb-1">
-                                <Button onClick={() => void saveApplicationEdit()}>Save changes</Button>
-                                <Button variant="outline" onClick={() => setEditApplication(null)}>Cancel</Button>
+                                <Button onClick={() => void saveApplicationEdit()}>
+                                    Save changes
+                                </Button>
+                                <Button
+                                    variant="outline"
+                                    onClick={() => setEditApplication(null)}
+                                >
+                                    Cancel
+                                </Button>
                             </div>
                         </div>
                     ) : null}
                 </DialogContent>
             </Dialog>
-            <Dialog open={!!selectedLiveProvider} onOpenChange={(open) => !open && setSelectedLiveProvider(null)}>
+            <Dialog
+                open={!!selectedLiveProvider}
+                onOpenChange={(open) => !open && setSelectedLiveProvider(null)}
+            >
                 <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
                     <DialogHeader>
                         <DialogTitle>Live Provider</DialogTitle>
@@ -1233,8 +1913,12 @@ export default function AdminProvidersPage() {
                     {selectedLiveProvider ? (
                         <div className="space-y-4">
                             <div className="rounded-md border bg-muted/20 p-3">
-                                <p className="text-sm font-medium">{selectedLiveProvider.name}</p>
-                                <p className="text-sm text-muted-foreground">{selectedLiveProvider.address ?? '—'}</p>
+                                <p className="text-sm font-medium">
+                                    {selectedLiveProvider.name}
+                                </p>
+                                <p className="text-sm text-muted-foreground">
+                                    {selectedLiveProvider.address ?? '—'}
+                                </p>
                                 <p className="mt-2 text-xs text-muted-foreground">
                                     Google rating:{' '}
                                     {selectedLiveProvider.rating != null
@@ -1244,22 +1928,208 @@ export default function AdminProvidersPage() {
                                 <div className="mt-2 grid grid-cols-3 gap-2 text-xs">
                                     <div className="rounded border bg-background p-2">
                                         <p className="text-muted-foreground">Outputs</p>
-                                        <p className="font-medium text-foreground">{selectedLiveProvider.output_count ?? '—'}</p>
+                                        <p className="font-medium text-foreground">
+                                            {selectedLiveProvider.output_count ?? '—'}
+                                        </p>
                                     </div>
                                     <div className="rounded border bg-background p-2">
                                         <p className="text-muted-foreground">Contacts</p>
-                                        <p className="font-medium text-foreground">{selectedLiveProvider.contact_count}</p>
+                                        <p className="font-medium text-foreground">
+                                            {selectedLiveProvider.contact_count}
+                                        </p>
                                     </div>
                                     <div className="rounded border bg-background p-2">
                                         <p className="text-muted-foreground">Profile Views</p>
-                                        <p className="font-medium text-foreground">{selectedLiveProvider.profile_view_count}</p>
+                                        <p className="font-medium text-foreground">
+                                            {selectedLiveProvider.profile_view_count}
+                                        </p>
                                     </div>
                                 </div>
                             </div>
+                            {/* Enrichment lifecycle */}
+                            <div>
+                                <p className="mb-1 text-sm font-semibold text-foreground">
+                                    Enrichment
+                                </p>
+                                <DetailRow
+                                    label="First enriched"
+                                    value={fmtDateTime(
+                                        selectedLiveProvider.enrichment_first_at,
+                                    )}
+                                />
+                                <DetailRow
+                                    label="Last enriched"
+                                    value={
+                                        selectedLiveProvider.enrichment_last_at
+                                            ? `${fmtDateTime(selectedLiveProvider.enrichment_last_at)} (${fmtRelative(selectedLiveProvider.enrichment_last_at)})`
+                                            : '—'
+                                    }
+                                />
+                                <DetailRow
+                                    label="Last scraped"
+                                    value={fmtDateTime(
+                                        selectedLiveProvider.enrichment_last_scraped_at,
+                                    )}
+                                />
+                                <DetailRow
+                                    label="Next enrichment"
+                                    value={
+                                        selectedLiveProvider.enrichment_next_at ? (
+                                            <>
+                                                {fmtDateTime(
+                                                    selectedLiveProvider.enrichment_next_at,
+                                                )}{' '}
+                                                <span className="text-muted-foreground">
+                                                    (
+                                                    {fmtRelative(
+                                                        selectedLiveProvider.enrichment_next_at,
+                                                    )}
+                                                    {selectedLiveProvider.enrichment_next_scheduled
+                                                        ? ', scheduled'
+                                                        : ', on view'}
+                                                    )
+                                                </span>
+                                            </>
+                                        ) : (
+                                            'On demand'
+                                        )
+                                    }
+                                />
+                                <DetailRow
+                                    label="Quality"
+                                    value={selectedLiveProvider.enrichment_quality ?? '—'}
+                                />
+                                <DetailRow
+                                    label="Scrape status"
+                                    value={selectedLiveProvider.enrichment_scrape_status ?? '—'}
+                                />
+                                <p className="mt-2 text-xs leading-snug text-muted-foreground">
+                                    {selectedLiveProvider.enrichment_next_basis}
+                                </p>
+                            </div>
+
+                            {/* All provider information */}
+                            <div>
+                                <p className="mb-1 text-sm font-semibold text-foreground">
+                                    All information
+                                </p>
+                                <DetailRow
+                                    label="Provider ID"
+                                    value={selectedLiveProvider.id}
+                                />
+                                <DetailRow
+                                    label="Phone"
+                                    value={selectedLiveProvider.phone ?? '—'}
+                                />
+                                <DetailRow
+                                    label="Website"
+                                    value={
+                                        selectedLiveProvider.website ? (
+                                            <a
+                                                href={selectedLiveProvider.website}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="text-primary underline underline-offset-2"
+                                            >
+                                                {selectedLiveProvider.website}
+                                            </a>
+                                        ) : (
+                                            '—'
+                                        )
+                                    }
+                                />
+                                <DetailRow
+                                    label="Google rating"
+                                    value={
+                                        selectedLiveProvider.rating != null
+                                            ? `${selectedLiveProvider.rating.toFixed(1)} (${selectedLiveProvider.rating_count})`
+                                            : '—'
+                                    }
+                                />
+                                <DetailRow
+                                    label="Mendr rating"
+                                    value={
+                                        selectedLiveProvider.mendr_rating != null
+                                            ? `${selectedLiveProvider.mendr_rating.toFixed(1)} (${selectedLiveProvider.mendr_rating_count})`
+                                            : '—'
+                                    }
+                                />
+                                <DetailRow
+                                    label="Key person"
+                                    value={selectedLiveProvider.key_person || '—'}
+                                />
+                                <DetailRow
+                                    label="Specialisations"
+                                    value={
+                                        selectedLiveProvider.specialisations.join(', ') || '—'
+                                    }
+                                />
+                                <DetailRow
+                                    label="Service areas"
+                                    value={selectedLiveProvider.service_areas.join(', ') || '—'}
+                                />
+                                <DetailRow
+                                    label="Certifications"
+                                    value={
+                                        selectedLiveProvider.certifications.join(', ') || '—'
+                                    }
+                                />
+                                <DetailRow
+                                    label="Highlights"
+                                    value={selectedLiveProvider.highlights.join(', ') || '—'}
+                                />
+                                <DetailRow
+                                    label="Active"
+                                    value={selectedLiveProvider.is_active ? 'Yes' : 'No'}
+                                />
+                                <DetailRow
+                                    label="Verified"
+                                    value={selectedLiveProvider.is_verified ? 'Yes' : 'No'}
+                                />
+                                <DetailRow
+                                    label="Created"
+                                    value={fmtDateTime(selectedLiveProvider.created_at)}
+                                />
+                                <DetailRow
+                                    label="Updated"
+                                    value={fmtDateTime(selectedLiveProvider.updated_at)}
+                                />
+                                <DetailRow
+                                    label="Last matched"
+                                    value={fmtDateTime(selectedLiveProvider.last_matched_at)}
+                                />
+                                <DetailRow
+                                    label="Reviews synced"
+                                    value={fmtDateTime(selectedLiveProvider.reviews_synced_at)}
+                                />
+                                {selectedLiveProvider.summary ? (
+                                    <div className="mt-2">
+                                        <p className="text-xs text-muted-foreground">
+                                            Review summary
+                                        </p>
+                                        <p className="mt-0.5 text-xs text-foreground">
+                                            {selectedLiveProvider.summary}
+                                        </p>
+                                    </div>
+                                ) : null}
+                                {selectedLiveProvider.about ? (
+                                    <div className="mt-2">
+                                        <p className="text-xs text-muted-foreground">About</p>
+                                        <p className="mt-0.5 text-xs text-foreground">
+                                            {selectedLiveProvider.about}
+                                        </p>
+                                    </div>
+                                ) : null}
+                            </div>
+
                             {selectedLiveProvider.google_place_id ? (
                                 <div className="rounded border bg-muted/20 p-2">
-                                    <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Google Place ID</p>
-                                    <p className="text-xs break-all font-sans">{selectedLiveProvider.google_place_id}</p>
+                                    <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                                        Google Place ID
+                                    </p>
+                                    <p className="text-xs break-all font-sans">
+                                        {selectedLiveProvider.google_place_id}
+                                    </p>
                                 </div>
                             ) : null}
                             {selectedLiveProvider.enrichment_review_required ? (
@@ -1268,8 +2138,10 @@ export default function AdminProvidersPage() {
                                         Enrichment needs review
                                     </p>
                                     <p className="mt-1 text-xs text-amber-900">
-                                        The AI enrichment failed the leak gate after retries. Some fields were dropped before being
-                                        saved. Re-queue enrichment after improving the source data, or edit the fields manually.
+                                        The AI enrichment failed the leak gate after retries.
+                                        Some fields were dropped before being saved. Re-queue
+                                        enrichment after improving the source data, or edit the
+                                        fields manually.
                                     </p>
                                     {selectedLiveProvider.enrichment_last_failure ? (
                                         <p className="mt-2 text-[11px] text-amber-900/80">
@@ -1280,7 +2152,9 @@ export default function AdminProvidersPage() {
                                     {selectedLiveProvider.enrichment_last_failure_at ? (
                                         <p className="text-[11px] text-amber-900/80">
                                             <span className="font-sans">When:</span>{' '}
-                                            {new Date(selectedLiveProvider.enrichment_last_failure_at).toLocaleString()}
+                                            {new Date(
+                                                selectedLiveProvider.enrichment_last_failure_at,
+                                            ).toLocaleString()}
                                         </p>
                                     ) : null}
                                 </div>
@@ -1288,16 +2162,35 @@ export default function AdminProvidersPage() {
                             <div className="flex flex-wrap gap-2">
                                 <Button
                                     type="button"
+                                    onClick={() =>
+                                        window.open(
+                                            `${getAppOrigin()}/contractors/${selectedLiveProvider.id}`,
+                                            '_blank',
+                                            'noopener,noreferrer',
+                                        )
+                                    }
+                                >
+                                    View full profile in app
+                                </Button>
+                                <Button
+                                    type="button"
                                     variant="outline"
-                                    disabled={refreshingGoogle || !selectedLiveProvider.google_place_id}
+                                    disabled={
+                                        refreshingGoogle ||
+                                        !selectedLiveProvider.google_place_id
+                                    }
                                     onClick={() => void refreshRatingsFromGoogle()}
                                 >
-                                    {refreshingGoogle ? 'Refreshing…' : 'Refresh rating & reviews from Google'}
+                                    {refreshingGoogle
+                                        ? 'Refreshing…'
+                                        : 'Refresh rating & reviews from Google'}
                                 </Button>
                                 {selectedLiveProvider.google_place_id ? (
                                     <Button
                                         variant="outline"
-                                        onClick={() => void requeueEnrichment(selectedLiveProvider)}
+                                        onClick={() =>
+                                            void requeueEnrichment(selectedLiveProvider)
+                                        }
                                     >
                                         Re-queue enrichment
                                     </Button>
@@ -1305,35 +2198,403 @@ export default function AdminProvidersPage() {
                                 {selectedLiveProvider.google_place_id ? (
                                     <Button
                                         variant="outline"
-                                        onClick={() => void copyToClipboard(selectedLiveProvider.google_place_id!, 'Google place id')}
+                                        onClick={() =>
+                                            void copyToClipboard(
+                                                selectedLiveProvider.google_place_id!,
+                                                'Google place id',
+                                            )
+                                        }
                                     >
                                         Copy Place ID
                                     </Button>
                                 ) : null}
-                                <Button variant="secondary" onClick={() => setEditLiveProvider({ ...selectedLiveProvider })}>Edit</Button>
-                                <Button variant="outline" onClick={() => setSelectedLiveProvider(null)}>Close</Button>
+                                <Button
+                                    variant="secondary"
+                                    onClick={() =>
+                                        setEditLiveProvider({ ...selectedLiveProvider })
+                                    }
+                                >
+                                    Edit
+                                </Button>
+                                <Button
+                                    variant="outline"
+                                    onClick={() => setSelectedLiveProvider(null)}
+                                >
+                                    Close
+                                </Button>
+                                <Button
+                                    variant="destructive"
+                                    disabled={deletingProvider}
+                                    onClick={() => void deleteProvider()}
+                                >
+                                    {deletingProvider ? 'Deleting…' : 'Delete provider'}
+                                </Button>
                             </div>
                         </div>
                     ) : null}
                 </DialogContent>
             </Dialog>
-            <Dialog open={!!editLiveProvider} onOpenChange={(open) => !open && setEditLiveProvider(null)}>
+            <Dialog
+                open={addOpen}
+                onOpenChange={(open) => {
+                    if (!open) {
+                        setAddOpen(false);
+                        setAddPlaceId('');
+                    }
+                }}
+            >
+                <DialogContent className="max-w-md">
+                    <DialogHeader>
+                        <DialogTitle>Add Provider</DialogTitle>
+                        <DialogDescription>
+                            Paste a Google place id. We fetch the business from Google Places
+                            and add it to the live directory with its rating, reviews, and
+                            photos.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-3">
+                        <div>
+                            <Label className="text-xs">Google place id</Label>
+                            <Input
+                                className="mt-1"
+                                value={addPlaceId}
+                                onChange={(e) => setAddPlaceId(e.target.value)}
+                                placeholder="ChIJ… or places/ChIJ…"
+                                autoFocus
+                            />
+                        </div>
+                        <div className="flex justify-end gap-2">
+                            <Button
+                                variant="outline"
+                                onClick={() => {
+                                    setAddOpen(false);
+                                    setAddPlaceId('');
+                                }}
+                            >
+                                Cancel
+                            </Button>
+                            <Button
+                                disabled={addingProvider || !addPlaceId.trim()}
+                                onClick={() => void addProvider()}
+                            >
+                                {addingProvider ? 'Adding…' : 'Add provider'}
+                            </Button>
+                        </div>
+                    </div>
+                </DialogContent>
+            </Dialog>
+            <Dialog
+                open={applyOpen}
+                onOpenChange={(open) => {
+                    if (!open) setApplyOpen(false);
+                }}
+            >
+                <DialogContent className="max-w-2xl max-h-[92vh] overflow-y-auto">
+                    <DialogHeader>
+                        <DialogTitle>Add Application</DialogTitle>
+                        <DialogDescription>
+                            Capture a provider application manually, the same fields the public
+                            apply form collects. It lands as a new application you can then
+                            process and enrich.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="max-h-[72vh] overflow-y-auto space-y-4 pr-1">
+                        {/* Contact */}
+                        <div>
+                            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                                Contact
+                            </p>
+                            <div className="grid gap-3 sm:grid-cols-2">
+                                <div>
+                                    <Label className="text-xs">Contact name</Label>
+                                    <Input
+                                        className="mt-1"
+                                        value={applyForm.contact_name}
+                                        onChange={(e) =>
+                                            setApplyForm({
+                                                ...applyForm,
+                                                contact_name: e.target.value,
+                                            })
+                                        }
+                                        placeholder="Contact name"
+                                    />
+                                </div>
+                                <div>
+                                    <Label className="text-xs">Business name</Label>
+                                    <Input
+                                        className="mt-1"
+                                        value={applyForm.business_name}
+                                        onChange={(e) =>
+                                            setApplyForm({
+                                                ...applyForm,
+                                                business_name: e.target.value,
+                                            })
+                                        }
+                                        placeholder="Business name"
+                                    />
+                                </div>
+                                <div>
+                                    <Label className="text-xs">Phone</Label>
+                                    <Input
+                                        className="mt-1"
+                                        value={applyForm.phone}
+                                        onChange={(e) =>
+                                            setApplyForm({
+                                                ...applyForm,
+                                                phone: e.target.value,
+                                            })
+                                        }
+                                        placeholder="Phone"
+                                    />
+                                </div>
+                                <div>
+                                    <Label className="text-xs">Email</Label>
+                                    <Input
+                                        className="mt-1"
+                                        value={applyForm.email}
+                                        onChange={(e) =>
+                                            setApplyForm({
+                                                ...applyForm,
+                                                email: e.target.value,
+                                            })
+                                        }
+                                        placeholder="Email"
+                                    />
+                                </div>
+                                <div>
+                                    <Label className="text-xs">Website</Label>
+                                    <Input
+                                        className="mt-1"
+                                        value={applyForm.website}
+                                        onChange={(e) =>
+                                            setApplyForm({
+                                                ...applyForm,
+                                                website: e.target.value,
+                                            })
+                                        }
+                                        placeholder="https://"
+                                    />
+                                </div>
+                                <div className="flex items-center gap-2 pt-5">
+                                    <input
+                                        type="checkbox"
+                                        id="add-whatsapp"
+                                        checked={applyForm.whatsapp_available}
+                                        onChange={(e) =>
+                                            setApplyForm({
+                                                ...applyForm,
+                                                whatsapp_available: e.target.checked,
+                                            })
+                                        }
+                                        className="h-4 w-4 rounded border-border"
+                                    />
+                                    <Label
+                                        htmlFor="add-whatsapp"
+                                        className="text-xs cursor-pointer"
+                                    >
+                                        WhatsApp available
+                                    </Label>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Trade */}
+                        <div>
+                            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                                Trade
+                            </p>
+                            <div className="grid gap-3 sm:grid-cols-2">
+                                <div>
+                                    <Label className="text-xs">Trade</Label>
+                                    <Input
+                                        className="mt-1"
+                                        value={applyForm.trade}
+                                        onChange={(e) =>
+                                            setApplyForm({
+                                                ...applyForm,
+                                                trade: e.target.value,
+                                            })
+                                        }
+                                        placeholder="e.g. Plumbing"
+                                    />
+                                </div>
+                                <div>
+                                    <Label className="text-xs">Registration number</Label>
+                                    <Input
+                                        className="mt-1"
+                                        value={applyForm.registration_number}
+                                        onChange={(e) =>
+                                            setApplyForm({
+                                                ...applyForm,
+                                                registration_number: e.target.value,
+                                            })
+                                        }
+                                        placeholder="Reg / CIPC number"
+                                    />
+                                </div>
+                            </div>
+                            <div className="mt-3">
+                                <Label className="text-xs">
+                                    Specialisations / trade description
+                                </Label>
+                                <Textarea
+                                    className="mt-1"
+                                    rows={3}
+                                    value={applyForm.trade_description}
+                                    onChange={(e) =>
+                                        setApplyForm({
+                                            ...applyForm,
+                                            trade_description: e.target.value,
+                                        })
+                                    }
+                                    placeholder="What they specialise in..."
+                                />
+                            </div>
+                            <div className="mt-3">
+                                <Label className="text-xs">Certifications</Label>
+                                <Textarea
+                                    className="mt-1"
+                                    rows={2}
+                                    value={applyForm.certifications}
+                                    onChange={(e) =>
+                                        setApplyForm({
+                                            ...applyForm,
+                                            certifications: e.target.value,
+                                        })
+                                    }
+                                    placeholder="Any relevant certifications..."
+                                />
+                            </div>
+                            <div className="mt-3">
+                                <Label className="text-xs">Highlights</Label>
+                                <Textarea
+                                    className="mt-1"
+                                    rows={2}
+                                    value={applyForm.highlights}
+                                    onChange={(e) =>
+                                        setApplyForm({
+                                            ...applyForm,
+                                            highlights: e.target.value,
+                                        })
+                                    }
+                                    placeholder="Key highlights..."
+                                />
+                            </div>
+                        </div>
+
+                        {/* Location */}
+                        <div>
+                            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                                Location
+                            </p>
+                            <div>
+                                <Label className="text-xs">Business address</Label>
+                                <Input
+                                    className="mt-1"
+                                    value={applyForm.address}
+                                    onChange={(e) =>
+                                        setApplyForm({ ...applyForm, address: e.target.value })
+                                    }
+                                    placeholder="Street address"
+                                />
+                            </div>
+                            <div className="mt-3">
+                                <Label className="text-xs">Service areas</Label>
+                                <Textarea
+                                    className="mt-1"
+                                    rows={2}
+                                    value={applyForm.areas}
+                                    onChange={(e) =>
+                                        setApplyForm({ ...applyForm, areas: e.target.value })
+                                    }
+                                />
+                            </div>
+                        </div>
+
+                        {/* Admin */}
+                        <div>
+                            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                                Admin
+                            </p>
+                            <div>
+                                <Label className="text-xs">Referral source</Label>
+                                <Input
+                                    className="mt-1"
+                                    value={applyForm.referral}
+                                    onChange={(e) =>
+                                        setApplyForm({ ...applyForm, referral: e.target.value })
+                                    }
+                                    placeholder="How they heard about us"
+                                />
+                            </div>
+                            <div className="mt-3">
+                                <Label className="text-xs">Internal notes</Label>
+                                <Textarea
+                                    className="mt-1"
+                                    rows={3}
+                                    value={applyForm.notes}
+                                    onChange={(e) =>
+                                        setApplyForm({ ...applyForm, notes: e.target.value })
+                                    }
+                                />
+                            </div>
+                        </div>
+
+                        <div className="flex gap-2 pt-1 sticky bottom-0 bg-background pb-1">
+                            <Button
+                                disabled={submittingApplication}
+                                onClick={() => void submitApplication()}
+                            >
+                                {submittingApplication ? 'Saving…' : 'Create application'}
+                            </Button>
+                            <Button variant="outline" onClick={() => setApplyOpen(false)}>
+                                Cancel
+                            </Button>
+                        </div>
+                    </div>
+                </DialogContent>
+            </Dialog>
+            <Dialog
+                open={!!editLiveProvider}
+                onOpenChange={(open) => !open && setEditLiveProvider(null)}
+            >
                 <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
                     <DialogHeader>
                         <DialogTitle>Edit Live Provider</DialogTitle>
                         <DialogDescription>
-                            Keep the customer-facing profile, summary, and ranking details up to date.
+                            Keep the customer-facing profile, summary, and ranking details up to
+                            date.
                         </DialogDescription>
                     </DialogHeader>
                     {editLiveProvider ? (
                         <div className="space-y-3">
                             <div>
                                 <Label className="text-xs">Name</Label>
-                                <Input className="mt-1" value={editLiveProvider.name} onChange={(e) => setEditLiveProvider({ ...editLiveProvider, name: e.target.value })} placeholder="Name" />
+                                <Input
+                                    className="mt-1"
+                                    value={editLiveProvider.name}
+                                    onChange={(e) =>
+                                        setEditLiveProvider({
+                                            ...editLiveProvider,
+                                            name: e.target.value,
+                                        })
+                                    }
+                                    placeholder="Name"
+                                />
                             </div>
                             <div>
                                 <Label className="text-xs">Address</Label>
-                                <Textarea className="mt-1" rows={2} value={editLiveProvider.address ?? ''} onChange={(e) => setEditLiveProvider({ ...editLiveProvider, address: e.target.value })} />
+                                <Textarea
+                                    className="mt-1"
+                                    rows={2}
+                                    value={editLiveProvider.address ?? ''}
+                                    onChange={(e) =>
+                                        setEditLiveProvider({
+                                            ...editLiveProvider,
+                                            address: e.target.value,
+                                        })
+                                    }
+                                />
                             </div>
                             <div className="grid grid-cols-2 gap-2">
                                 <div>
@@ -1346,7 +2607,10 @@ export default function AdminProvidersPage() {
                                         onChange={(e) =>
                                             setEditLiveProvider({
                                                 ...editLiveProvider,
-                                                rating: e.target.value === '' ? null : Number(e.target.value),
+                                                rating:
+                                                    e.target.value === ''
+                                                        ? null
+                                                        : Number(e.target.value),
                                             })
                                         }
                                         placeholder="e.g. 4.8"
@@ -1361,7 +2625,10 @@ export default function AdminProvidersPage() {
                                         onChange={(e) =>
                                             setEditLiveProvider({
                                                 ...editLiveProvider,
-                                                rating_count: e.target.value === '' ? 0 : Number(e.target.value),
+                                                rating_count:
+                                                    e.target.value === ''
+                                                        ? 0
+                                                        : Number(e.target.value),
                                             })
                                         }
                                         placeholder="0"
@@ -1369,24 +2636,39 @@ export default function AdminProvidersPage() {
                                 </div>
                             </div>
                             <p className="text-xs text-muted-foreground">
-                                Pro page “Summary” blends long summary, about, and past work. Short summary is the customer review blurb.
+                                Pro page “Summary” blends long summary, about, and past work.
+                                Short summary is the customer review blurb.
                             </p>
                             <div>
-                                <Label className="text-xs">Customer summary (short, from reviews)</Label>
+                                <Label className="text-xs">
+                                    Customer summary (short, from reviews)
+                                </Label>
                                 <Textarea
                                     className="mt-1 text-sm"
                                     rows={4}
                                     value={editLiveProvider.summary}
-                                    onChange={(e) => setEditLiveProvider({ ...editLiveProvider, summary: e.target.value })}
+                                    onChange={(e) =>
+                                        setEditLiveProvider({
+                                            ...editLiveProvider,
+                                            summary: e.target.value,
+                                        })
+                                    }
                                 />
                             </div>
                             <div>
-                                <Label className="text-xs">Summary long (primary about text)</Label>
+                                <Label className="text-xs">
+                                    Summary long (primary about text)
+                                </Label>
                                 <Textarea
                                     className="mt-1 text-sm"
                                     rows={4}
                                     value={editLiveProvider.summary_long}
-                                    onChange={(e) => setEditLiveProvider({ ...editLiveProvider, summary_long: e.target.value })}
+                                    onChange={(e) =>
+                                        setEditLiveProvider({
+                                            ...editLiveProvider,
+                                            summary_long: e.target.value,
+                                        })
+                                    }
                                 />
                             </div>
                             <div>
@@ -1395,7 +2677,12 @@ export default function AdminProvidersPage() {
                                     className="mt-1 text-sm"
                                     rows={3}
                                     value={editLiveProvider.about}
-                                    onChange={(e) => setEditLiveProvider({ ...editLiveProvider, about: e.target.value })}
+                                    onChange={(e) =>
+                                        setEditLiveProvider({
+                                            ...editLiveProvider,
+                                            about: e.target.value,
+                                        })
+                                    }
                                 />
                             </div>
                             <div>
@@ -1404,7 +2691,12 @@ export default function AdminProvidersPage() {
                                     className="mt-1 text-sm"
                                     rows={3}
                                     value={editLiveProvider.past_work}
-                                    onChange={(e) => setEditLiveProvider({ ...editLiveProvider, past_work: e.target.value })}
+                                    onChange={(e) =>
+                                        setEditLiveProvider({
+                                            ...editLiveProvider,
+                                            past_work: e.target.value,
+                                        })
+                                    }
                                 />
                             </div>
                             <div>
@@ -1412,7 +2704,12 @@ export default function AdminProvidersPage() {
                                 <Input
                                     className="mt-1"
                                     value={editLiveProvider.key_person}
-                                    onChange={(e) => setEditLiveProvider({ ...editLiveProvider, key_person: e.target.value })}
+                                    onChange={(e) =>
+                                        setEditLiveProvider({
+                                            ...editLiveProvider,
+                                            key_person: e.target.value,
+                                        })
+                                    }
                                 />
                             </div>
                             <div>
@@ -1430,7 +2727,9 @@ export default function AdminProvidersPage() {
                                 />
                             </div>
                             <div>
-                                <Label className="text-xs">Specialisations (one per line)</Label>
+                                <Label className="text-xs">
+                                    Specialisations (one per line)
+                                </Label>
                                 <Textarea
                                     className="mt-1 text-sm font-sans"
                                     rows={4}
@@ -1459,13 +2758,21 @@ export default function AdminProvidersPage() {
                                     placeholder="e.g. PIRB Licensed Plumbers"
                                 />
                                 <p className="mt-1 text-[11px] text-muted-foreground">
-                                    Free-text labels shown on the customer profile. Stored in providers.certifications.
+                                    Free-text labels shown on the customer profile. Stored in
+                                    providers.certifications.
                                 </p>
                             </div>
 
                             <div className="flex gap-2 pt-2">
-                                <Button onClick={() => void saveLiveProviderEdit()}>Save</Button>
-                                <Button variant="outline" onClick={() => setEditLiveProvider(null)}>Cancel</Button>
+                                <Button onClick={() => void saveLiveProviderEdit()}>
+                                    Save
+                                </Button>
+                                <Button
+                                    variant="outline"
+                                    onClick={() => setEditLiveProvider(null)}
+                                >
+                                    Cancel
+                                </Button>
                             </div>
                         </div>
                     ) : null}

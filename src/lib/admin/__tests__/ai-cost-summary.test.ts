@@ -18,8 +18,8 @@ function ev(partial: Partial<AiCostEvent>): AiCostEvent {
 describe('summarizeAiCosts — empty', () => {
     it('returns zeroed totals and null per-diagnosis metrics', () => {
         const s = summarizeAiCosts([], NOW);
-        expect(s.monthToDate).toEqual({ usd: 0, calls: 0, tokens: 0 });
-        expect(s.lastMonth).toEqual({ usd: 0, calls: 0, tokens: 0 });
+        expect(s.monthToDate).toEqual({ usd: 0, calls: 0, tokens: 0, cachedTokens: 0 });
+        expect(s.lastMonth).toEqual({ usd: 0, calls: 0, tokens: 0, cachedTokens: 0 });
         expect(s.costPerDiagnosis).toBeNull();
         expect(s.callsPerDiagnosis).toBeNull();
         expect(s.projection.elapsedDays).toBe(15);
@@ -30,11 +30,51 @@ describe('summarizeAiCosts — empty', () => {
 
 describe('summarizeAiCosts — populated', () => {
     const events: AiCostEvent[] = [
-        ev({ created_at: '2026-06-05T10:00:00Z', model_name: 'A', endpoint: 'X', conversation_id: 'c1', estimated_usd: 0.1, total_tokens: 1000 }),
-        ev({ created_at: '2026-06-06T10:00:00Z', model_name: 'A', endpoint: 'Y', conversation_id: 'c1', estimated_usd: 0.2, total_tokens: 2000 }),
-        ev({ created_at: '2026-06-07T10:00:00Z', model_name: 'B', endpoint: 'X', conversation_id: 'c2', estimated_usd: 0.3, total_tokens: 3000 }),
-        ev({ created_at: '2026-06-08T10:00:00Z', model_name: 'A', endpoint: 'X', conversation_id: null, estimated_usd: 0.05, total_tokens: 500 }),
-        ev({ created_at: '2026-05-20T10:00:00Z', model_name: 'A', endpoint: 'X', conversation_id: 'c9', estimated_usd: 1.0, total_tokens: 9000 }),
+        ev({
+            created_at: '2026-06-05T10:00:00Z',
+            model_name: 'A',
+            endpoint: 'X',
+            conversation_id: 'c1',
+            estimated_usd: 0.1,
+            total_tokens: 1000,
+            cached_tokens: 100,
+        }),
+        ev({
+            created_at: '2026-06-06T10:00:00Z',
+            model_name: 'A',
+            endpoint: 'Y',
+            conversation_id: 'c1',
+            estimated_usd: 0.2,
+            total_tokens: 2000,
+            cached_tokens: 200,
+        }),
+        ev({
+            created_at: '2026-06-07T10:00:00Z',
+            model_name: 'B',
+            endpoint: 'X',
+            conversation_id: 'c2',
+            estimated_usd: 0.3,
+            total_tokens: 3000,
+            cached_tokens: 300,
+        }),
+        ev({
+            created_at: '2026-06-08T10:00:00Z',
+            model_name: 'A',
+            endpoint: 'X',
+            conversation_id: null,
+            estimated_usd: 0.05,
+            total_tokens: 500,
+            cached_tokens: 0,
+        }),
+        ev({
+            created_at: '2026-05-20T10:00:00Z',
+            model_name: 'A',
+            endpoint: 'X',
+            conversation_id: 'c9',
+            estimated_usd: 1.0,
+            total_tokens: 9000,
+            cached_tokens: 900,
+        }),
     ];
 
     it('splits month-to-date vs last month', () => {
@@ -42,8 +82,10 @@ describe('summarizeAiCosts — populated', () => {
         expect(s.monthToDate.usd).toBeCloseTo(0.65, 6);
         expect(s.monthToDate.calls).toBe(4);
         expect(s.monthToDate.tokens).toBe(6500);
+        expect(s.monthToDate.cachedTokens).toBe(600);
         expect(s.lastMonth.usd).toBeCloseTo(1.0, 6);
         expect(s.lastMonth.calls).toBe(1);
+        expect(s.lastMonth.cachedTokens).toBe(900);
     });
 
     it('breaks down by model and endpoint, sorted by spend', () => {

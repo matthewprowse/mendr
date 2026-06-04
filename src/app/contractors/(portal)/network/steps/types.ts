@@ -70,8 +70,13 @@ export type ExistingApplicationRow = {
     address: string | null;
     phone: string | null;
     whatsapp_available: boolean | null;
+    preferred_contact_channel?: string | null;
     website: string | null;
     trade: string | null;
+    insurance_cover?: string | null;
+    typical_response_time?: string | null;
+    pricing_model?: string | null;
+    callout_fee?: number | null;
     trade_description: string | null;
     founded_year: number | null;
     team_size: number | null;
@@ -86,14 +91,15 @@ export type ExistingApplicationRow = {
 
 export type FormData = {
     contractorType: ContractorType | '';
-    willingnessToPayBand: string;
     applicantGooglePlaceId: string;
     businessName: string;
-    contactPerson: string;
+    firstName: string;
+    surname: string;
     emailAddress: string;
     address: string;
     phone: string;
     whatsappAvailable: boolean;
+    preferredContactChannel: string;
     website: string;
     trade: string;
     specialisations: string;
@@ -103,6 +109,10 @@ export type FormData = {
     bio: string;
     certifications: string;
     highlights: string;
+    insuranceCover: string;
+    typicalResponseTime: string;
+    pricingModel: string;
+    calloutFee: string;
     referralSource: string;
     referralOther: string;
 };
@@ -111,6 +121,10 @@ export type PlaceSearchHit = {
     placeId: string;
     name: string;
     address: string;
+    phone: string | null;
+    website: string | null;
+    lat: number | null;
+    lng: number | null;
     rating: number | null;
     userRatingCount: number | null;
 };
@@ -127,14 +141,15 @@ export type PlaceDetailsPayload = {
 
 export const EMPTY_FORM: FormData = {
     contractorType: '',
-    willingnessToPayBand: '',
     applicantGooglePlaceId: '',
     businessName: '',
-    contactPerson: '',
+    firstName: '',
+    surname: '',
     emailAddress: '',
     address: '',
     phone: '',
     whatsappAvailable: false,
+    preferredContactChannel: '',
     website: '',
     trade: '',
     specialisations: '',
@@ -144,39 +159,49 @@ export const EMPTY_FORM: FormData = {
     bio: '',
     certifications: '',
     highlights: '',
+    insuranceCover: '',
+    typicalResponseTime: '',
+    pricingModel: '',
+    calloutFee: '',
     referralSource: '',
     referralOther: '',
 };
 
 export const STEP = {
     CONTRACTOR_TYPE: 1,
-    WILLINGNESS_TO_PAY: 2,
-    COMPANY_SEARCH: 3,
-    BASICS: 4,
-    CONTACT: 5,
-    SERVICE: 6,
-    TRADE: 7,
-    PROFILE: 8,
-    KYC: 9,
-    GALLERY: 10,
-    CONFIRM: 11,
+    COMPANY_SEARCH: 2,
+    BASICS: 3,
+    CONTACT: 4,
+    SERVICE: 5,
+    TRADE: 6,
+    PROFILE: 7,
+    KYC: 8,
+    GALLERY: 9,
+    CONFIRM: 10,
 } as const;
 
 export const TOTAL_STEPS = STEP.CONFIRM;
 export const DEFAULT_SERVICE_RADIUS_KM = 10;
 
-export const SESSION_KEY = 'scandio-contractor-onboard-v2';
+// Bumped to v3 after the willingness-to-pay step was removed and the new
+// service-terms fields were added — invalidates stale in-progress sessions.
+export const SESSION_KEY = 'scandio-contractor-onboard-v3';
 
 export const REGISTRATION_CERT_CAPTION = 'Registration certificate';
 export const KYC_ID_CAPTION = 'KYC: ID document';
 export const KYC_SELFIE_CAPTION = 'KYC: Selfie photo';
 
-export const WILLINGNESS_OPTIONS = [
-    { value: 'under_200', label: 'Under R200 / month' },
-    { value: '200_350', label: 'R200 – R350 / month' },
-    { value: '350_700', label: 'R350 – R700 / month' },
-    { value: '700_plus', label: 'R700+ / month' },
-    { value: 'prefer_not_to_say', label: 'Prefer not to say' },
+export const PREFERRED_CONTACT_OPTIONS = [
+    { value: 'whatsapp', label: 'WhatsApp' },
+    { value: 'email', label: 'Email' },
+] as const;
+
+export const RESPONSE_TIME_OPTIONS = [
+    { value: 'within_1h', label: 'Within an hour' },
+    { value: 'within_4h', label: 'Within 4 hours' },
+    { value: 'same_day', label: 'Same day' },
+    { value: 'within_24h', label: 'Within 24 hours' },
+    { value: 'within_48h', label: '1–2 days' },
 ] as const;
 
 /** Space between the last field and the fixed footer (visual gap above the bar). */

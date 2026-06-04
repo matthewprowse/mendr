@@ -18,6 +18,8 @@
 
 import { useCallback, useState } from 'react';
 import { Heart } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Spinner } from '@/components/ui/spinner';
 import { useAuth } from '@/context/auth-context';
 import { useSavedProvider } from '@/app/contractors/hooks/use-saved-provider';
 import { HomeownerAuthDialog } from '@/components/homeowner-auth-dialog';
@@ -58,23 +60,26 @@ export function SaveProviderButton({
 
     return (
         <>
-            <button
+            <Button
                 type="button"
+                variant="ghost"
+                size="icon"
                 onClick={handleClick}
                 disabled={!providerId || loading}
                 aria-label={saved ? 'Remove from favourites' : 'Save to favourites'}
                 aria-pressed={saved}
                 className={cn(
-                    'inline-flex size-8 cursor-pointer items-center justify-center rounded-full bg-background/90 text-foreground shadow-sm backdrop-blur transition-transform hover:scale-105 disabled:cursor-not-allowed disabled:opacity-60',
+                    'size-8',
+                    saved ? 'text-rose-500 hover:text-rose-600' : 'text-muted-foreground hover:text-foreground',
                     className
                 )}
             >
-                <Heart
-                    size={16}
-                    fill={saved ? 'currentColor' : 'none'}
-                    className={saved ? 'text-foreground' : 'text-foreground'}
-                />
-            </button>
+                {loading ? (
+                    <Spinner className="size-4 text-muted-foreground" />
+                ) : (
+                    <Heart size={16} fill={saved ? 'currentColor' : 'none'} />
+                )}
+            </Button>
             <HomeownerAuthDialog
                 open={authDialogOpen}
                 onOpenChange={setAuthDialogOpen}

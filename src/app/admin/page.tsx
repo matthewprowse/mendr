@@ -1,8 +1,8 @@
-import { META_ADMIN } from '@/lib/site-metadata';
+import { META_ADMIN_HOME } from '@/lib/site-metadata';
 import { requireAdminPage } from '@/lib/auth/admin-guard';
 import AdminHomeClient from './client';
 
-export const metadata = META_ADMIN;
+export const metadata = META_ADMIN_HOME;
 
 export default async function AdminPage() {
     await requireAdminPage();

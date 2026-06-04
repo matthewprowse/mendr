@@ -12,12 +12,13 @@ export type AiCostEvent = {
     created_at: string;
     estimated_usd: number;
     total_tokens: number;
+    cached_tokens?: number;
     model_name: string | null;
     endpoint: string | null;
     conversation_id: string | null;
 };
 
-export type CostTotals = { usd: number; calls: number; tokens: number };
+export type CostTotals = { usd: number; calls: number; tokens: number; cachedTokens: number };
 
 export type AiCostSummary = {
     monthToDate: CostTotals;
@@ -34,12 +35,13 @@ export type AiCostSummary = {
 };
 
 function emptyTotals(): CostTotals {
-    return { usd: 0, calls: 0, tokens: 0 };
+    return { usd: 0, calls: 0, tokens: 0, cachedTokens: 0 };
 }
 
 function addTo(totals: CostTotals, e: AiCostEvent): void {
     totals.usd += Number(e.estimated_usd) || 0;
     totals.tokens += Number(e.total_tokens) || 0;
+    totals.cachedTokens += Number(e.cached_tokens) || 0;
     totals.calls += 1;
 }
 
@@ -77,7 +79,10 @@ export function summarizeAiCosts(events: AiCostEvent[], now: Date): AiCostSummar
             byEndpoint.set(endpoint, eAgg);
 
             if (e.conversation_id) {
-                convUsd.set(e.conversation_id, (convUsd.get(e.conversation_id) ?? 0) + (Number(e.estimated_usd) || 0));
+                convUsd.set(
+                    e.conversation_id,
+                    (convUsd.get(e.conversation_id) ?? 0) + (Number(e.estimated_usd) || 0),
+                );
                 convCalls += 1;
             }
         } else if (t >= lastMonthStart) {

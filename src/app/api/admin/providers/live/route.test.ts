@@ -7,7 +7,11 @@
  * tests.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { makeRequest, mockSupabaseClient, type MockSupabaseClient } from '@/__tests__/helpers/route-test';
+import {
+    makeRequest,
+    mockSupabaseClient,
+    type MockSupabaseClient,
+} from '@/__tests__/helpers/route-test';
 
 let supabase: MockSupabaseClient;
 let denyAdmin = false;
@@ -87,5 +91,73 @@ describe('POST/PATCH /api/admin/providers/live — auth gate', () => {
         const { PATCH } = await import('./route');
         const res = await PATCH(makeRequest({ method: 'PATCH', body: {} }));
         expect(res.status).toBe(401);
+    });
+});
+
+describe('POST /api/admin/providers/live — add by place id', () => {
+    it('adds a provider from a place id', async () => {
+        const { refreshProviderByPlaceId } =
+            await import('@/lib/providers/refresh-provider-by-place-id');
+        vi.mocked(refreshProviderByPlaceId).mockResolvedValueOnce({
+            ok: true,
+            providerId: 'new-id',
+            provider: { name: 'Fresh Co', address: '1 Road' },
+        });
+        const { POST } = await import('./route');
+        const res = await POST(makeRequest({ method: 'POST', body: { place_id: 'ChIJabc' } }));
+        expect(res.status).toBe(200);
+        const body = await res.json();
+        expect(body).toMatchObject({ ok: true, id: 'new-id', name: 'Fresh Co' });
+    });
+
+    it('returns 502 when the Google fetch fails', async () => {
+        const { refreshProviderByPlaceId } =
+            await import('@/lib/providers/refresh-provider-by-place-id');
+        vi.mocked(refreshProviderByPlaceId).mockResolvedValueOnce({
+            ok: false,
+            error: 'no key',
+        });
+        const { POST } = await import('./route');
+        const res = await POST(makeRequest({ method: 'POST', body: { place_id: 'ChIJabc' } }));
+        expect(res.status).toBe(502);
+    });
+});
+
+describe('DELETE /api/admin/providers/live', () => {
+    it('returns 401 when not admin', async () => {
+        denyAdmin = true;
+        const { DELETE } = await import('./route');
+        const res = await DELETE(
+            makeRequest({ method: 'DELETE', path: '/api/admin/providers/live?id=p1' }),
+        );
+        expect(res.status).toBe(401);
+    });
+
+    it('returns 400 when id missing', async () => {
+        const { DELETE } = await import('./route');
+        const res = await DELETE(
+            makeRequest({ method: 'DELETE', path: '/api/admin/providers/live' }),
+        );
+        expect(res.status).toBe(400);
+    });
+
+    it('returns ok on success', async () => {
+        const { DELETE } = await import('./route');
+        const res = await DELETE(
+            makeRequest({ method: 'DELETE', path: '/api/admin/providers/live?id=p1' }),
+        );
+        expect(res.status).toBe(200);
+        expect((await res.json()).ok).toBe(true);
+    });
+
+    it('returns 500 when the delete errors', async () => {
+        supabase = mockSupabaseClient({
+            tables: { providers: { data: null, error: { message: 'db' } } },
+        });
+        const { DELETE } = await import('./route');
+        const res = await DELETE(
+            makeRequest({ method: 'DELETE', path: '/api/admin/providers/live?id=p1' }),
+        );
+        expect(res.status).toBe(500);
     });
 });

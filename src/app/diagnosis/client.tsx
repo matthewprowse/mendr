@@ -46,6 +46,7 @@ import {
 } from 'lucide-react';
 import { trackEvent } from '@/lib/analytics';
 import { FlowTopBar, StepHeading } from '@/components/match/flow-shell';
+import { HeaderAuth } from '@/components/header-auth';
 import { Spinner } from '@/components/ui/spinner';
 import { toast } from 'sonner';
 import { BRAND_NAME } from '@/lib/brand-system';
@@ -267,6 +268,14 @@ export default function DiagnosisPageClient({
     const [refinePhotoStorageUrls, setRefinePhotoStorageUrls] = useState<
         Record<string, string>
     >({});
+    // Existing diagnosis photos the user has marked for removal inside the Add
+    // Details overlay. Staged here and only committed on re-run. A ref mirrors
+    // it so the upload handler can read the freed-slot count without a stale
+    // closure.
+    const [removedOriginalUrls, setRemovedOriginalUrls] = useState<Set<string>>(
+        () => new Set()
+    );
+    const removedOriginalUrlsRef = useRef<Set<string>>(new Set());
     const refineUploadInputRef = useRef<HTMLInputElement | null>(null);
 
     useEffect(() => {
@@ -1438,7 +1447,9 @@ export default function DiagnosisPageClient({
             );
             if (files.length === 0) return;
             const existingTotal =
-                uploadedImageSourcesRef.current.length + refinePhotos.length;
+                uploadedImageSourcesRef.current.filter(
+                    (u) => !removedOriginalUrlsRef.current.has(u)
+                ).length + refinePhotos.length;
             const remaining = Math.max(0, REFINE_MAX_TOTAL_PHOTOS - existingTotal);
             if (remaining === 0) {
                 toast.error(
@@ -1525,6 +1536,27 @@ export default function DiagnosisPageClient({
         });
     }, []);
 
+    // Stage an existing diagnosis photo for removal. Commits on re-run.
+    const handleRemoveExistingPhoto = useCallback((url: string) => {
+        setRemovedOriginalUrls((prev) => {
+            const next = new Set(prev);
+            next.add(url);
+            return next;
+        });
+    }, []);
+
+    // Mirror removal state into a ref so the upload handler can read the
+    // freed-slot count without a stale closure.
+    useEffect(() => {
+        removedOriginalUrlsRef.current = removedOriginalUrls;
+    }, [removedOriginalUrls]);
+
+    // Reset staged removals each time the Add Details overlay opens, so an
+    // earlier cancelled edit does not carry over.
+    useEffect(() => {
+        if (showAddInfoScreen) setRemovedOriginalUrls(new Set());
+    }, [showAddInfoScreen]);
+
     // Upload each `ready` refine photo to storage once. Mirrors the effect in
     // /start that uploads on `ready` if a hosted URL doesn't yet exist.
     useEffect(() => {
@@ -1548,14 +1580,15 @@ export default function DiagnosisPageClient({
 
     const handleRescanReport = async () => {
         const trimmed = infoText.trim();
-        // New: refine can now also be "I'm adding photos" — allow rescan when
-        // either new text OR new ready photos are present.
+        // Refine can be "I'm adding text", "I'm adding photos", or "I'm
+        // removing photos" — allow rescan when any of those changed.
         const readyNewPhotos = refinePhotos.filter((p) => p.status === 'ready');
         const newPhotoUrls = readyNewPhotos
             .map((p) => refinePhotoStorageUrls[p.id])
             .filter((u): u is string => typeof u === 'string' && u.length > 0);
+        const hasRemovedPhotos = removedOriginalUrls.size > 0;
         if (!imageSrc) return;
-        if (!trimmed && newPhotoUrls.length === 0) return;
+        if (!trimmed && newPhotoUrls.length === 0 && !hasRemovedPhotos) return;
         setShowAddInfoScreen(false);
 
         const nextItems = trimmed
@@ -1568,12 +1601,16 @@ export default function DiagnosisPageClient({
         // Append new photo URLs (deduped) to the existing photo list. The
         // diagnose pipeline caps at 4 — we already enforce that in the upload
         // handler, but slice defensively here too.
+        const keptOriginals = uploadedImageSources.filter(
+            (u) => !removedOriginalUrls.has(u)
+        );
         const combinedPhotoSources = [
-            ...uploadedImageSources,
-            ...newPhotoUrls.filter((u) => !uploadedImageSources.includes(u)),
+            ...keptOriginals,
+            ...newPhotoUrls.filter((u) => !keptOriginals.includes(u)),
         ].slice(0, REFINE_MAX_TOTAL_PHOTOS);
         const photosChanged =
-            combinedPhotoSources.length !== uploadedImageSources.length;
+            combinedPhotoSources.length !== uploadedImageSources.length ||
+            combinedPhotoSources.some((u, i) => u !== uploadedImageSources[i]);
 
         if (conversationId) {
             try {
@@ -1602,12 +1639,21 @@ export default function DiagnosisPageClient({
         // the canonical uploadedImageSources list.
         setRefinePhotos([]);
         setRefinePhotoStorageUrls({});
+        setRemovedOriginalUrls(new Set());
+
+        // If the hero photo was removed, promote the first remaining photo to
+        // primary so the diagnosis still runs off a valid source image.
+        const nextPrimary =
+            imageSrc && combinedPhotoSources.includes(imageSrc)
+                ? imageSrc
+                : combinedPhotoSources[0] ?? imageSrc;
+        if (nextPrimary !== imageSrc) setImageSrc(nextPrimary);
 
         didRunDiagnosisRef.current = null;
         setDiagnosisTitle('Diagnosing…');
         setCustomerInfoItems(nextItems);
         await runInitialDiagnosis(
-            imageSrc,
+            nextPrimary,
             joinedInfo,
             selectedTradeHint.trim() || null,
             combinedPhotoSources
@@ -1878,7 +1924,9 @@ export default function DiagnosisPageClient({
                             <Badge variant="secondary" className="shrink-0">
                                 {badgeContent}
                             </Badge>
-                        ) : null
+                        ) : (
+                            <HeaderAuth />
+                        )
                     }
                 />
 
@@ -1919,8 +1967,7 @@ export default function DiagnosisPageClient({
                         we don't reserve dead space while content streams in. */}
                     {!showSkeleton && isDetailStageReady ? (
                         <p className="text-sm text-muted-foreground">
-                            Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore.
-                        </p>
+                            Here is what we think is wrong, exactly why we think so, and roughly what it should take to put it right again.</p>
                     ) : null}
                 </div>
 
@@ -1959,6 +2006,8 @@ export default function DiagnosisPageClient({
                         </div>
                     ) : showSkeleton ? (
                         <div className="grid grid-cols-2 gap-2">
+                            <Skeleton className="aspect-square w-full rounded-lg" />
+                            <Skeleton className="aspect-square w-full rounded-lg" />
                             <Skeleton className="aspect-square w-full rounded-lg" />
                             <Skeleton className="aspect-square w-full rounded-lg" />
                         </div>
@@ -2099,15 +2148,33 @@ export default function DiagnosisPageClient({
                     const refinePendingCount = refinePhotos.filter(
                         (p) => p.status === 'pending'
                     ).length;
+                    const keptOriginals = uploadedImageSources.filter(
+                        (u) => !removedOriginalUrls.has(u)
+                    );
                     const totalPhotosAfter =
-                        uploadedImageSources.length + refinePhotos.length;
+                        keptOriginals.length + refinePhotos.length;
                     const canAddMorePhotos =
                         totalPhotosAfter < REFINE_MAX_TOTAL_PHOTOS;
+                    // One shared 1..N numbering across existing + new photos.
+                    // At least one photo must remain, so removal is disabled
+                    // once a single tile is left.
+                    const showTileNumbers = totalPhotosAfter > 1;
+                    const canRemoveAny = totalPhotosAfter > 1;
+                    // Mirror /start's add-photo placement: an odd tile count
+                    // gets a square "Add Photos" tile to fill the 2-col row, an
+                    // even count gets a full-width button below the grid.
+                    const addPhotosAsTile =
+                        canAddMorePhotos && totalPhotosAfter % 2 === 1;
+                    const addPhotosAsButton =
+                        canAddMorePhotos && totalPhotosAfter % 2 === 0;
                     const hasNewText =
                         infoText.trim().length >= MIN_DESCRIPTION_CHARS;
                     const hasNewPhotos = refineReadyCount > 0;
+                    // Removing an existing photo is itself a change worth
+                    // re-running on, even with no new text or new photos.
+                    const hasRemovedPhotos = removedOriginalUrls.size > 0;
                     const canRescan =
-                        (hasNewText || hasNewPhotos) &&
+                        (hasNewText || hasNewPhotos || hasRemovedPhotos) &&
                         refinePendingCount === 0 &&
                         !isDiagnosing &&
                         !showSkeleton;
@@ -2150,27 +2217,38 @@ export default function DiagnosisPageClient({
                                     <div className="flex flex-col gap-8 w-full max-w-xl mx-auto">
                                         <StepHeading
                                             title="What Else Should We Know?"
-                                            sub="Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore."
+                                            sub="Add more photos or extra detail about the problem and we will refine the diagnosis to make it more accurate."
                                         />
 
-                                        {refinePhotos.length > 0 ? (
+                                        {totalPhotosAfter > 0 ? (
                                             <div className="grid grid-cols-2 gap-2">
+                                                {keptOriginals.map((url, idx) => (
+                                                    <DiagnosisPhotoTile
+                                                        key={url}
+                                                        src={url}
+                                                        index={idx}
+                                                        showNumber={showTileNumbers}
+                                                        onRemove={() =>
+                                                            handleRemoveExistingPhoto(url)
+                                                        }
+                                                        canRemove={canRemoveAny}
+                                                    />
+                                                ))}
                                                 {refinePhotos.map((photo, idx) => (
                                                     <RefinePhotoTile
                                                         key={photo.id}
                                                         photo={photo}
-                                                        index={idx}
-                                                        showNumber={
-                                                            refinePhotos.length > 1
+                                                        index={
+                                                            keptOriginals.length + idx
                                                         }
+                                                        showNumber={showTileNumbers}
                                                         onRemove={
                                                             handleRefineRemovePhoto
                                                         }
+                                                        canRemove={canRemoveAny}
                                                     />
                                                 ))}
-                                                {canAddMorePhotos &&
-                                                (refinePhotos.length === 1 ||
-                                                    refinePhotos.length === 3) ? (
+                                                {addPhotosAsTile ? (
                                                     <Button
                                                         type="button"
                                                         variant="secondary"
@@ -2185,9 +2263,7 @@ export default function DiagnosisPageClient({
                                             </div>
                                         ) : null}
 
-                                        {canAddMorePhotos &&
-                                        refinePhotos.length !== 1 &&
-                                        refinePhotos.length !== 3 ? (
+                                        {addPhotosAsButton ? (
                                             <div className="flex flex-col gap-2">
                                                 <Button
                                                     type="button"
@@ -2197,15 +2273,13 @@ export default function DiagnosisPageClient({
                                                     Add Photos
                                                 </Button>
                                                 <p className="text-center text-xs text-muted-foreground">
-                                                    Lorem ipsum dolor sit amet, consectetur adipiscing elit.
-                                                </p>
+                                                    Add up to four photos. Clear, well lit ones work best.</p>
                                             </div>
                                         ) : null}
 
                                         {!canAddMorePhotos ? (
                                             <p className="text-center text-xs text-muted-foreground">
-                                                Lorem ipsum dolor sit amet, consectetur adipiscing elit.
-                                            </p>
+                                                You have added the most photos we can take, which is four.</p>
                                         ) : null}
 
                                         {/* Note input — mirrors /start's Problem
@@ -2232,8 +2306,7 @@ export default function DiagnosisPageClient({
                                                     }
                                                 />
                                                 <p className="text-xs text-muted-foreground">
-                                                    Lorem ipsum dolor sit amet, consectetur adipiscing elit.
-                                                </p>
+                                                    Tell us anything new you have noticed since the diagnosis.</p>
                                             </div>
                                         </div>
                                     </div>
@@ -2309,29 +2382,27 @@ function DiagnosisPhotoTile({
     index,
     showNumber,
     onOpen,
+    onRemove,
+    canRemove = true,
 }: {
     /** Empty string renders a bg-secondary placeholder — used by mock mode
      *  and any case where the row is hydrating before image URLs land. */
     src: string;
     index: number;
     showNumber: boolean;
-    onOpen: () => void;
+    onOpen?: () => void;
+    /** When provided, the tile renders a removable variant (used in the Add
+     *  Details overlay) instead of the full-screen-open button. */
+    onRemove?: () => void;
+    canRemove?: boolean;
 }) {
     const hasImage = src.trim().length > 0;
-    return (
-        <button
-            type="button"
-            onClick={onOpen}
-            aria-label={
-                hasImage
-                    ? `Open uploaded issue photo ${index + 1}`
-                    : `Photo placeholder ${index + 1}`
-            }
-            className={[
-                'relative aspect-square overflow-hidden rounded-lg border border-border',
-                hasImage ? 'bg-background' : 'bg-secondary',
-            ].join(' ')}
-        >
+    const wrapperCls = [
+        'relative aspect-square overflow-hidden rounded-lg border border-border',
+        hasImage ? 'bg-background' : 'bg-secondary',
+    ].join(' ');
+    const inner = (
+        <>
             {hasImage ? (
                 /* eslint-disable-next-line @next/next/no-img-element */
                 <img
@@ -2346,6 +2417,47 @@ function DiagnosisPhotoTile({
                     {index + 1}
                 </Badge>
             ) : null}
+        </>
+    );
+
+    // Removable variant: a div wrapper with the same outline Remove badge that
+    // RefinePhotoTile uses. Rendered as a div (not a button) so the Remove
+    // button isn't nested inside another button. No full-screen open here.
+    if (onRemove) {
+        return (
+            <div className={wrapperCls}>
+                {inner}
+                {canRemove ? (
+                    <Badge asChild variant="outline">
+                        <button
+                            type="button"
+                            className="absolute right-2 top-2 cursor-pointer"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                onRemove();
+                            }}
+                            aria-label="Remove photo"
+                        >
+                            Remove
+                        </button>
+                    </Badge>
+                ) : null}
+            </div>
+        );
+    }
+
+    return (
+        <button
+            type="button"
+            onClick={onOpen}
+            aria-label={
+                hasImage
+                    ? `Open uploaded issue photo ${index + 1}`
+                    : `Photo placeholder ${index + 1}`
+            }
+            className={wrapperCls}
+        >
+            {inner}
         </button>
     );
 }
@@ -2355,11 +2467,13 @@ function RefinePhotoTile({
     index,
     showNumber,
     onRemove,
+    canRemove = true,
 }: {
     photo: SelectedPhoto;
     index: number;
     showNumber: boolean;
     onRemove: (photoId: string) => void;
+    canRemove?: boolean;
 }) {
     const isReady = photo.status === 'ready' && photo.previewSrc;
     const wrapperCls = [
@@ -2392,7 +2506,7 @@ function RefinePhotoTile({
                     {index + 1}
                 </Badge>
             ) : null}
-            {isReady ? (
+            {isReady && canRemove ? (
                 <Badge asChild variant="outline">
                     <button
                         type="button"

@@ -26,7 +26,9 @@ export async function GET(req: NextRequest) {
     const admin = await createSupabaseAdminClient();
     const { data, error } = await admin
         .from('ai_cost_events')
-        .select('created_at, estimated_usd, total_tokens, model_name, endpoint, conversation_id')
+        .select(
+            'created_at, estimated_usd, total_tokens, cached_tokens, model_name, endpoint, conversation_id',
+        )
         .gte('created_at', lastMonthStart.toISOString())
         .order('created_at', { ascending: false })
         .limit(MAX_ROWS);

@@ -14,7 +14,7 @@ export default async function ContractorServiceAreaPage() {
     } = await supabase.auth.getUser();
 
     if (!user) {
-        redirect('/contractors/auth?next=/contractors/account/service-area');
+        redirect('/pro/auth/login?next=/contractors/account/service-area');
     }
 
     return <ServiceAreaClient />;

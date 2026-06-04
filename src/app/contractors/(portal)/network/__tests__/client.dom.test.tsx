@@ -1,7 +1,7 @@
 /**
  * Behavior tests for the contractor application multi-step form (Pro onboarding).
  *
- * The full form is 11 steps and depends on Supabase, Google Maps, file uploads,
+ * The full form is 10 steps and depends on Supabase, Google Maps, file uploads,
  * and toast notifications. We don't try to drive the whole flow end-to-end here —
  * that belongs in Phase 6 (Playwright E2E). Instead this suite pins:
  *
@@ -10,7 +10,7 @@
  *   • The footer "Continue" button is disabled until a contractor type is
  *     selected — this is the validation gate the step depends on.
  *   • Selecting an option enables Continue, and clicking Continue advances to
- *     Step 2 (Willingness to Pay).
+ *     Step 2 (Company Search).
  *   • The "Back" header control returns to Step 1 from Step 2 with the
  *     selection retained.
  *
@@ -36,6 +36,12 @@ vi.mock('@googlemaps/js-api-loader', () => ({
 
 vi.mock('@/lib/google-maps-js-loader', () => ({
     ensureGoogleMapsLoaderOptions: vi.fn(),
+}));
+
+// The header renders <ProAccountMenu/>, which reads the auth context. The test
+// doesn't mount an AuthProvider, so stub it out to a no-op.
+vi.mock('@/components/pro-account-menu', () => ({
+    ProAccountMenu: () => null,
 }));
 
 vi.mock('@/lib/auth/supabase', () => ({
@@ -86,9 +92,9 @@ describe('ProOnboardPage — multi-step contractor application', () => {
         await waitFor(() =>
             expect(screen.getByRole('heading', { name: /how do you work\?/i })).toBeInTheDocument(),
         );
-        expect(screen.getByRole('button', { name: /^individual/i })).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: /^team/i })).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: /^enterprise/i })).toBeInTheDocument();
+        expect(screen.getByRole('radio', { name: /^individual/i })).toBeInTheDocument();
+        expect(screen.getByRole('radio', { name: /^team/i })).toBeInTheDocument();
+        expect(screen.getByRole('radio', { name: /^enterprise/i })).toBeInTheDocument();
     });
 
     it('gates the Continue button until a contractor type is selected', async () => {
@@ -99,21 +105,21 @@ describe('ProOnboardPage — multi-step contractor application', () => {
         const continueBtn = screen.getByRole('button', { name: /continue/i });
         expect(continueBtn).toBeDisabled();
 
-        await user.click(screen.getByRole('button', { name: /^individual/i }));
+        await user.click(screen.getByRole('radio', { name: /^individual/i }));
         expect(continueBtn).toBeEnabled();
     });
 
-    it('advances to Step 2 (Willingness to Pay) on Continue', async () => {
+    it('advances to Step 2 (Company Search) on Continue', async () => {
         const user = userEvent.setup();
         render(<ProOnboardPage />);
         await screen.findByRole('heading', { name: /how do you work\?/i });
 
-        await user.click(screen.getByRole('button', { name: /^team/i }));
+        await user.click(screen.getByRole('radio', { name: /^team/i }));
         await user.click(screen.getByRole('button', { name: /continue/i }));
 
-        // The Willingness step's heading is "What would you pay per month?".
+        // After contractor type, Step 2 is Company Search ("Find your business").
         expect(
-            await screen.findByRole('heading', { name: /what would you pay per month\?/i }),
+            await screen.findByRole('heading', { name: /find your business/i }),
         ).toBeInTheDocument();
     });
 
@@ -122,20 +128,19 @@ describe('ProOnboardPage — multi-step contractor application', () => {
         render(<ProOnboardPage />);
         await screen.findByRole('heading', { name: /how do you work\?/i });
 
-        await user.click(screen.getByRole('button', { name: /^enterprise/i }));
+        await user.click(screen.getByRole('radio', { name: /^enterprise/i }));
         await user.click(screen.getByRole('button', { name: /continue/i }));
-        await screen.findByRole('heading', { name: /what would you pay per month\?/i });
+        await screen.findByRole('heading', { name: /find your business/i });
 
-        // The back button in FlowStepHeader is an icon-only button labeled "Go back".
+        // The back button in FlowTopBar is an icon-only button labeled "Go back".
         const backBtn = screen.getByRole('button', { name: /go back/i });
         await user.click(backBtn);
 
         // We're back at Step 1; the Enterprise card is in the selected/visual state.
         const stepOneHeading = await screen.findByRole('heading', { name: /how do you work\?/i });
         const stepOne = stepOneHeading.closest('div')!;
-        const enterprise = within(stepOne.parentElement!).getByRole('button', { name: /^enterprise/i });
-        // The component uses `border-primary` on the selected option; assert
-        // via class rather than coupling to ARIA the component does not set.
-        expect(enterprise.className).toMatch(/border-primary/);
+        const enterprise = within(stepOne.parentElement!).getByRole('radio', { name: /^enterprise/i });
+        // Selection is expressed via aria-checked on the option radio.
+        expect(enterprise).toHaveAttribute('aria-checked', 'true');
     });
 });

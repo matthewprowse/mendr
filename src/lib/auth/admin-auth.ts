@@ -10,6 +10,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { isAdminUser } from './admin-access';
 
 const COOKIE_NAME = 'admin_session';
 
@@ -108,12 +109,9 @@ export async function verifyAdminCookie(req: NextRequest): Promise<boolean> {
  *   const deny = await requireAdmin(req);
  *   if (deny) return deny;
  */
-export async function requireAdmin(req: NextRequest): Promise<NextResponse | null> {
-    const valid = await verifyAdminCookie(req);
-    if (!valid) {
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-    return null;
+export async function requireAdmin(_req: NextRequest): Promise<NextResponse | null> {
+    if (await isAdminUser()) return null;
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 }
 
 /**

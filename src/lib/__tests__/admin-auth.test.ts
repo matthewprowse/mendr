@@ -5,6 +5,13 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 const TEST_PASSWORD = 'super-secret-test-password-42';
 
+// requireAdmin now authorizes via profiles.is_admin (admin-access.isAdminUser),
+// not the legacy cookie. Mock it so the contract can be tested deterministically.
+const { isAdminUserMock } = vi.hoisted(() => ({ isAdminUserMock: vi.fn() }));
+vi.mock('../auth/admin-access', () => ({
+    isAdminUser: () => isAdminUserMock(),
+}));
+
 // Helper to build a minimal NextRequest-like object with cookies
 function makeReq(cookieValue?: string) {
     return {
@@ -99,18 +106,17 @@ describe('admin-auth', () => {
         expect(await verifyAdminCookie(req)).toBe(false);
     });
 
-    it('requireAdmin returns null for a valid session', async () => {
-        const { createAdminSession, requireAdmin } = await import('../auth/admin-auth');
-        const token = await createAdminSession();
-        const req = makeReq(token!);
-        const result = await requireAdmin(req);
+    it('requireAdmin returns null when the user is an admin', async () => {
+        isAdminUserMock.mockResolvedValue(true);
+        const { requireAdmin } = await import('../auth/admin-auth');
+        const result = await requireAdmin(makeReq());
         expect(result).toBeNull();
     });
 
-    it('requireAdmin returns a 401 NextResponse for an invalid session', async () => {
+    it('requireAdmin returns a 401 NextResponse when the user is not an admin', async () => {
+        isAdminUserMock.mockResolvedValue(false);
         const { requireAdmin } = await import('../auth/admin-auth');
-        const req = makeReq('invalid.token');
-        const result = await requireAdmin(req);
+        const result = await requireAdmin(makeReq());
         expect(result).not.toBeNull();
         expect(result?.status).toBe(401);
     });

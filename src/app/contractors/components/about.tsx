@@ -1,7 +1,7 @@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ProPageMap } from '@/app/contractors/[id]/components/map';
+import { ProPageMap } from '@/app/pro/[id]/components/map';
 import type { Dispatch, SetStateAction } from 'react';
 
 function toTitleCaseLabel(text: string): string {

@@ -159,6 +159,13 @@ export const RATE_LIMITS = {
         max: 5,
     },
 
+    // Early-access code attempts on /launch — guards against brute-forcing
+    // individual access codes. Generous enough for honest typos.
+    betaAccess: {
+        windowMs: 15 * 60 * 1000, // 15 minutes
+        max: 20,
+    },
+
     // Review count read. Two count queries — very low cost.
     reviewsCount: {
         windowMs: 60 * 1000, // 1 minute

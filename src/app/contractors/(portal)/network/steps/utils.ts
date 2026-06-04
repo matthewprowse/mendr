@@ -37,12 +37,35 @@ export function toSaE164(value: string): string | null {
 }
 
 export function formatSaPhoneDisplay(value: string): string {
-    const e164 = toSaE164(value);
-    if (!e164) return value.replace(/[^\d+\s]/g, '').slice(0, 16);
-    const n = e164.slice(3);
-    return `+27 ${n.slice(0, 2)} ${n.slice(2, 5)} ${n.slice(5, 9)}`;
+    // Normalise to the 9 national digits (dropping +27 / 0 prefixes), capped so
+    // extra typed/pasted digits are ignored, then format in the familiar SA
+    // local style: 0XX XXX XXXX. Storage still converts to +27 via toSaE164.
+    let digits = value.replace(/\D/g, '');
+    if (digits.startsWith('27')) digits = digits.slice(2);
+    if (digits.startsWith('0')) digits = digits.slice(1);
+    digits = digits.slice(0, 9);
+    if (!digits) return '';
+    const a = digits.slice(0, 2);
+    const b = digits.slice(2, 5);
+    const c = digits.slice(5, 9);
+    return [`0${a}`, b, c].filter(Boolean).join(' ');
 }
 
 export function isValidEmail(value: string): boolean {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim().toLowerCase());
+}
+
+/**
+ * Shorten a Google formatted address to street, suburb, city — dropping the
+ * trailing postal code and country. e.g.
+ *   "6 Mount Rd, Rondebosch, Cape Town, 7700, South Africa"
+ *     → "6 Mount Rd, Rondebosch, Cape Town"
+ */
+export function shortenSaAddress(formatted: string): string {
+    return formatted
+        .split(',')
+        .map((segment) => segment.trim())
+        .filter(Boolean)
+        .filter((segment) => segment !== 'South Africa' && !/^\d{4}$/.test(segment))
+        .join(', ');
 }

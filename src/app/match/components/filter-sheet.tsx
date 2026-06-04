@@ -16,12 +16,14 @@
  * regardless of stacking context.
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { RefreshCw, X } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { BRAND_NAME } from '@/lib/brand-system';
 import { Switch } from '@/components/ui/switch';
-import { cn } from '@/lib/utils';
+import { Label } from '@/components/ui/label';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import type { MatchProvider } from '@/features/match/contracts';
 import {
     applyFilters,
@@ -47,8 +49,6 @@ export type FilterSheetProps = {
     onApply: (next: MatchFilterState) => void;
     /** Provider superset used to compute the histogram and the live "Show N results" count. */
     providers: ReadonlyArray<MatchProvider>;
-    /** Specialisations available across loaded providers (deduped, alphabetical). */
-    availableSpecialisations: readonly string[];
     /** Maximum value for distance slider (km). Defaults to 50. */
     maxDistanceKm?: number;
 };
@@ -59,7 +59,6 @@ export function FilterSheet({
     state,
     onApply,
     providers,
-    availableSpecialisations,
     maxDistanceKm = 50,
 }: FilterSheetProps) {
     const [draft, setDraft] = useState<MatchFilterState>(state);
@@ -78,6 +77,25 @@ export function FilterSheet({
         };
     }, [open]);
 
+    /**
+     * Swap the header label between the brand name and "Filters" depending on
+     * whether the in-body title has scrolled out of view — same behaviour as the
+     * History page. Re-attaches each time the sheet opens (the title only exists then).
+     */
+    const headingRef = useRef<HTMLHeadingElement>(null);
+    const [headingVisible, setHeadingVisible] = useState(true);
+    useEffect(() => {
+        if (!open) return;
+        const el = headingRef.current;
+        if (!el || typeof IntersectionObserver === 'undefined') return;
+        const observer = new IntersectionObserver(
+            ([entry]) => setHeadingVisible(entry?.isIntersecting ?? true),
+            { threshold: 0 }
+        );
+        observer.observe(el);
+        return () => observer.disconnect();
+    }, [open]);
+
     const draftActive = useMemo(() => countActiveFilters(draft), [draft]);
     const distancesKm = useMemo(() => providers.map((p) => p.distanceKm), [providers]);
     const liveResultCount = useMemo(
@@ -94,41 +112,51 @@ export function FilterSheet({
 
     return createPortal(
         <div className="fixed inset-0 z-[300] flex flex-col bg-background">
-            <header className="flex h-14 shrink-0 items-center justify-between gap-3 bg-background px-6">
-                <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="size-9"
-                    onClick={() => onOpenChange(false)}
-                    aria-label="Close filters"
-                >
-                    <X size={18} strokeWidth={2.5} />
-                </Button>
-                <h2 className="text-base font-semibold">
-                    Filters{draftActive > 0 ? ` · ${draftActive}` : ''}
-                </h2>
-                <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="text-sm"
-                    onClick={() => setDraft(DEFAULT_FILTER_STATE)}
-                    disabled={draftActive === 0}
-                >
-                    <RefreshCw size={14} strokeWidth={2.5} />
-                    Reset
-                </Button>
-            </header>
+            {/* Header — same as the match page header, with "Filters" centered and a Reset button. */}
+            <div className="sticky top-0 z-10 shrink-0 bg-background">
+                <div className="relative flex h-16 items-center justify-between gap-3 px-4">
+                    <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => onOpenChange(false)}
+                        aria-label="Close filters"
+                    >
+                        <ArrowLeft strokeWidth={2.5} />
+                    </Button>
+                    <p className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-base font-medium text-foreground">
+                        {headingVisible ? BRAND_NAME : 'Filters'}
+                    </p>
+                    <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setDraft(DEFAULT_FILTER_STATE)}
+                        disabled={draftActive === 0}
+                    >
+                        Reset
+                    </Button>
+                </div>
+            </div>
 
-            <div className="flex-1 overflow-y-auto p-6">
-                <div className="mx-auto flex w-full max-w-xl flex-col gap-6">
+            <div className="flex-1 overflow-y-auto p-4">
+                <div className="mx-auto flex w-full max-w-xl flex-col gap-8">
+                    <div className="flex w-full flex-col gap-3">
+                        <h1 ref={headingRef} className="text-2xl font-semibold text-foreground">
+                            Filters
+                        </h1>
+                        <p className="text-sm text-muted-foreground">
+                            Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do
+                            eiusmod tempor incididunt ut labore et dolore.
+                        </p>
+                    </div>
+
                     <SortSection
                         value={draft.sort}
                         onChange={(value) => setDraftField('sort', value)}
                     />
 
-                    <Section title="Distance" subtitle="Alarm Ipsum">
+                    <Section title="Distance" subtitle="Lorem ipsum dolor sit amet, consectetur adipiscing elit.">
                         <DistanceHistogram
                             distancesKm={distancesKm}
                             maxKm={maxDistanceKm}
@@ -144,31 +172,12 @@ export function FilterSheet({
                         />
                     </Section>
 
-                    <Section title="Rating Range" subtitle="Alarm Ipsum">
-                        <RatingRangePicker
-                            minValue={draft.minRating}
-                            maxValue={draft.maxRating}
-                            onChange={({ minValue, maxValue }) => {
-                                setDraft((prev) => ({
-                                    ...prev,
-                                    minRating: minValue,
-                                    maxRating: maxValue,
-                                }));
-                            }}
-                        />
-                    </Section>
-
-                    <Section title="Quick Toggles" subtitle="Alarm Ipsum">
+                    <Section title="Quick Toggles" subtitle="Lorem ipsum dolor sit amet, consectetur adipiscing elit.">
                         <div className="flex flex-col divide-y divide-border">
                             <ToggleRow
                                 label="Open Now"
                                 checked={draft.onlyOpenNow}
                                 onCheckedChange={(v) => setDraftField('onlyOpenNow', v)}
-                            />
-                            <ToggleRow
-                                label="Open 24/7"
-                                checked={draft.is247}
-                                onCheckedChange={(v) => setDraftField('is247', v)}
                             />
                             <ToggleRow
                                 label="Has Website"
@@ -183,64 +192,27 @@ export function FilterSheet({
                         </div>
                     </Section>
 
-                    {/* Company Size filter hidden — company_size not yet in DB schema */}
-
-                    {availableSpecialisations.length > 0 ? (
-                        <Section title="Specialisations" subtitle="Alarm Ipsum">
-                            <ChipGroup
-                                options={availableSpecialisations.map((s) => ({ value: s, label: s }))}
-                                selectedValues={draft.specialisations}
-                                onChange={(next) => setDraftField('specialisations', next)}
-                                multi
-                            />
-                        </Section>
-                    ) : null}
-
-                    <Section title="Certifications" subtitle="Alarm Ipsum">
-                        <ChipGroup
-                            options={[
-                                { value: 'yes', label: 'Yes, They Have' },
-                                { value: 'no', label: "No, They Don't" },
-                            ]}
-                            selectedValues={
-                                draft.certifications === 'any' ? [] : [draft.certifications]
-                            }
-                            onChange={(next) => {
-                                if (!next.length) {
-                                    setDraftField('certifications', 'any');
-                                    return;
-                                }
-                                const value = next[0] === 'yes' ? 'yes' : 'no';
-                                setDraftField('certifications', value);
-                            }}
-                            multi={false}
-                        />
-                    </Section>
                 </div>
             </div>
 
-            <footer className="sticky bottom-0 shrink-0 bg-background px-6 py-3">
-                <div className="flex gap-2">
+            <div className="sticky bottom-0 shrink-0 bg-background p-4">
+                <div className="mx-auto flex w-full max-w-xl flex-col gap-2">
+                    <Button type="button" className="w-full" onClick={() => onApply(draft)}>
+                        {liveResultCount > 0
+                            ? `Show ${liveResultCount} Result${liveResultCount === 1 ? '' : 's'}`
+                            : 'No Matches — Adjust Filters'}
+                    </Button>
                     <Button
                         type="button"
                         variant="ghost"
-                        className="flex-1"
+                        className="w-full"
                         onClick={() => setDraft(DEFAULT_FILTER_STATE)}
                         disabled={draftActive === 0}
                     >
                         Clear All
                     </Button>
-                    <Button
-                        type="button"
-                        onClick={() => onApply(draft)}
-                        className="flex-1"
-                    >
-                        {liveResultCount > 0
-                            ? `Show ${liveResultCount} Result${liveResultCount === 1 ? '' : 's'}`
-                            : 'No Matches — Adjust Filters'}
-                    </Button>
                 </div>
-            </footer>
+            </div>
         </div>,
         document.body
     );
@@ -256,13 +228,13 @@ function Section({
     children: React.ReactNode;
 }) {
     return (
-        <section className="flex flex-col gap-3">
-            <header className="flex flex-col gap-0.5">
-                <h3 className="text-sm font-semibold">{title}</h3>
+        <section className="flex flex-col gap-6">
+            <div className="flex flex-col gap-1">
+                <h2 className="text-lg font-semibold text-foreground">{title}</h2>
                 {subtitle ? (
-                    <p className="text-xs text-muted-foreground">{subtitle}</p>
+                    <p className="text-sm text-muted-foreground">{subtitle}</p>
                 ) : null}
-            </header>
+            </div>
             {children}
         </section>
     );
@@ -295,128 +267,24 @@ function SortSection({
     onChange: (next: MatchSortKey) => void;
 }) {
     return (
-        <Section title="Sort by">
-            <div className="flex flex-wrap gap-2">
+        <Section title="Sort By" subtitle="Lorem ipsum dolor sit amet, consectetur adipiscing elit.">
+            <RadioGroup
+                value={value}
+                onValueChange={(next) => onChange(next as MatchSortKey)}
+                className="flex flex-col gap-0 divide-y divide-border"
+            >
                 {SORT_OPTIONS.map((opt) => (
-                    <button
+                    <Label
                         key={opt.value}
-                        type="button"
-                        onClick={() => onChange(opt.value)}
-                        className={cn(
-                            'rounded-full border px-3 py-1.5 text-sm transition-colors',
-                            value === opt.value
-                                ? 'border-foreground bg-foreground text-background'
-                                : 'border-border bg-background text-foreground hover:bg-secondary'
-                        )}
+                        htmlFor={`sort-${opt.value}`}
+                        className="flex w-full cursor-pointer items-center justify-between gap-3 py-3"
                     >
                         {opt.label}
-                    </button>
+                        <RadioGroupItem id={`sort-${opt.value}`} value={opt.value} />
+                    </Label>
                 ))}
-            </div>
+            </RadioGroup>
         </Section>
     );
 }
 
-function RatingRangePicker({
-    minValue,
-    maxValue,
-    onChange,
-}: {
-    minValue: number;
-    maxValue: number;
-    onChange: (next: { minValue: number; maxValue: number }) => void;
-}) {
-    const options: Array<{ label: string; v: number }> = [
-        { label: 'Any', v: 0 },
-        { label: '3.0+', v: 3 },
-        { label: '3.5+', v: 3.5 },
-        { label: '4.0+', v: 4 },
-        { label: '4.5+', v: 4.5 },
-    ];
-    return (
-        <div className="flex flex-col gap-3">
-            <div className="flex flex-wrap gap-2">
-                <span className="w-full text-xs font-medium text-muted-foreground">Minimum</span>
-                {options.map((opt) => (
-                    <button
-                        key={`min-${opt.v}`}
-                        type="button"
-                        onClick={() => onChange({ minValue: opt.v, maxValue })}
-                        className={cn(
-                            'rounded-full border px-3 py-1.5 text-sm transition-colors',
-                            Math.abs(minValue - opt.v) < 0.0001
-                                ? 'border-foreground bg-foreground text-background'
-                                : 'border-border bg-background text-foreground hover:bg-secondary'
-                        )}
-                    >
-                        {opt.label}
-                    </button>
-                ))}
-            </div>
-            <div className="flex flex-wrap gap-2">
-                <span className="w-full text-xs font-medium text-muted-foreground">Maximum</span>
-                {options.map((opt) => (
-                    <button
-                        key={`max-${opt.v}`}
-                        type="button"
-                        onClick={() => onChange({ minValue, maxValue: opt.v })}
-                        className={cn(
-                            'rounded-full border px-3 py-1.5 text-sm transition-colors',
-                            Math.abs(maxValue - opt.v) < 0.0001
-                                ? 'border-foreground bg-foreground text-background'
-                                : 'border-border bg-background text-foreground hover:bg-secondary'
-                        )}
-                    >
-                        {opt.label}
-                    </button>
-                ))}
-            </div>
-        </div>
-    );
-}
-
-function ChipGroup({
-    options,
-    selectedValues,
-    onChange,
-    multi = true,
-}: {
-    options: ReadonlyArray<{ value: string; label: string; title?: string }>;
-    selectedValues: readonly string[];
-    onChange: (next: string[]) => void;
-    multi?: boolean;
-}) {
-    const set = new Set(selectedValues);
-    return (
-        <div className="flex flex-wrap gap-2">
-            {options.map((opt) => {
-                const active = set.has(opt.value);
-                return (
-                    <button
-                        key={opt.value}
-                        type="button"
-                        title={opt.title || opt.label}
-                        onClick={() => {
-                            if (!multi) {
-                                onChange(active ? [] : [opt.value]);
-                                return;
-                            }
-                            const next = new Set(set);
-                            if (active) next.delete(opt.value);
-                            else next.add(opt.value);
-                            onChange(Array.from(next));
-                        }}
-                        className={cn(
-                            'rounded-full border px-3 py-1.5 text-sm transition-colors',
-                            active
-                                ? 'border-foreground bg-foreground text-background'
-                                : 'border-border bg-background text-foreground hover:bg-secondary'
-                        )}
-                    >
-                        {opt.label}
-                    </button>
-                );
-            })}
-        </div>
-    );
-}

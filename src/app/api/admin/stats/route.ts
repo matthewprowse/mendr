@@ -15,7 +15,7 @@ export async function GET(req: NextRequest) {
     todayStart.setHours(0, 0, 0, 0);
     const todayIso = todayStart.toISOString();
 
-    const [waitlistNew, contactUnread, todayStarts, pendingReviews, pendingGallery] = await Promise.all([
+    const [waitlistNew, contactUnread, todayStarts, pendingReviews, pendingGallery, activeCodes] = await Promise.all([
         admin
             .from('provider_applications')
             .select('id', { count: 'exact', head: true })
@@ -37,6 +37,10 @@ export async function GET(req: NextRequest) {
             .from('provider_images')
             .select('id', { count: 'exact', head: true })
             .eq('status', 'pending'),
+        admin
+            .from('beta_access_codes')
+            .select('id', { count: 'exact', head: true })
+            .eq('is_active', true),
     ]);
 
     return NextResponse.json({
@@ -45,5 +49,6 @@ export async function GET(req: NextRequest) {
         todayStarts: todayStarts.count ?? 0,
         pendingReviews: pendingReviews.count ?? 0,
         pendingGallery: pendingGallery.count ?? 0,
+        activeCodes: activeCodes.count ?? 0,
     });
 }

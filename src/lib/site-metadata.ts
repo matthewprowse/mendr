@@ -110,7 +110,8 @@ export const META_CONTRACTORS: Metadata = {
 };
 
 export const META_CONTRACTORS_ONBOARD: Metadata = {
-    title: 'Contractor setup',
+    // `absolute` bypasses the "%s | Mendr" template so the tab reads exactly this.
+    title: { absolute: 'Mendr: Pro Setup' },
     description: 'Complete your Mendr contractor profile and service areas.',
     robots: { index: false, follow: false },
 };
@@ -191,10 +192,12 @@ export const META_DESIGN_PREVIEW: Metadata = {
 
 const ADMIN_ROBOTS = { index: false, follow: false } as const;
 
-export const META_ADMIN: Metadata = { title: 'Mendr Admin', robots: ADMIN_ROBOTS };
+export const META_ADMIN: Metadata = { title: { absolute: 'Mendr Admin' }, robots: ADMIN_ROBOTS };
+export const META_ADMIN_HOME: Metadata = { title: { absolute: 'Mendr Admin: Home' }, robots: ADMIN_ROBOTS };
 export const META_ADMIN_LOGIN: Metadata = { title: 'Admin sign in', robots: ADMIN_ROBOTS };
-export const META_ADMIN_ANALYTICS: Metadata = { title: 'Analytics', robots: ADMIN_ROBOTS };
-export const META_ADMIN_CONTACT: Metadata = { title: 'Contact messages', robots: ADMIN_ROBOTS };
+export const META_ADMIN_ANALYTICS: Metadata = { title: { absolute: 'Mendr Admin: Analytics' }, robots: ADMIN_ROBOTS };
+export const META_ADMIN_CONTACT: Metadata = { title: { absolute: 'Mendr Admin: Inbox' }, robots: ADMIN_ROBOTS };
 export const META_ADMIN_GALLERY: Metadata = { title: 'Gallery', robots: ADMIN_ROBOTS };
-export const META_ADMIN_PROVIDERS: Metadata = { title: 'Providers', robots: ADMIN_ROBOTS };
+export const META_ADMIN_PROVIDERS: Metadata = { title: { absolute: 'Mendr Admin: Providers' }, robots: ADMIN_ROBOTS };
 export const META_ADMIN_REVIEWS: Metadata = { title: 'Reviews', robots: ADMIN_ROBOTS };
+export const META_ADMIN_BETA_CODES: Metadata = { title: { absolute: 'Mendr Admin: Access codes' }, robots: ADMIN_ROBOTS };

@@ -121,13 +121,31 @@ export default function AdminGalleryPage() {
         toast.success('Image updated');
     }
 
+    async function deleteImage(id: string) {
+        if (
+            typeof window !== 'undefined' &&
+            !window.confirm('Delete this image permanently? This removes it from the provider and from storage.')
+        ) {
+            return;
+        }
+        const res = await fetch(`/api/admin/gallery?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+        if (!res.ok) {
+            toast.error('Failed to delete image');
+            return;
+        }
+        setRows((prev) => prev.filter((r) => r.id !== id));
+        setSelected((prev) => (prev?.id === id ? null : prev));
+        setEditDraft((prev) => (prev?.id === id ? null : prev));
+        toast.success('Image deleted');
+    }
+
     function imageUrl(row: GalleryRow): string | null {
         if (!baseUrl || !row.path) return null;
         return `${baseUrl}/storage/v1/object/public/${row.bucket || 'gallery'}/${row.path}`;
     }
 
     return (
-        <div className="mx-auto w-full max-w-3xl px-4 pb-8 pt-4 sm:px-6 lg:px-8">
+        <div className="mx-auto w-full max-w-xl px-4 pb-8 pt-4 sm:px-6 lg:px-8">
             <div className="mb-6">
                 <AdminPageHeader title="Gallery" />
             </div>
@@ -188,6 +206,9 @@ export default function AdminGalleryPage() {
                                     </Button>
                                     <Button size="sm" variant="outline" className="h-7 text-xs" onClick={(e) => { e.stopPropagation(); void updateStatus(row.id, 'rejected'); }}>
                                         Reject
+                                    </Button>
+                                    <Button size="sm" variant="ghost" className="h-7 text-xs text-destructive hover:text-destructive" onClick={(e) => { e.stopPropagation(); void deleteImage(row.id); }}>
+                                        Delete
                                     </Button>
                                 </div>
                             </TableCell>
@@ -276,6 +297,7 @@ export default function AdminGalleryPage() {
                                         Open Full Image
                                     </Button>
                                 ) : null}
+                                <Button variant="ghost" className="text-destructive hover:text-destructive" onClick={() => void deleteImage(selected.id)}>Delete</Button>
                                 <Button variant="outline" onClick={() => setSelected(null)}>Close</Button>
                             </div>
                         </div>

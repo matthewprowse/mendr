@@ -25,8 +25,9 @@ const UUID_RE =
 
 const MAX_GALLERY_THUMBS = 12;
 
-// NOTE: company_size, years_in_business, and profile_completeness are NOT columns
-// in the providers table — they live in provider_cache. Do not add them here.
+// NOTE: company_size and profile_completeness are NOT columns in the providers
+// table — they live in provider_cache. years_in_business IS a providers column
+// (contractor-claimed or enrichment-backfilled) and is selected below.
 const PROVIDER_SELECT = [
     'id',
     'google_place_id',
@@ -46,6 +47,7 @@ const PROVIDER_SELECT = [
     'highlights',
     'service_areas',
     'weekday_descriptions',
+    'years_in_business',
 ].join(', ');
 
 type ProviderRow = {
@@ -67,6 +69,7 @@ type ProviderRow = {
     highlights: string[] | null;
     service_areas: string[] | null;
     weekday_descriptions: string[] | null;
+    years_in_business: number | null;
 };
 
 type CertificationRow = {
@@ -329,11 +332,12 @@ export async function loadContractorProfileById(id: string): Promise<LoadContrac
             hasWorkPhotos: images.length > 0,
             enrichmentReviewSummary: summarySanitised || cachedReviewSummary || null,
             responseProfile: null,
-            // company_size, years_in_business, profile_completeness are in provider_cache,
-            // not in providers — not available on this server-side path.
+            // company_size and profile_completeness live in provider_cache, not in
+            // providers — not available on this server-side path. years_in_business is
+            // a providers column (contractor-claimed or enrichment-backfilled).
             profileCompleteness: undefined,
             companySize: null,
-            yearsInBusiness: null,
+            yearsInBusiness: typeof row.years_in_business === 'number' ? row.years_in_business : null,
             certifications,
             images,
             nextOpensAt: openStatus.nextOpensAt ?? null,

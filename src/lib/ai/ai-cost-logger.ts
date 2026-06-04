@@ -24,15 +24,27 @@ export type PricingTable = Record<string, ModelRate>;
  * Keep roughly in sync with the seeded DB rows; the DB is always authoritative.
  */
 export const FALLBACK_PRICING: PricingTable = {
-    'gemini-3.5-flash':         { input: 1.50 / 1_000_000, output: 9.00 / 1_000_000, cachedInput: 0.15 / 1_000_000 },
-    'gemini-2.5-flash':         { input: 0.30 / 1_000_000, output: 1.00 / 1_000_000 },
-    'gemini-2.5-flash-preview': { input: 0.30 / 1_000_000, output: 1.00 / 1_000_000 },
-    'gemini-2.0-flash':         { input: 0.10 / 1_000_000, output: 0.40 / 1_000_000 },
-    'gemini-2.0-flash-lite':    { input: 0.075 / 1_000_000, output: 0.30 / 1_000_000 },
+    'gemini-3.5-flash': {
+        input: 1.5 / 1_000_000,
+        output: 9.0 / 1_000_000,
+        cachedInput: 0.15 / 1_000_000,
+    },
+    'gemini-2.5-flash': {
+        input: 0.3 / 1_000_000,
+        output: 2.5 / 1_000_000,
+        cachedInput: 0.03 / 1_000_000,
+    },
+    'gemini-2.5-flash-preview': {
+        input: 0.3 / 1_000_000,
+        output: 2.5 / 1_000_000,
+        cachedInput: 0.03 / 1_000_000,
+    },
+    'gemini-2.0-flash': { input: 0.1 / 1_000_000, output: 0.4 / 1_000_000 },
+    'gemini-2.0-flash-lite': { input: 0.075 / 1_000_000, output: 0.3 / 1_000_000 },
 };
 
 /** Default per-token rate when a model name matches nothing in the table (≈ 2.5 Flash). */
-const DEFAULT_RATE: ModelRate = { input: 0.30 / 1_000_000, output: 1.00 / 1_000_000 };
+const DEFAULT_RATE: ModelRate = { input: 0.3 / 1_000_000, output: 1.0 / 1_000_000 };
 
 function resolveRate(table: PricingTable, modelName: string): ModelRate {
     // Prefix match so revision suffixes ('-001', '-exp-0205', '-preview') resolve.
@@ -57,7 +69,9 @@ export function estimateUsdWithTable(
     if (typeof rate.cachedInput === 'number') {
         const cached = Math.max(0, Math.min(cachedTokens, promptTokens));
         const regular = promptTokens - cached;
-        return regular * rate.input + cached * rate.cachedInput + completionTokens * rate.output;
+        return (
+            regular * rate.input + cached * rate.cachedInput + completionTokens * rate.output
+        );
     }
     return promptTokens * rate.input + completionTokens * rate.output;
 }
@@ -130,6 +144,8 @@ export interface GeminiUsageMetadata {
     candidatesTokenCount?: number;
     totalTokenCount?: number;
     cachedContentTokenCount?: number;
+    /** Internal reasoning ("thinking") tokens — billed by Google at the output rate. */
+    thoughtsTokenCount?: number;
 }
 
 // ─── Public API ───────────────────────────────────────────────────────────────
@@ -145,21 +161,29 @@ export async function logGeminiUsage(
 ): Promise<void> {
     if (!usageMetadata) return;
 
-    const promptTokens     = usageMetadata.promptTokenCount        ?? 0;
-    const completionTokens = usageMetadata.candidatesTokenCount    ?? 0;
-    const totalTokens      = usageMetadata.totalTokenCount         ?? promptTokens + completionTokens;
-    const cachedTokens     = usageMetadata.cachedContentTokenCount ?? 0;
+    const promptTokens = usageMetadata.promptTokenCount ?? 0;
+    const candidateTokens = usageMetadata.candidatesTokenCount ?? 0;
+    const thoughtTokens = usageMetadata.thoughtsTokenCount ?? 0;
+    const totalTokens =
+        usageMetadata.totalTokenCount ?? promptTokens + candidateTokens + thoughtTokens;
+    const cachedTokens = usageMetadata.cachedContentTokenCount ?? 0;
+    // Gemini bills every non-prompt token (visible output + internal "thinking")
+    // at the output rate. Derive billable output as total - prompt so thinking
+    // tokens are never under-counted, regardless of which SDK fields are populated.
+    const completionTokens = Math.max(0, totalTokens - promptTokens);
 
     let table: PricingTable;
     try {
         table = await getPricingTable();
     } catch (err) {
-        console.warn(JSON.stringify({
-            type: 'ai_cost_log',
-            event: 'pricing_db_unavailable_using_fallback',
-            endpoint: ctx.endpoint,
-            error: err instanceof Error ? err.message : String(err),
-        }));
+        console.warn(
+            JSON.stringify({
+                type: 'ai_cost_log',
+                event: 'pricing_db_unavailable_using_fallback',
+                endpoint: ctx.endpoint,
+                error: err instanceof Error ? err.message : String(err),
+            }),
+        );
         table = FALLBACK_PRICING;
     }
 
@@ -174,30 +198,35 @@ export async function logGeminiUsage(
     try {
         const admin = await createSupabaseAdminClient();
         const { error } = await admin.from('ai_cost_events').insert({
-            endpoint:          ctx.endpoint,
-            model_name:        ctx.modelName,
-            user_id:           ctx.userId    ?? null,
-            conversation_id:   ctx.conversationId ?? null,
-            prompt_tokens:     promptTokens,
+            endpoint: ctx.endpoint,
+            model_name: ctx.modelName,
+            user_id: ctx.userId ?? null,
+            conversation_id: ctx.conversationId ?? null,
+            prompt_tokens: promptTokens,
             completion_tokens: completionTokens,
-            total_tokens:      totalTokens,
-            estimated_usd:     estimatedUsd,
-            latency_ms:        ctx.latencyMs ?? null,
+            cached_tokens: cachedTokens,
+            total_tokens: totalTokens,
+            estimated_usd: estimatedUsd,
+            latency_ms: ctx.latencyMs ?? null,
         });
 
         if (error) {
-            console.warn(JSON.stringify({
-                type: 'ai_cost_log_error',
-                endpoint: ctx.endpoint,
-                error: error.message,
-            }));
+            console.warn(
+                JSON.stringify({
+                    type: 'ai_cost_log_error',
+                    endpoint: ctx.endpoint,
+                    error: error.message,
+                }),
+            );
         }
     } catch (err) {
-        console.warn(JSON.stringify({
-            type: 'ai_cost_log_error',
-            endpoint: ctx.endpoint,
-            error: err instanceof Error ? err.message : String(err),
-        }));
+        console.warn(
+            JSON.stringify({
+                type: 'ai_cost_log_error',
+                endpoint: ctx.endpoint,
+                error: err instanceof Error ? err.message : String(err),
+            }),
+        );
     }
 }
 
@@ -207,7 +236,15 @@ export async function logGeminiUsage(
  */
 export async function getAiCostDailyTotals(
     days: number = 7,
-): Promise<Array<{ date: string; total_usd: number; total_tokens: number; calls: number }>> {
+): Promise<
+    Array<{
+        date: string;
+        total_usd: number;
+        total_tokens: number;
+        total_cached_tokens: number;
+        calls: number;
+    }>
+> {
     try {
         const admin = await createSupabaseAdminClient();
         const cutoff = new Date();
@@ -215,19 +252,33 @@ export async function getAiCostDailyTotals(
 
         const { data, error } = await admin
             .from('ai_cost_events')
-            .select('created_at, estimated_usd, total_tokens')
+            .select('created_at, estimated_usd, total_tokens, cached_tokens')
             .gte('created_at', cutoff.toISOString())
             .order('created_at', { ascending: false });
 
         if (error || !data) return [];
 
-        const byDate = new Map<string, { total_usd: number; total_tokens: number; calls: number }>();
+        const byDate = new Map<
+            string,
+            {
+                total_usd: number;
+                total_tokens: number;
+                total_cached_tokens: number;
+                calls: number;
+            }
+        >();
         for (const row of data) {
             const date = row.created_at.slice(0, 10); // 'YYYY-MM-DD'
-            const existing = byDate.get(date) ?? { total_usd: 0, total_tokens: 0, calls: 0 };
-            existing.total_usd    += Number(row.estimated_usd) || 0;
-            existing.total_tokens += Number(row.total_tokens)  || 0;
-            existing.calls        += 1;
+            const existing = byDate.get(date) ?? {
+                total_usd: 0,
+                total_tokens: 0,
+                total_cached_tokens: 0,
+                calls: 0,
+            };
+            existing.total_usd += Number(row.estimated_usd) || 0;
+            existing.total_tokens += Number(row.total_tokens) || 0;
+            existing.total_cached_tokens += Number(row.cached_tokens) || 0;
+            existing.calls += 1;
             byDate.set(date, existing);
         }
 

@@ -1,18 +1,24 @@
 'use client';
 
 import { Button } from '@/components/ui/button';
+import { getSupabase } from '@/lib/auth/supabase';
 
 export function SignOutButton() {
     return (
         <Button
             type="button"
             variant="ghost"
+            size="sm"
             onClick={async () => {
-                await fetch('/api/admin/login', { method: 'DELETE' });
-                window.location.href = '/admin/login';
+                try {
+                    await getSupabase().auth.signOut();
+                } catch {
+                    // Ignore — always send the user home afterwards.
+                }
+                window.location.href = '/home';
             }}
         >
-            Log out
+            Log Out
         </Button>
     );
 }

@@ -2,7 +2,6 @@
 
 import { useState } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
-import { INK } from '@/lib/design-tokens';
 
 const DAY_ORDER = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'] as const;
 
@@ -55,10 +54,10 @@ export function HoursCard({ weekdayDescriptions, isLoading, onExpand }: HoursCar
 
     return (
         <section
-            className="rounded-3xl border border-black/[0.07] bg-white p-4 sm:p-5"
+            className="rounded-lg border border-border bg-card p-4"
             aria-labelledby="contractor-hours-heading"
         >
-            <h2 id="contractor-hours-heading" className="mb-3 text-base font-semibold" style={{ color: INK }}>
+            <h2 id="contractor-hours-heading" className="mb-3 text-lg font-semibold text-foreground">
                 Operating hours
             </h2>
             {isLoading ? (
@@ -97,10 +96,10 @@ export function HoursCard({ weekdayDescriptions, isLoading, onExpand }: HoursCar
 function Row({ day, hours, today }: { day: string; hours: string; today?: boolean }) {
     return (
         <div className="flex items-center justify-between border-b border-border/50 py-1.5 last:border-0">
-            <p className={`text-sm ${today ? 'font-medium' : 'text-muted-foreground'}`} style={today ? { color: INK } : undefined}>
+            <p className={`text-sm ${today ? 'font-medium text-foreground' : 'text-muted-foreground'}`}>
                 {day}
             </p>
-            <p className={`text-sm tabular-nums ${today ? 'font-medium' : 'text-muted-foreground'}`} style={today ? { color: INK } : undefined}>
+            <p className={`text-sm tabular-nums ${today ? 'font-medium text-foreground' : 'text-muted-foreground'}`}>
                 {hours}
             </p>
         </div>

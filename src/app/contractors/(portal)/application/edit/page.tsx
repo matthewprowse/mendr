@@ -16,7 +16,7 @@ export default async function ApplicationEditPage() {
     } = await supabase.auth.getUser();
 
     if (!user) {
-        redirect('/contractors/auth?next=/contractors/application/edit');
+        redirect('/pro/auth/login?next=/contractors/application/edit');
     }
 
     return <ApplicationEditClient />;

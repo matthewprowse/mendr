@@ -20,7 +20,7 @@ import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { ComingSoonClient } from '@/app/coming-soon/client';
+import { ComingSoonClient } from '@/app/launch/client';
 import { server } from '@/__tests__/msw/server';
 
 // Mock next/navigation so we can assert router-driven redirects without
@@ -45,11 +45,11 @@ describe('ComingSoonClient — contact form', () => {
         const submit = screen.getByRole('button', { name: /send message/i });
         expect(submit).toBeDisabled();
 
-        await user.type(screen.getByPlaceholderText(/full name/i), 'Ada');
-        await user.type(screen.getByPlaceholderText(/email address/i), 'ada@example.com');
+        await user.type(screen.getByLabelText(/full name/i), 'Ada');
+        await user.type(screen.getByLabelText(/email address/i), 'ada@example.com');
         expect(submit).toBeDisabled();
 
-        await user.type(screen.getByPlaceholderText(/^message$/i), 'Question');
+        await user.type(screen.getByLabelText(/^message$/i), 'Question');
         expect(submit).toBeEnabled();
     });
 
@@ -64,9 +64,9 @@ describe('ComingSoonClient — contact form', () => {
         );
 
         render(<ComingSoonClient />);
-        await user.type(screen.getByPlaceholderText(/full name/i), 'Ada');
-        await user.type(screen.getByPlaceholderText(/email address/i), 'ada@example.com');
-        await user.type(screen.getByPlaceholderText(/^message$/i), 'Hi');
+        await user.type(screen.getByLabelText(/full name/i), 'Ada');
+        await user.type(screen.getByLabelText(/email address/i), 'ada@example.com');
+        await user.type(screen.getByLabelText(/^message$/i), 'Hi');
         await user.click(screen.getByRole('button', { name: /send message/i }));
 
         await waitFor(() => {
@@ -89,9 +89,9 @@ describe('ComingSoonClient — contact form', () => {
         );
 
         render(<ComingSoonClient />);
-        await user.type(screen.getByPlaceholderText(/full name/i), 'Ada');
-        await user.type(screen.getByPlaceholderText(/email address/i), 'ada@example.com');
-        await user.type(screen.getByPlaceholderText(/^message$/i), 'Hi');
+        await user.type(screen.getByLabelText(/full name/i), 'Ada');
+        await user.type(screen.getByLabelText(/email address/i), 'ada@example.com');
+        await user.type(screen.getByLabelText(/^message$/i), 'Hi');
         await user.click(screen.getByRole('button', { name: /send message/i }));
 
         expect(await screen.findByText(/too many requests/i)).toBeInTheDocument();
@@ -111,7 +111,7 @@ describe('ComingSoonClient — beta-access form', () => {
         server.use(http.post('/api/beta-access', () => HttpResponse.json({ ok: true })));
 
         render(<ComingSoonClient />);
-        await user.type(screen.getByPlaceholderText(/early access code/i), 'sekret');
+        await user.type(screen.getByLabelText(/early access code/i), 'sekret');
         await user.click(screen.getByRole('button', { name: /^continue$/i }));
 
         await waitFor(() => expect(routerPush).toHaveBeenCalledWith('/'));
@@ -125,7 +125,7 @@ describe('ComingSoonClient — beta-access form', () => {
         );
 
         render(<ComingSoonClient />);
-        const code = screen.getByPlaceholderText(/early access code/i) as HTMLInputElement;
+        const code = screen.getByLabelText(/early access code/i) as HTMLInputElement;
         await user.type(code, 'wrong');
         await user.click(screen.getByRole('button', { name: /^continue$/i }));
 
@@ -138,7 +138,7 @@ describe('ComingSoonClient — beta-access form', () => {
         server.use(http.post('/api/beta-access', () => HttpResponse.error()));
 
         render(<ComingSoonClient />);
-        await user.type(screen.getByPlaceholderText(/early access code/i), 'sekret');
+        await user.type(screen.getByLabelText(/early access code/i), 'sekret');
         await user.click(screen.getByRole('button', { name: /^continue$/i }));
 
         expect(await screen.findByText(/something went wrong\. please try again\./i)).toBeInTheDocument();

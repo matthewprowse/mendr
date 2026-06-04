@@ -99,7 +99,7 @@ export default function AdminQualityClient() {
     const maxSignal = Math.max(1, ...(data?.topBelowSignals ?? []).map((s) => s.count));
 
     return (
-        <div className="mx-auto w-full max-w-3xl px-4 pb-8 pt-4 sm:px-6 lg:px-8">
+        <div className="mx-auto w-full max-w-xl px-4 pb-8 pt-4 sm:px-6 lg:px-8">
             <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
                 <div>
                     <AdminPageHeader title="Diagnosis Quality" />

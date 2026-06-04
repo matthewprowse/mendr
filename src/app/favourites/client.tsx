@@ -303,7 +303,7 @@ export default function FavouritesClient({
                                 {filtered && filtered.length > 0 ? (
                                     <div className="flex flex-col">
                                         {filtered.map((row, index) => {
-                                            const target = `/contractors/${encodeURIComponent(row.providerId ?? row.googlePlaceId ?? '')}`;
+                                            const target = `/pro/${encodeURIComponent(row.providerId ?? row.googlePlaceId ?? '')}`;
                                             return (
                                                 <Fragment key={row.savedId}>
                                                     {index > 0 && <Separator />}

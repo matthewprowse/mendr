@@ -73,7 +73,8 @@ export function UserAvatarMenu() {
                 <div className="flex flex-col gap-1 border-t border-input/75 pt-3 -mx-1 -mb-1">
                     <Button
                         variant="secondary"
-                        className="h-8 w-full justify-start px-3 text-sm font-normal transition-all duration-250"
+                        size="sm"
+                        className="w-full justify-start font-normal transition-all duration-250"
                         onClick={handleSignOut}
                     >
                         Log Out

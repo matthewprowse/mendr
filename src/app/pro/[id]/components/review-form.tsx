@@ -106,7 +106,7 @@ export function ProReviewForm({ providerId }: { providerId: string }) {
                     {CATEGORIES.map(({ key, label, hint }) => (
                         <div key={key} className="space-y-1">
                             <Label className="text-xs">{label}</Label>
-                            <p className="text-[11px] text-muted-foreground">{hint}</p>
+                            <p className="text-xs text-muted-foreground">{hint}</p>
                             <div className="flex gap-1">
                                 {[1, 2, 3, 4, 5].map((n) => {
                                     const active = (ratings[key] ?? 0) >= n;

@@ -15,6 +15,7 @@
  */
 
 import { useRouter } from 'next/navigation';
+import { ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
     Dialog,
@@ -24,33 +25,27 @@ import {
     DialogHeader,
     DialogTitle,
 } from '@/components/ui/dialog';
-import { FlowStepHeader } from '@/components/flow-header';
-import {
-    FOOTER_SCROLL_GAP_PX,
-    FOOTER_SCROLL_MIN_PX,
-    STEP,
-    TOTAL_STEPS,
-} from './steps/types';
+import { FlowTopBar } from '@/components/match/flow-shell';
+import { ProAccountMenu } from '@/components/pro-account-menu';
+import { BRAND_NAME_PRO } from '@/lib/brand-system';
+import { STEP, TOTAL_STEPS } from './steps/types';
 import { WizardProvider, useWizard } from './steps/wizard-context';
 import { StepContractorType } from './steps/step-01-contractor-type';
-import { StepWillingnessToPay } from './steps/step-02-willingness-to-pay';
-import { StepCompanySearch } from './steps/step-03-company-search';
-import { StepBasics } from './steps/step-04-basics';
-import { StepContact } from './steps/step-05-contact';
-import { StepServiceAreas } from './steps/step-06-service-areas';
-import { StepTrade } from './steps/step-07-trade';
-import { StepProfile } from './steps/step-08-profile';
-import { StepKyc } from './steps/step-09-kyc';
-import { StepGallery } from './steps/step-10-gallery';
-import { StepConfirm } from './steps/step-11-confirm';
+import { StepCompanySearch } from './steps/step-02-company-search';
+import { StepBasics } from './steps/step-03-basics';
+import { StepContact } from './steps/step-04-contact';
+import { StepServiceAreas } from './steps/step-05-service-areas';
+import { StepTrade } from './steps/step-06-trade';
+import { StepProfile } from './steps/step-07-profile';
+import { StepKyc } from './steps/step-08-kyc';
+import { StepGallery } from './steps/step-09-gallery';
+import { StepConfirm } from './steps/step-10-confirm';
 
 function CurrentStep() {
     const { step } = useWizard();
     switch (step) {
         case STEP.CONTRACTOR_TYPE:
             return <StepContractorType />;
-        case STEP.WILLINGNESS_TO_PAY:
-            return <StepWillingnessToPay />;
         case STEP.COMPANY_SEARCH:
             return <StepCompanySearch />;
         case STEP.BASICS:
@@ -83,8 +78,6 @@ function WizardShell() {
         canContinue,
         submitting,
         submitted,
-        footerRef,
-        footerHeight,
         contentRef,
         leaveDialogOpen,
         setLeaveDialogOpen,
@@ -98,36 +91,37 @@ function WizardShell() {
 
     if (submitted) return <SuccessScreen />;
 
-    /** Scroll clearance so the last field sits above the fixed footer. */
-    const bottomScrollClearancePx = Math.max(
-        footerHeight + FOOTER_SCROLL_GAP_PX,
-        FOOTER_SCROLL_MIN_PX + FOOTER_SCROLL_GAP_PX
-    );
-
     return (
         <div className="flex h-dvh flex-col overflow-hidden overscroll-none bg-background">
-            <FlowStepHeader step={step} onBack={goBack} centerLabel="Mendr" />
-            <main
-                ref={contentRef}
-                className="flex min-h-0 flex-1 items-start justify-center overflow-y-auto px-4 pt-20 sm:px-6"
-            >
-                <div className="flex w-full min-w-0 max-w-xl flex-col gap-8">
-                    <CurrentStep />
-                    <div
-                        aria-hidden
-                        className="shrink-0"
-                        style={{
-                            height: `${bottomScrollClearancePx}px`,
-                            minHeight: `${bottomScrollClearancePx}px`,
-                        }}
-                    />
+            <FlowTopBar
+                className="p-4"
+                leftSlot={
+                    <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        aria-label="Go back"
+                        onClick={goBack}
+                    >
+                        <ArrowLeft strokeWidth={2.5} />
+                    </Button>
+                }
+                centerSlot={
+                    <p className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-base font-medium text-foreground">
+                        {BRAND_NAME_PRO}
+                    </p>
+                }
+                rightSlot={<ProAccountMenu />}
+            />
+            <main ref={contentRef} className="min-h-0 flex-1 overflow-y-auto">
+                <div className="flex min-h-full flex-col justify-center p-4">
+                    <div className="mx-auto flex w-full min-w-0 max-w-xl flex-col gap-8">
+                        <CurrentStep />
+                    </div>
                 </div>
             </main>
-            <div
-                ref={footerRef}
-                className="fixed inset-x-0 bottom-0 z-40 bg-background/95 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur supports-[backdrop-filter]:bg-background/80"
-            >
-                <div className="mx-auto flex w-full max-w-xl flex-col gap-3">
+            <div className="sticky bottom-0 shrink-0 bg-background p-4">
+                <div className="mx-auto flex w-full max-w-xl flex-col gap-2">
                     <Button
                         type="button"
                         className="h-10 w-full"
@@ -136,6 +130,9 @@ function WizardShell() {
                     >
                         {submitting ? 'Submitting...' : step === TOTAL_STEPS ? 'Submit Application' : 'Continue'}
                     </Button>
+                    <p className="text-center text-xs text-muted-foreground">
+                        Lorem ipsum dolor sit amet, consectetur adipiscing elit.
+                    </p>
                 </div>
             </div>
 
@@ -231,8 +228,8 @@ function SuccessScreen() {
             <div className="flex flex-col gap-2">
                 <h1 className="text-2xl font-bold text-foreground">Application Received</h1>
                 <p className="max-w-sm text-base text-muted-foreground">
-                    Thank you for applying to join the Mendr contractor network. We&apos;ll review your application and
-                    be in touch within 2 business days.
+                    Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore
+                    et dolore.
                 </p>
             </div>
             <Button variant="secondary" onClick={() => router.push('/contractors')}>

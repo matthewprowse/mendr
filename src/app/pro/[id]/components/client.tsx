@@ -24,13 +24,13 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { ArrowLeft, Heart, Image, Star, User } from 'lucide-react';
+import { ArrowLeft, Heart, Image, Star } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ContactPopover } from '@/components/contact-popover';
 import { FlowTopBar } from '@/components/match/flow-shell';
+import { HeaderAuth } from '@/components/header-auth';
 import { HomeownerAuthDialog } from '@/components/homeowner-auth-dialog';
-import { INK } from '@/lib/design-tokens';
 import { normalizeWebsiteUrl } from '@/lib/utils';
 import { trackEvent } from '@/lib/analytics';
 import { trackProviderView } from '@/lib/analytics/provider-view';
@@ -38,7 +38,7 @@ import { useAuth } from '@/context/auth-context';
 import { ProviderCardCarousel } from '@/app/match/components/provider-card';
 import { ProReviewsTab } from '@/app/contractors/components/reviews';
 import { ProGalleryTab } from '@/app/contractors/components/gallery';
-import { ProPageMap } from '@/app/contractors/[id]/components/map';
+import { ProPageMap } from '@/app/pro/[id]/components/map';
 import {
     useContractor,
     type ContractorHydratePayload,
@@ -77,7 +77,7 @@ function ContractorClient({
     const searchParams = useSearchParams();
 
     const placeIdFromPath = useMemo(() => {
-        const m = pathname?.match(/^\/contractors\/([^/]+)$/);
+        const m = pathname?.match(/^\/pro\/([^/]+)$/);
         return m ? decodeURIComponent(m[1]) : '';
     }, [pathname]);
     const placeIdParam = searchParams.get('placeId') ?? '';
@@ -142,7 +142,7 @@ function ContractorClient({
 
     const handleSaveClick = useCallback(async () => {
         if (!isAuthenticated) {
-            setAuthDialogReason(`Save ${profile?.name ?? 'this provider'} to your account so you can find them again easily.`);
+            setAuthDialogReason(`Save ${profile?.name ?? 'this Pro'} to your account so you can find them again easily.`);
             setAuthDialogOpen(true);
             return;
         }
@@ -266,15 +266,13 @@ function ContractorClient({
         return (
             <main className="flex min-h-screen flex-col bg-background">
                 <FlowTopBar onBack={handleBack} />
-                <div className="mx-auto flex w-full max-w-xl flex-1 flex-col items-center justify-center gap-3 px-4 pb-24 pt-12 text-center">
-                    <h1 className="text-xl font-semibold" style={{ color: INK }}>
-                        Provider not found
-                    </h1>
+                <div className="mx-auto flex w-full max-w-xl flex-1 flex-col items-center justify-center gap-3 p-4 text-center">
+                    <h1 className="text-2xl font-semibold text-foreground">Pro not found</h1>
                     <p className="text-sm text-muted-foreground">
-                        We couldn&rsquo;t load this contractor&rsquo;s profile. Please try again.
+                        We couldn&rsquo;t load this Pro&rsquo;s profile. Please try again.
                     </p>
                     <Button onClick={handleBack} variant="secondary" className="mt-2">
-                        Go back
+                        Go Back
                     </Button>
                 </div>
             </main>
@@ -303,41 +301,14 @@ function ContractorClient({
                         <ArrowLeft size={18} strokeWidth={2.5} aria-hidden />
                     </Button>
                 }
-                rightSlot={
-                    isAuthenticated ? (
-                        <Button
-                            type="button"
-                            variant="secondary"
-                            size="icon"
-                            className="size-10"
-                            asChild
-                            aria-label="My account"
-                        >
-                            <a href="/account">
-                                <User size={18} aria-hidden />
-                            </a>
-                        </Button>
-                    ) : (
-                        <Button
-                            type="button"
-                            variant="ghost"
-                            className="h-10 px-3 text-sm font-medium"
-                            onClick={() => {
-                                setAuthDialogReason(undefined);
-                                setAuthDialogOpen(true);
-                            }}
-                        >
-                            Sign in
-                        </Button>
-                    )
-                }
+                rightSlot={<HeaderAuth />}
             />
 
-            <div className="mx-auto flex w-full max-w-xl flex-1 flex-col gap-4 px-4 pb-[calc(6rem+env(safe-area-inset-bottom))] sm:px-6 lg:max-w-4xl lg:px-8 xl:max-w-5xl 2xl:max-w-6xl">
+            <div className="mx-auto flex w-full max-w-xl flex-1 flex-col gap-8 p-4 pb-[calc(6rem+env(safe-area-inset-bottom))]">
                 <BannerCarousel
                     isLoading={isLoading}
                     images={bannerImages}
-                    providerName={profile?.name ?? 'Provider'}
+                    providerName={profile?.name ?? 'Pro'}
                     onSwipe={(idx) =>
                         trackEvent('contractor_image_swipe', {
                             provider_id: providerId ?? undefined,
@@ -353,7 +324,6 @@ function ContractorClient({
                     ratingCount={profile?.ratingCount ?? 0}
                     isOpen={profile?.isOpen ?? null}
                     nextOpensAt={profile?.nextOpensAt ?? null}
-                    companySize={profile?.companySize ?? null}
                     yearsInBusiness={profile?.yearsInBusiness ?? null}
                     scandioReviewCount={profile?.scandioReviewCount ?? null}
                 />
@@ -460,19 +430,19 @@ function ContractorClient({
                 </GallerySection>
 
                 <section
-                    className="rounded-3xl border border-black/[0.07] bg-white p-4 sm:p-5"
+                    className="rounded-lg border border-border bg-card p-4"
                     aria-label="Location"
                 >
-                    <h2 className="mb-3 text-base font-semibold" style={{ color: INK }}>
+                    <h2 className="mb-3 text-lg font-semibold text-foreground">
                         Location
                     </h2>
                     {isLoading ? (
-                        <Skeleton className="h-48 w-full rounded-xl sm:h-52 lg:h-64" />
+                        <Skeleton className="h-48 w-full rounded-lg" />
                     ) : hasMapCoords && mapsApiKey && lat != null && lng != null ? (
                         <ProPageMap
                             apiKey={mapsApiKey}
                             provider={{
-                                name: profile?.name || 'Provider',
+                                name: profile?.name || 'Pro',
                                 address: profile?.address ?? undefined,
                                 latitude: lat,
                                 longitude: lng,
@@ -498,8 +468,8 @@ function ContractorClient({
                 </section>
             </div>
 
-            <div className="fixed inset-x-0 bottom-0 z-50 border-t border-black/[0.06] bg-white/95 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur">
-                <div className="mx-auto flex w-full max-w-xl flex-row gap-2 px-4 sm:px-6 lg:max-w-4xl lg:gap-3 lg:px-8 xl:max-w-5xl 2xl:max-w-6xl">
+            <div className="fixed inset-x-0 bottom-0 z-50 border-t border-border bg-background/95 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur">
+                <div className="mx-auto flex w-full max-w-xl flex-row gap-2 px-4">
                     <Button
                         type="button"
                         variant="secondary"
@@ -507,7 +477,7 @@ function ContractorClient({
                         className="size-10 shrink-0"
                         onClick={() => void handleSaveClick()}
                         disabled={saveLoading}
-                        aria-label={saved ? 'Remove from saved' : 'Save provider'}
+                        aria-label={saved ? 'Remove from saved' : 'Save Pro'}
                         aria-pressed={saved}
                     >
                         <Heart
@@ -534,8 +504,8 @@ function ContractorClient({
                         </Button>
                     )}
                     <ContactPopover
-                        providerName={profile?.name || 'Provider'}
-                        displayName={profile?.name || 'Provider'}
+                        providerName={profile?.name || 'Pro'}
+                        displayName={profile?.name || 'Pro'}
                         phone={profile?.phone ?? null}
                         email={null}
                         label="Contact"
@@ -564,21 +534,21 @@ function BannerCarousel({
     onSwipe: (idx: number) => void;
 }) {
     if (isLoading) {
-        return <Skeleton className="h-48 w-full rounded-3xl sm:h-56 lg:h-72" />;
+        return <Skeleton className="h-48 w-full rounded-lg sm:h-56 lg:h-72" />;
     }
     if (images.length === 0) {
         return (
-            <div className="flex h-48 w-full items-center justify-center rounded-3xl bg-gradient-to-br from-muted to-secondary text-muted-foreground sm:h-56 lg:h-72">
+            <div className="flex h-48 w-full items-center justify-center rounded-lg bg-gradient-to-br from-muted to-secondary text-muted-foreground sm:h-56 lg:h-72">
                 <div className="flex flex-col items-center gap-1">
                     <Image size={28} aria-hidden />
-                    <p className="text-[11px] font-medium uppercase tracking-wide">No photos yet</p>
+                    <p className="text-xs font-medium">No photos yet</p>
                     <p className="sr-only">{providerName}</p>
                 </div>
             </div>
         );
     }
     return (
-        <div className="overflow-hidden rounded-3xl">
+        <div className="overflow-hidden rounded-lg">
             <ProviderCardCarousel
                 images={images}
                 providerName={providerName}
@@ -616,10 +586,10 @@ function AboutCard({
 
     return (
         <section
-            className="rounded-3xl border border-black/[0.07] bg-white p-4 sm:p-5"
+            className="rounded-lg border border-border bg-card p-4"
             aria-labelledby="contractor-about-heading"
         >
-            <h2 id="contractor-about-heading" className="mb-3 text-base font-semibold" style={{ color: INK }}>
+            <h2 id="contractor-about-heading" className="mb-3 text-lg font-semibold text-foreground">
                 About
             </h2>
             {isLoading ? (
@@ -645,16 +615,15 @@ function AboutCard({
                                 <button
                                     type="button"
                                     onClick={() => onToggleExpand(!expanded)}
-                                    className="mt-2 text-xs font-medium underline-offset-2 hover:underline"
-                                    style={{ color: INK }}
+                                    className="mt-2 text-xs font-medium text-foreground underline-offset-2 hover:underline"
                                 >
-                                    {expanded ? 'Show less' : 'Read more'}
+                                    {expanded ? 'Show Less' : 'Read More'}
                                 </button>
                             ) : null}
                         </>
                     ) : null}
                     {customerSays ? (
-                        <p className={`flex items-start gap-2 rounded-2xl bg-black/[0.03] px-3 py-2 text-sm italic text-muted-foreground ${hasContent ? 'mt-3' : ''}`}>
+                        <p className={`flex items-start gap-2 rounded-lg bg-muted px-3 py-2 text-sm text-muted-foreground ${hasContent ? 'mt-3' : ''}`}>
                             <Star size={14} fill="currentColor" className="mt-0.5 text-yellow-500 shrink-0" aria-hidden />
                             <span>{customerSays}</span>
                         </p>
@@ -668,10 +637,10 @@ function AboutCard({
 function HighlightsCard({ highlights }: { highlights: string[] }) {
     return (
         <section
-            className="rounded-3xl border border-black/[0.07] bg-white p-4 sm:p-5"
+            className="rounded-lg border border-border bg-card p-4"
             aria-labelledby="contractor-highlights-heading"
         >
-            <h2 id="contractor-highlights-heading" className="mb-3 text-base font-semibold" style={{ color: INK }}>
+            <h2 id="contractor-highlights-heading" className="mb-3 text-lg font-semibold text-foreground">
                 Highlights
             </h2>
             <ul className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">

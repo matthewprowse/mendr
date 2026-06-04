@@ -144,9 +144,9 @@ export default function AdminContactPage() {
     }
 
     return (
-        <div className="mx-auto w-full max-w-3xl px-4 pb-8 pt-4 sm:px-6 lg:px-8">
+        <div className="mx-auto w-full max-w-xl px-4 pb-8 pt-4 sm:px-6 lg:px-8">
             <div className="mb-6">
-                <AdminPageHeader title="Contact" />
+                <AdminPageHeader title="Inbox" description="Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt." />
             </div>
 
             <AdminDataTable

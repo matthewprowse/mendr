@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Users, Activity, Mail, Star, Image as ImageIcon } from 'lucide-react';
+import { Users, Activity, Mail, Star, Image as ImageIcon, KeyRound } from 'lucide-react';
 import { AdminPageHeader } from './components/page-header';
 import { AdminStatTile } from './components/stat-tile';
 
@@ -11,6 +11,7 @@ type Stats = {
     todayStarts: number;
     pendingReviews: number;
     pendingGallery: number;
+    activeCodes: number;
 };
 
 export default function AdminHome() {
@@ -38,7 +39,7 @@ export default function AdminHome() {
     }, []);
 
     return (
-        <div className="mx-auto w-full max-w-3xl px-4 pb-8 pt-4 sm:px-6 lg:px-8">
+        <div className="mx-auto w-full max-w-xl px-4 pb-8 pt-4 sm:px-6 lg:px-8">
             <div className="mb-6">
                 <AdminPageHeader
                     title="Home"
@@ -85,6 +86,14 @@ export default function AdminHome() {
                     sub="Awaiting approval"
                     href="/admin/gallery"
                     icon={ImageIcon}
+                    loading={loading}
+                />
+                <AdminStatTile
+                    label="Access codes"
+                    value={stats?.activeCodes ?? 0}
+                    sub="Active early-access codes"
+                    href="/admin/beta-codes"
+                    icon={KeyRound}
                     loading={loading}
                 />
             </div>

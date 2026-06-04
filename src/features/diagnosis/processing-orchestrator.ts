@@ -105,7 +105,7 @@ export async function runDiagnosisProcessingPipeline({
     const normalizedPrompt = prompt.trim();
     const normalizedSelectedService = selectedService?.trim() ?? '';
     const hasImages = imageUrls.length > 0 || Boolean(imageUrl?.trim());
-    if (!hasImages && normalizedPrompt.length < 25 && !normalizedSelectedService) {
+    if (!hasImages && normalizedPrompt.length < 15 && !normalizedSelectedService) {
         throw new Error('Please add a photo or provide more detail about the issue.');
     }
 

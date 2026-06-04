@@ -14,9 +14,9 @@ import AdminGalleryClient from '../gallery/client';
 export default function ProvidersHubClient() {
     return (
         <Tabs defaultValue="directory" className="w-full">
-            <div className="mx-auto w-full max-w-3xl px-4 pt-4 sm:px-6 lg:px-8">
+            <div className="mx-auto w-full max-w-xl px-4 pt-4 sm:px-6 lg:px-8">
                 <div className="mb-4">
-                    <AdminPageHeader title="Providers" />
+                    <AdminPageHeader title="Providers" description="Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt." />
                 </div>
                 <TabsList>
                     <TabsTrigger value="directory">Directory</TabsTrigger>

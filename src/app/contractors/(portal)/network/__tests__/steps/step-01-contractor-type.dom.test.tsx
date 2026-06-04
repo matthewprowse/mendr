@@ -3,8 +3,8 @@
  *
  * Behavior checks:
  *   • Initial render shows the three options with no selection.
- *   • Clicking an option applies the `border-primary` selected style.
- *   • Selecting a new option swaps the active highlight.
+ *   • Clicking an option marks it selected (aria-checked="true").
+ *   • Selecting a new option swaps the active selection.
  */
 
 import { screen } from '@testing-library/react';
@@ -41,33 +41,33 @@ describe('StepContractorType', () => {
     it('renders the three contractor type options', async () => {
         renderWithWizard(<StepContractorType />);
         await screen.findByRole('heading', { name: /how do you work\?/i });
-        expect(screen.getByRole('button', { name: /^individual/i })).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: /^team/i })).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: /^enterprise/i })).toBeInTheDocument();
+        expect(screen.getByRole('radio', { name: /^individual/i })).toBeInTheDocument();
+        expect(screen.getByRole('radio', { name: /^team/i })).toBeInTheDocument();
+        expect(screen.getByRole('radio', { name: /^enterprise/i })).toBeInTheDocument();
     });
 
-    it('highlights the option that was just clicked', async () => {
+    it('marks the option that was just clicked as selected', async () => {
         const user = userEvent.setup();
         renderWithWizard(<StepContractorType />);
         await screen.findByRole('heading', { name: /how do you work\?/i });
 
-        const teamBtn = screen.getByRole('button', { name: /^team/i });
-        expect(teamBtn.className).not.toMatch(/border-primary/);
+        const teamBtn = screen.getByRole('radio', { name: /^team/i });
+        expect(teamBtn).toHaveAttribute('aria-checked', 'false');
         await user.click(teamBtn);
-        expect(teamBtn.className).toMatch(/border-primary/);
+        expect(teamBtn).toHaveAttribute('aria-checked', 'true');
     });
 
-    it('swaps the selected highlight when another option is clicked', async () => {
+    it('swaps the selection when another option is clicked', async () => {
         const user = userEvent.setup();
         renderWithWizard(<StepContractorType />);
         await screen.findByRole('heading', { name: /how do you work\?/i });
 
-        await user.click(screen.getByRole('button', { name: /^individual/i }));
-        await user.click(screen.getByRole('button', { name: /^enterprise/i }));
+        await user.click(screen.getByRole('radio', { name: /^individual/i }));
+        await user.click(screen.getByRole('radio', { name: /^enterprise/i }));
 
-        const ind = screen.getByRole('button', { name: /^individual/i });
-        const ent = screen.getByRole('button', { name: /^enterprise/i });
-        expect(ind.className).not.toMatch(/border-primary/);
-        expect(ent.className).toMatch(/border-primary/);
+        const ind = screen.getByRole('radio', { name: /^individual/i });
+        const ent = screen.getByRole('radio', { name: /^enterprise/i });
+        expect(ind).toHaveAttribute('aria-checked', 'false');
+        expect(ent).toHaveAttribute('aria-checked', 'true');
     });
 });

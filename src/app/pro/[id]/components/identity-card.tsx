@@ -2,15 +2,7 @@
 
 import { Star, ShieldCheck, Clock } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
-import { INK } from '@/lib/design-tokens';
 import { formatBusinessName } from '@/lib/utils';
-
-const COMPANY_SIZE_LABEL: Record<'solo' | 'small' | 'mid' | 'large', string> = {
-    solo: 'Solo operator',
-    small: 'Small team (2–5)',
-    mid: 'Mid team (6–20)',
-    large: 'Large team (20+)',
-};
 
 export type IdentityCardProps = {
     isLoading: boolean;
@@ -19,7 +11,6 @@ export type IdentityCardProps = {
     ratingCount: number;
     isOpen: boolean | null;
     nextOpensAt: string | null;
-    companySize: 'solo' | 'small' | 'mid' | 'large' | null;
     yearsInBusiness: number | null;
     scandioReviewCount?: number | null;
 };
@@ -31,13 +22,11 @@ export function IdentityCard({
     ratingCount,
     isOpen,
     nextOpensAt,
-    companySize,
     yearsInBusiness,
     scandioReviewCount,
 }: IdentityCardProps) {
-    const displayName = formatBusinessName(name) || name || 'Provider';
+    const displayName = formatBusinessName(name) || name || 'Pro';
     const verified = (scandioReviewCount ?? 0) > 0;
-    const sizeLabel = companySize ? COMPANY_SIZE_LABEL[companySize] : null;
     const yearsLabel =
         typeof yearsInBusiness === 'number' && yearsInBusiness > 0
             ? `${yearsInBusiness} ${yearsInBusiness === 1 ? 'yr' : 'yrs'} in business`
@@ -52,7 +41,7 @@ export function IdentityCard({
 
     return (
         <section
-            className="rounded-3xl border border-black/[0.07] bg-white p-4 sm:p-5"
+            className="rounded-lg border border-border bg-card p-4"
             aria-labelledby="contractor-identity-heading"
         >
             <div className="flex flex-col gap-3">
@@ -60,23 +49,19 @@ export function IdentityCard({
                     <div className="flex min-w-0 flex-col gap-2">
                         <h1
                             id="contractor-identity-heading"
-                            className="truncate text-2xl font-semibold leading-snug sm:text-3xl"
-                            style={{ color: INK }}
+                            className="truncate text-2xl font-semibold leading-snug text-foreground"
                         >
                             {isLoading ? <Skeleton className="h-8 w-56" /> : displayName}
                         </h1>
                         {!isLoading && verified ? (
-                            <div className="inline-flex items-center gap-1.5 self-start rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-medium text-emerald-700">
+                            <div className="inline-flex items-center gap-1.5 self-start rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700">
                                 <ShieldCheck size={12} fill="currentColor" aria-hidden />
                                 Verified on Mendr
                             </div>
                         ) : null}
                     </div>
                     {!isLoading && openLabel ? (
-                        <span
-                            className="shrink-0 rounded-full bg-black/[0.06] px-3 py-1 text-xs font-medium"
-                            style={{ color: INK }}
-                        >
+                        <span className="shrink-0 rounded-full bg-secondary px-3 py-1 text-xs font-medium text-foreground">
                             {openLabel}
                         </span>
                     ) : null}
@@ -85,7 +70,7 @@ export function IdentityCard({
                 {isLoading ? (
                     <Skeleton className="h-5 w-64" />
                 ) : (
-                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-sm" style={{ color: INK }}>
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-sm text-foreground">
                         {rating != null ? (
                             <span className="inline-flex items-center gap-1">
                                 <Star size={14} fill="currentColor" className="text-yellow-500" aria-hidden />
@@ -100,9 +85,6 @@ export function IdentityCard({
                         ) : (
                             <span className="text-muted-foreground">No rating yet</span>
                         )}
-                        {sizeLabel ? (
-                            <span className="text-muted-foreground">· {sizeLabel}</span>
-                        ) : null}
                         {yearsLabel ? (
                             <span className="text-muted-foreground inline-flex items-center gap-1">
                                 <Clock size={12} strokeWidth={2.5} aria-hidden />

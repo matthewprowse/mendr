@@ -22,10 +22,9 @@ import type { MatchProvider } from '@/features/match/contracts';
 
 export const SORT_OPTIONS = [
     { value: 'recommended', label: 'Recommended' },
-    { value: 'rating_desc', label: 'Rating (high → low)' },
-    { value: 'distance_asc', label: 'Distance (closest)' },
-    { value: 'reviews_desc', label: 'Most reviewed' },
-    { value: 'newest', label: 'Newest on Mendr' },
+    { value: 'distance_asc', label: 'Distance' },
+    { value: 'rating_desc', label: 'Rating' },
+    { value: 'reviews_desc', label: 'Most Reviewed' },
 ] as const;
 
 export type MatchSortKey = (typeof SORT_OPTIONS)[number]['value'];
@@ -261,13 +260,6 @@ export function compareForSort(
         return da - db;
     }
     if (sort === 'reviews_desc') {
-        return (b.ratingCount ?? 0) - (a.ratingCount ?? 0);
-    }
-    if (sort === 'newest') {
-        // Provider IDs are uuids; we use providerId presence as proxy + ratingCount as tiebreaker.
-        const av = a.providerId ? 1 : 0;
-        const bv = b.providerId ? 1 : 0;
-        if (av !== bv) return bv - av;
         return (b.ratingCount ?? 0) - (a.ratingCount ?? 0);
     }
     // recommended

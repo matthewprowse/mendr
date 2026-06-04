@@ -85,3 +85,34 @@ describe('PATCH /api/admin/gallery', () => {
         expect(res.status).toBe(200);
     });
 });
+
+describe('DELETE /api/admin/gallery', () => {
+    it('returns 401 when not admin', async () => {
+        denyAdmin = true;
+        const { DELETE } = await import('./route');
+        const res = await DELETE(makeRequest({ method: 'DELETE', path: '/api/admin/gallery?id=img-1' }));
+        expect(res.status).toBe(401);
+    });
+
+    it('returns 400 when id missing', async () => {
+        const { DELETE } = await import('./route');
+        const res = await DELETE(makeRequest({ method: 'DELETE', path: '/api/admin/gallery' }));
+        expect(res.status).toBe(400);
+    });
+
+    it('returns { ok: true } on success', async () => {
+        const { DELETE } = await import('./route');
+        const res = await DELETE(makeRequest({ method: 'DELETE', path: '/api/admin/gallery?id=img-1' }));
+        expect(res.status).toBe(200);
+        expect((await res.json()).ok).toBe(true);
+    });
+
+    it('returns 500 when the delete errors', async () => {
+        supabase = mockSupabaseClient({
+            tables: { provider_images: { data: null, error: { message: 'db' } } },
+        });
+        const { DELETE } = await import('./route');
+        const res = await DELETE(makeRequest({ method: 'DELETE', path: '/api/admin/gallery?id=img-1' }));
+        expect(res.status).toBe(500);
+    });
+});
