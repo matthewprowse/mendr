@@ -14,6 +14,7 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 const TABS = [
     { href: '/pro/home', label: 'Home' },
     { href: '/pro/leads', label: 'Leads' },
+    { href: '/pro/customers', label: 'Customers' },
     { href: '/contractors/account', label: 'Account' },
 ] as const;
 
@@ -37,7 +38,7 @@ export function ProTabBar() {
     return (
         <div className="sticky bottom-0 shrink-0 bg-background p-4">
             <Tabs value={active} className="mx-auto w-full max-w-xl">
-                <TabsList className="grid h-10 w-full grid-cols-3">
+                <TabsList className="grid h-10 w-full grid-cols-4">
                     {TABS.map((tab) => (
                         <TabsTrigger key={tab.href} value={tab.href} asChild>
                             <Link href={tab.href}>{tab.label}</Link>

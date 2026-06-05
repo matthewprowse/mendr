@@ -77,7 +77,7 @@ Status as of the current build. Ticked items are implemented and verified (typec
 
 #### Phases 5 to 10 (not started)
 
-- [ ] Phase 5, Customers CRM
+- [x] Phase 5, Customers CRM: `provider_customers` table, auto-seeded from consented identified leads (insert-only so Pro edits are kept) plus manual add; `/pro/customers` list and `/pro/customers/[id]` detail (editable info + lead history); `Customers` tab in the Pro nav
 - [ ] Phase 5b, Jobs (work orders)
 - [ ] Phase 6, Quotes
 - [ ] Phase 7, Invoices (immutable on issue, credit notes, VAT)

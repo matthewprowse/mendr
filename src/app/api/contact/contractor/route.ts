@@ -61,6 +61,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     // identified even if the client did not send one.
     let homeownerUserId: string | null = null;
     let homeownerPhone: string | null = null;
+    let homeownerName: string | null = null;
+    let homeownerEmail: string | null = null;
     try {
         const ssr = await createSupabaseServerClient();
         const {
@@ -68,13 +70,19 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         } = await ssr.auth.getUser();
         if (user?.id) {
             homeownerUserId = user.id;
+            homeownerEmail = user.email ?? null;
             const { data: profile } = await admin
                 .from('profiles')
-                .select('phone')
+                .select('phone, first_name, surname')
                 .or(`id.eq.${user.id},user_id.eq.${user.id}`)
                 .maybeSingle();
-            const p = (profile as { phone?: string | null } | null)?.phone;
+            const prof = profile as
+                | { phone?: string | null; first_name?: string | null; surname?: string | null }
+                | null;
+            const p = prof?.phone;
             if (typeof p === 'string' && p.trim()) homeownerPhone = p.trim();
+            const nm = [prof?.first_name, prof?.surname].filter(Boolean).join(' ').trim();
+            if (nm) homeownerName = nm;
         }
     } catch {
         // Non-fatal — proceed as an anonymous/bot contact.
@@ -167,6 +175,22 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
             });
             if (consentError) {
                 console.warn('[contact/contractor] consent record skipped:', consentError.message);
+            }
+
+            // Seed the Pro's CRM with this homeowner. Insert-only (ignoreDuplicates)
+            // so a Pro's later manual edits to the customer are never overwritten.
+            const { error: customerError } = await admin.from('provider_customers').upsert(
+                {
+                    provider_id: providerId,
+                    homeowner_user_id: homeownerUserId,
+                    name: homeownerName,
+                    phone: homeownerWhatsapp,
+                    email: homeownerEmail,
+                },
+                { onConflict: 'provider_id,homeowner_user_id', ignoreDuplicates: true }
+            );
+            if (customerError) {
+                console.warn('[contact/contractor] customer seed skipped:', customerError.message);
             }
         }
     }
