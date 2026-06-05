@@ -78,7 +78,7 @@ Status as of the current build. Ticked items are implemented and verified (typec
 #### Phases 5 to 10 (not started)
 
 - [x] Phase 5, Customers CRM: `provider_customers` table, auto-seeded from consented identified leads (insert-only so Pro edits are kept) plus manual add; `/pro/customers` list and `/pro/customers/[id]` detail (editable info + lead history); `Customers` tab in the Pro nav
-- [ ] Phase 5b, Jobs (work orders)
+- [x] Phase 5b, Jobs (work orders): `jobs` table; `/pro/jobs` list + add, `/pro/jobs/[id]` detail (title, site address, scheduled date, status); a won lead auto-creates a job (idempotent); nav moved to a "More" popover (Account then More → Jobs) to make room for the back-office sections
 - [ ] Phase 6, Quotes
 - [ ] Phase 7, Invoices (immutable on issue, credit notes, VAT)
 - [ ] Phase 8, Team and roles

@@ -76,5 +76,52 @@ export async function PATCH(
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
+    // A won lead becomes a job (best-effort, idempotent on the lead).
+    if (patch.status === 'won') {
+        try {
+            type DiagRef = {
+                title: string | null;
+                customer_address: string | null;
+                user_id: string | null;
+            };
+            const { data: ev } = await admin
+                .from('provider_contact_events')
+                .select('diagnoses(title, customer_address, user_id)')
+                .eq('id', id)
+                .maybeSingle();
+            const raw = (ev as { diagnoses: DiagRef | DiagRef[] | null } | null)?.diagnoses ?? null;
+            const diag = Array.isArray(raw) ? raw[0] : raw;
+
+            let customerId: string | null = null;
+            if (diag?.user_id) {
+                const { data: cust } = await admin
+                    .from('provider_customers')
+                    .select('id')
+                    .eq('provider_id', providerId)
+                    .eq('homeowner_user_id', diag.user_id)
+                    .maybeSingle();
+                customerId = (cust as { id: string } | null)?.id ?? null;
+            }
+
+            const addr = diag?.customer_address ?? null;
+            const suburb = addr
+                ? (addr.split(',').map((p) => p.trim()).filter(Boolean)[1] ?? null)
+                : null;
+
+            await admin.from('jobs').upsert(
+                {
+                    provider_id: providerId,
+                    contact_event_id: id,
+                    customer_id: customerId,
+                    title: diag?.title ?? 'Job',
+                    site_address: suburb,
+                },
+                { onConflict: 'contact_event_id', ignoreDuplicates: true }
+            );
+        } catch (e) {
+            console.warn('[pro/leads] job creation skipped:', e);
+        }
+    }
+
     return NextResponse.json({ ok: true, ...patch });
 }
