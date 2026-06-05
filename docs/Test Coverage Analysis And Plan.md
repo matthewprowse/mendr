@@ -39,9 +39,9 @@ Phase T1, Pure-logic unit tests:
 - [x] format-money.ts (4 tests; locks the real en-ZA output "R 1 234,56")
 - [x] format-date.ts (8 tests; relative buckets pinned with fake timers)
 - [x] phone.ts, closed the formatSaPhoneInput gap (6 new tests)
-- [ ] rate-limit-config.ts
-- [ ] auth/admin-auth.ts
-- [ ] auth/cron-auth.ts
+- [x] rate-limit-config.ts (10 tests; getCallerIp, isRateLimitBypassed, config sanity)
+- [x] auth/admin-auth.ts (10 tests; token create/verify, expiry, tamper, wrong password, cookie helpers)
+- [x] auth/cron-auth.ts (5 tests; exact Bearer match, trim, unset secret)
 - [ ] diagnosis/trade-resolver.ts
 - [ ] providers/open-status.ts
 - [ ] providers/provider-profile-clean.ts
