@@ -88,6 +88,24 @@ Phase T5, Remaining lib and P2 tail:
 - [ ] notify-contractor-of-lead.ts gaps
 - [ ] P2 utilities and read-only routes
 
+Cost research feature (new workstream, requested mid-build):
+
+Decision: cost must not be hardcoded. It should come from real web data via Brave search, extracted into a min-max range plus a repair-vs-replace note, cached in the database, and refreshed only on a deliberate trigger so the paid API is never hit on a page view. The existing static estimates stay as a fallback until the cache fills. Failure modes carry name plus urgency only (Emergency / Soon / Routine), no cost of their own; cost lives at the fault-type level.
+
+- [x] cost_estimates cache table (DB, public read, service-role write) applied via MCP
+- [x] Brave web search client (src/lib/cost/brave-search.ts) with injectable fetch, 6 unit tests
+- [ ] Research step: Brave search plus LLM extraction of {min, max, note} per fault type, writing to the cache with a staleness skip
+- [ ] Deliberate trigger (admin or cron) to populate and refresh, with a dry-run mode so we never spend on the API by accident
+- [ ] Read path serves from the cache, falling back to the static estimates; report and match page both use it
+- [ ] Fill the 29 fault types with no estimate, and review the existing 57, via the research step
+- [ ] Add the cost block to the match / find-a-pro page
+
+Failure modes feature (build, keep switched off):
+
+- [ ] Data model types (FailureMode with name + Emergency/Soon/Routine urgency) plus the missing supporting exports
+- [ ] Draft failureModes content for the 86 taxonomy subcategories, in batches for review
+- [ ] Wire-up left OFF until reviewed; un-skip and fix the 7 Group A test files as the content lands
+
 Deferred, needs Docker or a Supabase branch (see Part 5):
 
 - [ ] Database-layer tests (RLS isolation, next_invoice_seq atomicity, SECURITY DEFINER lockdown, triggers, constraints, cascades)
