@@ -96,7 +96,7 @@ Decision: cost must not be hardcoded. It should come from real web data via Brav
 - [x] Brave web search client (src/lib/cost/brave-search.ts) with injectable fetch, 6 unit tests
 - [ ] Research step: Brave search plus LLM extraction of {min, max, note} per fault type, writing to the cache with a staleness skip
 - [ ] Deliberate trigger (admin or cron) to populate and refresh, with a dry-run mode so we never spend on the API by accident
-- [ ] Read path serves from the cache, falling back to the static estimates; report and match page both use it
+- [~] Read path: getCostEstimateCached service done (DB-first, static fallback, 5 tests); shared formatCostEstimate extracted so DB and static render identically. Still to do: swap the report and match page to call it (they currently call the static getCostEstimate).
 - [ ] Fill the 29 fault types with no estimate, and review the existing 57, via the research step
 - [ ] Add the cost block to the match / find-a-pro page
 
