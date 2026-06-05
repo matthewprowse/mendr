@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -61,10 +62,34 @@ async function patchLead(id: string, patch: { status?: LeadStatus; notes?: strin
 }
 
 export default function EnquiryDetailClient({ detail }: { detail: EnquiryDetail }) {
+    const router = useRouter();
     const [status, setStatus] = useState<LeadStatus>(detail.status);
     const [notes, setNotes] = useState(detail.notes);
     const [savedNotes, setSavedNotes] = useState(detail.notes);
     const [savingNotes, setSavingNotes] = useState(false);
+    const [creatingQuote, setCreatingQuote] = useState(false);
+
+    const createQuote = async () => {
+        if (creatingQuote) return;
+        setCreatingQuote(true);
+        try {
+            const res = await fetch('/api/pro/quotes', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ contactEventId: detail.id }),
+            });
+            const json = (await res.json().catch(() => null)) as { id?: string; error?: string } | null;
+            if (!res.ok || !json?.id) {
+                toast.error(json?.error ?? 'Could not create quote.');
+                return;
+            }
+            router.push(`/pro/quotes/${json.id}`);
+        } catch {
+            toast.error('Network error. Please try again.');
+        } finally {
+            setCreatingQuote(false);
+        }
+    };
 
     const updateStatus = async (next: LeadStatus) => {
         const prev = status;
@@ -214,6 +239,9 @@ export default function EnquiryDetailClient({ detail }: { detail: EnquiryDetail 
             {/* Outcome */}
             <div className="flex flex-col gap-3">
                 <SectionHeader title="Outcome" />
+                <Button disabled={creatingQuote} onClick={() => void createQuote()}>
+                    {creatingQuote ? 'Creating…' : 'Create Quote'}
+                </Button>
                 <div className="flex gap-2">
                     <Button
                         className="flex-1"

@@ -79,7 +79,7 @@ Status as of the current build. Ticked items are implemented and verified (typec
 
 - [x] Phase 5, Customers CRM: `provider_customers` table, auto-seeded from consented identified leads (insert-only so Pro edits are kept) plus manual add; `/pro/customers` list and `/pro/customers/[id]` detail (editable info + lead history); `Customers` tab in the Pro nav
 - [x] Phase 5b, Jobs (work orders): `jobs` table; `/pro/jobs` list + add, `/pro/jobs/[id]` detail (title, site address, scheduled date, status); a won lead auto-creates a job (idempotent); nav moved to a "More" popover (Account then More → Jobs) to make room for the back-office sections
-- [ ] Phase 6, Quotes
+- [x] Phase 6, Quotes: `quotes` + `quote_items` + `provider_branding` tables; `/pro/quotes` list, New Quote, and the `/pro/quotes/[id]` builder (line items, live totals, VAT-when-registered, deposit, validity, terms, status); Create Quote from a lead (pre-fills); public printable view `/quote/[id]` (shareable link, browser Save-as-PDF, stamps viewed). Deferred: server-side PDF generation (`@react-pdf/renderer`), a branding settings form (columns exist; renders defaults for now), and convert-to-invoice (lands with Phase 7)
 - [ ] Phase 7, Invoices (immutable on issue, credit notes, VAT)
 - [ ] Phase 8, Team and roles
 - [ ] Phase 9, Pro settings and analytics

@@ -19,7 +19,10 @@ const PRIMARY = [
     { href: '/contractors/account', label: 'Account' },
 ] as const;
 
-const MORE = [{ href: '/pro/jobs', label: 'Jobs' }] as const;
+const MORE = [
+    { href: '/pro/jobs', label: 'Jobs' },
+    { href: '/pro/quotes', label: 'Quotes' },
+] as const;
 
 function matches(pathname: string, href: string): boolean {
     return pathname === href || pathname.startsWith(`${href}/`);
