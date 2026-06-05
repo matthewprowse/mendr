@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { X } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -32,13 +33,15 @@ const num = (s: string) => {
 
 export default function QuoteEditorClient({ data }: { data: QuoteEditorData }) {
     const [items, setItems] = useState<Item[]>(
-        data.items.length > 0 ? data.items : [{ description: '', qty: '1', unitPrice: '0' }]
+        data.items.length > 0 ? data.items : [{ description: '', qty: '1', unitPrice: '0' }],
     );
     const [depositPercent, setDepositPercent] = useState(data.depositPercent);
     const [validUntil, setValidUntil] = useState(data.validUntil);
     const [terms, setTerms] = useState(data.terms);
     const [status, setStatus] = useState<QuoteStatus>(data.status);
     const [saving, setSaving] = useState(false);
+    const [converting, setConverting] = useState(false);
+    const router = useRouter();
 
     const totals = useMemo(() => {
         const subtotal = items.reduce((s, it) => s + num(it.qty) * num(it.unitPrice), 0);
@@ -48,8 +51,10 @@ export default function QuoteEditorClient({ data }: { data: QuoteEditorData }) {
 
     const setItem = (i: number, key: keyof Item, value: string) =>
         setItems((list) => list.map((it, idx) => (idx === i ? { ...it, [key]: value } : it)));
-    const addItem = () => setItems((l) => [...l, { description: '', qty: '1', unitPrice: '0' }]);
-    const removeItem = (i: number) => setItems((l) => (l.length > 1 ? l.filter((_, idx) => idx !== i) : l));
+    const addItem = () =>
+        setItems((l) => [...l, { description: '', qty: '1', unitPrice: '0' }]);
+    const removeItem = (i: number) =>
+        setItems((l) => (l.length > 1 ? l.filter((_, idx) => idx !== i) : l));
 
     const save = async (extra?: { status?: QuoteStatus }) => {
         if (saving) return;
@@ -80,6 +85,31 @@ export default function QuoteEditorClient({ data }: { data: QuoteEditorData }) {
         }
     };
 
+    const createInvoice = async () => {
+        if (converting) return;
+        setConverting(true);
+        try {
+            const res = await fetch('/api/pro/invoices', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ quoteId: data.id }),
+            });
+            const json = (await res.json().catch(() => null)) as {
+                id?: string;
+                error?: string;
+            } | null;
+            if (!res.ok || !json?.id) {
+                toast.error(json?.error ?? 'Could not create invoice.');
+                return;
+            }
+            router.push(`/pro/invoices/${json.id}`);
+        } catch {
+            toast.error('Network error. Please try again.');
+        } finally {
+            setConverting(false);
+        }
+    };
+
     const shareUrl =
         typeof window !== 'undefined' ? `${window.location.origin}/quote/${data.id}` : '';
 
@@ -87,7 +117,9 @@ export default function QuoteEditorClient({ data }: { data: QuoteEditorData }) {
         <>
             <div className="flex items-start justify-between gap-3">
                 <div className="flex flex-col gap-1">
-                    <h1 className="text-2xl font-semibold text-foreground">Quote {data.number}</h1>
+                    <h1 className="text-2xl font-semibold text-foreground">
+                        Quote {data.number}
+                    </h1>
                     <p className="text-sm text-muted-foreground">
                         {QUOTE_STATUS_LABEL[status]}
                         {data.customerName ? ` · ${data.customerName}` : ''}
@@ -132,7 +164,13 @@ export default function QuoteEditorClient({ data }: { data: QuoteEditorData }) {
                         </div>
                     ))}
                 </div>
-                <Button type="button" variant="secondary" size="sm" className="w-fit" onClick={addItem}>
+                <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    className="w-fit"
+                    onClick={addItem}
+                >
                     Add Item
                 </Button>
             </div>
@@ -222,6 +260,11 @@ export default function QuoteEditorClient({ data }: { data: QuoteEditorData }) {
                         Declined
                     </Button>
                 </div>
+                {status === 'accepted' ? (
+                    <Button disabled={converting} onClick={() => void createInvoice()}>
+                        {converting ? 'Creating…' : 'Create Invoice from Quote'}
+                    </Button>
+                ) : null}
                 <a
                     href={`/quote/${data.id}`}
                     target="_blank"

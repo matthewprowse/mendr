@@ -22,6 +22,7 @@ const PRIMARY = [
 const MORE = [
     { href: '/pro/jobs', label: 'Jobs' },
     { href: '/pro/quotes', label: 'Quotes' },
+    { href: '/pro/invoices', label: 'Invoices' },
 ] as const;
 
 function matches(pathname: string, href: string): boolean {
