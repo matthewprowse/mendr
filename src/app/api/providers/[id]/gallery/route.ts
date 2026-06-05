@@ -4,6 +4,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseAdminClient } from '@/lib/auth/supabase-server';
 import { checkRateLimit } from '@/lib/rate-limit-config';
+import { authorizeProviderWrite } from '@/lib/providers/ownership';
 
 function asFiles(value: FormDataEntryValue[] | undefined): File[] {
     if (!value) return [];
@@ -48,6 +49,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         const { id: providerId } = await params;
         if (!providerId) {
             return NextResponse.json({ error: 'Provider id is required' }, { status: 400 });
+        }
+
+        // Finding H5: only the provider's owner (or an admin) may attach images
+        // to a claimed provider; unclaimed providers are open for onboarding
+        // enrichment (uploads are pending + moderated).
+        const authz = await authorizeProviderWrite(providerId);
+        if (!authz.ok) {
+            return NextResponse.json({ error: authz.error }, { status: authz.status });
         }
 
         const form = await req.formData().catch(() => null);

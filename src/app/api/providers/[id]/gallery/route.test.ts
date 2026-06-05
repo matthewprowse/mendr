@@ -31,7 +31,11 @@ function ctx(id: string) {
 beforeEach(() => {
     vi.clearAllMocks();
     supabase = mockSupabaseClient({
-        tables: { provider_images: { data: [], error: null } },
+        tables: {
+            provider_images: { data: [], error: null },
+            // Unclaimed provider → onboarding enrichment is allowed (H5).
+            providers: { data: { claimed_by_user_id: null }, error: null },
+        },
         storageUploadResult: { data: { path: 'p' }, error: null },
     });
 });
@@ -53,6 +57,7 @@ describe('POST /api/providers/[id]/gallery', () => {
     it('returns 503 when provider_images table is missing', async () => {
         supabase = mockSupabaseClient({
             tables: {
+                providers: { data: { claimed_by_user_id: null }, error: null },
                 provider_images: {
                     data: null,
                     error: { code: '42P01', message: 'relation provider_images does not exist' },
@@ -72,5 +77,33 @@ describe('POST /api/providers/[id]/gallery', () => {
         expect(res.status).toBe(200);
         const body = await res.json();
         expect(body.uploaded).toBe(1);
+    });
+
+    it('returns 404 when the provider does not exist (H5)', async () => {
+        supabase = mockSupabaseClient({
+            tables: {
+                provider_images: { data: [], error: null },
+                providers: { data: null, error: null },
+            },
+            storageUploadResult: { data: { path: 'p' }, error: null },
+        });
+        const file = new File([Buffer.from('a')], 'x.jpg', { type: 'image/jpeg' });
+        const { POST } = await import('./route');
+        const res = await POST(postForm({ files: [file] }), ctx('ghost'));
+        expect(res.status).toBe(404);
+    });
+
+    it('forbids an unauthenticated write to a claimed provider (H5)', async () => {
+        supabase = mockSupabaseClient({
+            tables: {
+                provider_images: { data: [], error: null },
+                providers: { data: { claimed_by_user_id: 'owner-1' }, error: null },
+            },
+            storageUploadResult: { data: { path: 'p' }, error: null },
+        });
+        const file = new File([Buffer.from('a')], 'x.jpg', { type: 'image/jpeg' });
+        const { POST } = await import('./route');
+        const res = await POST(postForm({ files: [file] }), ctx('p1'));
+        expect(res.status).toBe(403);
     });
 });

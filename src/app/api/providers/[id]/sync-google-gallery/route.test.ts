@@ -3,7 +3,9 @@ import { makeRequest, mockSupabaseClient, type MockSupabaseClient } from '@/__te
 
 let supabase: MockSupabaseClient;
 let imageCount = 0;
-let providerData: { google_place_id?: string } | null = { google_place_id: 'places/abc' };
+let providerData: { google_place_id?: string; claimed_by_user_id?: string } | null = {
+    google_place_id: 'places/abc',
+};
 
 vi.mock('@/lib/rate-limit-config', () => ({ checkRateLimit: vi.fn(async () => null) }));
 vi.mock('@/lib/auth/supabase-server', () => ({
@@ -69,5 +71,12 @@ describe('POST /api/providers/[id]/sync-google-gallery', () => {
         const { POST } = await import('./route');
         const res = await POST(makeRequest({ method: 'POST' }), ctx('p1'));
         expect(res.status).toBe(502);
+    });
+
+    it('forbids an unauthenticated sync of a claimed provider (H5)', async () => {
+        providerData = { claimed_by_user_id: 'owner-1', google_place_id: 'places/abc' };
+        const { POST } = await import('./route');
+        const res = await POST(makeRequest({ method: 'POST' }), ctx('p1'));
+        expect(res.status).toBe(403);
     });
 });

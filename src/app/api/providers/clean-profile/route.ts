@@ -3,6 +3,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseAdminClient } from '@/lib/auth/supabase-server';
 import { normalizeProfileTextForStorage } from '@/lib/providers/provider-profile-clean';
+import { isAdminUser } from '@/lib/auth/admin-access';
 import { checkRateLimit } from '@/lib/rate-limit-config';
 
 type ProviderRow = {
@@ -16,6 +17,12 @@ type ProviderRow = {
 export async function POST(req: NextRequest) {
     const limited = await checkRateLimit(req, 'providerCleanProfile');
     if (limited) return limited;
+
+    // Finding H5: this mutates arbitrary provider copy by id/place id. It is a
+    // maintenance utility with no end-user call site, so restrict it to admins.
+    if (!(await isAdminUser())) {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
 
     try {
         const body = await req.json().catch(() => ({}));

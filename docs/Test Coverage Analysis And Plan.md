@@ -93,15 +93,18 @@ left unchanged — see the T2 note; ratchet once a clean coverage run is wired.
 Phase T4, Pro UI component tests:
 
 - [x] invoices, quotes, plan, team, claim clients (37 tests; render/empty states, create + navigate, role-gated controls, invite/remove flows, error toasts via MSW)
-- [ ] leads, jobs, customers, settings clients
+- [x] leads, jobs, customers, settings clients (20 tests; empty states, optimistic lead-status + rollback, add-via-dialog flows, profile edit gating by canEditProfile, notification save for any role)
 - [x] interactive shared components (pro-tab-bar active-tab + More popover, consent dialog confirm/cancel + dontAskAgain, auth-prompt magic-link steps)
-- [ ] Pro page empty and pending states
+- [x] Pro page empty and pending states (home page: signed-out redirect, claim CTA, pending-review message, linked dashboard with stats + recent enquiries)
 
-T4 in progress — P0 slice (money/access screens + shared interactive components)
-landed first per the plan's stated ordering. DOM tests live beside each client as
-`__tests__/client.dom.test.tsx`, run under the existing jsdom project with MSW
-overriding `/api/pro/*` per test. Remaining: leads/jobs/customers/settings clients
-and the Pro page empty/pending states.
+Phase T4 complete (57 new tests, all green; lint clean). DOM tests live beside each
+client as `__tests__/client.dom.test.tsx`, run under the existing jsdom project with
+MSW overriding `/api/pro/*` per test; the async home server component is tested by
+awaiting it and rendering the resolved tree. Per-client empty states double as the
+page-level empty-state coverage. Note: the shared repo has a concurrent workstream
+landing tests in parallel, so a whole-suite run can show transient failures while
+files change mid-run; every T4 file passes deterministically in isolation. Coverage
+thresholds unchanged — see the T2 note.
 
 Phase T5, Remaining lib and P2 tail:
 

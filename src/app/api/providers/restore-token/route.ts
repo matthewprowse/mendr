@@ -6,6 +6,7 @@ import { createSupabaseAdminClient } from '@/lib/auth/supabase-server';
 import { getISOWeekKey } from '@/lib/providers/ranking';
 import { logAiEvent } from '@/lib/ai/ai-logging';
 import { checkRateLimit } from '@/lib/rate-limit-config';
+import { resolveDiagnosisIdentity, ownsDiagnosis } from '@/lib/diagnosis/ownership';
 
 type RestoreTokenBody = {
     providerId?: string;
@@ -36,6 +37,20 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         }
 
         const admin = await createSupabaseAdminClient();
+
+        // Finding H5: this records a contact event and credits a rotation token
+        // for a provider. Bind it to a conversation the caller actually owns so
+        // an unrelated caller cannot inflate any provider's contact events.
+        const identity = await resolveDiagnosisIdentity(req);
+        const { data: convo } = await admin
+            .from('diagnoses')
+            .select('user_id, anon_key')
+            .eq('id', conversationId)
+            .maybeSingle();
+        if (!convo || !ownsDiagnosis(convo, identity)) {
+            return NextResponse.json({ error: 'Not found' }, { status: 404 });
+        }
+
         const weekKey = getISOWeekKey();
         const now = new Date();
         const nowIso = now.toISOString();

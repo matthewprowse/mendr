@@ -2,11 +2,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { makeRequest, mockSupabaseClient, type MockSupabaseClient } from '@/__tests__/helpers/route-test';
 
 let supabase: MockSupabaseClient;
+let isAdmin = true;
 
 vi.mock('@/lib/rate-limit-config', () => ({ checkRateLimit: vi.fn(async () => null) }));
 vi.mock('@/lib/auth/supabase-server', () => ({
     createSupabaseAdminClient: vi.fn(async () => supabase),
 }));
+vi.mock('@/lib/auth/admin-access', () => ({ isAdminUser: vi.fn(async () => isAdmin) }));
 vi.mock('@/lib/providers/provider-profile-clean', () => ({
     normalizeProfileTextForStorage: (v: string | null) =>
         // Always emit a different value than the input so the route's
@@ -16,6 +18,7 @@ vi.mock('@/lib/providers/provider-profile-clean', () => ({
 
 beforeEach(() => {
     vi.clearAllMocks();
+    isAdmin = true;
     supabase = mockSupabaseClient({
         tables: {
             providers: {
@@ -33,6 +36,13 @@ beforeEach(() => {
 });
 
 describe('POST /api/providers/clean-profile', () => {
+    it('returns 403 for a non-admin caller (H5)', async () => {
+        isAdmin = false;
+        const { POST } = await import('./route');
+        const res = await POST(makeRequest({ method: 'POST', body: { providerId: 'p1' } }));
+        expect(res.status).toBe(403);
+    });
+
     it('returns 400 when both ids missing', async () => {
         const { POST } = await import('./route');
         const res = await POST(makeRequest({ method: 'POST', body: {} }));

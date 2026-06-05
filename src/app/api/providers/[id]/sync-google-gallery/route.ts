@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseAdminClient } from '@/lib/auth/supabase-server';
 import { refreshProviderByPlaceId } from '@/lib/providers/refresh-provider-by-place-id';
 import { checkRateLimit } from '@/lib/rate-limit-config';
+import { authorizeProviderWrite } from '@/lib/providers/ownership';
 
 /**
  * POST /api/providers/[id]/sync-google-gallery
@@ -19,6 +20,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         const { id: providerId } = await params;
         if (!providerId) {
             return NextResponse.json({ error: 'Provider id is required' }, { status: 400 });
+        }
+
+        // Finding H5: gate the paid Google fetch to the provider's owner (or an
+        // admin); unclaimed providers stay open for onboarding enrichment.
+        const authz = await authorizeProviderWrite(providerId);
+        if (!authz.ok) {
+            return NextResponse.json({ error: authz.error }, { status: authz.status });
         }
 
         const admin = await createSupabaseAdminClient();
