@@ -42,10 +42,12 @@ Phase T1, Pure-logic unit tests:
 - [x] rate-limit-config.ts (10 tests; getCallerIp, isRateLimitBypassed, config sanity)
 - [x] auth/admin-auth.ts (10 tests; token create/verify, expiry, tamper, wrong password, cookie helpers)
 - [x] auth/cron-auth.ts (5 tests; exact Bearer match, trim, unset secret)
-- [ ] diagnosis/trade-resolver.ts
-- [ ] providers/open-status.ts
-- [ ] providers/provider-profile-clean.ts
-- [ ] diagnosis/parse-diagnosis-from-model-response.ts
+- [x] diagnosis/trade-resolver.ts (5 tests)
+- [x] providers/open-status.ts (already had a 9.4 KB suite from June; left as-is, the earlier inventory was wrong to call it untested)
+- [x] providers/provider-profile-clean.ts (11 tests; sanitize, low-signal, normalize-for-storage)
+- [x] diagnosis/parse-diagnosis-from-model-response.ts (9 tests; tags, fences, smart quotes, trailing junk, null cases)
+
+Phase T1 complete.
 
 Phase T2, Resolver and Pro route contracts:
 
@@ -95,7 +97,13 @@ Deferred, needs Docker or a Supabase branch (see Part 5):
 
 A running log of decisions and integrations surfaced while building tests. Add to this as we go.
 
-- Incomplete diagnosis-feature refactor (discovered during T0, needs a decision). A clean tsc --noEmit run from the app directory reports about 130 errors. Of these, roughly 64 are in PRODUCTION diagnosis code, not tests: agent-reasoning.ts, agent-critique.ts, agent-prose.ts, prompts/failure-mode-serializer.ts, lib/diagnosis/recommended-action.ts, prompts/taxonomy-serializer.ts, and others. They reference symbols that no longer exist: DiagnosticReasoning, FailureMode, a failureModes property on TaxonomySubcategory, EXCLUDED_SERVICES, buildSystemInstructionV2, and an agent-reasoning member missing from PipelineStepName. This looks like a half-finished or half-reverted failure-modes and reasoning feature. The 46 remaining Group A test errors are the tests for exactly this feature, so they cannot be made to typecheck until the feature is completed or reverted. These same 7 test files (29 tests) also fail at runtime under vitest (for example, expected undefined to be defined for failureModes), so this is a genuine incomplete feature, not merely a typing mismatch. The rest of the suite is green: 159 of 166 files and 1851 tests pass. This is a product decision for whoever owns the diagnosis pipeline, not test work. The app appears to run because Next builds with esbuild, which strips types and does not fail on type errors. Recommended next step: decide to finish or revert that feature, then fix or delete the Group A tests to match.
+- Incomplete diagnosis-feature refactor (discovered during T0, needs a decision). A clean tsc --noEmit run from the app directory reports about 130 errors. Of these, roughly 64 are in PRODUCTION diagnosis code, not tests: agent-reasoning.ts, agent-critique.ts, agent-prose.ts, prompts/failure-mode-serializer.ts, lib/diagnosis/recommended-action.ts, prompts/taxonomy-serializer.ts, and others. They reference symbols that no longer exist: DiagnosticReasoning, FailureMode, a failureModes property on TaxonomySubcategory, EXCLUDED_SERVICES, buildSystemInstructionV2, and an agent-reasoning member missing from PipelineStepName. This looks like a half-finished or half-reverted failure-modes and reasoning feature. The 46 remaining Group A test errors are the tests for exactly this feature, so they cannot be made to typecheck until the feature is completed or reverted. These same 7 test files (29 tests) also fail at runtime under vitest (for example, expected undefined to be defined for failureModes), so this is a genuine incomplete feature, not merely a typing mismatch. The rest of the suite is green: 159 of 166 files and 1851 tests pass.
+
+What is not built (investigated June 2026). The feature is a failure-modes plus structured-reasoning upgrade to the diagnosis pipeline. The consumer code that uses failure modes was committed (agent-reasoning.ts, agent-critique.ts, prompts/failure-mode-serializer.ts, prompts/taxonomy-serializer.ts, lib/diagnosis/recommended-action.ts), but three foundational layers were never committed:
+1. The data model. Missing type definitions and exports: FailureMode, FailureCostBand, FailureUrgency on the taxonomy; DiagnosticReasoning, RecommendedAction, DiagnosisFacets in features/diagnosis/types; the EXCLUDED_SERVICES constant; the buildSystemInstructionV2 builder; a facets field on the classification result; and an agent-reasoning member on PipelineStepName.
+2. The content. Each of the roughly 86 taxonomy subcategories needs a failureModes array authored (the real list of likely failure modes per fault, with urgency and cost band). This is the bulk of the work and it is content authoring, not just typing.
+3. The wiring. agent-reasoning is not called by the live /api/diagnose route or the processing orchestrator, so the feature is dormant and does not run in production.
+Good news: because it is dormant, the live diagnosis pipeline is unaffected. It still runs rate-limit then classify then prose, exactly as the integration test pins. So this is incomplete scaffolding sitting in the tree, not a broken live feature. Options are to finish all three layers (large, mostly content), or remove the dormant scaffolding and its tests to get the codebase clean. Left for a dedicated decision. This is a product decision for whoever owns the diagnosis pipeline, not test work. The app appears to run because Next builds with esbuild, which strips types and does not fail on type errors. Recommended next step: decide to finish or revert that feature, then fix or delete the Group A tests to match.
 - Dead backup directory: src/components/ui.backup-20260529-141207 contains stale files (for example chart.tsx) that contribute about 3 type errors. It is dead code and should be deleted or excluded from tsconfig.
 - A few demo and showcase pages (showcase, design, branding, favourites, trades) also carry small numbers of type errors, unrelated to tests. Worth a separate cleanup pass.
 - Database test harness: a Supabase branch (preferred, no Docker) or local Supabase via the CLI (needs Docker) is required before any RLS, trigger, or concurrency test can run. Targeted for roughly two weeks out.
