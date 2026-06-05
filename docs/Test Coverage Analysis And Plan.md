@@ -73,16 +73,22 @@ floors (lines 19, branches 65, functions 47, statements 19) only rise with this 
 
 Phase T3, Account and POPIA route contracts:
 
-- [ ] account/delete
-- [ ] account/export
-- [ ] account/data-consent
-- [ ] account/consents and account/consents/revoke
-- [ ] account/avatar
-- [ ] account/password
-- [ ] account/profile, account/phone, account/consent-settings, account/notification-preferences
-- [ ] admin/claims PATCH
-- [ ] admin/ai-pricing
-- [ ] contractors/account/service-area
+- [x] account/delete (5 tests; re-auth by typed email case-insensitive, anonymous-account 400, delete-error 500)
+- [x] account/export (2 tests; auth gate, downloadable JSON bundle with attachment headers + nested sub-select)
+- [x] account/data-consent (7 tests; defaults, boolean-only validation, upsert, error)
+- [x] account/consents and account/consents/revoke (7 tests; dedupe per specialist + fallback name, providerId UUID validation, revoke stamp)
+- [x] account/avatar (8 tests; magic-byte MIME, 5 MB cap 413, unsupported 415, storage+profiles+auth-metadata sync, delete)
+- [x] account/password (8 tests; re-auth, min length, must-differ, anonymous reject, reauth-fail 401, update-error 500)
+- [x] account/profile, account/phone, account/consent-settings, account/notification-preferences (26 tests; field caps + allowed-field gating, SA mobile validation/normalisation, mode enum, boolean-only prefs)
+- [x] admin/claims PATCH (9 tests; admin gate, approve links provider, reject, already-reviewed 404)
+- [x] admin/ai-pricing (8 tests; admin gate, close-then-insert history, cache invalidation, source/rate validation)
+- [x] contractors/account/service-area (10 tests; auth, no-linked-provider 404, WC bounds, radius bounds, plan-gated radius 409)
+
+Phase T3 complete (89 new tests, all green; lint clean). Full suite 204 files / 2040
+tests green. Admin routes mock `requireAdmin` via a `denyAdmin` flag (matching the
+existing admin route-test convention); the avatar route is driven with a real
+multipart `FormData` request carrying magic-byte image payloads. Coverage thresholds
+left unchanged — see the T2 note; ratchet once a clean coverage run is wired.
 
 Phase T4, Pro UI component tests:
 
