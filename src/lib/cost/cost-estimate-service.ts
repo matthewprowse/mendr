@@ -35,6 +35,7 @@ export async function getCostEstimateCached(
             .from('cost_estimates')
             .select('min_zar, max_zar, unit, note')
             .eq('subcategory_id', subcategoryId)
+            .eq('variant_key', '') // Layer 1 baseline
             .maybeSingle();
         const row = data as CostRow | null;
         if (row && typeof row.min_zar === 'number') {
