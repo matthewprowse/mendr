@@ -92,13 +92,13 @@ Cost research feature (new workstream, requested mid-build):
 
 Decision: cost must not be hardcoded. It should come from real web data via Brave search, extracted into a min-max range plus a repair-vs-replace note, cached in the database, and refreshed only on a deliberate trigger so the paid API is never hit on a page view. The existing static estimates stay as a fallback until the cache fills. Failure modes carry name plus urgency only (Emergency / Soon / Routine), no cost of their own; cost lives at the fault-type level.
 
-- [x] cost_estimates cache table (DB, public read, service-role write) applied via MCP
+- [x] cost_estimates cache table (DB, public read, service-role write) applied via MCP; variant_key composite key added so Layer 2 (brand) slots in later
 - [x] Brave web search client (src/lib/cost/brave-search.ts) with injectable fetch, 6 unit tests
-- [ ] Research step: Brave search plus LLM extraction of {min, max, note} per fault type, writing to the cache with a staleness skip
-- [ ] Deliberate trigger (admin or cron) to populate and refresh, with a dry-run mode so we never spend on the API by accident
-- [~] Read path: getCostEstimateCached service done (DB-first, static fallback, 5 tests); shared formatCostEstimate extracted so DB and static render identically. Still to do: swap the report and match page to call it (they currently call the static getCostEstimate).
-- [ ] Fill the 29 fault types with no estimate, and review the existing 57, via the research step
-- [ ] Add the cost block to the match / find-a-pro page
+- [x] Research step: researchAndCacheCost (search to extract to upsert, injectable deps, 5 tests) plus the Gemini extraction adapter extractCostWithGemini (5 tests)
+- [x] Deliberate trigger: POST /api/admin/cost-research, admin-gated, dryRun defaults TRUE (must pass dryRun false to spend), staleness skip (45 days), limit cap, force flag
+- [x] Read path API: GET /api/cost-estimate (public, cheap, cache-or-static), 4 route tests; getCostEstimateCached service (DB-first baseline row, static fallback, 5 tests); shared formatCostEstimate
+- [ ] Wire the report and match page UI to call /api/cost-estimate (deferred: the report client has early returns before the cost line, so the cost state/effect must move to the top of the component — a careful edit for the next increment)
+- [ ] Run the research trigger for real (your call, spends money) to populate the 86 fault types, which also fills the 29 gaps and refreshes the 57
 
 Failure modes feature (build, keep switched off):
 
