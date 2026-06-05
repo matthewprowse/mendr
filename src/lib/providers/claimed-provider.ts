@@ -32,10 +32,58 @@ export async function getClaimedProviderId(userId: string): Promise<string | nul
         .limit(1);
     if (app && app.length > 0) {
         const id = (app[0] as { matched_provider_id: string | null }).matched_provider_id;
-        return id ?? null;
+        if (id) return id;
+    }
+
+    // Phase 8: linked as an active team member (invited by an owner/admin).
+    const { data: member } = await admin
+        .from('provider_members')
+        .select('provider_id')
+        .eq('user_id', userId)
+        .eq('status', 'active')
+        .order('accepted_at', { ascending: true })
+        .limit(1);
+    if (member && member.length > 0) {
+        return (member[0] as { provider_id: string }).provider_id;
     }
 
     return null;
+}
+
+export type ProviderRole = 'owner' | 'admin' | 'member';
+
+/**
+ * The user's role on a provider's team (Phase 8). The original claimer is the
+ * owner even before any `provider_members` row exists; otherwise the role comes
+ * from their active membership. Returns null if they are not on the team.
+ */
+export async function getProviderRole(
+    userId: string,
+    providerId: string,
+): Promise<ProviderRole | null> {
+    const admin = await createSupabaseAdminClient();
+
+    const { data: provider } = await admin
+        .from('providers')
+        .select('claimed_by_user_id')
+        .eq('id', providerId)
+        .maybeSingle();
+    if (
+        (provider as { claimed_by_user_id: string | null } | null)?.claimed_by_user_id ===
+        userId
+    ) {
+        return 'owner';
+    }
+
+    const { data: member } = await admin
+        .from('provider_members')
+        .select('role')
+        .eq('provider_id', providerId)
+        .eq('user_id', userId)
+        .eq('status', 'active')
+        .maybeSingle();
+    const role = (member as { role: ProviderRole } | null)?.role;
+    return role ?? null;
 }
 
 /**
@@ -43,7 +91,7 @@ export async function getClaimedProviderId(userId: string): Promise<string | nul
  * awaiting admin review. Used by the portal to show the right empty state.
  */
 export async function getProviderState(
-    userId: string
+    userId: string,
 ): Promise<{ providerId: string | null; pending: boolean }> {
     const providerId = await getClaimedProviderId(userId);
     if (providerId) return { providerId, pending: false };
