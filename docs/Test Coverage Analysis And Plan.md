@@ -35,10 +35,10 @@ Phase T0, Stabilise the failing tests:
 
 Phase T1, Pure-logic unit tests:
 
-- [ ] plans.ts
-- [ ] format-money.ts
-- [ ] format-date.ts
-- [ ] phone.ts (close gaps)
+- [x] plans.ts (8 tests)
+- [x] format-money.ts (4 tests; locks the real en-ZA output "R 1 234,56")
+- [x] format-date.ts (8 tests; relative buckets pinned with fake timers)
+- [x] phone.ts, closed the formatSaPhoneInput gap (6 new tests)
 - [ ] rate-limit-config.ts
 - [ ] auth/admin-auth.ts
 - [ ] auth/cron-auth.ts
@@ -104,6 +104,7 @@ A running log of decisions and integrations surfaced while building tests. Add t
 - e2e build-error blocker around contents-builder.ts line 147 is reported but unconfirmed. Confirm before relying on the homeowner start-to-report e2e path.
 - A few shared-component filenames from the source survey need confirming before their tests are written.
 - Coverage thresholds in vitest.config.ts should be ratcheted upward at the end of each phase, never lowered.
+- Money formatting reality check (found in T1): formatZar uses the en-ZA locale, which on this runtime outputs a space thousands separator and a comma decimal, for example "R 1 234,56", not the "R 1,234.56" suggested by the code comment. The tests now lock the real output. If a comma-thousands, dot-decimal style is actually wanted on invoices and quotes, that is a deliberate formatting change to make, not a bug to fix silently.
 
 #### How To Read This Plan
 

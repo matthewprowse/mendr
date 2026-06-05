@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { normalizeSaPhone, isValidSaMobile, formatSaPhoneLocal } from '@/lib/phone';
+import {
+    normalizeSaPhone,
+    isValidSaMobile,
+    formatSaPhoneLocal,
+    formatSaPhoneInput,
+} from '@/lib/phone';
 
 describe('normalizeSaPhone', () => {
     it('converts a local 0-prefixed number to 27XXXXXXXXX', () => {
@@ -53,5 +58,34 @@ describe('formatSaPhoneLocal', () => {
 
     it('passes through anything not in 27XXXXXXXXX shape', () => {
         expect(formatSaPhoneLocal('garbage')).toBe('garbage');
+    });
+});
+
+describe('formatSaPhoneInput', () => {
+    it('groups a full local number as 0XX XXX XXXX', () => {
+        expect(formatSaPhoneInput('0821234567')).toBe('082 123 4567');
+    });
+
+    it('drops a +27 or 27 international prefix', () => {
+        expect(formatSaPhoneInput('+27821234567')).toBe('082 123 4567');
+        expect(formatSaPhoneInput('27821234567')).toBe('082 123 4567');
+    });
+
+    it('groups progressively as the user types', () => {
+        expect(formatSaPhoneInput('08')).toBe('08');
+        expect(formatSaPhoneInput('082')).toBe('082');
+        expect(formatSaPhoneInput('0821')).toBe('082 1');
+        expect(formatSaPhoneInput('082123')).toBe('082 123');
+        expect(formatSaPhoneInput('0821234')).toBe('082 123 4');
+    });
+
+    it('ignores non-digits and caps at nine national digits', () => {
+        expect(formatSaPhoneInput('082-123-4567')).toBe('082 123 4567');
+        expect(formatSaPhoneInput('0821234567890')).toBe('082 123 4567');
+    });
+
+    it('returns an empty string when there are no digits', () => {
+        expect(formatSaPhoneInput('')).toBe('');
+        expect(formatSaPhoneInput('abc')).toBe('');
     });
 });
