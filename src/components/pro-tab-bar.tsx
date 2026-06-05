@@ -24,6 +24,8 @@ const MORE = [
     { href: '/pro/quotes', label: 'Quotes' },
     { href: '/pro/invoices', label: 'Invoices' },
     { href: '/pro/team', label: 'Team' },
+    { href: '/pro/analytics', label: 'Analytics' },
+    { href: '/pro/settings', label: 'Settings' },
 ] as const;
 
 function matches(pathname: string, href: string): boolean {
