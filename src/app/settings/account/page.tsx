@@ -27,7 +27,10 @@ export default async function AccountPage() {
         firstName: data?.first_name ?? '',
         surname: data?.surname ?? '',
         description: data?.description ?? '',
-        avatarUrl: data?.avatar_url ?? null,
+        avatarUrl:
+            data?.avatar_url ??
+            (user.user_metadata?.avatar_url as string | undefined) ??
+            null,
     };
 
     return <AccountClient initialProfile={profile} />;

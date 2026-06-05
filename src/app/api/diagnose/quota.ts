@@ -21,6 +21,27 @@ import {
     createSupabaseAdminClient,
 } from '@/lib/auth/supabase-server';
 
+/**
+ * Free-diagnosis slot caps (Phase 2 of the onboarding plan). Logged-in
+ * homeowners get a daily allowance; anonymous visitors get a weekly one, which
+ * nudges signup while keeping the wow moment intact. Both are dialled here.
+ */
+const LOGGED_IN_DAILY_LIMIT = 3;
+const ANON_WEEKLY_LIMIT = 3;
+
+/**
+ * UTC start-of-ISO-week (Monday) as a YYYY-MM-DD string. Anonymous quota is
+ * bucketed by this date so a whole week shares one counter (3 per week). The
+ * quota RPC keys on the date string, so no RPC change is needed.
+ */
+function isoWeekStartUtc(now: Date): string {
+    const date = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+    const day = date.getUTCDay(); // 0=Sun .. 6=Sat
+    const shiftToMonday = day === 0 ? -6 : 1 - day;
+    date.setUTCDate(date.getUTCDate() + shiftToMonday);
+    return date.toISOString().split('T')[0];
+}
+
 export interface QuotaCheckResult {
     /** When non-null, the caller should return this Response immediately. */
     blockingResponse: Response | null;
@@ -78,8 +99,13 @@ export async function checkDiagnosisQuota(
         }
     }
 
-    const limit = quotaUserId ? 10 : 3;
-    const today = new Date().toISOString().split('T')[0];
+    // Logged-in: daily allowance, bucketed by calendar day. Anonymous: weekly
+    // allowance, bucketed by ISO-week-start so the week shares one counter.
+    const now = new Date();
+    const limit = quotaUserId ? LOGGED_IN_DAILY_LIMIT : ANON_WEEKLY_LIMIT;
+    const bucketDate = quotaUserId
+        ? now.toISOString().split('T')[0]
+        : isoWeekStartUtc(now);
 
     try {
         const admin = await createSupabaseAdminClient();
@@ -88,7 +114,7 @@ export async function checkDiagnosisQuota(
             {
                 p_user_id: quotaUserId ?? null,
                 p_anon_key: quotaAnonKey ?? null,
-                p_date: today,
+                p_date: bucketDate,
             },
         );
 
@@ -105,7 +131,7 @@ export async function checkDiagnosisQuota(
                             used: newCount,
                             message: quotaUserId
                                 ? `You have used all ${limit} diagnoses for today. Your quota resets at midnight.`
-                                : `You have used all ${limit} free diagnoses for today. Sign in for more.`,
+                                : `You have used all ${limit} free diagnoses for this week. Sign in for more.`,
                         }),
                         {
                             status: 429,

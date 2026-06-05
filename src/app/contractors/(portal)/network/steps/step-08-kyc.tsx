@@ -63,7 +63,7 @@ export function StepKyc() {
                     <input
                         ref={idRef}
                         type="file"
-                        accept="image/jpeg,image/png,image/webp,image/gif,application/pdf"
+                        accept="image/jpeg,image/png,image/webp,image/gif,application/pdf,image/heic,image/heif,.heic,.heif"
                         className="sr-only"
                         onChange={(e) => {
                             const f = e.target.files?.[0];
@@ -105,7 +105,7 @@ export function StepKyc() {
                     <input
                         ref={selfieRef}
                         type="file"
-                        accept="image/jpeg,image/png,image/webp,image/gif"
+                        accept="image/jpeg,image/png,image/webp,image/gif,image/heic,image/heif,.heic,.heif"
                         className="sr-only"
                         onChange={(e) => {
                             const f = e.target.files?.[0];

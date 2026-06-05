@@ -1,6 +1,7 @@
 'use client';
 
-import { useMemo, useRef, useState } from 'react';
+import { Fragment, useMemo, useRef, useState } from 'react';
+import { X } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -132,35 +133,21 @@ export function StepProfile() {
             />
             <div className="flex flex-col gap-6">
                 <SectionLabel>Business Details</SectionLabel>
-                <div className="grid grid-cols-2 gap-4">
-                    <div className="flex flex-col gap-4">
-                        <RequiredLabel htmlFor="foundedYear">Year founded</RequiredLabel>
-                        <Input
-                            id="foundedYear"
-                            type="number"
-                            inputMode="numeric"
-                            min="1900"
-                            max="2100"
-                            className="h-10"
-                            value={data.foundedYear}
-                            onChange={(e) => patch({ foundedYear: e.target.value.replace(/[^\d]/g, '') })}
-                        />
-                    </div>
-                    <div className="flex flex-col gap-4">
-                        <RequiredLabel htmlFor="teamSize">Team size</RequiredLabel>
-                        <Input
-                            id="teamSize"
-                            type="number"
-                            inputMode="numeric"
-                            min="1"
-                            className="h-10"
-                            value={data.teamSize}
-                            onChange={(e) => patch({ teamSize: e.target.value.replace(/[^\d]/g, '') })}
-                        />
-                    </div>
+                <div className="flex flex-col gap-3">
+                    <RequiredLabel htmlFor="foundedYear">Year founded</RequiredLabel>
+                    <Input
+                        id="foundedYear"
+                        type="number"
+                        inputMode="numeric"
+                        min="1900"
+                        max="2100"
+                        className="h-10"
+                        value={data.foundedYear}
+                        onChange={(e) => patch({ foundedYear: e.target.value.replace(/[^\d]/g, '') })}
+                    />
                 </div>
 
-                <div className="flex flex-col gap-4">
+                <div className="flex flex-col gap-3">
                     <OptionalLabel htmlFor="registrationNumber">CIPC registration number</OptionalLabel>
                     <Input
                         id="registrationNumber"
@@ -185,13 +172,13 @@ export function StepProfile() {
                 </div>
 
                 {regValid ? (
-                    <div className="flex flex-col gap-4">
+                    <div className="flex flex-col gap-3">
                         <RequiredLabel htmlFor="registrationCertFile">Registration Certificate</RequiredLabel>
                         <input
                             ref={regFileInputRef}
                             id="registrationCertFile"
                             type="file"
-                            accept="application/pdf,image/jpeg,image/png,image/webp,image/gif"
+                            accept="application/pdf,image/jpeg,image/png,image/webp,image/gif,image/heic,image/heif,.heic,.heif"
                             className="sr-only"
                             onChange={(e) => void handleRegistrationCertFile(e)}
                             disabled={regCertBusy}
@@ -241,7 +228,7 @@ export function StepProfile() {
                 <Separator />
 
                 <SectionLabel>Your Story</SectionLabel>
-                <div className="flex flex-col gap-4">
+                <div className="flex flex-col gap-3">
                     <RequiredLabel htmlFor="bio">About your business</RequiredLabel>
                     <Textarea
                         id="bio"
@@ -251,7 +238,7 @@ export function StepProfile() {
                         placeholder="What should homeowners know before they call?"
                     />
                 </div>
-                <div className="flex flex-col gap-4">
+                <div className="flex flex-col gap-3">
                     <RequiredLabel htmlFor="highlights">Highlights</RequiredLabel>
                     <Textarea
                         id="highlights"
@@ -265,7 +252,7 @@ export function StepProfile() {
                 <Separator />
 
                 <SectionLabel>Service Terms</SectionLabel>
-                <div className="flex flex-col gap-4">
+                <div className="flex flex-col gap-3">
                     <OptionalLabel htmlFor="insuranceCover">Insurance cover</OptionalLabel>
                     <Input
                         id="insuranceCover"
@@ -276,7 +263,7 @@ export function StepProfile() {
                     />
                 </div>
 
-                <div className="flex flex-col gap-4">
+                <div className="flex flex-col gap-3">
                     <OptionalLabel htmlFor="typicalResponseTime">Typical response time</OptionalLabel>
                     <Select
                         value={data.typicalResponseTime}
@@ -299,7 +286,7 @@ export function StepProfile() {
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
-                    <div className="flex flex-col gap-4">
+                    <div className="flex flex-col gap-3">
                         <OptionalLabel htmlFor="pricingModel">Pricing model</OptionalLabel>
                         <Input
                             id="pricingModel"
@@ -309,7 +296,7 @@ export function StepProfile() {
                             placeholder="e.g. Fixed callout, then quoted"
                         />
                     </div>
-                    <div className="flex flex-col gap-4">
+                    <div className="flex flex-col gap-3">
                         <OptionalLabel htmlFor="calloutFee">Call-out fee (R)</OptionalLabel>
                         <Input
                             id="calloutFee"
@@ -327,7 +314,7 @@ export function StepProfile() {
                 <Separator />
 
                 <SectionLabel>Certifications</SectionLabel>
-                <div className="flex flex-col gap-4">
+                <div className="flex flex-col gap-3">
                     <RequiredLabel htmlFor="certifications">Certifications (text)</RequiredLabel>
                     <Textarea
                         id="certifications"
@@ -345,7 +332,7 @@ export function StepProfile() {
                     </div>
                 </div>
 
-                <div className="flex flex-col gap-4">
+                <div className="flex flex-col gap-3">
                     <OptionalLabel htmlFor="certLabel">Certification documents</OptionalLabel>
                     <p className="text-xs text-muted-foreground">
                         PDF or photo for each ticket, trade test, or membership. Add a label, then upload.
@@ -360,7 +347,7 @@ export function StepProfile() {
                     <input
                         ref={certFileInputRef}
                         type="file"
-                        accept="application/pdf,image/jpeg,image/png,image/webp,image/gif"
+                        accept="application/pdf,image/jpeg,image/png,image/webp,image/gif,image/heic,image/heif,.heic,.heif"
                         className="sr-only"
                         onChange={(ev) => void handleCertificationFile(ev)}
                         disabled={certFileBusy}
@@ -375,65 +362,40 @@ export function StepProfile() {
                         {certFileBusy ? 'Uploading…' : 'Upload certification file'}
                     </Button>
                     {certificationFiles.length > 0 ? (
-                        <ul className="flex flex-col gap-2">
-                            {certificationFiles.map((c) => (
-                                <li
-                                    key={c.id}
-                                    className="flex items-center justify-between gap-2 rounded-md border border-border px-3 py-2 text-sm"
-                                >
-                                    <span className="min-w-0 truncate">
-                                        {c.label} — {c.path.split('/').pop()}
-                                    </span>
-                                    <Button
-                                        type="button"
-                                        variant="ghost"
-                                        className="h-8 shrink-0"
-                                        onClick={() => {
-                                            if (c.previewUrl?.startsWith('blob:')) URL.revokeObjectURL(c.previewUrl);
-                                            setCertificationFiles(certificationFiles.filter((x) => x.id !== c.id));
-                                        }}
-                                    >
-                                        Remove
-                                    </Button>
-                                </li>
+                        <div className="flex flex-col">
+                            {certificationFiles.map((c, i) => (
+                                <Fragment key={c.id}>
+                                    {i > 0 ? <Separator /> : null}
+                                    <div className="flex items-center gap-3 py-3">
+                                        <span className="size-12 shrink-0 rounded-md bg-secondary" aria-hidden="true" />
+                                        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                                            <p className="line-clamp-1 text-sm font-medium text-foreground">
+                                                {c.label}
+                                            </p>
+                                            <p className="line-clamp-1 text-xs text-muted-foreground">
+                                                {c.path.split('/').pop()}
+                                            </p>
+                                        </div>
+                                        <Button
+                                            type="button"
+                                            variant="ghost"
+                                            size="icon"
+                                            className="size-8 shrink-0 text-muted-foreground hover:text-foreground"
+                                            aria-label="Remove certification"
+                                            onClick={() => {
+                                                if (c.previewUrl?.startsWith('blob:')) URL.revokeObjectURL(c.previewUrl);
+                                                setCertificationFiles(certificationFiles.filter((x) => x.id !== c.id));
+                                            }}
+                                        >
+                                            <X size={16} strokeWidth={2.5} />
+                                        </Button>
+                                    </div>
+                                </Fragment>
                             ))}
-                        </ul>
-                    ) : null}
-                </div>
-
-                <Separator />
-
-                <SectionLabel>How You Heard About Us</SectionLabel>
-                <div className="flex flex-col gap-4">
-                    <RequiredLabel htmlFor="referralSource">How did you hear about Mendr?</RequiredLabel>
-                    <Select
-                        value={data.referralSource}
-                        onValueChange={(v) => patch({ referralSource: v })}
-                    >
-                        <SelectTrigger id="referralSource" className="h-10 min-h-10 w-full data-[size=default]:h-10">
-                            <SelectValue placeholder="Select referral source" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="Instagram">Instagram</SelectItem>
-                            <SelectItem value="Facebook">Facebook</SelectItem>
-                            <SelectItem value="Google">Google</SelectItem>
-                            <SelectItem value="Contractor">Contractor Referral</SelectItem>
-                            <SelectItem value="Other">Other</SelectItem>
-                        </SelectContent>
-                    </Select>
-                    {data.referralSource === 'Other' ? (
-                        <div className="flex flex-col gap-4">
-                            <RequiredLabel htmlFor="referralOther">Tell us more</RequiredLabel>
-                            <Input
-                                id="referralOther"
-                                className="h-10"
-                                value={data.referralOther}
-                                onChange={(e) => patch({ referralOther: e.target.value })}
-                                placeholder="Please specify"
-                            />
                         </div>
                     ) : null}
                 </div>
+
             </div>
         </div>
     );

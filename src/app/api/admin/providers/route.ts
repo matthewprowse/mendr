@@ -65,7 +65,6 @@ export async function POST(req: NextRequest) {
         registration_number: str(body?.registration_number) || null,
         certifications: str(body?.certifications) || null,
         highlights: str(body?.highlights) || null,
-        referral: str(body?.referral) || null,
         notes: str(body?.notes) || null,
         whatsapp_available: Boolean(body?.whatsapp_available),
         status: 'new',
@@ -108,7 +107,6 @@ export async function PATCH(req: NextRequest) {
         'registration_number',
         'certifications',
         'highlights',
-        'referral',
     ] as const;
     const patch: Record<string, unknown> = {};
     for (const key of allowed) {

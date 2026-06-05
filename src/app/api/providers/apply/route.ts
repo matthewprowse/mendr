@@ -29,7 +29,6 @@ type ApplyBody = {
     trade?: string;
     specialisations?: string;
     foundedYear?: string;
-    teamSize?: string;
     registrationNumber?: string;
     certifications?: string;
     highlights?: string;
@@ -38,8 +37,6 @@ type ApplyBody = {
     typicalResponseTime?: string;
     pricingModel?: string;
     calloutFee?: string;
-    referralSource?: string;
-    referralOther?: string;
     uploads?: Array<{ path?: string; bucket?: string; caption?: string | null }>;
     serviceAreaRadii?: Array<{
         address?: string;
@@ -111,9 +108,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         return NextResponse.json({ error: 'Valid email is required.' }, { status: 400 });
     }
 
-    const teamRaw    = typeof body?.teamSize === 'string' ? body.teamSize.trim() : '';
     const foundedYear = foundedYearRaw ? parseInt(foundedYearRaw, 10) : null;
-    const teamSize    = teamRaw ? parseInt(teamRaw, 10) : null;
 
     const calloutFeeRaw = typeof body?.calloutFee === 'string' ? body.calloutFee.trim() : '';
     const calloutFee    = calloutFeeRaw ? parseInt(calloutFeeRaw, 10) : null;
@@ -152,13 +147,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         const admin = await createSupabaseAdminClient();
 
         // ── Insert core fields (stable schema) ───────────────────────────────
-        const referral =
-            typeof body?.referralSource === 'string'
-                ? body.referralSource.trim() === 'Other'
-                    ? (typeof body?.referralOther === 'string' ? body.referralOther.trim() : 'Other') || 'Other'
-                    : body.referralSource.trim()
-                : null;
-
         const kycRaw = body?.kycDocuments;
         const idPath = kycRaw && typeof kycRaw.idDocument?.path === 'string' ? kycRaw.idDocument.path.trim() : '';
         const idBucket = kycRaw && typeof kycRaw.idDocument?.bucket === 'string' ? kycRaw.idDocument.bucket.trim() : 'gallery';
@@ -190,7 +178,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
                 trade,
                 trade_description:   specialisations,
                 founded_year:        Number.isFinite(foundedYear) ? foundedYear : null,
-                team_size:           Number.isFinite(teamSize) ? teamSize : null,
                 registration_number: typeof body?.registrationNumber === 'string' ? body.registrationNumber.trim() || null : null,
                 certifications:      typeof body?.certifications === 'string' ? body.certifications.trim() || null : null,
                 highlights:          typeof body?.highlights === 'string' ? body.highlights.trim() || null : null,
@@ -199,7 +186,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
                 typical_response_time:     typicalResponseTime,
                 pricing_model:             pricingModel,
                 callout_fee:               Number.isFinite(calloutFee) ? calloutFee : null,
-                referral,
                 application_images:  uploads.length > 0 ? uploads : null,
                 service_areas:       serviceAreaRadii.length > 0 ? serviceAreaRadii : null,
                 applicant_ip:        applicantIp,

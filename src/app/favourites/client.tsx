@@ -9,14 +9,6 @@ import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Spinner } from '@/components/ui/spinner';
-import {
-    Empty,
-    EmptyContent,
-    EmptyDescription,
-    EmptyHeader,
-    EmptyMedia,
-    EmptyTitle,
-} from '@/components/ui/empty';
 import { FlowTopBar } from '@/components/match/flow-shell';
 import { AccountTabBar } from '@/components/account-tab-bar';
 import { BRAND_NAME } from '@/lib/brand-system';
@@ -34,18 +26,6 @@ export type SavedProvider = {
     rating: number | null;
     ratingCount: number | null;
     specialisations: string[];
-};
-
-const DEMO_PROVIDER: SavedProvider = {
-    savedId: 'demo-1',
-    savedAt: new Date().toISOString(),
-    providerId: 'demo-provider-1',
-    googlePlaceId: null,
-    name: "Mike's Plumbing & Drainage",
-    address: 'Sea Point, Cape Town, Western Cape, South Africa',
-    rating: 4.8,
-    ratingCount: 127,
-    specialisations: ['Plumbing', 'Drainage'],
 };
 
 function formatRelativeDate(iso: string): string {
@@ -73,11 +53,7 @@ export default function FavouritesClient({
     const isLoggedIn = Boolean(user && user.email);
 
     const [rows, setRows] = useState<SavedProvider[] | null>(
-        initialProviders !== undefined
-            ? initialProviders.length > 0
-                ? initialProviders
-                : [DEMO_PROVIDER]
-            : null,
+        initialProviders ?? null,
     );
     const [error, setError] = useState<string | null>(null);
     const [query, setQuery] = useState('');
@@ -97,8 +73,7 @@ export default function FavouritesClient({
             })
             .then((data: { providers?: SavedProvider[] }) => {
                 if (!cancelled) {
-                    const real = data.providers ?? [];
-                    setRows(real.length > 0 ? real : [DEMO_PROVIDER]);
+                    setRows(data.providers ?? []);
                 }
             })
             .catch(() => {
@@ -216,7 +191,7 @@ export default function FavouritesClient({
                                         Favourites
                                     </h1>
                                     <p className="text-sm text-muted-foreground">
-                                        Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore.
+                                        The specialists you have saved, all in one place.
                                     </p>
                                 </div>
 
@@ -270,22 +245,9 @@ export default function FavouritesClient({
 
                                 {/* Empty */}
                                 {isEmpty ? (
-                                    <Empty>
-                                        <EmptyMedia variant="icon">
-                                            <Heart fill="currentColor" />
-                                        </EmptyMedia>
-                                        <EmptyHeader>
-                                            <EmptyTitle>No Favourite Providers</EmptyTitle>
-                                            <EmptyDescription>
-                                                Save contractors you love and find them here anytime.
-                                            </EmptyDescription>
-                                        </EmptyHeader>
-                                        <EmptyContent>
-                                            <Button asChild variant="secondary">
-                                                <Link href="/start">Find a Contractor</Link>
-                                            </Button>
-                                        </EmptyContent>
-                                    </Empty>
+                                    <p className="text-center text-sm text-muted-foreground">
+                                        No favourites yet.
+                                    </p>
                                 ) : null}
 
                                 {/* No search results */}

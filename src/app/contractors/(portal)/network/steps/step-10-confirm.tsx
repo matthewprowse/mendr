@@ -26,8 +26,6 @@ function contractorTypeLabel(t: ContractorType | ''): string {
 
 export function StepConfirm() {
     const { data, radii, uploads, registrationCertificate, certificationFiles, kycId, kycSelfie } = useWizard();
-    const referralLabel =
-        data.referralSource === 'Other' ? data.referralOther.trim() || 'Other' : data.referralSource || '—';
     return (
         <div className="flex flex-col gap-8">
             <StepHeader
@@ -78,7 +76,6 @@ export function StepConfirm() {
                 </SummaryCard>
                 <SummaryCard title="Business Profile">
                     <p className="text-muted-foreground">Founded year: {data.foundedYear || '—'}</p>
-                    <p className="text-muted-foreground">Team size: {data.teamSize || '—'}</p>
                     <p className="text-muted-foreground">Registration: {data.registrationNumber || '—'}</p>
                     {registrationCertificate ? (
                         <p className="text-muted-foreground">
@@ -93,7 +90,6 @@ export function StepConfirm() {
                         </p>
                     ) : null}
                     <p className="text-muted-foreground">Highlights: {data.highlights || '—'}</p>
-                    <p className="text-muted-foreground">Referral: {referralLabel}</p>
                 </SummaryCard>
                 <SummaryCard title="Service Terms">
                     <p className="text-muted-foreground">Insurance cover: {data.insuranceCover || '—'}</p>

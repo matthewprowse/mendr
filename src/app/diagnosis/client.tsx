@@ -1589,6 +1589,25 @@ export default function DiagnosisPageClient({
         const hasRemovedPhotos = removedOriginalUrls.size > 0;
         if (!imageSrc) return;
         if (!trimmed && newPhotoUrls.length === 0 && !hasRemovedPhotos) return;
+
+        // Refinement fair-use cap: the server increments refinement_count for this
+        // diagnosis and returns 429 once the per-diagnosis limit is exceeded. Only
+        // user-initiated refines (this handler) count, never clarifications.
+        if (conversationId) {
+            const capRes = await fetch('/api/diagnose/refinement', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ conversationId }),
+            }).catch(() => null);
+            if (capRes && capRes.status === 429) {
+                setShowAddInfoScreen(false);
+                setDiagnosisFailureMessage(
+                    'You have reached the refinement limit for this diagnosis. Start a new one to continue.'
+                );
+                return;
+            }
+        }
+
         setShowAddInfoScreen(false);
 
         const nextItems = trimmed

@@ -14,9 +14,11 @@
  *   • Success screen for after submission
  */
 
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import {
     Dialog,
     DialogContent,
@@ -89,6 +91,27 @@ function WizardShell() {
         deleteExistingApplication,
     } = useWizard();
 
+    // Swap the header wordmark for the step title once the step's <h1> scrolls
+    // up behind the top bar (mirrors /diagnoses and /start).
+    const [scrolledTitle, setScrolledTitle] = useState<string | null>(null);
+    useEffect(() => {
+        const root = contentRef.current;
+        if (!root) return;
+        setScrolledTitle(null);
+        const update = () => {
+            const h1 = root.querySelector('h1');
+            if (!h1) {
+                setScrolledTitle(null);
+                return;
+            }
+            const scrolledOut = h1.getBoundingClientRect().bottom <= root.getBoundingClientRect().top;
+            setScrolledTitle(scrolledOut ? h1.textContent?.trim() || null : null);
+        };
+        update();
+        root.addEventListener('scroll', update, { passive: true });
+        return () => root.removeEventListener('scroll', update);
+    }, [contentRef, step]);
+
     if (submitted) return <SuccessScreen />;
 
     return (
@@ -107,11 +130,18 @@ function WizardShell() {
                     </Button>
                 }
                 centerSlot={
-                    <p className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-base font-medium text-foreground">
-                        {BRAND_NAME_PRO}
+                    <p className="pointer-events-none absolute left-1/2 top-1/2 max-w-[70%] -translate-x-1/2 -translate-y-1/2 truncate text-center text-base font-medium text-foreground">
+                        {scrolledTitle ?? BRAND_NAME_PRO}
                     </p>
                 }
-                rightSlot={<ProAccountMenu />}
+                rightSlot={
+                    <div className="flex items-center gap-2">
+                        <Badge variant="secondary">
+                            Step {step}/{TOTAL_STEPS}
+                        </Badge>
+                        <ProAccountMenu />
+                    </div>
+                }
             />
             <main ref={contentRef} className="min-h-0 flex-1 overflow-y-auto">
                 <div className="flex min-h-full flex-col justify-center p-4">

@@ -412,7 +412,6 @@ export function WizardProvider({ children }: { children: ReactNode }) {
             trade: app.trade || '',
             specialisations: app.trade_description || '',
             foundedYear: typeof app.founded_year === 'number' ? String(app.founded_year) : '',
-            teamSize: typeof app.team_size === 'number' ? String(app.team_size) : '',
             registrationNumber: app.registration_number || '',
             bio: typeof app.about === 'string' ? app.about : '',
             certifications: app.certifications || '',
@@ -421,8 +420,6 @@ export function WizardProvider({ children }: { children: ReactNode }) {
             typicalResponseTime: app.typical_response_time || '',
             pricingModel: app.pricing_model || '',
             calloutFee: typeof app.callout_fee === 'number' ? String(app.callout_fee) : '',
-            referralSource: app.referral || '',
-            referralOther: '',
         });
         setRadii(nextRadii);
         setUploads(nextUploads);
@@ -540,7 +537,6 @@ export function WizardProvider({ children }: { children: ReactNode }) {
         if (step === STEP.TRADE) return Boolean(data.trade.trim() && tokenizeCsv(data.specialisations).length > 0);
         if (step === STEP.PROFILE) {
             const year = Number(data.foundedYear);
-            const team = Number(data.teamSize);
             const regPartial =
                 data.registrationNumber.trim().length > 0 && !isValidSaRegistrationNumber(data.registrationNumber);
             if (regPartial) return false;
@@ -549,13 +545,9 @@ export function WizardProvider({ children }: { children: ReactNode }) {
                 Number.isInteger(year) &&
                 year >= 1900 &&
                 year <= new Date().getFullYear() &&
-                Number.isInteger(team) &&
-                team >= 1 &&
                 data.bio.trim().length > 0 &&
                 tokenizeCsv(data.certifications).length > 0 &&
-                data.highlights.trim().length > 0 &&
-                data.referralSource.trim().length > 0 &&
-                (data.referralSource !== 'Other' || data.referralOther.trim().length > 0)
+                data.highlights.trim().length > 0
             );
         }
         if (step === STEP.KYC) return true;
@@ -613,7 +605,6 @@ export function WizardProvider({ children }: { children: ReactNode }) {
                     trade: data.trade,
                     specialisations: tokenizeCsv(data.specialisations).join(', '),
                     foundedYear: data.foundedYear,
-                    teamSize: data.teamSize,
                     registrationNumber: data.registrationNumber,
                     certifications: tokenizeCsv(data.certifications).join(', '),
                     bio: data.bio,
@@ -622,8 +613,6 @@ export function WizardProvider({ children }: { children: ReactNode }) {
                     typicalResponseTime: data.typicalResponseTime,
                     pricingModel: data.pricingModel,
                     calloutFee: data.calloutFee,
-                    referralSource: data.referralSource,
-                    referralOther: data.referralOther,
                     serviceAreas: radii.map((r) => `${r.address} (${r.radiusKm}km)`).join(', '),
                     serviceAreaRadii: radii,
                     uploads: uploadsPayload,

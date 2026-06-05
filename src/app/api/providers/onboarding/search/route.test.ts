@@ -1,44 +1,32 @@
-import { describe, it, expect, vi, beforeEach, afterAll } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { makeRequest } from '@/__tests__/helpers/route-test';
 
 vi.mock('@/lib/rate-limit-config', () => ({ checkRateLimit: vi.fn(async () => null) }));
-vi.mock('@/lib/providers/constants', () => ({ RETAIL_TYPES: new Set(['cafe']) }));
-vi.mock('@/lib/providers/place-id', () => ({
-    normalizePlaceId: (id: string) => id.replace(/^places\//, ''),
-}));
 
-const originalFetch = global.fetch;
+// The route now searches our `providers` table via the admin client (no Google).
+let queryResult: { data: unknown; error: unknown } = { data: [], error: null };
+vi.mock('@/lib/auth/supabase-server', () => ({
+    createSupabaseAdminClient: vi.fn(async () => ({
+        from: () => {
+            // A thenable query builder where every method returns itself and
+            // awaiting resolves to the configured { data, error }.
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const builder: any = {
+                select: () => builder,
+                ilike: () => builder,
+                eq: () => builder,
+                order: () => builder,
+                limit: () => builder,
+                then: (resolve: (v: unknown) => unknown) => resolve(queryResult),
+            };
+            return builder;
+        },
+    })),
+}));
 
 beforeEach(() => {
     vi.clearAllMocks();
-    process.env.GOOGLE_PLACES_API_KEY = 'test-key';
-    global.fetch = vi.fn(async () =>
-        new Response(
-            JSON.stringify({
-                places: [
-                    {
-                        id: 'places/p1',
-                        displayName: { text: 'Acme' },
-                        formattedAddress: 'Cape Town',
-                        types: ['plumber'],
-                        rating: 4.5,
-                        userRatingCount: 10,
-                    },
-                    {
-                        id: 'places/p2',
-                        displayName: { text: 'Café Skip' },
-                        formattedAddress: 'CT',
-                        types: ['cafe'],
-                    },
-                ],
-            }),
-            { status: 200 },
-        ),
-    ) as typeof global.fetch;
-});
-
-afterAll(() => {
-    global.fetch = originalFetch;
+    queryResult = { data: [], error: null };
 });
 
 describe('POST /api/providers/onboarding/search', () => {
@@ -54,28 +42,37 @@ describe('POST /api/providers/onboarding/search', () => {
         expect(res.status).toBe(400);
     });
 
-    it('returns 500 when API key missing', async () => {
-        delete process.env.GOOGLE_PLACES_API_KEY;
-        delete process.env.NEXT_PUBLIC_GOOGLE_PLACES_API_KEY;
-        delete process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+    it('returns providers matched from our database', async () => {
+        queryResult = {
+            data: [
+                {
+                    id: 'prov-1',
+                    google_place_id: 'gp1',
+                    name: 'Acme Plumbing',
+                    address: '1 Main Rd, Cape Town',
+                    phone: '+27821234567',
+                    website: 'https://acme.co.za',
+                    latitude: -33.9,
+                    longitude: 18.4,
+                    rating: 4.5,
+                    rating_count: 10,
+                },
+            ],
+            error: null,
+        };
         const { POST } = await import('./route');
         const res = await POST(makeRequest({ method: 'POST', body: { query: 'plumb' } }));
-        expect(res.status).toBe(500);
-    });
-
-    it('returns filtered results (retail types removed)', async () => {
-        const { POST } = await import('./route');
-        const res = await POST(makeRequest({ method: 'POST', body: { query: 'plumber' } }));
         expect(res.status).toBe(200);
         const body = await res.json();
         expect(body.results).toHaveLength(1);
-        expect(body.results[0].name).toBe('Acme');
+        expect(body.results[0].name).toBe('Acme Plumbing');
+        expect(body.results[0].placeId).toBe('gp1');
     });
 
-    it('returns 502 when Google returns an error', async () => {
-        global.fetch = vi.fn(async () => new Response('err', { status: 500 })) as typeof global.fetch;
+    it('returns 500 when the DB query errors', async () => {
+        queryResult = { data: null, error: { message: 'db' } };
         const { POST } = await import('./route');
-        const res = await POST(makeRequest({ method: 'POST', body: { query: 'plumber' } }));
-        expect(res.status).toBe(502);
+        const res = await POST(makeRequest({ method: 'POST', body: { query: 'plumb' } }));
+        expect(res.status).toBe(500);
     });
 });

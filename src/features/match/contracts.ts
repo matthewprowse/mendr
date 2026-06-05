@@ -50,6 +50,12 @@ export type MatchProvider = {
     yearsInBusiness?: number | null;
     certifications?: MatchProviderCertification[];
     images?: MatchProviderImage[];
+    /**
+     * True when the specialist's identity is withheld because the homeowner is
+     * not signed in with a verified number. Name and contact are stripped
+     * server-side; the card renders a locked state and gates profile/contact.
+     */
+    identityLocked?: boolean;
 };
 
 export type ProvidersRequest = {

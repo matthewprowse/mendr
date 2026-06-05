@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createHash } from 'crypto';
 import { checkRateLimit } from '@/lib/rate-limit-config';
-import { createSupabaseAdminClient } from '@/lib/auth/supabase-server';
+import {
+    createSupabaseAdminClient,
+    createSupabaseServerClient,
+} from '@/lib/auth/supabase-server';
 import { notifyContractorOfLead } from '@/lib/providers/notify-contractor-of-lead';
 import { stampFirstContact } from '@/lib/analytics/funnel';
 
@@ -20,6 +23,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         diagnosisId?: unknown;
         homeownerWhatsapp?: unknown;
         channel?: unknown;
+        consentTextVersion?: unknown;
     };
 
     let body: BodyShape | null = null;
@@ -32,8 +36,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
     const providerId = typeof body?.providerId === 'string' ? body.providerId.trim() : '';
     const diagnosisId = typeof body?.diagnosisId === 'string' ? body.diagnosisId.trim() : '';
-    const homeownerWhatsapp =
+    const homeownerWhatsappRaw =
         typeof body?.homeownerWhatsapp === 'string' ? body.homeownerWhatsapp.trim() || null : null;
+    const consentTextVersion =
+        typeof body?.consentTextVersion === 'string' ? body.consentTextVersion.trim() || null : null;
     const channelRaw = body?.channel;
     const channel =
         channelRaw === 'phone' || channelRaw === 'email' || channelRaw === 'whatsapp'
@@ -48,6 +54,33 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     }
 
     const admin = await createSupabaseAdminClient();
+
+    // Identify the homeowner from their session (web path). The WhatsApp bot
+    // path has no session and passes homeownerWhatsapp directly. When a logged-in
+    // homeowner contacts, fall back to their stored profile number so the lead is
+    // identified even if the client did not send one.
+    let homeownerUserId: string | null = null;
+    let homeownerPhone: string | null = null;
+    try {
+        const ssr = await createSupabaseServerClient();
+        const {
+            data: { user },
+        } = await ssr.auth.getUser();
+        if (user?.id) {
+            homeownerUserId = user.id;
+            const { data: profile } = await admin
+                .from('profiles')
+                .select('phone')
+                .or(`id.eq.${user.id},user_id.eq.${user.id}`)
+                .maybeSingle();
+            const p = (profile as { phone?: string | null } | null)?.phone;
+            if (typeof p === 'string' && p.trim()) homeownerPhone = p.trim();
+        }
+    } catch {
+        // Non-fatal — proceed as an anonymous/bot contact.
+    }
+
+    const homeownerWhatsapp = homeownerWhatsappRaw ?? homeownerPhone;
 
     // Verify provider exists and is active
     const { data: provider, error: providerError } = await admin
@@ -120,6 +153,22 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         }).catch((err) => {
             console.error('[contact/contractor] lead notification error:', err);
         });
+
+        // Record the POPIA consent that authorised sharing this homeowner's
+        // identity with this Pro. Best-effort; never fails the contact. Only for
+        // logged-in homeowners (the web consent gate); the bot path has no user.
+        if (homeownerUserId) {
+            const { error: consentError } = await admin.from('lead_contact_consents').insert({
+                user_id: homeownerUserId,
+                provider_id: providerId,
+                diagnosis_id: diagnosisId,
+                channel,
+                consent_text_version: consentTextVersion,
+            });
+            if (consentError) {
+                console.warn('[contact/contractor] consent record skipped:', consentError.message);
+            }
+        }
     }
 
     // Durable funnel stamp for the "Contacted" stage (first write wins), plus the

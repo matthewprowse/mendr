@@ -9,6 +9,9 @@ import { toWhatsAppPhone } from '@/lib/utils';
 import { setLastConversationIdForWhatsApp, resolveWhatsAppPrefill } from '@/lib/whatsapp-prefill';
 import { Loader, Crosshair } from 'lucide-react';
 import { toast } from 'sonner';
+import { useAuth } from '@/context/auth-context';
+import { HomeownerAuthDialog } from '@/components/homeowner-auth-dialog';
+import { ContactConsentDialog, CONSENT_TEXT_VERSION } from '@/components/contact-consent-dialog';
 import { MatchResultsLayout } from '@/app/match/components/match-map-sheet-layout';
 import { ProviderCard } from '@/app/match/components/provider-card';
 import dynamic from 'next/dynamic';
@@ -259,6 +262,18 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
         conversationId,
     });
     const [contactOpen, setContactOpen] = useState(false);
+    // Contact gate (Phase 2): logged-in + captured number + consent before any
+    // WhatsApp/Call/Email action. The lead and shared identity are written at
+    // the moment of consent, before any message is sent.
+    const { user } = useAuth();
+    const [authOpen, setAuthOpen] = useState(false);
+    const [consentOpen, setConsentOpen] = useState(false);
+    const [contactBusy, setContactBusy] = useState(false);
+    const [consentMode, setConsentMode] = useState<'ask_each_time' | 'always_share' | null>(null);
+    const [pendingContact, setPendingContact] = useState<{
+        provider: MatchProvider;
+        channel: 'whatsapp' | 'phone' | 'email';
+    } | null>(null);
     const [isUpdatingLocation, setIsUpdatingLocation] = useState(false);
     const [isLocatingUser, setIsLocatingUser] = useState(false);
     const [isFilterSheetOpen, setIsFilterSheetOpen] = useState(false);
@@ -870,6 +885,12 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
 
     const openProviderDetails = useCallback(async (targetProvider: MatchProvider | null) => {
         if (!targetProvider?.providerId) return;
+        // Identity is gated: a locked card cannot open the full profile. Prompt
+        // sign-in instead (the profile reveals name and contact).
+        if (targetProvider.identityLocked) {
+            setAuthOpen(true);
+            return;
+        }
         // Track when a user actually opens provider details.
         trackEvent('provider_profile_view', {
             provider_id: targetProvider.providerId,
@@ -932,6 +953,149 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
         </Button>
     );
 
+    // --- Contact channel actions (run only after the gate passes) ---------------
+    const openWhatsAppChannel = async (provider: MatchProvider) => {
+        const waPhone = toWhatsAppPhone(provider.phone);
+        if (!waPhone) return;
+        const profileUrl = provider.providerId
+            ? `${window.location.origin}/pro/${provider.providerId}`
+            : window.location.href;
+        const prefill = await resolveWhatsAppPrefill(profileUrl);
+        let text = [
+            `Hi${provider.name ? ` ${provider.name}` : ''}, I found you on Mendr.`,
+            prefill.diagnosis && prefill.diagnosis !== 'Home repair or maintenance'
+                ? `Mendr diagnosed my issue: ${prefill.diagnosis}.`
+                : `I have a home repair issue I'd like your help with.`,
+            prefill.report_url
+                ? `You can view my full Mendr report here: ${prefill.report_url}`
+                : '',
+            `Are you available to assist?`,
+        ]
+            .filter(Boolean)
+            .join('\n\n');
+        try {
+            const res = await fetch('/api/whatsapp-message', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    diagnosis: prefill.diagnosis,
+                    provider_name: provider.name,
+                    trade: prefill.trade,
+                    report_url: prefill.report_url,
+                    profile_url: prefill.profile_url,
+                }),
+            });
+            const data = (await res.json().catch(() => ({}))) as { message?: string };
+            if (res.ok && data.message?.trim()) text = data.message.trim();
+        } catch {
+            // Keep the template fallback.
+        }
+        window.open(
+            `https://wa.me/${waPhone}?text=${encodeURIComponent(text)}`,
+            '_blank',
+            'noopener,noreferrer'
+        );
+    };
+
+    const openPhoneChannel = (provider: MatchProvider) => {
+        if (provider.phone) window.location.href = `tel:${provider.phone}`;
+    };
+
+    const openEmailChannel = (provider: MatchProvider) => {
+        if (provider.website) window.location.href = `mailto:${provider.website}`;
+    };
+
+    // Records the identified lead + consent, then opens the channel. Best-effort
+    // recording — a failure must never block the homeowner contacting.
+    const executeContact = async (
+        provider: MatchProvider,
+        channel: 'whatsapp' | 'phone' | 'email'
+    ) => {
+        trackContactIntent(channel);
+        if (provider.providerId && conversationId) {
+            try {
+                await fetch('/api/contact/contractor', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        providerId: provider.providerId,
+                        diagnosisId: conversationId,
+                        channel,
+                        consentTextVersion: CONSENT_TEXT_VERSION,
+                    }),
+                });
+            } catch {
+                // Non-fatal — proceed to the channel regardless.
+            }
+        }
+        if (channel === 'whatsapp') await openWhatsAppChannel(provider);
+        else if (channel === 'phone') openPhoneChannel(provider);
+        else openEmailChannel(provider);
+    };
+
+    // The gate: sign in -> captured number -> consent, then contact.
+    const beginContact = async (
+        provider: MatchProvider,
+        channel: 'whatsapp' | 'phone' | 'email'
+    ) => {
+        if (!user) {
+            setPendingContact({ provider, channel });
+            setAuthOpen(true);
+            return;
+        }
+        // A captured number is required so the lead is identified.
+        try {
+            const res = await fetch('/api/account/phone');
+            const data = (await res.json().catch(() => ({}))) as { phone?: string | null };
+            if (!data.phone) {
+                toast.info('Add your mobile number so specialists can reach you.');
+                router.push('/onboarding');
+                return;
+            }
+        } catch {
+            // If the check itself fails, do not hard-block the contact.
+        }
+        let mode = consentMode;
+        if (mode == null) {
+            try {
+                const res = await fetch('/api/account/consent-settings');
+                const data = (await res.json().catch(() => ({}))) as {
+                    mode?: 'ask_each_time' | 'always_share';
+                };
+                mode = data.mode ?? 'ask_each_time';
+                setConsentMode(mode);
+            } catch {
+                mode = 'ask_each_time';
+            }
+        }
+        if (mode === 'always_share') {
+            void executeContact(provider, channel);
+            return;
+        }
+        setPendingContact({ provider, channel });
+        setConsentOpen(true);
+    };
+
+    const handleConsentConfirm = async (dontAskAgain: boolean) => {
+        if (!pendingContact) return;
+        setContactBusy(true);
+        try {
+            if (dontAskAgain) {
+                setConsentMode('always_share');
+                void fetch('/api/account/consent-settings', {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ mode: 'always_share' }),
+                }).catch(() => {});
+            }
+            await executeContact(pendingContact.provider, pendingContact.channel);
+        } finally {
+            setContactBusy(false);
+            setConsentOpen(false);
+            setPendingContact(null);
+        }
+    };
+
     const renderContactSlot = (provider: MatchProvider, idx: number) => (
         <Popover
             open={contactOpen && companyIndex - 1 === idx}
@@ -963,70 +1127,17 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
                         <Button
                             type="button"
                             className="w-full"
-                            onClick={async () => {
-                                const waPhone = toWhatsAppPhone(provider.phone);
-                                if (waPhone) {
-                                    trackContactIntent('whatsapp');
-                                    const profileUrl = provider.providerId
-                                        ? `${window.location.origin}/pro/${provider.providerId}`
-                                        : window.location.href;
-                                    const prefill = await resolveWhatsAppPrefill(profileUrl);
-
-                                    // Template fallback, only used if the AI generator is unavailable.
-                                    let text = [
-                                        `Hi${provider.name ? ` ${provider.name}` : ''}, I found you on Mendr.`,
-                                        prefill.diagnosis &&
-                                        prefill.diagnosis !== 'Home repair or maintenance'
-                                            ? `Mendr diagnosed my issue: ${prefill.diagnosis}.`
-                                            : `I have a home repair issue I'd like your help with.`,
-                                        prefill.report_url
-                                            ? `You can view my full Mendr report here: ${prefill.report_url}`
-                                            : '',
-                                        `Are you available to assist?`,
-                                    ]
-                                        .filter(Boolean)
-                                        .join('\n\n');
-
-                                    // Prefer the Gemini-generated, human-sounding message (it is
-                                    // prompted with the diagnosis and instructed to include the
-                                    // report link verbatim).
-                                    try {
-                                        const res = await fetch('/api/whatsapp-message', {
-                                            method: 'POST',
-                                            headers: { 'Content-Type': 'application/json' },
-                                            body: JSON.stringify({
-                                                diagnosis: prefill.diagnosis,
-                                                provider_name: provider.name,
-                                                trade: prefill.trade,
-                                                report_url: prefill.report_url,
-                                                profile_url: prefill.profile_url,
-                                            }),
-                                        });
-                                        const data = (await res.json().catch(() => ({}))) as {
-                                            message?: string;
-                                        };
-                                        if (res.ok && data.message?.trim()) {
-                                            text = data.message.trim();
-                                        }
-                                    } catch {
-                                        // Network/endpoint failure — keep the template fallback.
-                                    }
-
-                                    window.open(
-                                        `https://wa.me/${waPhone}?text=${encodeURIComponent(text)}`,
-                                        '_blank',
-                                        'noopener,noreferrer'
-                                    );
-                                }
+                            onClick={() => {
                                 setContactOpen(false);
+                                void beginContact(provider, 'whatsapp');
                             }}
                             disabled={!toWhatsAppPhone(provider.phone)}
                         >
                             WhatsApp
                         </Button>
                         <p className="text-xs text-muted-foreground">
-                            Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do
-                            eiusmod tempor incididunt.
+                            We share your name and number with this specialist so they can help.
+                            You confirm before anything is sent.
                         </p>
                     </div>
                     <div className="flex gap-2">
@@ -1035,11 +1146,8 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
                             variant="secondary"
                             className="flex-1"
                             onClick={() => {
-                                if (provider.phone) {
-                                    trackContactIntent('phone');
-                                    window.location.href = `tel:${provider.phone}`;
-                                }
                                 setContactOpen(false);
+                                void beginContact(provider, 'phone');
                             }}
                             disabled={!provider.phone}
                         >
@@ -1050,11 +1158,8 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
                             variant="secondary"
                             className="flex-1"
                             onClick={() => {
-                                if (provider.website) {
-                                    trackContactIntent('email');
-                                    window.location.href = `mailto:${provider.website}`;
-                                }
                                 setContactOpen(false);
+                                void beginContact(provider, 'email');
                             }}
                             disabled={!provider.website}
                         >
@@ -1210,6 +1315,22 @@ export function MatchClient({ conversationId: initialConversationId }: { convers
             }}
             providers={sortedProviders}
             maxDistanceKm={50}
+        />
+
+        <HomeownerAuthDialog
+            open={authOpen}
+            onOpenChange={setAuthOpen}
+            reason="Sign in to contact this specialist — it's free."
+        />
+        <ContactConsentDialog
+            open={consentOpen}
+            onOpenChange={(o) => {
+                setConsentOpen(o);
+                if (!o) setPendingContact(null);
+            }}
+            businessName={pendingContact?.provider.name || 'this specialist'}
+            onConfirm={(dontAsk) => void handleConsentConfirm(dontAsk)}
+            busy={contactBusy}
         />
         </>
     );

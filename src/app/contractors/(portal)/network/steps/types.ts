@@ -79,11 +79,9 @@ export type ExistingApplicationRow = {
     callout_fee?: number | null;
     trade_description: string | null;
     founded_year: number | null;
-    team_size: number | null;
     registration_number: string | null;
     certifications: string | null;
     highlights: string | null;
-    referral: string | null;
     about?: string | null;
     application_images: Array<{ path: string; bucket: string; caption?: string | null }> | null;
     service_areas: Array<{ address?: string; lat?: number; lng?: number; radius_km?: number }> | null;
@@ -104,7 +102,6 @@ export type FormData = {
     trade: string;
     specialisations: string;
     foundedYear: string;
-    teamSize: string;
     registrationNumber: string;
     bio: string;
     certifications: string;
@@ -113,8 +110,6 @@ export type FormData = {
     typicalResponseTime: string;
     pricingModel: string;
     calloutFee: string;
-    referralSource: string;
-    referralOther: string;
 };
 
 export type PlaceSearchHit = {
@@ -154,7 +149,6 @@ export const EMPTY_FORM: FormData = {
     trade: '',
     specialisations: '',
     foundedYear: '',
-    teamSize: '',
     registrationNumber: '',
     bio: '',
     certifications: '',
@@ -163,8 +157,6 @@ export const EMPTY_FORM: FormData = {
     typicalResponseTime: '',
     pricingModel: '',
     calloutFee: '',
-    referralSource: '',
-    referralOther: '',
 };
 
 export const STEP = {

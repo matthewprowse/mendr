@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
@@ -14,6 +14,9 @@ import { AccountTabBar } from '@/components/account-tab-bar';
 import { BRAND_NAME } from '@/lib/brand-system';
 import { useAuth } from '@/context/auth-context';
 import { UserAvatar } from '@/components/user-avatar';
+import { toast } from 'sonner';
+
+type SharedSpecialist = { provider_id: string; name: string };
 
 export type ConsentState = { product_analytics: boolean; model_training: boolean };
 
@@ -38,6 +41,11 @@ export default function PrivacyClient({ initialConsent }: { initialConsent?: Con
     const [consent, setConsent] = useState<ConsentState | null>(initialConsent ?? null);
     const [exporting, setExporting] = useState(false);
 
+    // Lead-share consent (Phase 3): global mode + the specialists shared with.
+    const [shareMode, setShareMode] = useState<'ask_each_time' | 'always_share' | null>(null);
+    const [shares, setShares] = useState<SharedSpecialist[] | null>(null);
+    const [revokingId, setRevokingId] = useState<string | null>(null);
+
     useEffect(() => {
         if (initialConsent !== undefined) return; // server already provided data
         if (!isLoggedIn) return;
@@ -46,6 +54,48 @@ export default function PrivacyClient({ initialConsent }: { initialConsent?: Con
             .then((data: ConsentState | null) => { if (data) setConsent(data); })
             .catch(() => null);
     }, [isLoggedIn]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    useEffect(() => {
+        if (!isLoggedIn) return;
+        fetch('/api/account/consent-settings')
+            .then(r => (r.ok ? r.json() : null))
+            .then((d: { mode?: 'ask_each_time' | 'always_share' } | null) =>
+                setShareMode(d?.mode ?? 'ask_each_time'))
+            .catch(() => setShareMode('ask_each_time'));
+        fetch('/api/account/consents')
+            .then(r => (r.ok ? r.json() : null))
+            .then((d: { specialists?: SharedSpecialist[] } | null) => setShares(d?.specialists ?? []))
+            .catch(() => setShares([]));
+    }, [isLoggedIn]);
+
+    const toggleShareMode = async () => {
+        const next = shareMode === 'always_share' ? 'ask_each_time' : 'always_share';
+        setShareMode(next);
+        await fetch('/api/account/consent-settings', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ mode: next }),
+        }).catch(() => {});
+    };
+
+    const revokeShare = async (providerId: string) => {
+        if (revokingId) return;
+        setRevokingId(providerId);
+        try {
+            const res = await fetch('/api/account/consents/revoke', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ providerId }),
+            });
+            if (!res.ok) throw new Error();
+            setShares(prev => (prev ? prev.filter(s => s.provider_id !== providerId) : prev));
+            toast.success('Access removed.');
+        } catch {
+            toast.error('Could not remove access. Please try again.');
+        } finally {
+            setRevokingId(null);
+        }
+    };
 
     const toggleConsent = async (key: keyof ConsentState) => {
         if (!consent) return;
@@ -187,6 +237,93 @@ export default function PrivacyClient({ initialConsent }: { initialConsent?: Con
                                             ))}
                                         </div>
                                     )}
+                                </div>
+
+                                {/* Sharing With Specialists */}
+                                <div className="flex flex-col gap-4">
+                                    <div className="flex flex-col gap-1">
+                                        <h2 className="text-lg font-semibold text-foreground">Sharing With Specialists</h2>
+                                        <p className="text-sm text-muted-foreground">
+                                            Control how your details are shared when you contact a specialist.
+                                        </p>
+                                    </div>
+
+                                    <div className="flex items-center gap-4 py-2">
+                                        <div className="flex flex-1 flex-col gap-0.5 min-w-0">
+                                            <p className="text-sm font-medium">Always Share With Specialists I Contact</p>
+                                            <p className="text-xs text-muted-foreground">
+                                                When off, we ask you to confirm each time before sharing your details.
+                                            </p>
+                                        </div>
+                                        <Switch
+                                            checked={shareMode === 'always_share'}
+                                            onCheckedChange={() => void toggleShareMode()}
+                                            aria-label="Always share with specialists I contact"
+                                            disabled={shareMode === null}
+                                        />
+                                    </div>
+
+                                    <div className="flex flex-col gap-1">
+                                        <p className="text-sm font-medium">Specialists You Have Shared Details With</p>
+                                        {shares === null ? (
+                                            <div className="flex flex-col">
+                                                {[0, 1].map((i) => (
+                                                    <div key={i} className="flex items-center gap-3 py-3">
+                                                        <Skeleton className="size-12 shrink-0 rounded-md" />
+                                                        <div className="flex flex-1 flex-col gap-1.5 min-w-0">
+                                                            <Skeleton className="h-3.5 w-2/5 rounded" />
+                                                            <Skeleton className="h-3 w-3/5 rounded" />
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        ) : shares.length === 0 ? (
+                                            <p className="text-sm text-muted-foreground">
+                                                You have not shared your details with any specialists yet.
+                                            </p>
+                                        ) : (
+                                            <div className="flex flex-col">
+                                                {shares.map((s, i) => (
+                                                    <Fragment key={s.provider_id}>
+                                                        {i > 0 && <Separator />}
+                                                        <div className="flex items-center gap-3 py-3">
+                                                            <Button
+                                                                type="button"
+                                                                variant="secondary"
+                                                                size="icon"
+                                                                className="size-12 shrink-0"
+                                                                tabIndex={-1}
+                                                                aria-hidden="true"
+                                                            />
+                                                            <div className="flex flex-1 flex-col gap-0.5 min-w-0">
+                                                                <p className="text-sm font-medium">{s.name}</p>
+                                                                <p className="text-xs text-muted-foreground">
+                                                                    Can see your name and number.
+                                                                </p>
+                                                            </div>
+                                                            <Button
+                                                                type="button"
+                                                                variant="ghost"
+                                                                size="sm"
+                                                                onClick={() => void revokeShare(s.provider_id)}
+                                                                disabled={revokingId === s.provider_id}
+                                                            >
+                                                                {revokingId === s.provider_id ? (
+                                                                    <Spinner className="size-4" />
+                                                                ) : (
+                                                                    'Revoke'
+                                                                )}
+                                                            </Button>
+                                                        </div>
+                                                    </Fragment>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    <p className="text-xs text-muted-foreground">
+                                        Revoking stops us sharing your details going forward and asks the specialist to delete them. It cannot recall a message you have already sent.
+                                    </p>
                                 </div>
 
                                 {/* Data Export */}

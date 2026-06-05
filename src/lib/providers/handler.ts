@@ -635,6 +635,7 @@ export async function POST(req: NextRequest) {
                   google_place_id: string;
                   name?: string | null;
                   certifications?: string[] | null;
+                  specialisations?: string[] | null;
               }[]
             | null = null;
         const dbReader = adminSupabase || supabase;
@@ -655,7 +656,9 @@ export async function POST(req: NextRequest) {
                         .from('providers')
                         // company_size and years_in_business are NOT in providers —
                         // they live in provider_cache. Only select columns that exist.
-                        .select('id, google_place_id, name, certifications')
+                        // specialisations is the source of truth for ranking (claimed
+                        // value when claimed, enrichment value otherwise).
+                        .select('id, google_place_id, name, certifications, specialisations')
                         .eq('is_active', true)
                         .in('google_place_id', placeIds),
                 ]);
@@ -666,6 +669,7 @@ export async function POST(req: NextRequest) {
                         google_place_id: string;
                         name?: string | null;
                         certifications?: string[] | null;
+                        specialisations?: string[] | null;
                     }>) ?? null;
                 const nameByGoogleId = new Map<string, string>(
                     (prefetchedProvRows || [])
@@ -689,12 +693,26 @@ export async function POST(req: NextRequest) {
                         Number(r.profile_completeness ?? 0),
                     ])
                 );
-                // R5: map specialisations for relevance scoring
-                const specialisationsByGoogleId = new Map<string, string[]>(
-                    (cacheRows || [])
-                        .filter((r: any) => Array.isArray(r.specialisations) && r.specialisations.length > 0)
-                        .map((r: any) => [String(r.google_place_id), r.specialisations as string[]])
-                );
+                // R5: map specialisations for relevance scoring. Prefer the `providers`
+                // table (the source of truth — the contractor's claimed value when the
+                // profile is claimed, the enrichment value otherwise). Fall back to the
+                // enrichment cache only for providers not yet written to `providers`.
+                const specialisationsByGoogleId = new Map<string, string[]>();
+                (prefetchedProvRows || []).forEach((r) => {
+                    if (Array.isArray(r.specialisations) && r.specialisations.length > 0) {
+                        specialisationsByGoogleId.set(String(r.google_place_id), r.specialisations);
+                    }
+                });
+                (cacheRows || []).forEach((r: any) => {
+                    const gid = String(r.google_place_id);
+                    if (
+                        !specialisationsByGoogleId.has(gid) &&
+                        Array.isArray(r.specialisations) &&
+                        r.specialisations.length > 0
+                    ) {
+                        specialisationsByGoogleId.set(gid, r.specialisations as string[]);
+                    }
+                });
                 // has_work_photos and images are not in provider_cache — hasWorkPhotos is
                 // set from provider_images rows below, and imagesByGoogleId is always empty.
                 // The providerGalleryByProviderId fallback (provider_images table) is the

@@ -64,11 +64,9 @@ export async function POST(req: NextRequest) {
         trade,
         trade_description: message || '—',
         founded_year,
-        team_size: null,
         registration_number: null,
         certifications: null,
         highlights: null,
-        referral: source && VALID_SOURCES.includes(source as any) ? source : null,
         source: source && VALID_SOURCES.includes(source as any) ? source : null,
         status: 'new',
     });

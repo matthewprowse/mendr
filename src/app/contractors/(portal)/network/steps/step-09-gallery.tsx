@@ -3,110 +3,72 @@
 import { useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import {
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogFooter,
-    DialogHeader,
-    DialogTitle,
-} from '@/components/ui/dialog';
+import { Badge } from '@/components/ui/badge';
 import { createClientId } from '@/lib/client-random-id';
 import { useWizard } from './wizard-context';
 import { StepHeader } from './shared-ui';
-import type { GalleryDraftItem, UploadedImage } from './types';
+import type { UploadedImage } from './types';
 
 export function StepGallery() {
     const { uploads, setUploads } = useWizard();
-    const [galleryAddOpen, setGalleryAddOpen] = useState(false);
-    const [galleryDraftItems, setGalleryDraftItems] = useState<GalleryDraftItem[]>([]);
-    const [galleryUploading, setGalleryUploading] = useState(false);
-    const [galleryModalError, setGalleryModalError] = useState<string | null>(null);
-    const galleryModalInputRef = useRef<HTMLInputElement>(null);
+    const [uploading, setUploading] = useState(false);
+    const inputRef = useRef<HTMLInputElement>(null);
+    const [draggedId, setDraggedId] = useState<string | null>(null);
+    const [dropTargetId, setDropTargetId] = useState<string | null>(null);
 
-    const removeGalleryDraftItem = (id: string) => {
-        setGalleryDraftItems((prev) => {
-            const item = prev.find((p) => p.id === id);
-            if (item) URL.revokeObjectURL(item.preview);
-            return prev.filter((p) => p.id !== id);
-        });
-    };
+    const openPicker = () => inputRef.current?.click();
 
-    const updateGalleryDraftCaption = (id: string, caption: string) => {
-        setGalleryDraftItems((prev) => prev.map((p) => (p.id === id ? { ...p, caption } : p)));
-    };
-
-    const handleGalleryModalFiles = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleFiles = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const list = e.target.files;
+        if (e.target) e.target.value = '';
         if (!list?.length) return;
-        setGalleryModalError(null);
-        setGalleryDraftItems((prev) => {
-            const next = [...prev];
-            for (const file of Array.from(list)) {
-                if (!file.type.startsWith('image/')) continue;
-                next.push({
-                    id: createClientId(),
-                    file,
-                    caption: '',
-                    preview: URL.createObjectURL(file),
-                });
-            }
-            return next;
-        });
-        e.target.value = '';
-    };
-
-    const handleGalleryModalSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (galleryDraftItems.length === 0) return;
-        setGalleryUploading(true);
-        setGalleryModalError(null);
+        setUploading(true);
         try {
             const fd = new FormData();
-            for (const item of galleryDraftItems) {
-                fd.append('files', item.file);
+            let count = 0;
+            for (const file of Array.from(list)) {
+                fd.append('files', file);
+                count += 1;
             }
+            if (count === 0) return;
             const res = await fetch('/api/providers/application-images', { method: 'POST', body: fd });
             const json = (await res.json().catch(() => null)) as {
                 images?: Array<{ path: string; bucket: string }>;
                 error?: string;
             } | null;
             if (!res.ok || !json?.images?.length) {
-                setGalleryModalError(json?.error || 'Upload failed.');
+                toast.error(json?.error || 'Upload failed.');
                 return;
             }
             const base = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-            const fresh: UploadedImage[] = json.images.map((item, i) => ({
+            const fresh: UploadedImage[] = json.images.map((item) => ({
                 id: createClientId(),
                 path: item.path,
                 bucket: item.bucket,
-                caption: galleryDraftItems[i]?.caption.trim() || null,
+                caption: null,
                 previewUrl: `${base}/storage/v1/object/public/${item.bucket}/${item.path}`,
             }));
             setUploads([...uploads, ...fresh]);
-            setGalleryDraftItems((prev) => {
-                prev.forEach((p) => URL.revokeObjectURL(p.preview));
-                return [];
-            });
-            toast.success('Images queued for review.');
-            setGalleryAddOpen(false);
         } finally {
-            setGalleryUploading(false);
+            setUploading(false);
         }
     };
 
-    const openGalleryAddDialog = () => {
-        setGalleryDraftItems((prev) => {
-            prev.forEach((p) => URL.revokeObjectURL(p.preview));
-            return [];
-        });
-        setGalleryModalError(null);
-        setGalleryAddOpen(true);
+    const removeUpload = (id: string) => setUploads(uploads.filter((u) => u.id !== id));
+
+    const swap = (sourceId: string, targetId: string) => {
+        if (sourceId === targetId) return;
+        const s = uploads.findIndex((u) => u.id === sourceId);
+        const t = uploads.findIndex((u) => u.id === targetId);
+        if (s < 0 || t < 0) return;
+        const copy = [...uploads];
+        [copy[s], copy[t]] = [copy[t], copy[s]];
+        setUploads(copy);
     };
 
-    const removeUpload = (id: string) => setUploads(uploads.filter((u) => u.id !== id));
+    // Odd photo counts leave one open grid cell, so Add Photos fills it as a
+    // tile. Even counts (and zero) get a full-width secondary button below.
+    const isOdd = uploads.length % 2 === 1;
 
     return (
         <div className="flex flex-col gap-8">
@@ -115,139 +77,113 @@ export function StepGallery() {
                 description="Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore."
             />
             <input
-                ref={galleryModalInputRef}
+                ref={inputRef}
                 type="file"
-                accept="image/jpeg,image/png,image/webp,image/gif"
+                accept="image/jpeg,image/png,image/webp,image/gif,image/heic,image/heif,.heic,.heif"
                 multiple
                 className="hidden"
-                onChange={handleGalleryModalFiles}
+                onChange={(e) => void handleFiles(e)}
             />
 
             <div className="flex flex-col gap-4">
-                <Button
-                    type="button"
-                    variant="secondary"
-                    className="h-10 w-full"
-                    disabled={galleryUploading}
-                    onClick={openGalleryAddDialog}
-                >
-                    Add work photos
-                </Button>
-                <p className="text-xs text-muted-foreground">JPG, PNG, WebP or GIF — up to 10MB each.</p>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2 md:grid-cols-3">
-                {uploads.map((item) => (
-                    <div key={item.id} className="rounded-lg border border-input p-2">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                            src={item.previewUrl}
-                            alt={item.caption || 'Uploaded image'}
-                            className="h-24 w-full rounded object-cover"
-                        />
-                        <p className="mt-2 line-clamp-2 text-xs text-muted-foreground">{item.caption || 'No caption'}</p>
-                        <Button
-                            type="button"
-                            variant="ghost"
-                            className="mt-1 h-8 w-full"
-                            onClick={() => removeUpload(item.id)}
-                        >
-                            Remove
-                        </Button>
-                    </div>
-                ))}
-            </div>
-
-            <Dialog
-                open={galleryAddOpen}
-                onOpenChange={(open) => {
-                    setGalleryAddOpen(open);
-                    if (!open) {
-                        setGalleryDraftItems((prev) => {
-                            prev.forEach((p) => URL.revokeObjectURL(p.preview));
-                            return [];
-                        });
-                        setGalleryModalError(null);
-                    }
-                }}
-            >
-                <DialogContent showCloseButton={false} className="max-h-[min(90vh,640px)] overflow-y-auto sm:max-w-lg">
-                    <form onSubmit={(e) => void handleGalleryModalSubmit(e)} className="flex flex-col gap-6">
-                        <DialogHeader className="gap-3 text-left">
-                            <DialogTitle className="text-left leading-none">Add photos</DialogTitle>
-                            <DialogDescription className="text-left text-muted-foreground">
-                                Choose clear shots of finished work. Short captions help reviewers understand each job.
-                            </DialogDescription>
-                        </DialogHeader>
-
-                        <div className="flex flex-col gap-4">
+                {uploads.length > 0 ? (
+                    <div className="grid grid-cols-2 gap-2">
+                        {uploads.map((item, i) => {
+                            const dragged = draggedId === item.id;
+                            const dropTarget = dropTargetId === item.id;
+                            return (
+                                <div
+                                    key={item.id}
+                                    draggable
+                                    onDragStart={(e) => {
+                                        setDraggedId(item.id);
+                                        try {
+                                            e.dataTransfer.effectAllowed = 'move';
+                                            e.dataTransfer.setData('text/plain', item.id);
+                                        } catch {
+                                            /* ignore */
+                                        }
+                                    }}
+                                    onDragOver={(e) => {
+                                        if (!draggedId || draggedId === item.id) return;
+                                        e.preventDefault();
+                                        e.dataTransfer.dropEffect = 'move';
+                                        if (dropTargetId !== item.id) setDropTargetId(item.id);
+                                    }}
+                                    onDragLeave={() => {
+                                        if (dropTargetId === item.id) setDropTargetId(null);
+                                    }}
+                                    onDrop={(e) => {
+                                        e.preventDefault();
+                                        const src = draggedId ?? e.dataTransfer.getData('text/plain');
+                                        if (src && src !== item.id) swap(src, item.id);
+                                        setDraggedId(null);
+                                        setDropTargetId(null);
+                                    }}
+                                    onDragEnd={() => {
+                                        setDraggedId(null);
+                                        setDropTargetId(null);
+                                    }}
+                                    className={`relative aspect-square cursor-grab overflow-hidden rounded-lg border border-border bg-background transition-all duration-150 active:cursor-grabbing ${
+                                        dragged ? 'opacity-50' : ''
+                                    } ${dropTarget ? 'ring-2 ring-foreground' : ''}`}
+                                >
+                                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                                    <img
+                                        src={item.previewUrl}
+                                        alt=""
+                                        className="h-full w-full object-cover"
+                                        draggable={false}
+                                    />
+                                    <Badge variant="count" className="absolute bottom-2 left-2">
+                                        {i + 1}
+                                    </Badge>
+                                    <Badge asChild variant="outline">
+                                        <button
+                                            type="button"
+                                            className="absolute right-2 top-2 cursor-pointer"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                removeUpload(item.id);
+                                            }}
+                                            aria-label="Remove photo"
+                                        >
+                                            Remove
+                                        </button>
+                                    </Badge>
+                                </div>
+                            );
+                        })}
+                        {isOdd ? (
                             <Button
                                 type="button"
                                 variant="secondary"
-                                className="h-10 w-full"
-                                disabled={galleryUploading}
-                                onClick={() => galleryModalInputRef.current?.click()}
+                                className="aspect-square h-auto w-full"
+                                disabled={uploading}
+                                onClick={openPicker}
                             >
-                                Select images
+                                {uploading ? 'Uploading…' : 'Add Photos'}
                             </Button>
-                        </div>
-
-                        {galleryDraftItems.length > 0 ? (
-                            <div className="flex flex-col gap-6">
-                                {galleryDraftItems.map((item) => (
-                                    <div
-                                        key={item.id}
-                                        className="flex flex-col gap-4 rounded-lg border border-border/75 p-4"
-                                    >
-                                        <div className="w-full overflow-hidden rounded-md bg-muted">
-                                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                                            <img src={item.preview} alt="" className="max-h-52 w-full object-cover" />
-                                        </div>
-                                        <div className="flex flex-col gap-3">
-                                            <Label htmlFor={`cap-${item.id}`}>Caption</Label>
-                                            <Textarea
-                                                id={`cap-${item.id}`}
-                                                value={item.caption}
-                                                onChange={(e) => updateGalleryDraftCaption(item.id, e.target.value)}
-                                                className="min-h-[48px] resize-y text-sm"
-                                            />
-                                        </div>
-                                        <Button
-                                            type="button"
-                                            variant="ghost"
-                                            className="h-10 w-full shrink-0"
-                                            onClick={() => removeGalleryDraftItem(item.id)}
-                                        >
-                                            Remove Image
-                                        </Button>
-                                    </div>
-                                ))}
-                            </div>
                         ) : null}
+                    </div>
+                ) : null}
 
-                        {galleryModalError ? <p className="text-sm text-destructive">{galleryModalError}</p> : null}
+                {!isOdd ? (
+                    <Button
+                        type="button"
+                        variant="secondary"
+                        className="h-10 w-full"
+                        disabled={uploading}
+                        onClick={openPicker}
+                    >
+                        {uploading ? 'Uploading…' : 'Add Photos'}
+                    </Button>
+                ) : null}
 
-                        <DialogFooter>
-                            <Button
-                                type="button"
-                                className="h-10 min-h-10 flex-1"
-                                variant="ghost"
-                                onClick={() => setGalleryAddOpen(false)}
-                                disabled={galleryUploading}
-                            >
-                                Cancel
-                            </Button>
-                            <Button
-                                type="submit"
-                                className="h-10 min-h-10 flex-1"
-                                disabled={galleryUploading || galleryDraftItems.length === 0}
-                            >
-                                {galleryUploading ? 'Submitting…' : 'Share Review'}
-                            </Button>
-                        </DialogFooter>
-                    </form>
-                </DialogContent>
-            </Dialog>
+                <p className="text-center text-xs text-muted-foreground">
+                    Lorem ipsum dolor sit amet, consectetur adipiscing elit.
+                </p>
+            </div>
         </div>
     );
 }

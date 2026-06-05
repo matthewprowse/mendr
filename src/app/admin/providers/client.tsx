@@ -58,8 +58,6 @@ type ProviderApplication = {
     registration_number: string | null;
     certifications: string | null;
     highlights: string | null;
-    referral: string | null;
-    team_size: number | null;
     status: Status;
     notes: string | null;
     sendgrid_sent_at: string | null;
@@ -381,7 +379,6 @@ export default function AdminProvidersPage() {
         registration_number: '',
         certifications: '',
         highlights: '',
-        referral: '',
         notes: '',
         whatsapp_available: false,
     };
@@ -515,7 +512,6 @@ export default function AdminProvidersPage() {
                 registration_number: editApplication.registration_number,
                 certifications: editApplication.certifications,
                 highlights: editApplication.highlights,
-                referral: editApplication.referral,
                 status: editApplication.status,
                 notes: editApplication.notes,
             }),
@@ -1853,20 +1849,6 @@ export default function AdminProvidersPage() {
                                             />
                                         </div>
                                     </div>
-                                    <div>
-                                        <Label className="text-xs">Referral source</Label>
-                                        <Input
-                                            className="mt-1"
-                                            value={editApplication.referral ?? ''}
-                                            onChange={(e) =>
-                                                setEditApplication({
-                                                    ...editApplication,
-                                                    referral: e.target.value || null,
-                                                })
-                                            }
-                                            placeholder="How they heard about us"
-                                        />
-                                    </div>
                                 </div>
                                 <div className="mt-3">
                                     <Label className="text-xs">Internal notes</Label>
@@ -2517,17 +2499,6 @@ export default function AdminProvidersPage() {
                                 Admin
                             </p>
                             <div>
-                                <Label className="text-xs">Referral source</Label>
-                                <Input
-                                    className="mt-1"
-                                    value={applyForm.referral}
-                                    onChange={(e) =>
-                                        setApplyForm({ ...applyForm, referral: e.target.value })
-                                    }
-                                    placeholder="How they heard about us"
-                                />
-                            </div>
-                            <div className="mt-3">
                                 <Label className="text-xs">Internal notes</Label>
                                 <Textarea
                                     className="mt-1"

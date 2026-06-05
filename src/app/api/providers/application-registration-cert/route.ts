@@ -22,7 +22,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     const okMime =
         mime.startsWith('image/') ||
         mime === 'application/pdf' ||
-        /\.(pdf|png|jpe?g|webp|gif)$/i.test(name);
+        /\.(pdf|png|jpe?g|webp|gif|heic|heif)$/i.test(name);
     if (!okMime) {
         return NextResponse.json({ error: 'Upload a PDF or image file.' }, { status: 422 });
     }
