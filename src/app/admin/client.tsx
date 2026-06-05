@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Users, Activity, Mail, Star, Image as ImageIcon, KeyRound } from 'lucide-react';
+import { Users, Activity, Mail, Star, Image as ImageIcon, KeyRound, BadgeCheck } from 'lucide-react';
 import { AdminPageHeader } from './components/page-header';
 import { AdminStatTile } from './components/stat-tile';
 
@@ -12,6 +12,7 @@ type Stats = {
     pendingReviews: number;
     pendingGallery: number;
     activeCodes: number;
+    pendingClaims: number;
 };
 
 export default function AdminHome() {
@@ -48,6 +49,14 @@ export default function AdminHome() {
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2">
+                <AdminStatTile
+                    label="Pending claims"
+                    value={stats?.pendingClaims ?? 0}
+                    sub="Businesses to verify"
+                    href="/admin/claims"
+                    icon={BadgeCheck}
+                    loading={loading}
+                />
                 <AdminStatTile
                     label="Provider waitlist"
                     value={stats?.newProviders ?? 0}

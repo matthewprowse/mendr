@@ -1,8 +1,10 @@
 'use client';
 
 import { Fragment, useState } from 'react';
+import Link from 'next/link';
 import { toast } from 'sonner';
 import { Separator } from '@/components/ui/separator';
+import { formatRelativeDate } from '@/lib/format-date';
 import {
     Select,
     SelectContent,
@@ -38,16 +40,6 @@ const CHANNEL_LABEL: Record<string, string> = {
     phone: 'Phone',
     email: 'Email',
 };
-
-function ageOf(iso: string): string {
-    const t = new Date(iso).getTime();
-    if (!Number.isFinite(t)) return '';
-    const days = Math.floor(Math.max(0, Date.now() - t) / 86_400_000);
-    if (days < 1) return 'Today';
-    if (days === 1) return 'Yesterday';
-    if (days < 30) return `${days}d ago`;
-    return new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
-}
 
 function titleCase(s: string | null): string {
     if (!s) return '';
@@ -96,7 +88,10 @@ export default function LeadsClient({ rows }: { rows: LeadRow[] }) {
                             <Fragment key={row.id}>
                                 {i > 0 && <Separator />}
                                 <div className="flex items-center gap-3 py-3">
-                                    <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                                    <Link
+                                        href={`/pro/leads/${row.id}`}
+                                        className="flex min-w-0 flex-1 flex-col gap-0.5"
+                                    >
                                         <p className="truncate text-sm font-medium text-foreground">
                                             {row.title || titleCase(row.trade) || 'New Enquiry'}
                                         </p>
@@ -104,14 +99,11 @@ export default function LeadsClient({ rows }: { rows: LeadRow[] }) {
                                             <p className="truncate text-xs text-muted-foreground">{meta}</p>
                                         ) : null}
                                         {row.contact ? (
-                                            <a
-                                                href={`tel:${row.contact.replace(/\s+/g, '')}`}
-                                                className="text-xs text-foreground underline-offset-2 hover:underline"
-                                            >
+                                            <span className="truncate text-xs text-muted-foreground">
                                                 {row.contact}
-                                            </a>
+                                            </span>
                                         ) : null}
-                                    </div>
+                                    </Link>
                                     <div className="flex shrink-0 items-center gap-3">
                                         <Select
                                             value={row.status}
@@ -128,8 +120,8 @@ export default function LeadsClient({ rows }: { rows: LeadRow[] }) {
                                                 ))}
                                             </SelectContent>
                                         </Select>
-                                        <span className="w-16 shrink-0 text-right text-xs text-muted-foreground">
-                                            {ageOf(row.createdAt)}
+                                        <span className="shrink-0 whitespace-nowrap text-right text-xs text-muted-foreground">
+                                            {formatRelativeDate(row.createdAt)}
                                         </span>
                                     </div>
                                 </div>

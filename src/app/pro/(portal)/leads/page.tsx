@@ -4,13 +4,13 @@ import {
     createSupabaseServerClient,
     createSupabaseAdminClient,
 } from '@/lib/auth/supabase-server';
-import { getClaimedProviderId } from '@/lib/providers/claimed-provider';
+import { getProviderState } from '@/lib/providers/claimed-provider';
 import { Button } from '@/components/ui/button';
 import { formatSaPhoneLocal } from '@/lib/phone';
 import LeadsClient, { type LeadRow, type LeadStatus } from './client';
 
 export const metadata = {
-    title: 'Leads | Mendr Pro',
+    title: { absolute: 'Mendr Pro: Leads' },
     robots: { index: false, follow: false },
 };
 
@@ -40,7 +40,7 @@ export default async function ProLeadsPage() {
     } = await supabase.auth.getUser();
     if (!user) redirect('/pro/auth/login?next=/pro/leads');
 
-    const providerId = await getClaimedProviderId(user.id);
+    const { providerId, pending } = await getProviderState(user.id);
 
     if (!providerId) {
         return (
@@ -48,12 +48,16 @@ export default async function ProLeadsPage() {
                 <div className="flex flex-col gap-1">
                     <h1 className="text-2xl font-semibold text-foreground">Leads</h1>
                     <p className="text-sm text-muted-foreground">
-                        Your business is not linked to a profile yet.
+                        {pending
+                            ? 'Your claim is under review. Your leads will appear here once your business is verified.'
+                            : 'Your business is not linked to a profile yet.'}
                     </p>
                 </div>
-                <Button asChild className="w-fit">
-                    <Link href="/contractors/network">Apply Now</Link>
-                </Button>
+                {pending ? null : (
+                    <Button asChild className="w-fit">
+                        <Link href="/pro/claim">Claim Your Business</Link>
+                    </Button>
+                )}
             </div>
         );
     }

@@ -30,10 +30,26 @@ export async function PATCH(
     } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: 'Unauthorized.' }, { status: 401 });
 
-    const body = (await req.json().catch(() => ({}))) as { status?: unknown };
-    const status = body.status;
-    if (typeof status !== 'string' || !STATUSES.includes(status as (typeof STATUSES)[number])) {
-        return NextResponse.json({ error: 'Invalid status.' }, { status: 400 });
+    const body = (await req.json().catch(() => ({}))) as { status?: unknown; notes?: unknown };
+
+    const patch: { status?: string; notes?: string | null } = {};
+    if (body.status !== undefined) {
+        if (
+            typeof body.status !== 'string' ||
+            !STATUSES.includes(body.status as (typeof STATUSES)[number])
+        ) {
+            return NextResponse.json({ error: 'Invalid status.' }, { status: 400 });
+        }
+        patch.status = body.status;
+    }
+    if (body.notes !== undefined) {
+        if (typeof body.notes !== 'string') {
+            return NextResponse.json({ error: 'Invalid notes.' }, { status: 400 });
+        }
+        patch.notes = body.notes.trim().slice(0, 2000) || null;
+    }
+    if (Object.keys(patch).length === 0) {
+        return NextResponse.json({ error: 'Nothing to update.' }, { status: 400 });
     }
 
     const providerId = await getClaimedProviderId(user.id);
@@ -54,11 +70,11 @@ export async function PATCH(
     const { error } = await admin
         .from('lead_states')
         .upsert(
-            { contact_event_id: id, status, updated_at: new Date().toISOString() },
+            { contact_event_id: id, ...patch, updated_at: new Date().toISOString() },
             { onConflict: 'contact_event_id' }
         );
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-    return NextResponse.json({ ok: true, status });
+    return NextResponse.json({ ok: true, ...patch });
 }

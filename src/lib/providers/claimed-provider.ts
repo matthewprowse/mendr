@@ -37,3 +37,23 @@ export async function getClaimedProviderId(userId: string): Promise<string | nul
 
     return null;
 }
+
+/**
+ * The Pro's link state: their claimed provider, or whether they have a claim
+ * awaiting admin review. Used by the portal to show the right empty state.
+ */
+export async function getProviderState(
+    userId: string
+): Promise<{ providerId: string | null; pending: boolean }> {
+    const providerId = await getClaimedProviderId(userId);
+    if (providerId) return { providerId, pending: false };
+
+    const admin = await createSupabaseAdminClient();
+    const { data } = await admin
+        .from('provider_claims')
+        .select('id')
+        .eq('user_id', userId)
+        .eq('status', 'pending')
+        .limit(1);
+    return { providerId: null, pending: Boolean(data && data.length > 0) };
+}

@@ -70,9 +70,10 @@ Status as of the current build. Ticked items are implemented and verified (typec
 - [x] Pro nav and Mendr Pro naming (`Home`, `Leads`, `Account`)
 - [x] Home dashboard (`/contractors/home`) with real stats and small-sample guards on rating and win rate
 - [x] Leads inbox (`/contractors/leads`) on `provider_contact_events` + `lead_states`, inline status editing via `PATCH /api/pro/leads/[id]`, consent-gated contact
-- [ ] Enquiry detail (per-lead full diagnosis, notes, Create Quote / Mark Won-Lost)
-- [ ] Full provider claiming flow (UI for a Pro to claim their scraped listing; a claim was seeded manually for testing)
-- [ ] Unclaimed-lead acquisition lever ("N leads waiting, claim your profile")
+- [x] Enquiry detail (`/pro/leads/[id]`): full diagnosis, photos, consent-gated contact with WhatsApp/Call, private notes, status, Mark Won/Lost
+- [x] Provider claiming flow (`/pro/claim`): search by name, submit a claim. Claims are pending and go through admin review (`provider_claims` table, `/admin/claims` queue with Approve/Reject); approval is what sets `claimed_by_user_id`. Manual ownership verification by the admin.
+- [x] Unclaimed-lead acquisition lever: the claim search shows "N leads waiting" per business and sorts them first
+- [ ] Create Quote action (deferred to Phase 6, Quotes)
 
 #### Phases 5 to 10 (not started)
 
