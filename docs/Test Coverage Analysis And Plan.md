@@ -92,10 +92,16 @@ left unchanged — see the T2 note; ratchet once a clean coverage run is wired.
 
 Phase T4, Pro UI component tests:
 
-- [ ] invoices, quotes, plan, team, claim clients
+- [x] invoices, quotes, plan, team, claim clients (37 tests; render/empty states, create + navigate, role-gated controls, invite/remove flows, error toasts via MSW)
 - [ ] leads, jobs, customers, settings clients
-- [ ] interactive shared components (pro-tab-bar, consent dialog, auth-prompt)
+- [x] interactive shared components (pro-tab-bar active-tab + More popover, consent dialog confirm/cancel + dontAskAgain, auth-prompt magic-link steps)
 - [ ] Pro page empty and pending states
+
+T4 in progress — P0 slice (money/access screens + shared interactive components)
+landed first per the plan's stated ordering. DOM tests live beside each client as
+`__tests__/client.dom.test.tsx`, run under the existing jsdom project with MSW
+overriding `/api/pro/*` per test. Remaining: leads/jobs/customers/settings clients
+and the Pro page empty/pending states.
 
 Phase T5, Remaining lib and P2 tail:
 
