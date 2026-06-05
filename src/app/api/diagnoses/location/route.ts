@@ -4,6 +4,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseAdminClient } from '@/lib/auth/supabase-server';
 import { checkRateLimit } from '@/lib/rate-limit-config';
+import { resolveDiagnosisIdentity, ownsDiagnosis } from '@/lib/diagnosis/ownership';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -32,6 +33,22 @@ export async function POST(req: NextRequest) {
         }
 
         const admin = await createSupabaseAdminClient();
+
+        // This writes the customer's home GPS + address, so it must be gated on
+        // ownership rather than trusting the client-supplied id (finding C5).
+        const identity = await resolveDiagnosisIdentity(req);
+        const { data: existing, error: ownErr } = await admin
+            .from('diagnoses')
+            .select('user_id, anon_key')
+            .eq('id', id)
+            .maybeSingle();
+        if (ownErr) {
+            return NextResponse.json({ error: ownErr.message }, { status: 500 });
+        }
+        if (!existing || !ownsDiagnosis(existing, identity)) {
+            return NextResponse.json({ error: 'Not found' }, { status: 404 });
+        }
+
         const { error } = await admin
             .from('diagnoses')
             .update({
