@@ -17,6 +17,7 @@ import {
     createSupabaseAdminClient,
 } from '@/lib/auth/supabase-server';
 import { checkRateLimit } from '@/lib/rate-limit-config';
+import { planLimits, toPlanId } from '@/lib/pro/plans';
 
 type ServiceAreaPayload = {
     lat: number | null;
@@ -167,6 +168,24 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     }
 
     const admin = await createSupabaseAdminClient();
+
+    // Plan-gated reach: cap the radius to the provider's plan.
+    const { data: planRow } = await admin
+        .from('providers')
+        .select('plan')
+        .eq('id', providerId)
+        .maybeSingle();
+    const maxRadiusKm = planLimits(
+        toPlanId((planRow as { plan?: string } | null)?.plan),
+    ).maxRadiusKm;
+    if (radiusKm > maxRadiusKm) {
+        return NextResponse.json(
+            {
+                error: `Your plan allows a service area up to ${maxRadiusKm} km. Upgrade your plan to cover more ground.`,
+            },
+            { status: 409 },
+        );
+    }
     const { error } = await admin
         .from('providers')
         .update({

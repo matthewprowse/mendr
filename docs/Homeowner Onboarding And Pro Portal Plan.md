@@ -83,7 +83,7 @@ Status as of the current build. Ticked items are implemented and verified (typec
 - [x] Phase 7, Invoices: `invoices` + `invoice_items` + `credit_notes` + `provider_document_counters` tables, plus a gap-free `next_invoice_seq` RPC; `/pro/invoices` list, New Invoice, and the `/pro/invoices/[id]` editor (draft line items, live totals, VAT-when-registered, due date, deposit, terms). Issue assigns a permanent `INV-000N` number and locks the invoice (immutable; edits return 409 pointing at credit notes). Record Payment tracks partial/paid with running balance. Convert an accepted quote into a draft invoice (copies customer, items, totals). Public printable view `/invoice/[id]` ("Tax Invoice" when VAT-registered, banking details, balance due, browser Save-as-PDF); drafts are not publicly viewable. Deferred: credit-note UI (table exists), server-side PDF (`@react-pdf/renderer`), overdue auto-status
 - [x] Phase 8, Team and roles: `provider_members` table (owner / admin / member, invite-by-email, status invited/active/removed) with the first claimer backfilled as owner; provider resolution (`getClaimedProviderId`) now also follows active membership, plus a `getProviderRole` helper. Invites link an already-registered Pro immediately (`get_user_id_by_email` RPC) and an on-signup trigger activates pending invites when that email registers. `/api/pro/members` (GET roster, POST invite) and `/api/pro/members/[id]` (PATCH role owner-only, DELETE remove with owner-immutable + admin-can't-remove-admin guards). Team page in the More nav mirrors the list patterns (invite dialog, inline role select, remove). Deferred: per-member lead/job visibility scoping (members currently see the full provider workspace), invite emails (link-on-login only for now)
 - [x] Phase 9, Pro settings and analytics: `/pro/settings` surfaces the editable business profile (insurance cover, typical response time, pricing model, callout fee, preferred contact channel, realtime-alert toggle, owner/admin gated) plus a per-teammate notifications block (new enquiry, new review, weekly summary, preferred channel, quiet hours) backed by a new `provider_notification_preferences` table keyed by `(provider_id, user_id)`; `/api/pro/settings` (GET/PATCH, role-gated profile + own-row notification upsert). `/pro/analytics` shows real numbers from `provider_profile_views`, `provider_contact_events`, and `lead_states`: profile views and enquiries (all-time + last 30 days), views-to-enquiry conversion, win rate (won vs decided, hidden under 5 decided leads), and enquiries by trade. Both pages added to the More nav. Deferred: per-member notification delivery (the realtime alert still routes to the single provider email via `notify_realtime`), "scrolled past my card" impressions (needs a match-impression event first), leads-by-suburb (no suburb on contact events)
-- [ ] Phase 10, Billing and payments (future)
+- [~] Phase 10, Plan tiers done; billing deferred: Pros pick a plan (Starter / Team / Business) on `/pro/plan`, and the limits are enforced live (team seats in the invite API, service-area radius in the service-area save), with a downgrade guard so you cannot drop below your current seat usage. The `providers.plan` column and `src/lib/pro/plans.ts` are the source of truth. No payment is taken and nobody is charged: the plan picker says so explicitly and prices are indicative only. Billing, subscriptions, receipts, dunning, VAT, and payments/escrow remain unbuilt, gated on a payment provider and the decision to start charging (see the Billing section below)
 
 #### Fixes And Groundwork Done Along The Way (not originally in the plan)
 
@@ -480,11 +480,31 @@ Goal: a settings home for the Pro and an analytics view on real data.
 
 ---
 
-## Phase 10, Future, Billing And Payments
+## Phase 10, Plan Tiers Now, Billing Later
 
-Per the Contractor Expansion doc steps 5 and 8, gated on external decisions, not built now.
-- Billing and subscription: current plan, price, renewal, payment method, receipts, plan change, VAT and dunning. Needs a payment provider and the decision to start charging.
-- Payments and escrow: deposit to Pro, balance escrowed, completion-triggered release via `job_outcomes`, refunds and disputes, payout history. Needs a licensed PSP or escrow partner and South African regulatory clearance. Reuse the existing KYC.
+#### What Is Built
+
+Plan selection and enforcement, with no money changing hands.
+
+- Three tiers in `src/lib/pro/plans.ts` (the single source of truth): Starter (1 seat, 20 km), Team (5 seats, 35 km), Business (25 seats, 50 km). Tune the numbers there and every enforcement point follows.
+- `providers.plan` column (`starter` / `team` / `business`, default `starter`).
+- `/pro/plan` picker (linked from Settings), owner-only switching, with a plain notice that billing is not live and prices are indicative.
+- `/api/pro/plan` GET (plan + seat usage) and PATCH (owner only) with a downgrade guard that refuses to drop below current seat usage.
+- Enforcement points: the team invite API rejects a new seat past the plan limit; the service-area save rejects a radius past the plan limit. Both return a 409 telling the Pro to upgrade.
+
+#### What Is Deliberately Not Built (Billing)
+
+No payment provider is wired and nobody is charged. The following are gated on choosing a PSP and the decision to start charging, and on South African regulatory clearance for any money movement:
+
+- Billing and subscription: real charging on plan change, renewal, payment method, receipts, invoices for the subscription itself, VAT handling, proration, and dunning. When this lands, the plan PATCH becomes a checkout/subscription update rather than a free flag flip, and a webhook keeps `providers.plan` in sync with the PSP.
+- Payments and escrow (Contractor Expansion doc steps 5 and 8): deposit to Pro, balance escrowed, completion-triggered release via `job_outcomes`, refunds and disputes, payout history. Needs a licensed PSP or escrow partner. Reuse the existing KYC.
+
+#### Migration Path When Billing Starts
+
+1. Pick a PSP (e.g. Paystack or Stripe for ZAR subscriptions).
+2. Add `provider_subscriptions` (provider_id, psp_customer_id, psp_subscription_id, status, current_period_end) and a billing webhook that writes `providers.plan`.
+3. Turn the `/api/pro/plan` PATCH into a checkout/subscription change; keep the local enforcement limits exactly as they are.
+4. Add the billing screens (current plan, payment method, receipts) to Settings.
 
 ---
 

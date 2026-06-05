@@ -17,6 +17,7 @@ import {
     getProviderRole,
     type ProviderRole,
 } from '@/lib/providers/claimed-provider';
+import { planLimits, toPlanId } from '@/lib/pro/plans';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -122,6 +123,25 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     if (dupe && dupe.length > 0) {
         return NextResponse.json(
             { error: 'That person is already on the team.' },
+            { status: 409 },
+        );
+    }
+
+    // Seat limit (plan-gated). Counts active members and pending invites.
+    const [{ data: providerPlan }, { count: seatsUsed }] = await Promise.all([
+        admin.from('providers').select('plan').eq('id', ctx.providerId).maybeSingle(),
+        admin
+            .from('provider_members')
+            .select('id', { count: 'exact', head: true })
+            .eq('provider_id', ctx.providerId)
+            .neq('status', 'removed'),
+    ]);
+    const limits = planLimits(toPlanId((providerPlan as { plan?: string } | null)?.plan));
+    if ((seatsUsed ?? 0) >= limits.maxSeats) {
+        return NextResponse.json(
+            {
+                error: `Your plan allows ${limits.maxSeats} seat(s). Upgrade your plan to add more teammates.`,
+            },
             { status: 409 },
         );
     }

@@ -120,6 +120,19 @@ export default function SettingsClient({
                 </p>
             </div>
 
+            <Link
+                href="/pro/plan"
+                className="flex items-center justify-between gap-3 rounded-lg border border-border px-4 py-3"
+            >
+                <div className="flex min-w-0 flex-col gap-0.5">
+                    <p className="text-sm font-medium text-foreground">Plan</p>
+                    <p className="text-xs text-muted-foreground">View and change your plan.</p>
+                </div>
+                <span aria-hidden className="shrink-0 text-muted-foreground">
+                    &rsaquo;
+                </span>
+            </Link>
+
             {/* Business profile */}
             <div className="flex flex-col gap-4">
                 <h2 className="text-lg font-semibold text-foreground">Business Profile</h2>
