@@ -1,5 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { makeRequest, mockSupabaseClient, type MockSupabaseClient } from '@/__tests__/helpers/route-test';
+import {
+    makeRequest,
+    mockSupabaseClient,
+    type MockSupabaseClient,
+} from '@/__tests__/helpers/route-test';
 
 let supabase: MockSupabaseClient;
 
@@ -35,21 +39,23 @@ beforeEach(() => {
 describe('GET /api/cron/contractor-onboarding', () => {
     it('returns 401 without cron auth', async () => {
         const mod = await import('./route');
-        const handler = (mod.GET ?? mod.POST) as (req: Request) => Promise<Response>;
+        const handler = (mod.GET ?? mod.POST) as unknown as (req: Request) => Promise<Response>;
         const res = await handler(makeRequest({ path: '/api/cron/contractor-onboarding' }));
         expect(res.status).toBe(401);
     });
 
     it('runs successfully when no applications match', async () => {
         const mod = await import('./route');
-        const handler = (mod.GET ?? mod.POST) as (req: Request) => Promise<Response>;
-        const res = await handler(makeRequest({ path: '/api/cron/contractor-onboarding', cron: true }));
+        const handler = (mod.GET ?? mod.POST) as unknown as (req: Request) => Promise<Response>;
+        const res = await handler(
+            makeRequest({ path: '/api/cron/contractor-onboarding', cron: true }),
+        );
         expect(res.status).toBe(200);
     });
 
     it('respects dryRun=true and does not call the mailer', async () => {
         const mod = await import('./route');
-        const handler = (mod.GET ?? mod.POST) as (req: Request) => Promise<Response>;
+        const handler = (mod.GET ?? mod.POST) as unknown as (req: Request) => Promise<Response>;
         const res = await handler(
             makeRequest({ path: '/api/cron/contractor-onboarding?dryRun=true', cron: true }),
         );
@@ -60,7 +66,7 @@ describe('GET /api/cron/contractor-onboarding', () => {
 
     it('runs only the day-3 batch when day=3 is supplied', async () => {
         const mod = await import('./route');
-        const handler = (mod.GET ?? mod.POST) as (req: Request) => Promise<Response>;
+        const handler = (mod.GET ?? mod.POST) as unknown as (req: Request) => Promise<Response>;
         const res = await handler(
             makeRequest({ path: '/api/cron/contractor-onboarding?day=3', cron: true }),
         );

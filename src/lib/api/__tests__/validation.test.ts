@@ -9,7 +9,11 @@ function makeJsonRequest(body: unknown, opts: { rawBody?: string } = {}) {
         headers: { 'content-type': 'application/json' },
     };
     init.body = opts.rawBody !== undefined ? opts.rawBody : JSON.stringify(body);
-    return new NextRequest('http://localhost/test', init);
+    // Next's RequestInit differs from the DOM lib's; cast to the constructor's own type.
+    return new NextRequest(
+        'http://localhost/test',
+        init as ConstructorParameters<typeof NextRequest>[1],
+    );
 }
 
 describe('parseJsonBody', () => {

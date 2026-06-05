@@ -20,6 +20,91 @@ Coverage thresholds recorded in vitest.config.ts (the current actuals): lines 20
 
 The single largest untested surface is the Pro portal (Phases 4 to 10): leads, jobs, customers, quotes, invoices, team, plan, and settings. It is also the revenue path, and its money logic (gap-free invoice numbering, VAT, payment math, issue-then-lock immutability) and tenant isolation (RLS) are untested.
 
+#### Progress Checklist
+
+This is the live tracker. Each box is ticked as the work lands and is pushed.
+
+Phase T0, Stabilise the failing tests:
+
+- [x] Group C, remove stale suppression directives in setup-dom.ts
+- [x] Group D, fix component session typing in auth-card.dom.test.tsx
+- [x] Group B, fix the route-test helper and the downstream type-drift files (route-test.ts, validation.test.ts, handler-places-client, handler.integration, cron contractor-onboarding, contact, contact contractor, diagnose integration). All 58 tests in the touched files pass.
+- [ ] Group A, reconcile diagnosis type and export drift across 7 files. BLOCKED, see note below. These test files reference types that production diagnosis code also references and fails on (an incomplete feature refactor), so they cannot be fixed in isolation without repairing or reverting that feature.
+- [x] Added a typecheck script (npm run typecheck). Not yet wired as a blocking CI gate because the codebase has a pre-existing non-test baseline of failures (see note); wire it once that is at zero.
+- [ ] Whole test suite typechecks clean (blocked on Group A and the diagnosis-feature production errors)
+
+Phase T1, Pure-logic unit tests:
+
+- [ ] plans.ts
+- [ ] format-money.ts
+- [ ] format-date.ts
+- [ ] phone.ts (close gaps)
+- [ ] rate-limit-config.ts
+- [ ] auth/admin-auth.ts
+- [ ] auth/cron-auth.ts
+- [ ] diagnosis/trade-resolver.ts
+- [ ] providers/open-status.ts
+- [ ] providers/provider-profile-clean.ts
+- [ ] diagnosis/parse-diagnosis-from-model-response.ts
+
+Phase T2, Resolver and Pro route contracts:
+
+- [ ] providers/claimed-provider.ts (resolver)
+- [ ] pro/invoices and pro/invoices/[id]
+- [ ] pro/quotes and pro/quotes/[id]
+- [ ] pro/claim
+- [ ] pro/members and pro/members/[id]
+- [ ] pro/plan
+- [ ] pro/leads/[id]
+- [ ] pro/jobs and pro/jobs/[id]
+- [ ] pro/customers and pro/customers/[id]
+- [ ] pro/settings
+
+Phase T3, Account and POPIA route contracts:
+
+- [ ] account/delete
+- [ ] account/export
+- [ ] account/data-consent
+- [ ] account/consents and account/consents/revoke
+- [ ] account/avatar
+- [ ] account/password
+- [ ] account/profile, account/phone, account/consent-settings, account/notification-preferences
+- [ ] admin/claims PATCH
+- [ ] admin/ai-pricing
+- [ ] contractors/account/service-area
+
+Phase T4, Pro UI component tests:
+
+- [ ] invoices, quotes, plan, team, claim clients
+- [ ] leads, jobs, customers, settings clients
+- [ ] interactive shared components (pro-tab-bar, consent dialog, auth-prompt)
+- [ ] Pro page empty and pending states
+
+Phase T5, Remaining lib and P2 tail:
+
+- [ ] whatsapp/session-manager.ts
+- [ ] notify-contractor-of-lead.ts gaps
+- [ ] P2 utilities and read-only routes
+
+Deferred, needs Docker or a Supabase branch (see Part 5):
+
+- [ ] Database-layer tests (RLS isolation, next_invoice_seq atomicity, SECURITY DEFINER lockdown, triggers, constraints, cascades)
+- [ ] End-to-end Pro lifecycle, team invite, plan enforcement, auth persistence
+
+#### Things Coming Up Or To Integrate Later
+
+A running log of decisions and integrations surfaced while building tests. Add to this as we go.
+
+- Incomplete diagnosis-feature refactor (discovered during T0, needs a decision). A clean tsc --noEmit run from the app directory reports about 130 errors. Of these, roughly 64 are in PRODUCTION diagnosis code, not tests: agent-reasoning.ts, agent-critique.ts, agent-prose.ts, prompts/failure-mode-serializer.ts, lib/diagnosis/recommended-action.ts, prompts/taxonomy-serializer.ts, and others. They reference symbols that no longer exist: DiagnosticReasoning, FailureMode, a failureModes property on TaxonomySubcategory, EXCLUDED_SERVICES, buildSystemInstructionV2, and an agent-reasoning member missing from PipelineStepName. This looks like a half-finished or half-reverted failure-modes and reasoning feature. The 46 remaining Group A test errors are the tests for exactly this feature, so they cannot be made to typecheck until the feature is completed or reverted. These same 7 test files (29 tests) also fail at runtime under vitest (for example, expected undefined to be defined for failureModes), so this is a genuine incomplete feature, not merely a typing mismatch. The rest of the suite is green: 159 of 166 files and 1851 tests pass. This is a product decision for whoever owns the diagnosis pipeline, not test work. The app appears to run because Next builds with esbuild, which strips types and does not fail on type errors. Recommended next step: decide to finish or revert that feature, then fix or delete the Group A tests to match.
+- Dead backup directory: src/components/ui.backup-20260529-141207 contains stale files (for example chart.tsx) that contribute about 3 type errors. It is dead code and should be deleted or excluded from tsconfig.
+- A few demo and showcase pages (showcase, design, branding, favourites, trades) also carry small numbers of type errors, unrelated to tests. Worth a separate cleanup pass.
+- Database test harness: a Supabase branch (preferred, no Docker) or local Supabase via the CLI (needs Docker) is required before any RLS, trigger, or concurrency test can run. Targeted for roughly two weeks out.
+- CI typecheck of test files: vitest does not typecheck, so a separate tsc step (or a lint rule) is needed to stop type drift returning. Added in T0.
+- Diagnosis type drift (Group A) implies the production diagnosis types were refactored without updating tests. Worth a short review with whoever owns that module to confirm the removed fields (facets and the reasoning types) are intentional and not a regression.
+- e2e build-error blocker around contents-builder.ts line 147 is reported but unconfirmed. Confirm before relying on the homeowner start-to-report e2e path.
+- A few shared-component filenames from the source survey need confirming before their tests are written.
+- Coverage thresholds in vitest.config.ts should be ratcheted upward at the end of each phase, never lowered.
+
 #### How To Read This Plan
 
 Priority bands used throughout:

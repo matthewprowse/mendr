@@ -29,11 +29,18 @@ vi.mock('next/navigation', () => ({
 }));
 
 // Hoisted Supabase auth method mocks so each `it` block can configure return values.
+// The result type allows a null session (confirm-email signups) and an error
+// object so `mockResolvedValueOnce` overrides typecheck in every `it` block.
+type AuthResult = {
+    data: { session: { user: { id: string } } | null };
+    error: { message: string } | null;
+};
+const okResult: AuthResult = { data: { session: { user: { id: 'u1' } } }, error: null };
 const supabaseAuth = {
     signInWithOAuth: vi.fn(async () => ({ error: null })),
     signInWithOtp: vi.fn(async () => ({ error: null })),
-    signInWithPassword: vi.fn(async () => ({ data: { session: { user: { id: 'u1' } } }, error: null })),
-    signUp: vi.fn(async () => ({ data: { session: { user: { id: 'u1' } } }, error: null })),
+    signInWithPassword: vi.fn(async (): Promise<AuthResult> => okResult),
+    signUp: vi.fn(async (): Promise<AuthResult> => okResult),
 };
 
 vi.mock('@/lib/auth/supabase', () => ({

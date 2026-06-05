@@ -65,7 +65,9 @@ export function makeRequest(opts: MakeRequestOptions = {}): NextRequest {
         init.body = opts.rawBody;
     }
 
-    return new NextRequestCtor(url, init);
+    // Next's RequestInit differs from the DOM lib's (notably `signal`); cast to
+    // the constructor's own parameter type rather than the global RequestInit.
+    return new NextRequestCtor(url, init as ConstructorParameters<typeof NextRequestCtor>[1]);
 }
 
 /** Add the CRON bearer header to an existing request body builder. */
@@ -191,8 +193,10 @@ export function mockSupabaseClient(options: MockSupabaseOptions = {}) {
             });
         }
 
-        // Make the builder awaitable.
-        (builder as unknown as PromiseLike<SupabaseQueryResult>).then = (
+        // Make the builder awaitable. Assign through a loose `then` shape — the
+        // strict PromiseLike generic signature is not needed at the call sites,
+        // which only `await` the builder.
+        (builder as unknown as { then: unknown }).then = (
             onFulfilled?: (value: SupabaseQueryResult) => unknown,
             onRejected?: (reason: unknown) => unknown,
         ) => Promise.resolve(resolve()).then(onFulfilled, onRejected);
@@ -214,21 +218,31 @@ export function mockSupabaseClient(options: MockSupabaseOptions = {}) {
             admin: {
                 createUser: vi.fn(async () => ({ data: { user: options.user }, error: null })),
                 deleteUser: vi.fn(async () => ({ data: null, error: null })),
-                updateUserById: vi.fn(async () => ({ data: { user: options.user }, error: null })),
+                updateUserById: vi.fn(async () => ({
+                    data: { user: options.user },
+                    error: null,
+                })),
                 generateLink: vi.fn(async () => ({
                     data: { properties: { action_link: 'https://example.com/x' } },
                     error: null,
                 })),
             },
-            signInWithPassword: vi.fn(async () => ({ data: { user: options.user, session: null }, error: null })),
+            signInWithPassword: vi.fn(async () => ({
+                data: { user: options.user, session: null },
+                error: null,
+            })),
         },
         rpc: vi.fn(async (name: string, _args?: unknown) => {
             return options.rpc?.[name] ?? { data: 1, error: null };
         }),
         storage: {
             from: vi.fn((_bucket: string) => ({
-                upload: vi.fn(async () =>
-                    options.storageUploadResult ?? { data: { path: 'uploads/file.bin' }, error: null },
+                upload: vi.fn(
+                    async () =>
+                        options.storageUploadResult ?? {
+                            data: { path: 'uploads/file.bin' },
+                            error: null,
+                        },
                 ),
                 createSignedUrl: vi.fn(async () => ({
                     data: { signedUrl: 'https://example.com/signed' },

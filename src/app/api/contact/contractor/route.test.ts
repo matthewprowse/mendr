@@ -2,7 +2,11 @@
  * Contract tests for POST /api/contact/contractor.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { makeRequest, mockSupabaseClient, type MockSupabaseClient } from '@/__tests__/helpers/route-test';
+import {
+    makeRequest,
+    mockSupabaseClient,
+    type MockSupabaseClient,
+} from '@/__tests__/helpers/route-test';
 
 let supabase: MockSupabaseClient;
 
@@ -14,7 +18,7 @@ vi.mock('@/lib/auth/supabase-server', () => ({
     createSupabaseAdminClient: vi.fn(async () => supabase),
 }));
 
-const notifyContractorOfLeadMock = vi.fn(async () => ({ ok: true }));
+const notifyContractorOfLeadMock = vi.fn(async (..._args: unknown[]) => ({ ok: true }));
 vi.mock('@/lib/providers/notify-contractor-of-lead', () => ({
     notifyContractorOfLead: (...args: unknown[]) => notifyContractorOfLeadMock(...args),
 }));

@@ -29,18 +29,15 @@ if (IS_JSDOM) {
         // jsdom doesn't implement these — components that revoke object URLs
         // (e.g. file-upload previews) otherwise throw.
         if (typeof URL.createObjectURL !== 'function') {
-            // @ts-expect-error — jsdom polyfill
             URL.createObjectURL = () => 'blob:test';
         }
         if (typeof URL.revokeObjectURL !== 'function') {
-            // @ts-expect-error — jsdom polyfill
             URL.revokeObjectURL = () => undefined;
         }
 
         // Radix primitives (Switch, Select, Dialog) measure their trigger
         // via ResizeObserver. jsdom doesn't ship it, so we stub a no-op.
         if (typeof globalThis.ResizeObserver === 'undefined') {
-            // @ts-expect-error — minimal stub matches the constructor signature
             globalThis.ResizeObserver = class {
                 observe() {}
                 unobserve() {}
@@ -73,7 +70,6 @@ if (IS_JSDOM) {
             typeof globalThis.HTMLElement !== 'undefined' &&
             !globalThis.HTMLElement.prototype.scrollTo
         ) {
-            // @ts-expect-error — jsdom polyfill
             globalThis.HTMLElement.prototype.scrollTo = () => {};
         }
         // jsdom ships a stub `window.scrollTo` that throws "Not implemented".

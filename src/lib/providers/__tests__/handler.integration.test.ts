@@ -30,7 +30,10 @@ function makeFromBuilder(table: string) {
                 },
                 in: async () => ({ data: [], error: null }),
                 order() {
-                    return { then: (resolve: (v: unknown) => unknown) => resolve({ data: [], error: null }) };
+                    return {
+                        then: (resolve: (v: unknown) => unknown) =>
+                            resolve({ data: [], error: null }),
+                    };
                 },
             };
         },
@@ -41,7 +44,11 @@ function makeFromBuilder(table: string) {
         delete() {
             return {
                 eq() {
-                    return { eq() { return { lt: async () => ({ data: null, error: null }) }; } };
+                    return {
+                        eq() {
+                            return { lt: async () => ({ data: null, error: null }) };
+                        },
+                    };
                 },
                 in: async () => ({ data: null, error: null }),
             };
@@ -63,7 +70,7 @@ vi.mock('@/lib/ai/ai-logging', () => ({
 }));
 
 // Stub the global fetch so we never call Google Places.
-const placesFetchSpy = vi.fn(async () => {
+const placesFetchSpy = vi.fn(async (_url?: unknown, _init?: RequestInit) => {
     return new Response(
         JSON.stringify({
             places: [
@@ -80,9 +87,7 @@ const placesFetchSpy = vi.fn(async () => {
                     regularOpeningHours: { weekdayDescriptions: [] },
                 },
             ],
-            routingSummaries: [
-                { legs: [{ distanceMeters: 1500, duration: '180s' }] },
-            ],
+            routingSummaries: [{ legs: [{ distanceMeters: 1500, duration: '180s' }] }],
             nextPageToken: null,
         }),
         { status: 200, headers: { 'content-type': 'application/json' } },

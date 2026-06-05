@@ -9,7 +9,11 @@
  *  - whitelist enforcement for `subject`
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { makeRequest, mockSupabaseClient, type MockSupabaseClient } from '@/__tests__/helpers/route-test';
+import {
+    makeRequest,
+    mockSupabaseClient,
+    type MockSupabaseClient,
+} from '@/__tests__/helpers/route-test';
 
 // ── Mocks ─────────────────────────────────────────────────────────────────────
 let supabase: MockSupabaseClient;
@@ -105,7 +109,7 @@ describe('POST /api/contact — happy path', () => {
 
     it('drops invalid subject values (whitelist)', async () => {
         const { POST } = await import('./route');
-        const insertSpy = vi.fn(() => supabase.from('contact_messages'));
+        const insertSpy = vi.fn((_payload?: unknown) => supabase.from('contact_messages'));
         supabase.from = vi.fn((table: string) => {
             const b = mockSupabaseClient({
                 tables: { [table]: { data: null, error: null } },

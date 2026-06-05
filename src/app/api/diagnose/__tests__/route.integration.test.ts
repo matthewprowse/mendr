@@ -91,10 +91,9 @@ vi.mock('@/lib/ai/ai-logging', () => ({
 }));
 
 vi.mock('@/features/diagnosis/agent-classify', async () => {
-    const actual =
-        await vi.importActual<typeof import('@/features/diagnosis/agent-classify')>(
-            '@/features/diagnosis/agent-classify',
-        );
+    const actual = await vi.importActual<typeof import('@/features/diagnosis/agent-classify')>(
+        '@/features/diagnosis/agent-classify',
+    );
     return {
         ...actual,
         runClassification: vi.fn(async () => {
@@ -105,10 +104,9 @@ vi.mock('@/features/diagnosis/agent-classify', async () => {
 });
 
 vi.mock('@/features/diagnosis/agent-prose', async () => {
-    const actual =
-        await vi.importActual<typeof import('@/features/diagnosis/agent-prose')>(
-            '@/features/diagnosis/agent-prose',
-        );
+    const actual = await vi.importActual<typeof import('@/features/diagnosis/agent-prose')>(
+        '@/features/diagnosis/agent-prose',
+    );
     return {
         ...actual,
         runProseGeneration: vi.fn(async () => {
@@ -119,10 +117,9 @@ vi.mock('@/features/diagnosis/agent-prose', async () => {
 });
 
 vi.mock('@/lib/diagnosis/structural-confidence', async () => {
-    const actual =
-        await vi.importActual<typeof import('@/lib/diagnosis/structural-confidence')>(
-            '@/lib/diagnosis/structural-confidence',
-        );
+    const actual = await vi.importActual<
+        typeof import('@/lib/diagnosis/structural-confidence')
+    >('@/lib/diagnosis/structural-confidence');
     return {
         ...actual,
         computeStructuralConfidence: vi.fn(() => ({
@@ -244,7 +241,9 @@ describe('/api/diagnose — rate limit', () => {
             status: 429,
         });
         const rateLimitConfig = await import('@/lib/rate-limit-config');
-        vi.mocked(rateLimitConfig.checkRateLimit).mockResolvedValueOnce(blocked);
+        vi.mocked(rateLimitConfig.checkRateLimit).mockResolvedValueOnce(
+            blocked as unknown as Awaited<ReturnType<typeof rateLimitConfig.checkRateLimit>>,
+        );
 
         const { POST } = await import('../route');
         const res = await POST(makeRequest({ textQuery: 'help' }));

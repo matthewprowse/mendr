@@ -76,7 +76,9 @@ describe('resolvePlacesApiKey', () => {
 
 describe('fetchPlacesSearchText', () => {
     it('sends the API key in the X-Goog-Api-Key header', async () => {
-        const fetchImpl = vi.fn(async () => new Response('{}', { status: 200 }));
+        const fetchImpl = vi.fn(
+            async (_url: string, _init?: RequestInit) => new Response('{}', { status: 200 }),
+        );
         await fetchPlacesSearchText(
             'test-key',
             { textQuery: 'plumber' },
@@ -92,7 +94,9 @@ describe('fetchPlacesSearchText', () => {
     });
 
     it('serialises the body as JSON', async () => {
-        const fetchImpl = vi.fn(async () => new Response('{}', { status: 200 }));
+        const fetchImpl = vi.fn(
+            async (_url: string, _init?: RequestInit) => new Response('{}', { status: 200 }),
+        );
         await fetchPlacesSearchText(
             'test-key',
             { textQuery: 'plumber', pageSize: 20 },
@@ -153,7 +157,10 @@ describe('fetchPlacesSearchText', () => {
 
         it('does NOT short-circuit when MOCK_PLACES is unset', async () => {
             delete process.env.MOCK_PLACES;
-            const fetchImpl = vi.fn(async () => new Response('{}', { status: 200 }));
+            const fetchImpl = vi.fn(
+                async (_url: string, _init?: RequestInit) =>
+                    new Response('{}', { status: 200 }),
+            );
             await fetchPlacesSearchText(
                 'k',
                 { textQuery: 'plumber' },
