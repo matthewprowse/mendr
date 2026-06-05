@@ -108,9 +108,16 @@ thresholds unchanged — see the T2 note.
 
 Phase T5, Remaining lib and P2 tail:
 
-- [ ] whatsapp/session-manager.ts
-- [ ] notify-contractor-of-lead.ts gaps
-- [ ] P2 utilities and read-only routes
+- [x] whatsapp/session-manager.ts (15 tests; get/get-or-create incl. the insert-then-reread race + throw, user_id sync, update touch vs no-touch, reset preserves vs clears active_diagnosis_id, msSinceLastMessage)
+- [x] notify-contractor-of-lead.ts gaps (5 added: not_found, no_email, diagnosis_not_found, provider query-error passthrough, opt-out default-on when notify_realtime is null)
+- [x] P2 utilities and read-only routes (providers/search: min-query, DB hit, Google fallback, no-key + fetch-fail empties; account/saved-providers/list: auth, empty, join + inactive filter, soft error)
+
+Phase T5 complete (30 new tests, all green; lint clean). Isolated full-suite run in
+a dedicated worktree: 220 files / 2144 tests green. This phase was built on a
+separate branch (`test/t5-lib-tail`) in a git worktree to avoid colliding with the
+concurrent security/DB workstream that shares the main checkout — the isolation also
+gives a clean, non-flaky full-suite gate. All non-Docker phases (T1–T5) are now done;
+remaining work is the deferred database-harness phase (Part 5).
 
 Cost research feature (new workstream, requested mid-build):
 

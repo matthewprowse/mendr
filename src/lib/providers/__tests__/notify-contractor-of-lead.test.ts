@@ -192,4 +192,60 @@ describe('notifyContractorOfLead', () => {
         expect(payload.html).not.toMatch(/https:\/\/wa\.me\//);
         expect(payload.html).not.toContain('Reply on WhatsApp');
     });
+
+    it('returns { ok: false, reason: "not_found" } when the provider row is missing', async () => {
+        tables.providers = () => ({ data: null, error: null });
+        const result = await notifyContractorOfLead({
+            contractorId: 'missing',
+            diagnosisId: 'diag-1',
+            homeownerWhatsapp: null,
+        });
+        expect(result).toEqual({ ok: false, reason: 'not_found' });
+        expect(sendScandioEmailMock).not.toHaveBeenCalled();
+    });
+
+    it('returns { ok: false, reason: "no_email" } when the provider has no email', async () => {
+        setupHappyPath({ provider: { email: null } });
+        const result = await notifyContractorOfLead({
+            contractorId: 'prov-1',
+            diagnosisId: 'diag-1',
+            homeownerWhatsapp: null,
+        });
+        expect(result).toEqual({ ok: false, reason: 'no_email' });
+        expect(sendScandioEmailMock).not.toHaveBeenCalled();
+    });
+
+    it('returns { ok: false, reason: "diagnosis_not_found" } when the diagnosis is missing', async () => {
+        setupHappyPath();
+        tables.diagnoses = () => ({ data: null, error: null });
+        const result = await notifyContractorOfLead({
+            contractorId: 'prov-1',
+            diagnosisId: 'gone',
+            homeownerWhatsapp: null,
+        });
+        expect(result).toEqual({ ok: false, reason: 'diagnosis_not_found' });
+        expect(sendScandioEmailMock).not.toHaveBeenCalled();
+    });
+
+    it('surfaces the provider query error message', async () => {
+        tables.providers = () => ({ data: null, error: { message: 'db down' } });
+        const result = await notifyContractorOfLead({
+            contractorId: 'prov-1',
+            diagnosisId: 'diag-1',
+            homeownerWhatsapp: null,
+        });
+        expect(result).toEqual({ ok: false, reason: 'db down' });
+    });
+
+    it('still sends when notify_realtime is absent (opt-out defaults to opted-in)', async () => {
+        // notify_realtime is only blocking when explicitly false.
+        setupHappyPath({ provider: { notify_realtime: null } });
+        const result = await notifyContractorOfLead({
+            contractorId: 'prov-1',
+            diagnosisId: 'diag-1',
+            homeownerWhatsapp: null,
+        });
+        expect(result).toEqual({ ok: true });
+        expect(sendScandioEmailMock).toHaveBeenCalledTimes(1);
+    });
 });
