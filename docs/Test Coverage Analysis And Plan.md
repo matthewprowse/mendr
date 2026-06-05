@@ -97,8 +97,9 @@ Decision: cost must not be hardcoded. It should come from real web data via Brav
 - [x] Research step: researchAndCacheCost (search to extract to upsert, injectable deps, 5 tests) plus the Gemini extraction adapter extractCostWithGemini (5 tests)
 - [x] Deliberate trigger: POST /api/admin/cost-research, admin-gated, dryRun defaults TRUE (must pass dryRun false to spend), staleness skip (45 days), limit cap, force flag
 - [x] Read path API: GET /api/cost-estimate (public, cheap, cache-or-static), 4 route tests; getCostEstimateCached service (DB-first baseline row, static fallback, 5 tests); shared formatCostEstimate
-- [ ] Wire the report and match page UI to call /api/cost-estimate (deferred: the report client has early returns before the cost line, so the cost state/effect must move to the top of the component — a careful edit for the next increment)
-- [ ] Run the research trigger for real (your call, spends money) to populate the 86 fault types, which also fills the 29 gaps and refreshes the 57
+- [x] Wire the report UI to /api/cost-estimate: the report now shows the static estimate immediately and upgrades to the cached, researched value when present. Hook lives at the top of the component (above the early returns). Full suite confirms no regression.
+- [ ] Match / find-a-pro page cost block: deferred deliberately. The match page is a 1300-line provider-list view with no obvious cost slot, so where a cost block goes is a UI-placement decision, not a wiring task. Needs a quick design call before adding.
+- [ ] Run the research trigger for real (your call, spends money) to populate the 86 fault types, which also fills the 29 gaps and refreshes the 57. Use POST /api/admin/cost-research with { dryRun: false, limit: N }; omit dryRun to preview for free.
 
 Failure modes feature (build, keep switched off):
 

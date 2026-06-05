@@ -28,19 +28,19 @@ import {
 import type { DiagnosisData } from '@/features/diagnosis/types';
 
 const TRADE_JOB_TITLES: Record<string, string> = {
-    'Electrical':              'Electrician',
-    'Plumbing':                'Plumber',
-    'Security':                'Security Technician',
+    Electrical: 'Electrician',
+    Plumbing: 'Plumber',
+    Security: 'Security Technician',
     'Building & Construction': 'Builder',
-    'Carpentry & Woodwork':    'Carpenter',
-    'Flooring & Tiling':       'Flooring Specialist',
-    'Garden & Landscaping':    'Landscaper',
-    'General Handyman':        'Handyman',
-    'Locksmith Services':      'Locksmith',
-    'Painting':                'Painter',
-    'Pool Maintenance':        'Pool Technician',
-    'Rubble & Waste Removal':  'Waste Removal Team',
-    'Welding':                 'Welder',
+    'Carpentry & Woodwork': 'Carpenter',
+    'Flooring & Tiling': 'Flooring Specialist',
+    'Garden & Landscaping': 'Landscaper',
+    'General Handyman': 'Handyman',
+    'Locksmith Services': 'Locksmith',
+    Painting: 'Painter',
+    'Pool Maintenance': 'Pool Technician',
+    'Rubble & Waste Removal': 'Waste Removal Team',
+    Welding: 'Welder',
 };
 
 function tradeToJobTitle(trade: string | null): string {
@@ -77,7 +77,12 @@ function initialFromServer(serverResult: ReportDetailServerResult | undefined): 
         return { loading: true, reportData: null, error: null, skipClientFetch: false };
     }
     if (serverResult.status === 'ok') {
-        return { loading: false, reportData: serverResult.data, error: null, skipClientFetch: true };
+        return {
+            loading: false,
+            reportData: serverResult.data,
+            error: null,
+            skipClientFetch: true,
+        };
     }
     if (serverResult.status === 'not_found') {
         return {
@@ -108,7 +113,15 @@ export function ReportDetailContent({ reportId, serverResult }: ReportDetailCont
     // ── Refinement state ──────────────────────────────────────────────────────
     const [refineOpen, setRefineOpen] = useState(false);
     const [refineText, setRefineText] = useState('');
-    const [refinePhotos, setRefinePhotos] = useState<Array<{ id: string; previewSrc: string; file: File; uploading: boolean; uploadedUrl: string | null }>>([]);
+    const [refinePhotos, setRefinePhotos] = useState<
+        Array<{
+            id: string;
+            previewSrc: string;
+            file: File;
+            uploading: boolean;
+            uploadedUrl: string | null;
+        }>
+    >([]);
     const [isRefining, setIsRefining] = useState(false);
     const [refineError, setRefineError] = useState<string | null>(null);
     const [refineTrigger, setRefineTrigger] = useState<'user' | 'photo_request'>('user');
@@ -126,10 +139,9 @@ export function ReportDetailContent({ reportId, serverResult }: ReportDetailCont
             if (!list.some((r) => r.conversationId === id)) {
                 list.unshift({
                     conversationId: id,
-                    title:
-                        (reportData.diagnosis as any)?.diagnosis
-                            ? `Report: ${String((reportData.diagnosis as any).diagnosis).slice(0, 40)}…`
-                            : `Report ${new Date().toLocaleDateString()}`,
+                    title: (reportData.diagnosis as any)?.diagnosis
+                        ? `Report: ${String((reportData.diagnosis as any).diagnosis).slice(0, 40)}…`
+                        : `Report ${new Date().toLocaleDateString()}`,
                     date: new Date().toISOString(),
                 });
                 window.localStorage.setItem(key, JSON.stringify(list.slice(0, 50)));
@@ -138,6 +150,32 @@ export function ReportDetailContent({ reportId, serverResult }: ReportDetailCont
             // ignore
         }
     }, [id, reportData, error]);
+
+    // ── Cost estimate ─────────────────────────────────────────────────────────
+    // Show the static estimate immediately, then upgrade to the researched,
+    // cached value from /api/cost-estimate when it is available. Kept at the top
+    // (above the loading/error early returns) to respect the rules of hooks.
+    const [costEstimate, setCostEstimate] = useState<{
+        label: string;
+        note: string | null;
+    } | null>(null);
+    useEffect(() => {
+        const raw = (reportData?.diagnosis as { subcategory_id?: unknown } | null)
+            ?.subcategory_id;
+        const sub = typeof raw === 'string' ? raw : null;
+        setCostEstimate(getCostEstimate(sub));
+        if (!sub) return;
+        let cancelled = false;
+        void fetch(`/api/cost-estimate?subcategoryId=${encodeURIComponent(sub)}`)
+            .then((r) => (r.ok ? r.json() : null))
+            .then((j: { estimate?: { label: string; note: string | null } | null } | null) => {
+                if (!cancelled && j?.estimate) setCostEstimate(j.estimate);
+            })
+            .catch(() => {});
+        return () => {
+            cancelled = true;
+        };
+    }, [reportData]);
 
     const loadReport = useCallback(async () => {
         if (!id) return;
@@ -149,7 +187,7 @@ export function ReportDetailContent({ reportId, serverResult }: ReportDetailCont
             const { data: d1, error: e1 } = await supabase
                 .from('diagnoses')
                 .select(
-                    'diagnosis, image_url, image_urls, customer_address, customer_lat, customer_lng, initial_image_description'
+                    'diagnosis, image_url, image_urls, customer_address, customer_lat, customer_lng, initial_image_description',
                 )
                 .eq('id', id)
                 .maybeSingle();
@@ -167,7 +205,7 @@ export function ReportDetailContent({ reportId, serverResult }: ReportDetailCont
                     const { data: d2, error: e2 } = await supabase
                         .from('diagnoses')
                         .select(
-                            'diagnosis_json, image_url, image_urls, customer_address, customer_lat, customer_lng, initial_image_description'
+                            'diagnosis_json, image_url, image_urls, customer_address, customer_lat, customer_lng, initial_image_description',
                         )
                         .eq('id', id)
                         .maybeSingle();
@@ -212,8 +250,10 @@ export function ReportDetailContent({ reportId, serverResult }: ReportDetailCont
                 customer_lat: conv.customer_lat as number | null,
                 customer_lng: conv.customer_lng as number | null,
                 initial_image_description:
-                    typeof (conv as { initial_image_description?: unknown }).initial_image_description === 'string'
-                        ? (conv as { initial_image_description: string }).initial_image_description
+                    typeof (conv as { initial_image_description?: unknown })
+                        .initial_image_description === 'string'
+                        ? (conv as { initial_image_description: string })
+                              .initial_image_description
                         : null,
             });
         } catch (e: unknown) {
@@ -282,7 +322,8 @@ export function ReportDetailContent({ reportId, serverResult }: ReportDetailCont
                 }
                 reject(new Error('Could not read the selected image.'));
             };
-            reader.onerror = () => reject(reader.error ?? new Error('Could not read the selected image.'));
+            reader.onerror = () =>
+                reject(reader.error ?? new Error('Could not read the selected image.'));
             reader.readAsDataURL(file);
         });
 
@@ -294,7 +335,9 @@ export function ReportDetailContent({ reportId, serverResult }: ReportDetailCont
                 form.set('file', file);
                 const res = await fetch('/api/upload-image', { method: 'POST', body: form });
                 if (!res.ok) throw new Error('Upload failed');
-                const json = (await res.json().catch(() => null)) as { imageUrl?: string } | null;
+                const json = (await res.json().catch(() => null)) as {
+                    imageUrl?: string;
+                } | null;
                 const url =
                     typeof json?.imageUrl === 'string' && json.imageUrl.startsWith('http')
                         ? json.imageUrl
@@ -344,8 +387,13 @@ export function ReportDetailContent({ reportId, serverResult }: ReportDetailCont
                     if (isHeicLike(file)) {
                         const form = new FormData();
                         form.set('file', file);
-                        const res = await fetch('/api/convert-heic', { method: 'POST', body: form });
-                        const json = (await res.json().catch(() => ({}))) as { dataUrl?: string };
+                        const res = await fetch('/api/convert-heic', {
+                            method: 'POST',
+                            body: form,
+                        });
+                        const json = (await res.json().catch(() => ({}))) as {
+                            dataUrl?: string;
+                        };
                         if (
                             !res.ok ||
                             typeof json.dataUrl !== 'string' ||
@@ -364,7 +412,11 @@ export function ReportDetailContent({ reportId, serverResult }: ReportDetailCont
                     const len = binStr.length;
                     const bytes = new Uint8Array(len);
                     for (let i = 0; i < len; i += 1) bytes[i] = binStr.charCodeAt(i);
-                    const ext = mime.includes('png') ? 'png' : mime.includes('webp') ? 'webp' : 'jpg';
+                    const ext = mime.includes('png')
+                        ? 'png'
+                        : mime.includes('webp')
+                          ? 'webp'
+                          : 'jpg';
                     const base = (file.name || 'photo').replace(/\.[^.]+$/, '');
                     const normalised = new File([bytes], `${base}.${ext}`, { type: mime });
 
@@ -391,14 +443,11 @@ export function ReportDetailContent({ reportId, serverResult }: ReportDetailCont
         setRefinePhotos((prev) => prev.filter((p) => p.id !== photoId));
     }, []);
 
-    const openRefineSheet = useCallback(
-        (trigger: 'user' | 'photo_request') => {
-            setRefineTrigger(trigger);
-            setRefineError(null);
-            setRefineOpen(true);
-        },
-        [],
-    );
+    const openRefineSheet = useCallback((trigger: 'user' | 'photo_request') => {
+        setRefineTrigger(trigger);
+        setRefineError(null);
+        setRefineOpen(true);
+    }, []);
 
     const submitRefinement = useCallback(async () => {
         if (!reportData) return;
@@ -427,9 +476,11 @@ export function ReportDetailContent({ reportId, serverResult }: ReportDetailCont
                     trigger: refineTrigger,
                 }),
             });
-            const json = (await res.json().catch(() => null)) as
-                | { diagnosis?: DiagnosisData; imageUrls?: string[]; error?: string }
-                | null;
+            const json = (await res.json().catch(() => null)) as {
+                diagnosis?: DiagnosisData;
+                imageUrls?: string[];
+                error?: string;
+            } | null;
             if (!res.ok || !json?.diagnosis) {
                 throw new Error(json?.error || 'Refinement failed.');
             }
@@ -569,11 +620,8 @@ export function ReportDetailContent({ reportId, serverResult }: ReportDetailCont
     const extraImages = allImages.slice(1);
 
     const diagnosisTitle =
-        typeof diag?.diagnosis === 'string' && diag.diagnosis !== 'N/A'
-            ? diag.diagnosis
-            : null;
-    const trade =
-        typeof diag?.trade === 'string' && diag.trade !== 'N/A' ? diag.trade : null;
+        typeof diag?.diagnosis === 'string' && diag.diagnosis !== 'N/A' ? diag.diagnosis : null;
+    const trade = typeof diag?.trade === 'string' && diag.trade !== 'N/A' ? diag.trade : null;
     const tradeDetail =
         typeof diag?.trade_detail === 'string' && diag.trade_detail.trim()
             ? diag.trade_detail
@@ -585,18 +633,18 @@ export function ReportDetailContent({ reportId, serverResult }: ReportDetailCont
 
     const thoughtParagraph = reportThoughtsParagraph(
         diag,
-        reportData.initial_image_description ?? undefined
+        reportData.initial_image_description ?? undefined,
     );
 
     const { detail: diagnosisDetailBody, hazard: diagnosisHazard } = splitDetailAndHazard(
-        diagMessage ?? ''
+        diagMessage ?? '',
     );
     const diagnosisDisplayBody = (diagnosisDetailBody || diagMessage || '').trim() || null;
 
     // New structured fields — fall back gracefully for older diagnoses.
     const contractorChecklist: string[] = Array.isArray(diag?.contractor_checklist)
         ? (diag.contractor_checklist as unknown[]).filter(
-              (s): s is string => typeof s === 'string' && s.trim().length > 0
+              (s): s is string => typeof s === 'string' && s.trim().length > 0,
           )
         : [];
     const homeownerPrep =
@@ -628,7 +676,7 @@ export function ReportDetailContent({ reportId, serverResult }: ReportDetailCont
             : null;
     const confidenceDrivers: string[] = Array.isArray(diag?.confidence_drivers)
         ? (diag.confidence_drivers as unknown[]).filter(
-              (s): s is string => typeof s === 'string' && s.trim().length > 0
+              (s): s is string => typeof s === 'string' && s.trim().length > 0,
           )
         : [];
     const photoRequest =
@@ -641,7 +689,11 @@ export function ReportDetailContent({ reportId, serverResult }: ReportDetailCont
         primary_observation: string;
         components_visible: string[];
         components_missing_or_damaged: string[];
-        role_in_diagnosis: 'primary_evidence' | 'corroborating' | 'contradicting' | 'context_only';
+        role_in_diagnosis:
+            | 'primary_evidence'
+            | 'corroborating'
+            | 'contradicting'
+            | 'context_only';
     };
     const VALID_OBS_ROLES = [
         'primary_evidence',
@@ -653,22 +705,18 @@ export function ReportDetailContent({ reportId, serverResult }: ReportDetailCont
         (diag as { image_observations?: unknown } | null | undefined)?.image_observations,
     )
         ? ((diag as { image_observations: unknown[] }).image_observations as unknown[])
-              .filter(
-                  (o): o is Record<string, unknown> => typeof o === 'object' && o !== null,
-              )
+              .filter((o): o is Record<string, unknown> => typeof o === 'object' && o !== null)
               .map((o) => ({
                   primary_observation:
                       typeof o.primary_observation === 'string' ? o.primary_observation : '',
                   components_visible: Array.isArray(o.components_visible)
                       ? (o.components_visible as unknown[]).filter(
-                            (s): s is string =>
-                                typeof s === 'string' && s.trim().length > 0,
+                            (s): s is string => typeof s === 'string' && s.trim().length > 0,
                         )
                       : [],
                   components_missing_or_damaged: Array.isArray(o.components_missing_or_damaged)
                       ? (o.components_missing_or_damaged as unknown[]).filter(
-                            (s): s is string =>
-                                typeof s === 'string' && s.trim().length > 0,
+                            (s): s is string => typeof s === 'string' && s.trim().length > 0,
                         )
                       : [],
                   role_in_diagnosis:
@@ -687,18 +735,12 @@ export function ReportDetailContent({ reportId, serverResult }: ReportDetailCont
 
     const jobTitle = tradeToJobTitle(trade);
 
-    const subcategoryId =
-        typeof diag?.subcategory_id === 'string' ? diag.subcategory_id : null;
-    const costEstimate = getCostEstimate(subcategoryId);
+    const showDiagnosisSection = !isRejected && !isUnserviced && Boolean(diagnosisDisplayBody);
 
-    const showDiagnosisSection =
-        !isRejected && !isUnserviced && Boolean(diagnosisDisplayBody);
-
-    const hasLocation =
-        reportData.customer_lat != null && reportData.customer_lng != null;
+    const hasLocation = reportData.customer_lat != null && reportData.customer_lng != null;
     const mapDestination = hasLocation
         ? `${reportData.customer_lat},${reportData.customer_lng}`
-        : reportData.customer_address ?? null;
+        : (reportData.customer_address ?? null);
     const directionsHref = mapDestination
         ? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(mapDestination)}`
         : null;
@@ -716,7 +758,6 @@ export function ReportDetailContent({ reportId, serverResult }: ReportDetailCont
             `}</style>
 
             <main className="flex flex-col gap-6 p-4 pt-22 pb-22 bg-background min-h-screen">
-
                 {/* ── Fixed top header ── */}
                 <div className="no-print flex flex-row justify-between items-center p-4 h-18 bg-background w-full fixed inset-x-0 top-0 z-50">
                     <Button
@@ -737,11 +778,7 @@ export function ReportDetailContent({ reportId, serverResult }: ReportDetailCont
                 {/* ── Banner image (matches diagnosis page frame) ── */}
                 {bannerImage ? (
                     <div className="overflow-hidden rounded-lg border border-input bg-secondary">
-                        <img
-                            src={bannerImage}
-                            alt=""
-                            className="h-56 w-full object-cover"
-                        />
+                        <img src={bannerImage} alt="" className="h-56 w-full object-cover" />
                     </div>
                 ) : (
                     <div className="flex h-56 rounded-lg border border-input bg-secondary" />
@@ -765,7 +802,9 @@ export function ReportDetailContent({ reportId, serverResult }: ReportDetailCont
                     {failedComponent ? (
                         <p className="text-sm text-muted-foreground">
                             Component identified:{' '}
-                            <span className="text-foreground font-medium">{failedComponent}</span>
+                            <span className="text-foreground font-medium">
+                                {failedComponent}
+                            </span>
                         </p>
                     ) : null}
                     {failedComponent && cascadingDamage ? (
@@ -790,16 +829,15 @@ export function ReportDetailContent({ reportId, serverResult }: ReportDetailCont
 
                 {/* ── Unrelated / unserviced notices ── */}
                 {isRejected && (
-                    <UnrelatedImageCard
-                        conversationId={id}
-                        recordFeedback={false}
-                    />
+                    <UnrelatedImageCard conversationId={id} recordFeedback={false} />
                 )}
                 {isUnserviced && (
                     <UnservicedCategoryCard
                         conversationId={id}
                         requestedService={String(diag?.trade ?? 'Unknown')}
-                        diagnosis={typeof diag?.diagnosis === 'string' ? diag.diagnosis : undefined}
+                        diagnosis={
+                            typeof diag?.diagnosis === 'string' ? diag.diagnosis : undefined
+                        }
                         diagnosisFull={diag ?? undefined}
                         recordFeedback={false}
                     />
@@ -814,7 +852,9 @@ export function ReportDetailContent({ reportId, serverResult }: ReportDetailCont
                  */}
                 {showDiagnosisSection ? (
                     <div className="flex flex-col gap-2">
-                        <p className="text-sm font-medium text-foreground">What&rsquo;s Wrong</p>
+                        <p className="text-sm font-medium text-foreground">
+                            What&rsquo;s Wrong
+                        </p>
                         <div className="flex flex-col gap-3">
                             {(diagnosisDisplayBody ?? '')
                                 .split(/\n{2,}/)
@@ -859,12 +899,18 @@ export function ReportDetailContent({ reportId, serverResult }: ReportDetailCont
                 {!isRejected && !isUnserviced && photoRequest ? (
                     <div className="no-print flex flex-col gap-3 rounded-lg border border-primary/30 bg-primary/5 px-4 py-3">
                         <div className="flex items-start gap-2">
-                            <Camera size={16} strokeWidth={2.5} className="mt-0.5 shrink-0 text-primary" />
+                            <Camera
+                                size={16}
+                                strokeWidth={2.5}
+                                className="mt-0.5 shrink-0 text-primary"
+                            />
                             <div className="flex flex-col gap-1">
                                 <p className="text-sm font-medium text-foreground">
                                     A photo would help me be more sure
                                 </p>
-                                <p className="text-sm text-foreground/80 leading-relaxed">{photoRequest}</p>
+                                <p className="text-sm text-foreground/80 leading-relaxed">
+                                    {photoRequest}
+                                </p>
                             </div>
                         </div>
                         <Button
@@ -883,7 +929,9 @@ export function ReportDetailContent({ reportId, serverResult }: ReportDetailCont
                 {/* ── You can verify this yourself ── */}
                 {!isRejected && !isUnserviced && diyVerification ? (
                     <div className="flex flex-col gap-2">
-                        <p className="text-sm font-medium text-foreground">You can verify this yourself</p>
+                        <p className="text-sm font-medium text-foreground">
+                            You can verify this yourself
+                        </p>
                         <p className="text-sm text-foreground leading-relaxed border-l-2 border-primary/50 pl-3">
                             {diyVerification}
                         </p>
@@ -898,7 +946,10 @@ export function ReportDetailContent({ reportId, serverResult }: ReportDetailCont
                         </p>
                         <ul className="flex flex-col gap-2">
                             {contractorChecklist.map((item, i) => (
-                                <li key={i} className="flex gap-2.5 text-sm text-foreground leading-relaxed">
+                                <li
+                                    key={i}
+                                    className="flex gap-2.5 text-sm text-foreground leading-relaxed"
+                                >
                                     <span className="mt-[5px] size-1.5 shrink-0 rounded-full bg-foreground/30" />
                                     <span>{item}</span>
                                 </li>
@@ -910,7 +961,9 @@ export function ReportDetailContent({ reportId, serverResult }: ReportDetailCont
                 {/* ── Before They Arrive ── */}
                 {!isRejected && !isUnserviced && (homeownerPrep || legacyActionRequired) ? (
                     <div className="flex flex-col gap-2">
-                        <p className="text-sm font-medium text-foreground">Before They Arrive</p>
+                        <p className="text-sm font-medium text-foreground">
+                            Before They Arrive
+                        </p>
                         <p className="text-sm text-foreground leading-relaxed border-l-2 border-primary/50 pl-3">
                             {homeownerPrep ?? legacyActionRequired}
                         </p>
@@ -929,7 +982,10 @@ export function ReportDetailContent({ reportId, serverResult }: ReportDetailCont
                         {confidenceDrivers.length > 0 ? (
                             <ul className="mt-1 flex flex-col gap-1">
                                 {confidenceDrivers.map((d, i) => (
-                                    <li key={i} className="flex gap-2 text-xs text-muted-foreground">
+                                    <li
+                                        key={i}
+                                        className="flex gap-2 text-xs text-muted-foreground"
+                                    >
                                         <span className="mt-[5px] size-1 shrink-0 rounded-full bg-muted-foreground/40" />
                                         <span>{d}</span>
                                     </li>
@@ -942,11 +998,14 @@ export function ReportDetailContent({ reportId, serverResult }: ReportDetailCont
                 {/* ── Per-image observations (v7.3) ── */}
                 {hasObservations && allImages.length > 0 ? (
                     <div className="flex flex-col gap-3">
-                        <p className="text-sm text-foreground font-medium">Photos &amp; observations</p>
+                        <p className="text-sm text-foreground font-medium">
+                            Photos &amp; observations
+                        </p>
 
                         {hasContradictingObservation ? (
                             <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-foreground">
-                                Note: one of your photos suggests a different cause. Read the per-image notes below.
+                                Note: one of your photos suggests a different cause. Read the
+                                per-image notes below.
                             </div>
                         ) : null}
 
@@ -1020,10 +1079,15 @@ export function ReportDetailContent({ reportId, serverResult }: ReportDetailCont
                                                         {obs.components_visible.join(', ')}
                                                     </p>
                                                 ) : null}
-                                                {obs.components_missing_or_damaged.length > 0 ? (
+                                                {obs.components_missing_or_damaged.length >
+                                                0 ? (
                                                     <p className="text-xs text-foreground/80">
-                                                        <span className="font-medium">Issues spotted:</span>{' '}
-                                                        {obs.components_missing_or_damaged.join(', ')}
+                                                        <span className="font-medium">
+                                                            Issues spotted:
+                                                        </span>{' '}
+                                                        {obs.components_missing_or_damaged.join(
+                                                            ', ',
+                                                        )}
                                                     </p>
                                                 ) : null}
                                             </div>
@@ -1067,10 +1131,20 @@ export function ReportDetailContent({ reportId, serverResult }: ReportDetailCont
                             Refine
                         </Button>
                     ) : null}
-                    <Button variant="secondary" className="flex-1 h-10" onClick={handleShare} type="button">
+                    <Button
+                        variant="secondary"
+                        className="flex-1 h-10"
+                        onClick={handleShare}
+                        type="button"
+                    >
                         Share
                     </Button>
-                    <Button variant="default" className="flex-1 h-10" onClick={handlePrint} type="button">
+                    <Button
+                        variant="default"
+                        className="flex-1 h-10"
+                        onClick={handlePrint}
+                        type="button"
+                    >
                         Download PDF
                     </Button>
                 </div>
@@ -1079,7 +1153,9 @@ export function ReportDetailContent({ reportId, serverResult }: ReportDetailCont
                 {isRefining ? (
                     <div className="no-print fixed inset-0 z-[60] flex flex-col items-center justify-center gap-3 bg-background/85 backdrop-blur-sm">
                         <Spinner className="size-8 text-foreground" />
-                        <p className="text-sm font-medium text-foreground">Refining diagnosis…</p>
+                        <p className="text-sm font-medium text-foreground">
+                            Refining diagnosis…
+                        </p>
                     </div>
                 ) : null}
 
@@ -1089,8 +1165,8 @@ export function ReportDetailContent({ reportId, serverResult }: ReportDetailCont
                         <SheetHeader>
                             <SheetTitle>Refine this diagnosis</SheetTitle>
                             <SheetDescription>
-                                Add a clearer photo or extra details and I&rsquo;ll re-assess. New photos
-                                are weighted most heavily.
+                                Add a clearer photo or extra details and I&rsquo;ll re-assess.
+                                New photos are weighted most heavily.
                             </SheetDescription>
                         </SheetHeader>
 
@@ -1109,7 +1185,9 @@ export function ReportDetailContent({ reportId, serverResult }: ReportDetailCont
                             />
 
                             <div className="flex flex-col gap-2">
-                                <p className="text-sm font-medium text-foreground">Add photos</p>
+                                <p className="text-sm font-medium text-foreground">
+                                    Add photos
+                                </p>
                                 {refinePhotos.length > 0 ? (
                                     <div className="flex gap-2 overflow-x-auto pb-1">
                                         {refinePhotos.map((p) => (
@@ -1154,8 +1232,13 @@ export function ReportDetailContent({ reportId, serverResult }: ReportDetailCont
                                         : 'Add photo'}
                                 </Button>
                                 <p className="text-xs text-muted-foreground">
-                                    You have {Math.max(0, remainingPhotoSlots - refinePhotos.length)} photo
-                                    slot{Math.max(0, remainingPhotoSlots - refinePhotos.length) === 1 ? '' : 's'}{' '}
+                                    You have{' '}
+                                    {Math.max(0, remainingPhotoSlots - refinePhotos.length)}{' '}
+                                    photo slot
+                                    {Math.max(0, remainingPhotoSlots - refinePhotos.length) ===
+                                    1
+                                        ? ''
+                                        : 's'}{' '}
                                     remaining (4 max per diagnosis).
                                 </p>
                             </div>
@@ -1189,7 +1272,10 @@ export function ReportDetailContent({ reportId, serverResult }: ReportDetailCont
                                 >
                                     {isRefining ? (
                                         <>
-                                            <Loader className="size-4 animate-spin shrink-0" aria-hidden />
+                                            <Loader
+                                                className="size-4 animate-spin shrink-0"
+                                                aria-hidden
+                                            />
                                             Refining…
                                         </>
                                     ) : (
