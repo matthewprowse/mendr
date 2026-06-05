@@ -11,11 +11,7 @@
 import { describe, it, expect } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
-import {
-    parseProseResponse,
-    FALLBACK_PROSE,
-    type ProseResult,
-} from '../agent-prose';
+import { parseProseResponse, FALLBACK_PROSE, type ProseResult } from '../agent-prose';
 
 const FIXTURES_DIR = path.resolve(__dirname, 'fixtures', 'prose');
 
@@ -131,8 +127,7 @@ describe('parseProseResponse — malformed inputs', () => {
 
 describe('parseProseResponse — refusal / safety responses', () => {
     it('returns null when the model emits a plain-text refusal instead of JSON', () => {
-        const refusal =
-            'Sorry, I am not able to provide a diagnosis for this content.';
+        const refusal = 'Sorry, I am not able to provide a diagnosis for this content.';
         expect(parseProseResponse(refusal)).toBeNull();
     });
 
@@ -143,7 +138,11 @@ describe('parseProseResponse — refusal / safety responses', () => {
 });
 
 describe('parseProseResponse — field coercion and defaults', () => {
-    it('substitutes the fallback thought when the model emits a thought shorter than 200 chars', () => {
+    it('keeps a short thought verbatim (fallback decision moved to runProseGeneration in v7.4)', () => {
+        // From v7.4, parseProseResponse no longer silently substitutes the
+        // fallback for a short thought — that masked a 30% silent-fallback bug.
+        // The caller (runProseGeneration) now inspects the length and decides,
+        // so the parser preserves the raw thought as-is.
         const raw = JSON.stringify({
             thought: 'too short',
             diagnosis: 'Geyser Leak',
@@ -159,7 +158,7 @@ describe('parseProseResponse — field coercion and defaults', () => {
             confidence_drivers: [],
         });
         const out = parseProseResponse(raw);
-        expect(out?.thought).toBe(FALLBACK_PROSE.thought);
+        expect(out?.thought).toBe('too short');
     });
 
     it('keeps a long-enough thought verbatim', () => {

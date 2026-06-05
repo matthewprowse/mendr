@@ -29,6 +29,7 @@ const generateContent = vi.fn();
 vi.mock('@/lib/ai/ai-diagnosis-backend', () => ({
     GEMINI_MODEL_NAME: 'gemini-2.5-flash-test',
     getDiagnosisModel: () => ({ generateContent }),
+    getDiagnosisModelByName: () => ({ generateContent }),
 }));
 
 vi.mock('@/lib/ai/ai-cost-logger', () => ({
