@@ -36,30 +36,35 @@ export default defineConfig({
                 'node_modules',
                 '.next',
             ],
-            // Phase 7 final thresholds — ratcheted to current actuals minus ~1pp,
-            // floored at previous thresholds so we never lower the bar in CI.
+            // Thresholds ratcheted to current actuals minus ~1pp, floored at the
+            // previous thresholds so we never lower the bar in CI.
             //
-            // Phase 7 final actuals (1522 tests across 144 files):
-            //   lines:      20.78
-            //   branches:   66.42
-            //   functions:  48.18
-            //   statements: 20.78
+            // Post-T5 actuals (2144 tests across 220 files, measured in an
+            // isolated worktree off origin/main so the suite runs clean):
+            //   lines:      27.70
+            //   branches:   68.28
+            //   functions:  54.74
+            //   statements: 27.70
             //
             // Applied thresholds (max(prev-threshold, floor(actual)-1)):
-            //   lines:      19   (max(19, floor(20.78)-1=19))
-            //   branches:   65   (max(65, floor(66.42)-1=65))
-            //   functions:  47   (max(46, floor(48.18)-1=47))  ← up from 46
-            //   statements: 19   (max(19, floor(20.78)-1=19))
+            //   lines:      26   (max(19, floor(27.70)-1=26))  ← up from 19
+            //   branches:   67   (max(65, floor(68.28)-1=67))  ← up from 65
+            //   functions:  53   (max(47, floor(54.74)-1=53))  ← up from 47
+            //   statements: 26   (max(19, floor(27.70)-1=26))  ← up from 19
             //
-            // Phase 5 (Supabase integration tests) was deferred — Docker is
-            // not installed locally. Once it ships, lines/statements should
-            // jump materially (most uncovered code is server route handlers
-            // currently exercised only via mocked contract tests).
+            // The ~1pp margin also absorbs the small drift between this branch and
+            // main (main carries a few more tests from a parallel workstream, so
+            // its coverage is >= these figures — these remain a safe floor there).
+            //
+            // Phase 5 (Supabase integration tests) is still deferred — needs a real
+            // Postgres. Once it ships, lines/statements should jump materially
+            // (most uncovered code is server route handlers exercised only via
+            // mocked contract tests today).
             thresholds: {
-                lines: 19,
-                branches: 65,
-                functions: 47,
-                statements: 19,
+                lines: 26,
+                branches: 67,
+                functions: 53,
+                statements: 26,
             },
         },
     },
