@@ -320,7 +320,7 @@ export default function AiCostsClient() {
                             />
                             <YAxis tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
                             <Tooltip
-                                formatter={(value: number) => [usd(value), 'Spend']}
+                                formatter={(value) => [usd(Number(value)), 'Spend']}
                                 labelClassName="text-xs"
                                 contentStyle={{ fontSize: 12 }}
                             />
