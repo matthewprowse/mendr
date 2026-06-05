@@ -50,7 +50,7 @@ describe('POST /api/account/password', () => {
 
     it('401 when re-auth with the current password fails', async () => {
         authed();
-        serverClient.auth.signInWithPassword = vi.fn(async () => ({ data: { user: null, session: null }, error: { message: 'bad' } }));
+        serverClient.auth.signInWithPassword = vi.fn(async () => ({ data: { user: null, session: null }, error: { message: 'bad' } })) as unknown as typeof serverClient.auth.signInWithPassword;
         const { POST } = await import('./route');
         expect((await POST(makeRequest({ method: 'POST', body: { currentPassword: 'wrong', newPassword: 'abcdefgh' } }))).status).toBe(401);
     });

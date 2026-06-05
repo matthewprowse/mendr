@@ -3,7 +3,9 @@ import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { AuthPromptDialog } from '@/components/auth-prompt-dialog';
 
-const supa = vi.hoisted(() => ({ signInWithOtp: vi.fn(async () => ({ error: null })) }));
+const supa = vi.hoisted(() => ({
+    signInWithOtp: vi.fn(async (): Promise<{ error: { message: string } | null }> => ({ error: null })),
+}));
 vi.mock('@/lib/auth/supabase', () => ({ supabase: { auth: supa } }));
 
 beforeEach(() => {

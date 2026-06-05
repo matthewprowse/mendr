@@ -46,7 +46,7 @@ describe('POST /api/account/delete', () => {
     it('500 when the delete fails', async () => {
         serverClient = mockSupabaseClient({ user: { id: 'user-1', email: 'a@b.co' } });
         adminClient = mockSupabaseClient();
-        adminClient.auth.admin.deleteUser = vi.fn(async () => ({ data: null, error: { message: 'boom' } }));
+        adminClient.auth.admin.deleteUser = vi.fn(async () => ({ data: null, error: { message: 'boom' } })) as unknown as typeof adminClient.auth.admin.deleteUser;
         const { POST } = await import('./route');
         expect((await POST(makeRequest({ method: 'POST', body: { confirmEmail: 'a@b.co' } }))).status).toBe(500);
     });

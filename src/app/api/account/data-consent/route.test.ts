@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { makeRequest, mockSupabaseClient, type MockSupabaseClient } from '@/__tests__/helpers/route-test';
+import { makeRequest, mockSupabaseClient, type MockSupabaseClient, type SupabaseQueryResult } from '@/__tests__/helpers/route-test';
 
 let serverClient: MockSupabaseClient;
 
@@ -10,7 +10,7 @@ vi.mock('@/lib/auth/supabase-server', () => ({
 function anon() {
     serverClient = mockSupabaseClient({ user: null });
 }
-function authed(tables: Record<string, { data: unknown; error: unknown }> = {}) {
+function authed(tables: Record<string, SupabaseQueryResult> = {}) {
     serverClient = mockSupabaseClient({ user: { id: 'user-1' }, tables });
 }
 

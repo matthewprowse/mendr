@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { makeRequest, mockSupabaseClient, type MockSupabaseClient } from '@/__tests__/helpers/route-test';
+import { makeRequest, mockSupabaseClient, type MockSupabaseClient, type SupabaseQueryResult } from '@/__tests__/helpers/route-test';
 
 let serverClient: MockSupabaseClient;
 let adminClient: MockSupabaseClient;
@@ -13,7 +13,7 @@ function anon() {
     serverClient = mockSupabaseClient({ user: null });
     adminClient = mockSupabaseClient();
 }
-function authed(tables: Record<string, { data: unknown; error: unknown }> = {}) {
+function authed(tables: Record<string, SupabaseQueryResult> = {}) {
     serverClient = mockSupabaseClient({ user: { id: 'user-1', email: 'a@b.co' } });
     adminClient = mockSupabaseClient({ tables });
 }

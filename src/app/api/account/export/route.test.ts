@@ -20,7 +20,7 @@ describe('GET /api/account/export', () => {
     });
 
     it('returns a downloadable JSON bundle of the user data', async () => {
-        serverClient = mockSupabaseClient({ user: { id: 'user-1', email: 'a@b.co', created_at: '2026-01-01' } });
+        serverClient = mockSupabaseClient({ user: { id: 'user-1', email: 'a@b.co' } });
         adminClient = mockSupabaseClient({
             tables: {
                 profiles: { data: { first_name: 'Ada', surname: 'L', username: 'ada', description: '', locations: [], created_at: 't' }, error: null },
