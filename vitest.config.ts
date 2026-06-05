@@ -19,6 +19,9 @@ export default defineConfig({
         environment: 'node',
         globals: true,
         include: ['src/**/*.test.ts', 'src/**/*.test.tsx', 'src/**/*.dom.test.tsx'],
+        // DB integration tests (PGlite) run via their own config (`pnpm test:db`)
+        // since each spins up a real Postgres — excluded from the fast default run.
+        exclude: ['**/node_modules/**', '**/dist/**', '**/.next/**', 'src/**/*.db.test.ts'],
         environmentMatchGlobs: [
             ['src/**/*.dom.test.tsx', 'jsdom'],
             ['src/**/__tests__/components/**/*.test.tsx', 'jsdom'],
