@@ -51,16 +51,25 @@ Phase T1 complete.
 
 Phase T2, Resolver and Pro route contracts:
 
-- [ ] providers/claimed-provider.ts (resolver)
-- [ ] pro/invoices and pro/invoices/[id]
-- [ ] pro/quotes and pro/quotes/[id]
-- [ ] pro/claim
-- [ ] pro/members and pro/members/[id]
-- [ ] pro/plan
-- [ ] pro/leads/[id]
-- [ ] pro/jobs and pro/jobs/[id]
-- [ ] pro/customers and pro/customers/[id]
-- [ ] pro/settings
+- [x] providers/claimed-provider.ts (resolver) (12 tests; direct-claim/application/membership precedence, owner-vs-member role, pending state)
+- [x] pro/invoices and pro/invoices/[id] (19 tests; auth/403/404, copy-from-quote, issue gap-free number + lock, payment math partial/paid, issued-edit 409)
+- [x] pro/quotes and pro/quotes/[id] (14 tests; per-Pro numbering, lead pre-fill, VAT-when-registered, status validation + first-transition stamps)
+- [x] pro/claim (8 tests; already-claimed 409, one-pending-per-user, one-pending-per-provider, merged/unclaimed checks, happy pending)
+- [x] pro/members and pro/members/[id] (18 tests; owner/admin invite gate, duplicate + seat-limit 409, link-existing vs pending, owner-immutable, admin-cannot-remove-admin)
+- [x] pro/plan (6 tests; owner-only PATCH, unknown-plan 400, downgrade-below-seats 409)
+- [x] pro/leads/[id] (8 tests; status enum, notes cap, cross-tenant 404, won auto-creates a job)
+- [x] pro/jobs and pro/jobs/[id] (12 tests; title required, status enum, cross-tenant 404)
+- [x] pro/customers and pro/customers/[id] (13 tests; tenant scoping, field validation, partial update, cross-tenant 404)
+- [x] pro/settings (6 tests; profile edits owner/admin-only, notification prefs any role, default prefs)
+
+Phase T2 complete (116 new tests, all green; lint clean). The shared route-test
+Supabase mock needed no changes — same-table multi-query routes (claim, members,
+plan, settings) are driven with a small in-test sequenced ChainResolver. Coverage
+thresholds were left unchanged this phase: actuals cannot be measured cleanly while
+the documented Group A diagnosis-feature tests (7 files / 29 tests) fail at runtime,
+which aborts the coverage run before reports are written. Ratchet thresholds upward
+once Group A is unblocked and a clean `pnpm run test:coverage` completes. The current
+floors (lines 19, branches 65, functions 47, statements 19) only rise with this work.
 
 Phase T3, Account and POPIA route contracts:
 
