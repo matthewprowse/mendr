@@ -21,10 +21,15 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { PGlite } from '@electric-sql/pglite';
 
-const MIGRATIONS_DIR = join(process.cwd(), 'supabase', 'migrations');
+export const MIGRATIONS_DIR = join(process.cwd(), 'supabase', 'migrations');
 
-/** Pro-portal migrations, in apply order, layered on the stub base schema. */
-const PRO_MIGRATIONS = [
+/** Read a migration file's SQL by filename. */
+export function readMigration(file: string): string {
+    return readFileSync(join(MIGRATIONS_DIR, file), 'utf8');
+}
+
+/** Pro-portal migrations, in apply order, layered on the base schema. */
+export const PRO_MIGRATIONS = [
     '20260604130000_lead_consents_and_refinement_count.sql',
     '20260604160000_lead_states_and_provider_merge.sql',
     '20260605123139_provider_claims.sql',
@@ -38,7 +43,7 @@ const PRO_MIGRATIONS = [
     '20260605170401_providers_plan_tier.sql',
 ];
 
-const PREAMBLE = `
+export const ROLES_AUTH_SQL = `
 -- Supabase roles.
 CREATE ROLE anon NOINHERIT;
 CREATE ROLE authenticated NOINHERIT;
@@ -61,7 +66,11 @@ $$;
 CREATE OR REPLACE FUNCTION auth.jwt() RETURNS jsonb LANGUAGE sql STABLE AS $$
   SELECT COALESCE(current_setting('request.jwt.claims', true)::jsonb, '{}'::jsonb)
 $$;
+`;
 
+// Base-table schema only (no roles/auth) — reusable against a real Supabase
+// branch, where the roles and auth schema already exist.
+export const BASE_SCHEMA_SQL = `
 -- Base tables that pre-date the Pro migrations in prod (their earlier creation
 -- migrations are not in the repo). Reproduced from the LIVE production schema
 -- (columns, types, NOT NULL, FK on-delete actions) so the RLS/cascade tests run
@@ -150,7 +159,7 @@ CREATE TABLE public.provider_contact_events (
 // In Supabase, anon/authenticated hold broad table privileges and RLS is the
 // actual gate; we replicate that so a denied read returns 0 rows, not a
 // "permission denied" error.
-const POST_GRANTS = `
+export const POST_GRANTS = `
 GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
 GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated, service_role;
 GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated, service_role;
@@ -184,10 +193,10 @@ const ALL_TABLES =
 /** Spin up a fresh in-memory Postgres with the Pro schema + RLS loaded. */
 export async function createTestDb(): Promise<TestDb> {
     const db = await PGlite.create();
-    await db.exec(PREAMBLE);
+    await db.exec(ROLES_AUTH_SQL);
+    await db.exec(BASE_SCHEMA_SQL);
     for (const file of PRO_MIGRATIONS) {
-        const sql = readFileSync(join(MIGRATIONS_DIR, file), 'utf8');
-        await db.exec(sql);
+        await db.exec(readMigration(file));
     }
     await db.exec(POST_GRANTS);
 
