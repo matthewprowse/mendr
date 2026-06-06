@@ -13,6 +13,7 @@ const QUOTE = 'dddddddd-1111-4111-8111-111111111111';
 const INVOICE = 'eeeeeeee-1111-4111-8111-111111111111';
 const EVENT = '77777777-aaaa-4aaa-8aaa-777777777777';
 const JOB = 'ffffffff-1111-4111-8111-111111111111';
+const DIAG = '99999999-9999-4999-8999-999999999999';
 
 let t: TestDb;
 beforeAll(async () => {
@@ -65,7 +66,8 @@ describe('FK cascades on child delete', () => {
     });
 
     it('cascades lead_states when the contact event is deleted', async () => {
-        await t.raw(`INSERT INTO public.provider_contact_events (id, provider_id) VALUES ('${EVENT}','${PROV_A}')`);
+        await t.raw(`INSERT INTO public.diagnoses (id) VALUES ('${DIAG}')`);
+        await t.raw(`INSERT INTO public.provider_contact_events (id, provider_id, conversation_id) VALUES ('${EVENT}','${PROV_A}','${DIAG}')`);
         await t.raw(`INSERT INTO public.lead_states (contact_event_id, status) VALUES ('${EVENT}','new')`);
         await t.raw(`DELETE FROM public.provider_contact_events WHERE id = '${EVENT}'`);
         expect(await count('lead_states')).toBe(0);
@@ -94,16 +96,20 @@ describe('FK SET NULL — preserve the record, drop the link', () => {
     });
 
     it('nulls job.contact_event_id when the contact event is deleted', async () => {
-        await t.raw(`INSERT INTO public.provider_contact_events (id, provider_id) VALUES ('${EVENT}','${PROV_A}')`);
+        await t.raw(`INSERT INTO public.diagnoses (id) VALUES ('${DIAG}')`);
+        await t.raw(`INSERT INTO public.provider_contact_events (id, provider_id, conversation_id) VALUES ('${EVENT}','${PROV_A}','${DIAG}')`);
         await t.raw(`INSERT INTO public.jobs (id, provider_id, contact_event_id) VALUES ('${JOB}','${PROV_A}','${EVENT}')`);
         await t.raw(`DELETE FROM public.provider_contact_events WHERE id = '${EVENT}'`);
         expect(await count('jobs', `WHERE contact_event_id IS NULL AND id = '${JOB}'`)).toBe(1);
     });
 
-    it('nulls provider.claimed_by_user_id and member links when the user is deleted', async () => {
+    it('nulls member links but preserves provider.claimed_by_user_id on user delete', async () => {
+        // provider_members.user_id has an ON DELETE SET NULL FK (from its migration);
+        // providers.claimed_by_user_id has NO FK in production, so it is left intact.
+        // (Worth flagging: an orphaned claimed_by_user_id is a real data-integrity gap.)
         await t.raw(`INSERT INTO public.provider_members (provider_id, user_id, role) VALUES ('${PROV_A}','${USER_A}','owner')`);
         await t.raw(`DELETE FROM auth.users WHERE id = '${USER_A}'`);
-        expect(await count('providers', `WHERE claimed_by_user_id IS NULL AND id = '${PROV_A}'`)).toBe(1);
         expect(await count('provider_members', `WHERE user_id IS NULL`)).toBe(1);
+        expect(await count('providers', `WHERE claimed_by_user_id = '${USER_A}' AND id = '${PROV_A}'`)).toBe(1);
     });
 });

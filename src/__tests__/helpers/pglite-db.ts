@@ -25,6 +25,7 @@ const MIGRATIONS_DIR = join(process.cwd(), 'supabase', 'migrations');
 
 /** Pro-portal migrations, in apply order, layered on the stub base schema. */
 const PRO_MIGRATIONS = [
+    '20260604130000_lead_consents_and_refinement_count.sql',
     '20260604160000_lead_states_and_provider_merge.sql',
     '20260605123139_provider_claims.sql',
     '20260605152115_provider_customers.sql',
@@ -61,17 +62,86 @@ CREATE OR REPLACE FUNCTION auth.jwt() RETURNS jsonb LANGUAGE sql STABLE AS $$
   SELECT COALESCE(current_setting('request.jwt.claims', true)::jsonb, '{}'::jsonb)
 $$;
 
--- Stub of pre-existing base tables (created before the Pro migrations in prod).
--- Only the columns the Pro migrations reference via FK or policy.
+-- Base tables that pre-date the Pro migrations in prod (their earlier creation
+-- migrations are not in the repo). Reproduced from the LIVE production schema
+-- (columns, types, NOT NULL, FK on-delete actions) so the RLS/cascade tests run
+-- against the real shape, not an invented one. Two harness-only DEFAULTs are
+-- marked below (providers.source / providers.name are NOT NULL with no prod
+-- default — defaulted here so seeds stay terse; nothing under test depends on
+-- them). 'plan' and 'merged_into' are intentionally omitted: the Pro migrations
+-- add them, with their real CHECK/FK, exactly as in prod.
+CREATE TABLE public.diagnoses (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid,
+  title text DEFAULT 'New Diagnosis',
+  customer_address text,
+  primary_trade text,
+  diagnosis jsonb,
+  is_direct_match boolean NOT NULL DEFAULT false,
+  image_refinement_log jsonb NOT NULL DEFAULT '[]'::jsonb,
+  clarification_round integer NOT NULL DEFAULT 0,
+  refinement_count integer NOT NULL DEFAULT 0,
+  created_at timestamptz DEFAULT now()
+);
+
+CREATE TABLE public.profiles (
+  id uuid PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  user_id uuid REFERENCES auth.users(id) ON DELETE CASCADE,
+  first_name text,
+  surname text,
+  username text,
+  avatar_url text,
+  is_admin boolean NOT NULL DEFAULT false,
+  profile_type text NOT NULL DEFAULT 'customer',
+  phone text,
+  phone_verified_at timestamptz,
+  created_at timestamptz DEFAULT now()
+);
+
 CREATE TABLE public.providers (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  claimed_by_user_id uuid REFERENCES auth.users(id) ON DELETE SET NULL,
-  name text,
-  is_active boolean NOT NULL DEFAULT true
+  source text NOT NULL DEFAULT 'test',            -- harness default (prod: none)
+  google_place_id text,
+  name text NOT NULL DEFAULT 'Test Provider',     -- harness default (prod: none)
+  address text,
+  rating numeric,
+  rating_count integer,
+  phone text,
+  website text,
+  latitude double precision,
+  longitude double precision,
+  specialisations text[] NOT NULL DEFAULT '{}',
+  service_areas text[] NOT NULL DEFAULT '{}',
+  certifications text[] NOT NULL DEFAULT '{}',
+  is_active boolean NOT NULL DEFAULT true,
+  is_verified boolean NOT NULL DEFAULT false,
+  notify_realtime boolean NOT NULL DEFAULT true,
+  service_area_center_lat numeric,
+  service_area_center_lng numeric,
+  service_area_radius_km integer NOT NULL DEFAULT 15,
+  mendr_rating numeric,
+  mendr_rating_count integer NOT NULL DEFAULT 0,
+  insurance_cover text,
+  typical_response_time text,
+  pricing_model text,
+  callout_fee numeric,
+  preferred_contact_channel text,
+  field_sources jsonb NOT NULL DEFAULT '{}'::jsonb,
+  claimed_at timestamptz,
+  -- NB: prod has NO foreign key here, so deleting an auth user does NOT null it.
+  claimed_by_user_id uuid,
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now()
 );
+
 CREATE TABLE public.provider_contact_events (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   provider_id uuid NOT NULL REFERENCES public.providers(id) ON DELETE CASCADE,
+  conversation_id uuid NOT NULL REFERENCES public.diagnoses(id) ON DELETE CASCADE,
+  channel text NOT NULL DEFAULT 'whatsapp',                  -- harness default
+  dedupe_key text NOT NULL DEFAULT gen_random_uuid()::text,  -- harness default
+  homeowner_whatsapp text,
+  diagnosis_trade text,
   created_at timestamptz NOT NULL DEFAULT now()
 );
 `;
@@ -84,7 +154,9 @@ const POST_GRANTS = `
 GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
 GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated, service_role;
 GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated, service_role;
-GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO anon, authenticated, service_role;
+-- Deliberately NOT granting EXECUTE on all functions: function-level grants are
+-- left as the migrations set them (e.g. get_user_id_by_email REVOKEs anon/auth),
+-- so we don't paper over a deliberate SECURITY DEFINER lockdown.
 `;
 
 export interface TestDb {
@@ -103,10 +175,11 @@ export interface TestDb {
 }
 
 const ALL_TABLES =
-    'auth.users, public.providers, public.provider_contact_events, public.provider_claims, ' +
-    'public.provider_customers, public.jobs, public.quotes, public.quote_items, public.invoices, ' +
-    'public.invoice_items, public.credit_notes, public.provider_branding, public.provider_members, ' +
-    'public.lead_states, public.provider_document_counters';
+    'auth.users, public.profiles, public.diagnoses, public.providers, public.provider_contact_events, ' +
+    'public.provider_claims, public.provider_customers, public.jobs, public.quotes, public.quote_items, ' +
+    'public.invoices, public.invoice_items, public.credit_notes, public.provider_branding, ' +
+    'public.provider_members, public.lead_states, public.provider_document_counters, ' +
+    'public.lead_contact_consents';
 
 /** Spin up a fresh in-memory Postgres with the Pro schema + RLS loaded. */
 export async function createTestDb(): Promise<TestDb> {

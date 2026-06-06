@@ -11,6 +11,7 @@ const USER_B = '22222222-2222-4222-8222-222222222222';
 const PROV_A = 'aaaaaaaa-1111-4111-8111-111111111111';
 const PROV_B = 'bbbbbbbb-2222-4222-8222-222222222222';
 const EVENT = '77777777-aaaa-4aaa-8aaa-777777777777';
+const DIAG = '99999999-9999-4999-8999-999999999999';
 
 let t: TestDb;
 beforeAll(async () => {
@@ -53,7 +54,8 @@ describe('CHECK constraints', () => {
     });
 
     it('rejects an invalid lead status', async () => {
-        await t.raw(`INSERT INTO public.provider_contact_events (id, provider_id) VALUES ('${EVENT}','${PROV_A}')`);
+        await t.raw(`INSERT INTO public.diagnoses (id) VALUES ('${DIAG}')`);
+        await t.raw(`INSERT INTO public.provider_contact_events (id, provider_id, conversation_id) VALUES ('${EVENT}','${PROV_A}','${DIAG}')`);
         await expect(
             t.raw(`INSERT INTO public.lead_states (contact_event_id, status) VALUES ('${EVENT}','cold')`),
         ).rejects.toThrow();
@@ -99,7 +101,8 @@ describe('unique (partial) indexes', () => {
     });
 
     it('allows only one job per originating contact event', async () => {
-        await t.raw(`INSERT INTO public.provider_contact_events (id, provider_id) VALUES ('${EVENT}','${PROV_A}')`);
+        await t.raw(`INSERT INTO public.diagnoses (id) VALUES ('${DIAG}')`);
+        await t.raw(`INSERT INTO public.provider_contact_events (id, provider_id, conversation_id) VALUES ('${EVENT}','${PROV_A}','${DIAG}')`);
         await t.raw(`INSERT INTO public.jobs (provider_id, contact_event_id) VALUES ('${PROV_A}','${EVENT}')`);
         await expect(
             t.raw(`INSERT INTO public.jobs (provider_id, contact_event_id) VALUES ('${PROV_A}','${EVENT}')`),

@@ -11,6 +11,7 @@ const USER_A = '11111111-1111-4111-8111-111111111111';
 const USER_B = '22222222-2222-4222-8222-222222222222';
 const PROV_A = 'aaaaaaaa-1111-4111-8111-111111111111';
 const PROV_B = 'bbbbbbbb-2222-4222-8222-222222222222';
+const DIAG = '99999999-9999-4999-8999-999999999999';
 
 let t: TestDb;
 
@@ -139,15 +140,47 @@ describe('RLS isolation — child tables (joined through parent)', () => {
     });
 
     it('lead_states follow the contact event → provider', async () => {
-        await t.raw(`INSERT INTO public.provider_contact_events (id, provider_id) VALUES
-            ('77777777-aaaa-4aaa-8aaa-777777777777','${PROV_A}'),
-            ('88888888-bbbb-4bbb-8bbb-888888888888','${PROV_B}')`);
+        await t.raw(`INSERT INTO public.diagnoses (id) VALUES ('${DIAG}')`);
+        await t.raw(`INSERT INTO public.provider_contact_events (id, provider_id, conversation_id) VALUES
+            ('77777777-aaaa-4aaa-8aaa-777777777777','${PROV_A}','${DIAG}'),
+            ('88888888-bbbb-4bbb-8bbb-888888888888','${PROV_B}','${DIAG}')`);
         await t.raw(`INSERT INTO public.lead_states (contact_event_id, status) VALUES
             ('77777777-aaaa-4aaa-8aaa-777777777777','new'),
             ('88888888-bbbb-4bbb-8bbb-888888888888','new')`);
         expect(await t.asUser(USER_A, 'SELECT * FROM public.lead_states')).toHaveLength(1);
         expect(await t.asUser(USER_B, 'SELECT * FROM public.lead_states')).toHaveLength(1);
         expect(await t.asAnon('SELECT * FROM public.lead_states')).toHaveLength(0);
+    });
+});
+
+describe('RLS isolation — POPIA consent table (homeowner-scoped)', () => {
+    it('lead_contact_consents: a homeowner reads only their own consents', async () => {
+        await t.raw(`INSERT INTO public.lead_contact_consents (user_id, provider_id) VALUES
+            ('${USER_A}','${PROV_A}'),
+            ('${USER_B}','${PROV_B}')`);
+        const a = await t.asUser(USER_A, 'SELECT * FROM public.lead_contact_consents');
+        expect(a).toHaveLength(1);
+        expect((a[0] as { user_id: string }).user_id).toBe(USER_A);
+        expect(await t.asAnon('SELECT * FROM public.lead_contact_consents')).toHaveLength(0);
+        expect(await t.asService('SELECT * FROM public.lead_contact_consents')).toHaveLength(2);
+    });
+
+    it('lead_contact_consents: a homeowner can revoke their own but not another’s', async () => {
+        await t.raw(`INSERT INTO public.lead_contact_consents (id, user_id, provider_id) VALUES
+            ('aaaa1111-1111-4111-8111-111111111111','${USER_A}','${PROV_A}'),
+            ('bbbb2222-2222-4222-8222-222222222222','${USER_B}','${PROV_B}')`);
+        // A revokes A's own consent — allowed.
+        await t.asUser(USER_A, `UPDATE public.lead_contact_consents SET revoked_at = now() WHERE id = 'aaaa1111-1111-4111-8111-111111111111'`);
+        const aOwn = await t.asService<{ revoked_at: string | null }>(
+            `SELECT revoked_at FROM public.lead_contact_consents WHERE id = 'aaaa1111-1111-4111-8111-111111111111'`,
+        );
+        expect(aOwn[0].revoked_at).not.toBeNull();
+        // A tries to revoke B's consent — RLS filters it out, zero rows affected.
+        await t.asUser(USER_A, `UPDATE public.lead_contact_consents SET revoked_at = now() WHERE id = 'bbbb2222-2222-4222-8222-222222222222'`);
+        const bOwn = await t.asService<{ revoked_at: string | null }>(
+            `SELECT revoked_at FROM public.lead_contact_consents WHERE id = 'bbbb2222-2222-4222-8222-222222222222'`,
+        );
+        expect(bOwn[0].revoked_at).toBeNull();
     });
 });
 
