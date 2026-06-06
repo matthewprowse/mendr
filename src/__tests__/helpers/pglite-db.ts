@@ -21,7 +21,11 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { PGlite } from '@electric-sql/pglite';
 
-export const MIGRATIONS_DIR = join(process.cwd(), 'supabase', 'migrations');
+// After the migration squash, the individual incremental migrations live here
+// (migrations/ holds only the generated baseline). The PGlite/pg harnesses load
+// these specific Pro migrations on a stub base; the baseline is what a real
+// Supabase branch builds from.
+export const MIGRATIONS_DIR = join(process.cwd(), 'supabase', 'migrations_pre_baseline');
 
 /** Read a migration file's SQL by filename. */
 export function readMigration(file: string): string {
