@@ -1,11 +1,13 @@
 /* eslint-disable no-console */
 import { createBrowserClient } from '@supabase/ssr';
+import type { SupabaseClient } from '@supabase/supabase-js';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 
 // Singleton instance to avoid "Multiple GoTrueClient instances" warning
-let supabaseInstance: any = null;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let supabaseInstance: SupabaseClient | Record<string, any> | null = null;
 let hasWarnedMissingEnv = false;
 
 export const getSupabase = () => {

@@ -56,7 +56,7 @@ export async function createSupabaseAdminClient() {
  * Anon Supabase client for Server Components when env is configured; otherwise `null`
  * (caller may fall back to client-side loading).
  */
-export async function createServerSupabaseClient() {
+export async function tryCreateSupabaseServerClient() {
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
     if (!url || !key) {
