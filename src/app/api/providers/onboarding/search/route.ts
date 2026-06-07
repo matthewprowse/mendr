@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 // Required env vars: UPSTASH_REDIS_REST_URL, UPSTASH_REDIS_REST_TOKEN
 //
 // Onboarding business search. Searches the Mendr `providers` table (our own

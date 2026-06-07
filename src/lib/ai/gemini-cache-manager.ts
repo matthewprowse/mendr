@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 /**
  * Gemini context-cache helper.
  *

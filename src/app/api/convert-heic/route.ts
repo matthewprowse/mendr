@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 // Required env vars: UPSTASH_REDIS_REST_URL, UPSTASH_REDIS_REST_TOKEN (optional — falls back to in-memory)
 
 import { NextRequest, NextResponse } from 'next/server';

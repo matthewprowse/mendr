@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 /**
  * Contractor reply to a homeowner Mendr review (`job_outcomes` row).
  *

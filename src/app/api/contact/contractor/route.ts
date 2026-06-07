@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 import { NextRequest, NextResponse } from 'next/server';
 import { createHash } from 'crypto';
 import { checkRateLimit } from '@/lib/rate-limit-config';

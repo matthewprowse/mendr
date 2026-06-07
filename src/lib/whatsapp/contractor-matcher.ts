@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 /**
  * Contractor matching + lead logging reuse layer (part of Phase A4).
  *

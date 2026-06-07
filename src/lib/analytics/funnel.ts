@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 /**
  * Durable per-diagnosis funnel stamps (Phase 2 of the analytics rebuild).
  *

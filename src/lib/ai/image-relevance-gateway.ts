@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 /**
  * Image Relevance Gateway — cheap pre-pass that runs BEFORE the expensive
  * diagnosis pipeline (Agent 2a classify + Agent 2b prose on 3.5 Flash) to

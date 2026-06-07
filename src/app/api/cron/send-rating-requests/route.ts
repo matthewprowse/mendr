@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 import { NextRequest, NextResponse } from 'next/server';
 import { isAuthorizedCronRequest } from '@/lib/auth/cron-auth';
 import { createSupabaseAdminClient } from '@/lib/auth/supabase-server';

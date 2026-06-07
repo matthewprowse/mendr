@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 /**
  * The forgiving parser (Designing For Every User).
  *

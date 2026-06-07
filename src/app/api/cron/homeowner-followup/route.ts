@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 /**
  * Cron: homeowner post-diagnosis follow-up
  *

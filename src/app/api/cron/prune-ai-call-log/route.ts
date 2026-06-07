@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 /**
  * Cron: prune ai_call_log rows older than the retention window.
  *

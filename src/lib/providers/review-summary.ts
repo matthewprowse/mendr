@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 import { Type } from '@google/genai';
 import { getGenAiClient, GEMINI_MODEL_NAME } from '@/lib/ai/ai-client';
 

@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 /**
  * Daily diagnosis quota check for /api/diagnose.
  *

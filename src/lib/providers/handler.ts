@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 import { NextRequest, NextResponse } from 'next/server';
 import { logAiEvent } from '@/lib/ai/ai-logging';
 import { checkRateLimit } from '@/lib/rate-limit-config';

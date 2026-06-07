@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 /**
  * Admin-only endpoint to send cold outreach emails to unregistered contractors.
  *

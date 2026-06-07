@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 // Required env vars: NEXT_PUBLIC_SUPABASE_URL, RESEND_API_KEY, RESEND_FROM,
 //                    SEND_EMAIL_HOOK_SECRET
 

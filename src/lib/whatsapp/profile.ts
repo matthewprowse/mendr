@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 /**
  * Profile helpers for the WhatsApp bot.
  *

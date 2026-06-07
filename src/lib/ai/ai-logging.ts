@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 /**
  * Structured logging utilities for AI/diagnosis pipeline events.
  *

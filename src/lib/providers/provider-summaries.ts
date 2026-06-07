@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 /**
  * Server-only: generate provider copy (customer review summary, about business, past work)
  * using Gemini. Used when stored values are missing on the Pro page.

@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 import { NextRequest } from 'next/server';
 import { createHmac, timingSafeEqual } from 'crypto';
 import { createSupabaseAdminClient } from '@/lib/auth/supabase-server';

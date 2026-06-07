@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 /**
  * Phase 2 of `docs/Diagnosis-Architecture-Hardening-Plan.md` — fire-and-forget
  * persistence wrapper for Agent 3 (self-critique).

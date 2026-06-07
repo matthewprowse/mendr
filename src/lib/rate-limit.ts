@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 /**
  * Distributed rate limiting with Upstash Redis.
  *

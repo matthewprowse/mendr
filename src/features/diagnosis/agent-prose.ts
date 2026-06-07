@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 /**
  * Agent 2b — Prose generation sub-agent.
  *

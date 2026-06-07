@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 // Required env vars: SUPABASE_SERVICE_ROLE_KEY, NEXT_PUBLIC_SUPABASE_URL, ADMIN_PASSWORD
 //
 // Admin-only AI pricing management.

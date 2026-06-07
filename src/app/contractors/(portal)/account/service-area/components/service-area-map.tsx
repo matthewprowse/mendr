@@ -1,4 +1,5 @@
 'use client';
+/* eslint-disable no-console */
 
 import { useEffect, useRef, useState } from 'react';
 import { importLibrary } from '@googlemaps/js-api-loader';

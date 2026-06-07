@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 /**
  * Simulator API (Phase A5).
  *

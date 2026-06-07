@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 /**
  * Phase 3 of the Diagnosis Architecture Hardening Plan.
  *

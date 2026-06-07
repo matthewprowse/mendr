@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 import { NextRequest, NextResponse } from 'next/server';
 import { createHmac } from 'crypto';
 import { isAuthorizedCronRequest } from '@/lib/auth/cron-auth';

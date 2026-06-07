@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 /**
  * Lists profiles for the simulator's "Simulating as" dropdown.
  *

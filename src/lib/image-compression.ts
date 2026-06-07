@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 /**
  * File: image-compression.ts
  * Description: Client-side image compression utility to reduce payload size and AI costs.

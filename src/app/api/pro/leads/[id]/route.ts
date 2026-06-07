@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 /**
  * PATCH /api/pro/leads/[id] — update a lead's pipeline status (Phase 4).
  *

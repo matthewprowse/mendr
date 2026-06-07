@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 /**
  * Server-only: fetch a provider from Google Places by place id, upsert into
  * `providers` and `reviews`, then return the provider id.

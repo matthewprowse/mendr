@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 /**
  * Pure helpers for the /api/diagnose route. Extracted in Phase 2 so the
  * route handler stays a thin orchestrator and these utilities can be unit

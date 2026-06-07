@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 /**
  * Server-side contractor profile for `/contractors/[id]` and `GET /api/providers/[id]`.
  * Same behaviour as the former inline route handler: Supabase admin, sanitisation,

@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 /**
  * Review ingestion — upsert DataForSEO reviews into the reviews table.
  *

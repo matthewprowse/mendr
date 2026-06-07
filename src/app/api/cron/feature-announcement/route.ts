@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 /**
  * Cron: feature announcement ("What's new") emails.
  *

@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 /**
  * Request parsing + validation for /api/diagnose.
  *

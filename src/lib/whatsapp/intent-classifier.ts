@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 /**
  * Layer 2 of the forgiving parser: a cheap constrained intent classifier.
  *

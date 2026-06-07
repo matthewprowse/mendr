@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 /**
  * Cron job: send day-3 and day-7 onboarding emails to approved contractors.
  *

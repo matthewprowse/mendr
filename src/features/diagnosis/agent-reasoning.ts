@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 /**
  * Agent 2c — Diagnostic Reasoning sub-agent.
  *

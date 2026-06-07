@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 /**
  * Fire-and-forget background persistence for /api/providers. Extracted from
  * `handler.ts` in Phase 2.

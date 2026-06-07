@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 /**
  * DataForSEO Business Data — Google Reviews (Standard task_post / task_get).
  *

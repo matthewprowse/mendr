@@ -1,4 +1,5 @@
 'use client';
+/* eslint-disable no-console */
 
 /**
  * Two-step homeowner onboarding (Phase 1 of the onboarding plan).

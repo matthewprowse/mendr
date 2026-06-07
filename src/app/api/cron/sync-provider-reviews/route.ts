@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 // Required env vars: NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY,
 //                    CRON_SECRET, DATAFORSEO_LOGIN, DATAFORSEO_PASSWORD
 

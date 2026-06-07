@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 /**
  * `analysisPhase === 'image_thought_only'` warm-up handler for /api/diagnose.
  *

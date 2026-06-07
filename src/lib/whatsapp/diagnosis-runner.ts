@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 /**
  * Diagnosis reuse layer (Phase A2).
  *

@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 /**
  * WhatsApp session read/write layer (Phase A1).
  *

@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 /**
  * Multi-agent pipeline orchestrator for /api/diagnose.
  *

@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 /**
  * File: image-store.ts
  * Description: Storage utility for images between pages.

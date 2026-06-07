@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 /**
  * Image → Gemini inline-data conversion for the /api/diagnose route.
  *

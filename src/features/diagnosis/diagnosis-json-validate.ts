@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 import { z } from 'zod';
 
 /** Loose schema to catch obvious shape drift; passthrough preserves unknown fields. */
