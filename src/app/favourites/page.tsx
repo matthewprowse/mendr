@@ -56,7 +56,7 @@ export default async function FavouritesPage() {
                     specialisations: (p.specialisations ?? []) as string[],
                 };
             })
-            .filter((p): p is SavedProvider => p !== null);
+            .filter((p) => p !== null) as SavedProvider[];
     }
 
     return <FavouritesClient initialProviders={providers} />;

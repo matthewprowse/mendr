@@ -61,3 +61,62 @@ export const FAQS = [
         a: 'Yes. You can message us from the contact form for homeowner, provider, or partnership questions.',
     },
 ] as const;
+
+import {
+    Zap,
+    Droplets,
+    ShieldCheck,
+    Wind,
+    Home,
+    Wrench,
+} from 'lucide-react';
+
+/**
+ * Six featured trade categories shown on the homepage "What we cover" section.
+ * Deliberately a curated subset of SERVICE_LABELS — pick the six most common
+ * homeowner fault types for maximum landing-page relevance.
+ */
+export const TRADES = [
+    {
+        slug: 'electrical',
+        name: 'Electrical',
+        descriptor: 'Trips, outages, wiring faults, and load-shedding damage.',
+        icon: Zap,
+        examples: ['Tripping breakers', 'Dead plugs or lights', 'Geyser element failure'],
+    },
+    {
+        slug: 'plumbing',
+        name: 'Plumbing',
+        descriptor: 'Leaks, burst pipes, blocked drains, and geyser issues.',
+        icon: Droplets,
+        examples: ['Leaking tap or pipe', 'Blocked drain', 'No hot water'],
+    },
+    {
+        slug: 'security',
+        name: 'Security',
+        descriptor: 'Alarm systems, electric fences, CCTV, and access control.',
+        icon: ShieldCheck,
+        examples: ['Alarm triggering falsely', 'Gate not opening', 'Camera offline'],
+    },
+    {
+        slug: 'air-conditioning',
+        name: 'Air Conditioning',
+        descriptor: 'Cooling, heating, and ventilation faults for all unit types.',
+        icon: Wind,
+        examples: ['Unit not cooling', 'Water dripping inside', 'Strange noise from unit'],
+    },
+    {
+        slug: 'roofing',
+        name: 'Roofing',
+        descriptor: 'Leaks, damaged tiles, gutters, and waterproofing failures.',
+        icon: Home,
+        examples: ['Roof leaking after rain', 'Damaged or missing tiles', 'Blocked gutters'],
+    },
+    {
+        slug: 'building',
+        name: 'Building & Construction',
+        descriptor: 'Structural cracks, damp, rising water, and brick / plaster damage.',
+        icon: Wrench,
+        examples: ['Cracks in walls', 'Rising damp', 'Ceiling collapse risk'],
+    },
+] as const;

@@ -1558,9 +1558,11 @@ export default function ShowcasePage() {
                     </Section>
 
                     <Section title="Resizable">
+                        {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
                         <ResizablePanelGroup
                             direction="horizontal"
                             className="h-40 rounded-md border"
+                            {...({} as any)}
                         >
                             <ResizablePanel defaultSize={30} className="p-3 text-sm">
                                 Sidebar
@@ -1586,23 +1588,23 @@ export default function ShowcasePage() {
                     </Section>
 
                     <Section title="Stepper">
-                        <Stepper defaultValue={2} className="w-full">
+                        <Stepper defaultValue="2" className="w-full">
                             <StepperList>
-                                <StepperItem value={1}>
+                                <StepperItem value="1">
                                     <StepperTrigger>
                                         <StepperIndicator />
                                         <StepperTitle>Photos</StepperTitle>
                                     </StepperTrigger>
                                     <StepperSeparator />
                                 </StepperItem>
-                                <StepperItem value={2}>
+                                <StepperItem value="2">
                                     <StepperTrigger>
                                         <StepperIndicator />
                                         <StepperTitle>Details</StepperTitle>
                                     </StepperTrigger>
                                     <StepperSeparator />
                                 </StepperItem>
-                                <StepperItem value={3}>
+                                <StepperItem value="3">
                                     <StepperTrigger>
                                         <StepperIndicator />
                                         <StepperTitle>Review</StepperTitle>

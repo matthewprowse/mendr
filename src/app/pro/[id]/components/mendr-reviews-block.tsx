@@ -121,8 +121,8 @@ export function MendrReviewsBlock({
                 </p>
             ) : (
                 <ul className="flex flex-col">
-                    {mendr.reviews.map((r) => (
-                        <ReviewItem key={r.id} review={r} businessName={businessName} />
+                    {mendr.reviews.map((r, i) => (
+                        <ReviewItem key={i} review={r} businessName={businessName} />
                     ))}
                 </ul>
             )}

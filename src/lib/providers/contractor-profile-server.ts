@@ -5,6 +5,22 @@
  * LLM content guard on prose fields, leak-triggered enrich queue.
  */
 
+/** One homeowner-visible review from the Mendr job_outcomes table. */
+export interface MendrPublicReview {
+    rating: number | null;
+    createdAt: string | null;
+    outcome: string | null;
+    contractorReply: string | null;
+    contractorReplyAt: string | null;
+}
+
+/** Aggregated Mendr rating summary for a provider's public profile. */
+export interface MendrRatingSummary {
+    rating: number | null;
+    count: number;
+    reviews: MendrPublicReview[];
+}
+
 import { createSupabaseAdminClient } from '@/lib/auth/supabase-server';
 import {
     sanitizeProfileText,
