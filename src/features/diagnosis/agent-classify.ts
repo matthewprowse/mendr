@@ -1,4 +1,4 @@
-/* eslint-disable no-console */
+import { logger } from '@/lib/logging/logger';
 /**
  * Agent 2a — Classification sub-agent.
  *
@@ -244,15 +244,11 @@ export function finalizeClassificationAgainstCatalogAndTaxonomy(
     // in production (e.g. subcategory_id='garage_door_fault' with unserviced=
     // true would otherwise short-circuit to N/A).
     if (unserviced && sid !== TAXONOMY_NONE_ID && getSubcategoryById(sid)) {
-        console.warn(
-            JSON.stringify({
-                event: 'classification.unserviced_overridden_by_taxonomy',
-                reason:
-                    'model returned unserviced=true alongside a valid subcategory_id; trusting the taxonomy',
-                subcategory_id: sid,
-                model_trade: trade,
-            }),
-        );
+        logger.warn('classification_unserviced_overridden_by_taxonomy', {
+            reason: 'model returned unserviced=true alongside a valid subcategory_id; trusting the taxonomy',
+            subcategory_id: sid,
+            model_trade: trade,
+        });
         unserviced = false;
         parsed.unserviced = false;
     }
@@ -544,6 +540,17 @@ export async function runClassification(
 
         const usage = result.usageMetadata;
 
+        // Structured observability log for AI cost tracking
+        logger.info('gemini_call_complete', {
+            agent_step: 'classify',
+            model: GEMINI_MODEL_NAME,
+            cached_tokens: usage?.cachedContentTokenCount ?? 0,
+            input_tokens: usage?.promptTokenCount ?? 0,
+            output_tokens: usage?.candidatesTokenCount ?? 0,
+            thinking_tokens: usage?.thoughtsTokenCount ?? 0,
+            cache_hit: (usage?.cachedContentTokenCount ?? 0) > 0,
+        });
+
         // Fire-and-forget cost log — never blocks the response
         void logGeminiUsage(usage, {
             endpoint: 'diagnose/classify',
@@ -557,8 +564,9 @@ export async function runClassification(
         const out = parseClassificationResponse(raw, allowedTradeLabels);
         if (!out) {
             const reason = raw ? 'JSON parse failed' : 'empty model text';
-            console.error(`[agent-classify] ${reason}`, raw ? raw.slice(0, 400) : {
-                cand: result.candidates?.length ?? 0,
+            logger.error('agent_classify_parse_error', new Error(reason), {
+                raw_preview: raw ? raw.slice(0, 400) : undefined,
+                candidates: result.candidates?.length ?? 0,
             });
             logPipelineStep({
                 stepName: 'agent-classify', status: 'error', durationMs: Date.now() - stepStart,
@@ -578,7 +586,7 @@ export async function runClassification(
         });
         return out;
     } catch (e) {
-        console.error('[agent-classify] generateContent threw', e);
+        logger.error('agent_classify_generate_error', e);
         logPipelineStep({
             stepName: 'agent-classify', status: 'error', durationMs: Date.now() - stepStart,
             conversationId: ctx?.conversationId, userId: ctx?.userId,

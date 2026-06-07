@@ -84,6 +84,8 @@ describe('extractClarificationOptions', () => {
             primary_trade: 'Plumbing',
             clarification_questions: [],
             recommendations: [],
+            thinking: '',
+            action_required: '',
         } as Parameters<typeof extractClarificationOptions>[0]);
         expect(result).toBeNull();
     });
@@ -101,6 +103,8 @@ describe('extractClarificationOptions', () => {
             primary_trade: 'Plumbing',
             clarification_questions: ['Is it dripping?', 'Is there flooding?'],
             recommendations: [],
+            thinking: '',
+            action_required: '',
         } as Parameters<typeof extractClarificationOptions>[0]);
         expect(result).not.toBeNull();
         expect(result?.options).toHaveLength(2);
@@ -114,7 +118,7 @@ describe('handleMessage — global commands', () => {
         const { resetSession } = await import('../session-manager');
 
         const result = await handleMessage({
-            phone: '+27821234567',
+            from: '+27821234567',
             text: '/restart',
         });
 
