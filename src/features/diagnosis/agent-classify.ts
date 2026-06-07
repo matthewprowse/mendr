@@ -5,17 +5,14 @@
  * (trade, urgency, confidence, flags) BEFORE the prose agent runs.
  */
 
-import { SchemaType } from '@google/generative-ai';
-import type { Content as GeminiContent } from '@google/generative-ai';
+import { Type } from '@google/genai';
+import type { Content as GeminiContent } from '@google/genai';
 import {
     getDiagnosisModel,
     getDiagnosisModelByName,
     GEMINI_MODEL_NAME,
 } from '@/lib/ai/ai-diagnosis-backend';
-import {
-    getGeminiApiKey,
-    getGeminiModelFromCachedContent,
-} from '@/lib/ai/ai-client';
+import { getGenAiClient } from '@/lib/ai/ai-client';
 import { getOrCreateCachedSystemPrompt } from '@/lib/ai/gemini-cache-manager';
 import { logGeminiUsage } from '@/lib/ai/ai-cost-logger';
 import { logPipelineStep } from '@/lib/ai/ai-logging';
@@ -61,73 +58,73 @@ export interface ClassificationResult {
 }
 
 const CLASSIFICATION_SCHEMA = {
-    type: SchemaType.OBJECT,
+    type: Type.OBJECT,
     properties: {
         subcategory_id: {
-            type: SchemaType.STRING,
+            type: Type.STRING,
             description: `ROUTING SUBCATEGORIES id. Allowed: ${CLASSIFICATION_SUBCATEGORY_ENUM.join(', ')}. Use none_unmapped when none fit.`,
         },
         trade: {
-            type: SchemaType.STRING,
+            type: Type.STRING,
             description:
                 'Exactly one of the allowed trade labels, or "N/A" when rejected, unserviced, or unclear.',
         },
         trade_detail: {
-            type: SchemaType.STRING,
+            type: Type.STRING,
             description:
                 'Short specialty (max 12 words, Headline-Style Title Case). Empty string when not applicable.',
         },
         confidence: {
-            type: SchemaType.INTEGER,
+            type: Type.INTEGER,
             description:
                 'Integer 0–100. Below 85 → requires_clarification true.',
         },
         rejected: {
-            type: SchemaType.BOOLEAN,
+            type: Type.BOOLEAN,
             description:
                 'True ONLY when content is clearly not home maintenance.',
         },
         requires_clarification: {
-            type: SchemaType.BOOLEAN,
+            type: Type.BOOLEAN,
             description: 'True when confidence < 85 or genuinely ambiguous.',
         },
         unserviced: {
-            type: SchemaType.BOOLEAN,
+            type: Type.BOOLEAN,
             description:
                 'True when home-related but not in allowed trades.',
         },
         refetch_providers: {
-            type: SchemaType.BOOLEAN,
+            type: Type.BOOLEAN,
             description:
                 'True ONLY when user asks for different/more providers.',
         },
         unsupported_reason: {
-            type: SchemaType.STRING,
+            type: Type.STRING,
             description: 'One sentence explaining why trade is N/A. Empty string when trade is valid.',
         },
         failed_component: {
-            type: SchemaType.STRING,
+            type: Type.STRING,
             description:
                 'The single specific component that has failed (e.g. "torsion spring", "thermostat", "pressure relief valve", "PCB board", "stop valve"). Empty string only when no component can be identified.',
         },
         cascading_damage: {
-            type: SchemaType.STRING,
+            type: Type.STRING,
             description:
                 'Secondary mechanical or electrical damage caused by the primary failure (e.g. "bent connecting rod from spring loss", "warped frame from sustained leak", "tripped earth leakage from short to chassis"). Empty string when none.',
         },
         trade_candidates: {
-            type: SchemaType.ARRAY,
+            type: Type.ARRAY,
             description:
                 'Top 3 candidate trades you considered, ranked highest-first. Each candidate is the trade label (from the allowed list) and a score 0-100. Always include 3 entries when trade is set or trade is N/A (so the UI can show "did you mean ..."). Order by score descending. Repeat the chosen trade as the first entry. Empty array only if no trade could be considered at all.',
             items: {
-                type: SchemaType.OBJECT,
+                type: Type.OBJECT,
                 properties: {
                     trade: {
-                        type: SchemaType.STRING,
+                        type: Type.STRING,
                         description: 'One of the allowed trade labels exactly.',
                     },
                     score: {
-                        type: SchemaType.INTEGER,
+                        type: Type.INTEGER,
                         description: 'Integer 0-100. Higher = stronger candidate.',
                     },
                 },
@@ -506,19 +503,13 @@ export async function runClassification(
             process.env.GEMINI_CACHE_ENABLED !== '0' &&
             variantCtx.variant === 'v3.5' &&
             effectiveModel === 'gemini-3.5-flash';
-        const apiKey = cacheEnabled ? getGeminiApiKey() : null;
-        const cachedContent =
-            cacheEnabled && apiKey
-                ? await getOrCreateCachedSystemPrompt({
-                      apiKey,
-                      model: `models/${effectiveModel}`,
-                      systemInstruction: systemBlock,
-                      ttlSeconds: 3600,
-                  })
-                : null;
-        const model = cachedContent
-            ? getGeminiModelFromCachedContent(cachedContent)
-            : baseModel;
+        const cachedContentName = cacheEnabled
+            ? await getOrCreateCachedSystemPrompt({
+                  model: `models/${effectiveModel}`,
+                  systemInstruction: systemBlock,
+                  ttlSeconds: 3600,
+              })
+            : null;
 
         // System instruction is passed separately from conversation history so it is
         // never accumulated into multi-turn context tokens on follow-up calls.
@@ -534,30 +525,23 @@ export async function runClassification(
             },
         ];
 
-        // When we have a cached content, the system instruction is already
-        // inside it — DO NOT pass systemInstruction again or it overrides.
-        const generateRequest = {
-            // generationConfig is cast via `as any` because the Gemini SDK
-            // type doesn't include `thinkingConfig` yet, but the API accepts
-            // it (prose agent uses the same pattern). The variant resolver
-            // sets thinkingConfig only on v3.5; v2.5 path leaves it undefined.
+        const ai = getGenAiClient();
+        const geminiStartedAt = Date.now();
+        const result = await ai.models.generateContent({
+            model: baseModel.model,
             contents: classContents,
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            generationConfig: {
+            config: {
                 ...sampling,
                 responseMimeType: 'application/json',
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                responseSchema: ORDERED_SCHEMA as any,
-            } as any,
-            ...(cachedContent
-                ? {}
-                : { systemInstruction: { role: 'system' as const, parts: [{ text: systemBlock }] } }),
-        };
-        const geminiStartedAt = Date.now();
-        const result = await model.generateContent(generateRequest);
+                responseSchema: ORDERED_SCHEMA,
+                ...(cachedContentName
+                    ? { cachedContent: cachedContentName }
+                    : { systemInstruction: systemBlock }),
+            },
+        });
         const latencyMs = Date.now() - geminiStartedAt;
 
-        const usage = result.response.usageMetadata;
+        const usage = result.usageMetadata;
 
         // Fire-and-forget cost log — never blocks the response
         void logGeminiUsage(usage, {
@@ -568,12 +552,12 @@ export async function runClassification(
             latencyMs,
         });
 
-        const raw = result.response.text().trim();
+        const raw = (result.text ?? '').trim();
         const out = parseClassificationResponse(raw, allowedTradeLabels);
         if (!out) {
             const reason = raw ? 'JSON parse failed' : 'empty model text';
             console.error(`[agent-classify] ${reason}`, raw ? raw.slice(0, 400) : {
-                cand: result.response.candidates?.length ?? 0,
+                cand: result.candidates?.length ?? 0,
             });
             logPipelineStep({
                 stepName: 'agent-classify', status: 'error', durationMs: Date.now() - stepStart,

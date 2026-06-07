@@ -16,8 +16,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { createSupabaseAdminClient } from '@/lib/auth/supabase-server';
 import { isAuthorizedCronRequest } from '@/lib/auth/cron-auth';
-import { SchemaType } from '@google/generative-ai';
-import { getGeminiModel } from '@/lib/ai/ai-client';
+import { Type } from '@google/genai';
+import { getGenAiClient, GEMINI_MODEL_NAME } from '@/lib/ai/ai-client';
 import { normalizeProviderName } from '@/lib/providers/provider-display-name';
 
 export const maxDuration = 60; // seconds — Vercel Hobby allows up to 60s
@@ -302,7 +302,7 @@ async function generateGeminiSummary(
     app: QueuedApplication,
     payload: EnrichmentPayload,
 ): Promise<string> {
-    const model = getGeminiModel();
+    const ai = getGenAiClient();
 
     const providerSection = [
         payload.provider.name && `Business: ${payload.provider.name}`,
@@ -339,28 +339,28 @@ ${reviewSection}
 Write a concise public profile summary in 2–3 short paragraphs. Direct, warm, and factual — no marketing fluff. Describe what they do and who they are. Weave in customer sentiment if available (no verbatim quotes). End with coverage area or availability if the data supports it. Return a JSON object with a single "summary" field.`;
 
     try {
-        const result = await model.generateContent({
+        const result = await ai.models.generateContent({
+            model: GEMINI_MODEL_NAME,
             contents: [{ role: 'user', parts: [{ text: prompt }] }],
-            generationConfig: {
+            config: {
                 temperature: 0.3,
                 topK: 20,
                 topP: 0.75,
                 maxOutputTokens: 512,
                 responseMimeType: 'application/json',
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 responseSchema: {
-                    type: SchemaType.OBJECT,
+                    type: Type.OBJECT,
                     properties: {
                         summary: {
-                            type: SchemaType.STRING,
+                            type: Type.STRING,
                             description: '2–3 short paragraphs. Direct, warm, factual. Max 200 words. No headings, no bullet points, no markdown.',
                         },
                     },
                     required: ['summary'],
-                } as any,
+                },
             },
         });
-        const raw    = result.response.text().trim();
+        const raw    = (result.text ?? '').trim();
         const parsed = JSON.parse(raw) as { summary: string };
         return parsed.summary?.trim() || 'Profile summary could not be generated.';
     } catch (err) {

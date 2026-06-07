@@ -37,7 +37,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 
-import type { Content as GeminiContent } from '@google/generative-ai';
+import type { Content as GeminiContent } from '@google/genai';
 
 import { runClassification } from '@/features/diagnosis/agent-classify';
 import { runProseGeneration } from '@/features/diagnosis/agent-prose';

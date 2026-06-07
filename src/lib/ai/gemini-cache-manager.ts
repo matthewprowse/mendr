@@ -1,64 +1,34 @@
 /**
  * Gemini context-cache helper.
  *
- * Wraps `@google/generative-ai/server`'s `GoogleAICacheManager` with a tiny
- * in-memory lookup so we don't re-create the same cached system prompt on
- * every diagnosis. Saves ~90% of input-token cost on the cached portion.
+ * Wraps the @google/genai `ai.caches.*` API with a tiny in-memory lookup so
+ * we don't re-create the same cached system prompt on every diagnosis.
+ * Saves ~90% of input-token cost on the cached portion.
  *
  * Use case: the classifier's system prompt (taxonomy block + commit rules +
  * confidence-band copy) is identical across every diagnosis for a given
  * service catalog — ~10–13K tokens of pure boilerplate. With caching, we
- * pay the cached-input rate ($0.15/1M for Gemini 3.5 Flash) instead of the
- * full input rate ($1.50/1M) for that portion. The user-specific images +
- * conversation text + task hint are NOT cached and are still billed at the
- * regular rate.
+ * pay the cached-input rate instead of the full input rate for that portion.
  *
  * Lifecycle:
  *   1. First call for a given system-prompt hash → create cache + remember it
- *   2. Subsequent calls → look up by hash, reuse the cache
+ *   2. Subsequent calls → look up by hash, reuse the cache name
  *   3. After TTL expires (default 1 hour) → next call falls through to (1)
- *      and creates a fresh cache
- *   4. On any error (minimum-cache-size violation, API quota, etc.) → caller
- *      catches and falls back to the non-cached call path
- *
- * IMPORTANT: Gemini enforces a minimum number of tokens that must be cached
- * (varies by model — older docs say 32k for 1.5 Pro/Flash; the 3.x line
- * may have a lower minimum). If `create()` throws because the prompt is
- * too small, the caller should NOT retry — just fall back. This module
- * makes that easy by returning `null` from `getOrCreate()` on failure.
- *
- * NOT a general-purpose cache. Scoped to the agent-classify call site.
- * The prose agent's system prompt is dynamic (it injects the classification
- * result) so it cannot use this helper without a refactor.
+ *   4. On any error → caller catches and falls back to the non-cached path
  */
 
 import { createHash } from 'node:crypto';
-import {
-    GoogleAICacheManager,
-    type CachedContent,
-} from '@google/generative-ai/server';
+import { getGenAiClient } from '@/lib/ai/ai-client';
 
 interface CacheEntry {
-    /** Full path Gemini gives us when the cache is created (`cachedContents/abc123`). */
+    /** Full cache name Gemini gives us when the cache is created. */
     readonly cachedContentName: string;
     /** Epoch-ms when this entry should be considered stale. */
     readonly expiresAtMs: number;
-    /** Resolved CachedContent object (so we can pass it to getGenerativeModelFromCachedContent). */
-    readonly cachedContent: CachedContent;
 }
 
 // In-memory map. Process-local — each Vercel function invocation starts fresh.
-// In dev, this persists for the lifetime of the dev server, which is exactly
-// what we want for the eval matrix.
 const CACHE_LOOKUP = new Map<string, CacheEntry>();
-
-let cacheManager: GoogleAICacheManager | null = null;
-function getCacheManager(apiKey: string): GoogleAICacheManager {
-    if (!cacheManager) {
-        cacheManager = new GoogleAICacheManager(apiKey);
-    }
-    return cacheManager;
-}
 
 function hashKey(model: string, systemInstruction: string): string {
     return createHash('sha256')
@@ -70,20 +40,20 @@ function hashKey(model: string, systemInstruction: string): string {
 }
 
 /**
- * Get a CachedContent for this (model, systemInstruction) pair, creating
- * one if we don't have a valid one in memory. Returns null if Gemini rejects
- * the creation (e.g., minimum-size violation, API error) — caller falls back.
+ * Get a cache name for this (model, systemInstruction) pair, creating one if
+ * we don't have a valid one in memory. Returns null if Gemini rejects the
+ * creation (e.g., minimum-size violation, API error) — caller falls back.
  *
  * `model` must be in the `models/<id>` form expected by the cache API.
+ * Returns the cache name string (to pass as `config.cachedContent`).
  */
 export async function getOrCreateCachedSystemPrompt(opts: {
-    apiKey: string;
     model: `models/${string}`;
     systemInstruction: string;
     ttlSeconds?: number;
     /** Safety margin: refresh the cache if less than this many seconds remain. */
     refreshIfRemainingLessThan?: number;
-}): Promise<CachedContent | null> {
+}): Promise<string | null> {
     const ttlSeconds = opts.ttlSeconds ?? 3600;
     const refreshIfRemainingLessThan = opts.refreshIfRemainingLessThan ?? 60;
     const key = hashKey(opts.model, opts.systemInstruction);
@@ -91,22 +61,17 @@ export async function getOrCreateCachedSystemPrompt(opts: {
 
     const existing = CACHE_LOOKUP.get(key);
     if (existing && existing.expiresAtMs - now > refreshIfRemainingLessThan * 1000) {
-        return existing.cachedContent;
+        return existing.cachedContentName;
     }
 
     try {
-        const manager = getCacheManager(opts.apiKey);
-        const cached = await manager.create({
+        const ai = getGenAiClient();
+        const cached = await ai.caches.create({
             model: opts.model,
-            systemInstruction: {
-                role: 'system',
-                parts: [{ text: opts.systemInstruction }],
+            config: {
+                systemInstruction: opts.systemInstruction,
+                ttl: `${ttlSeconds}s`,
             },
-            // Empty contents array — we're caching ONLY the system prompt.
-            // Per-call contents (the user's images + text) are passed at
-            // generation time.
-            contents: [],
-            ttlSeconds,
         });
         if (!cached.name) {
             console.warn(
@@ -120,7 +85,6 @@ export async function getOrCreateCachedSystemPrompt(opts: {
         CACHE_LOOKUP.set(key, {
             cachedContentName: cached.name,
             expiresAtMs: now + ttlSeconds * 1000,
-            cachedContent: cached,
         });
         console.warn(
             JSON.stringify({
@@ -131,16 +95,9 @@ export async function getOrCreateCachedSystemPrompt(opts: {
                 systemInstructionChars: opts.systemInstruction.length,
             }),
         );
-        return cached;
+        return cached.name;
     } catch (e) {
         const message = e instanceof Error ? e.message : String(e);
-        // Most common failures we expect:
-        //   - "input must be at least N tokens" → our prompt is smaller than the
-        //     model's minimum cacheable size; nothing we can do here
-        //   - "RESOURCE_EXHAUSTED" or quota errors → degrade gracefully
-        //   - Network errors → degrade gracefully
-        // Don't kill the diagnosis path; let the caller fall through to the
-        // non-cached call.
         console.warn(
             JSON.stringify({
                 type: 'gemini_cache.create_failed',

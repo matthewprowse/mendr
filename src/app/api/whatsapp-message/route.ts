@@ -1,7 +1,7 @@
 // Required env vars: GEMINI_API_KEY, UPSTASH_REDIS_REST_URL, UPSTASH_REDIS_REST_TOKEN
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getGeminiModel } from '@/lib/ai/ai-client';
+import { getGenAiClient, GEMINI_MODEL_NAME } from '@/lib/ai/ai-client';
 import { checkRateLimit } from '@/lib/rate-limit-config';
 
 type Body = {
@@ -84,7 +84,7 @@ export async function POST(req: NextRequest) {
         }
 
         try {
-            const model = getGeminiModel();
+            const ai = getGenAiClient();
 
             const prompt = `You write short WhatsApp messages for South African homeowners contacting home-service businesses.
 British English. Warm and practical. No markdown or bullet lists. Under 900 characters.
@@ -101,8 +101,11 @@ ${!report_url && profile_url ? `- Mendr profile URL (include exactly): ${profile
 
 Reply with only the message text, nothing else.`;
 
-            const result = await model.generateContent(prompt);
-            const text = result.response.text().trim();
+            const result = await ai.models.generateContent({
+                model: GEMINI_MODEL_NAME,
+                contents: prompt,
+            });
+            const text = (result.text ?? '').trim();
             if (!text) {
                 return NextResponse.json({ message: fallback });
             }

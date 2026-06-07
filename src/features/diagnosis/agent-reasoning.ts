@@ -12,8 +12,8 @@
  * entirely in the model's general world knowledge.
  */
 
-import { SchemaType } from '@google/generative-ai';
-import type { Content as GeminiContent } from '@google/generative-ai';
+import { Type } from '@google/genai';
+import type { Content as GeminiContent } from '@google/genai';
 import {
     getDiagnosisModel,
     getDiagnosisModelByName,
@@ -36,38 +36,38 @@ export type { DiagnosticReasoning };
 // ── Schema ─────────────────────────────────────────────────────────────────────
 
 const REASONING_SCHEMA = {
-    type: SchemaType.OBJECT,
+    type: Type.OBJECT,
     properties: {
         hypotheses: {
-            type: SchemaType.ARRAY,
+            type: Type.ARRAY,
             description: 'The 2–4 fault hypotheses you are weighing. Order by confidence_alone descending.',
             items: {
-                type: SchemaType.OBJECT,
+                type: Type.OBJECT,
                 properties: {
                     id: {
-                        type: SchemaType.STRING,
+                        type: Type.STRING,
                         description: 'Stable id within this turn, e.g. "h1", "h2".',
                     },
                     label: {
-                        type: SchemaType.STRING,
+                        type: Type.STRING,
                         description: 'Short, homeowner-readable fault name. Max 6 words. E.g. "Broken torsion spring".',
                     },
                     confidence_alone: {
-                        type: SchemaType.NUMBER,
+                        type: Type.NUMBER,
                         description: 'Float 0–1. What the confidence would be IF this hypothesis is confirmed.',
                     },
                     evidence_for: {
-                        type: SchemaType.ARRAY,
+                        type: Type.ARRAY,
                         description: '1–3 short phrases citing visible evidence from the photos or description.',
-                        items: { type: SchemaType.STRING },
+                        items: { type: Type.STRING },
                     },
                     evidence_against: {
-                        type: SchemaType.ARRAY,
+                        type: Type.ARRAY,
                         description: '1–3 short phrases. Empty array if no contradicting evidence.',
-                        items: { type: SchemaType.STRING },
+                        items: { type: Type.STRING },
                     },
                     visual_anchor_image_index: {
-                        type: SchemaType.INTEGER,
+                        type: Type.INTEGER,
                         description: '0-based index of the photo that most supports this hypothesis. Omit if no specific photo.',
                     },
                 },
@@ -75,46 +75,46 @@ const REASONING_SCHEMA = {
             },
         },
         what_we_dont_know: {
-            type: SchemaType.STRING,
+            type: Type.STRING,
             description: '1–2 sentences in plain English. The specific gap in evidence that prevents committing to a diagnosis.',
         },
         why_it_matters: {
-            type: SchemaType.STRING,
+            type: Type.STRING,
             description: '1–2 sentences. Why this question is the right one to ask now — ties the question to discrimination between hypotheses.',
         },
         chips: {
-            type: SchemaType.ARRAY,
+            type: Type.ARRAY,
             description: '3–4 homeowner-tappable chips. Each is a hypothesis-update payload. The last chip should always be "Something else is happening."',
             items: {
-                type: SchemaType.OBJECT,
+                type: Type.OBJECT,
                 properties: {
                     id: {
-                        type: SchemaType.STRING,
+                        type: Type.STRING,
                         description: 'Stable id within this turn, e.g. "c1", "c2".',
                     },
                     text: {
-                        type: SchemaType.STRING,
+                        type: Type.STRING,
                         description: 'The chip label. Max 8 words, homeowner-readable. Start with a capital letter.',
                     },
                     supports: {
-                        type: SchemaType.STRING,
+                        type: Type.STRING,
                         description: 'Hypothesis id (e.g. "h1") that selecting this chip would CONFIRM. Use empty string for "Something else" or when ambiguous.',
                     },
                     rules_out: {
-                        type: SchemaType.ARRAY,
+                        type: Type.ARRAY,
                         description: 'Hypothesis ids that selecting this chip would RULE OUT. Empty array if none.',
-                        items: { type: SchemaType.STRING },
+                        items: { type: Type.STRING },
                     },
                 },
                 required: ['id', 'text', 'supports', 'rules_out'],
             },
         },
         round: {
-            type: SchemaType.INTEGER,
+            type: Type.INTEGER,
             description: '1 for first clarification round, 2 for second.',
         },
         next_step_if_unresolved: {
-            type: SchemaType.STRING,
+            type: Type.STRING,
             description: '"ask_again" if a second discriminating question exists, "commit_low_confidence" if this is the last useful question you can ask.',
         },
     },
@@ -372,18 +372,19 @@ export async function runDiagnosticReasoning({
         ];
 
         const callStart = Date.now();
-        const result = await model.generateContent({
-            systemInstruction: { role: 'system', parts: [{ text: systemPrompt }] },
+        const result = await model.client.models.generateContent({
+            model: model.model,
             contents: reasoningContents,
-            generationConfig: {
+            config: {
                 ...sampling,
                 responseMimeType: 'application/json',
-                responseSchema: REASONING_SCHEMA as never,
+                responseSchema: REASONING_SCHEMA,
+                systemInstruction: systemPrompt,
             },
         });
         const latencyMs = Date.now() - callStart;
 
-        const usage = result.response.usageMetadata;
+        const usage = result.usageMetadata;
         void logGeminiUsage(usage, {
             endpoint: 'diagnose/reasoning',
             modelName: effectiveModel,
@@ -392,7 +393,7 @@ export async function runDiagnosticReasoning({
             latencyMs,
         });
 
-        const raw = result.response.text().trim();
+        const raw = (result.text ?? '').trim();
         let parsed: unknown;
         try {
             parsed = JSON.parse(raw);

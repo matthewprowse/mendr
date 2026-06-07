@@ -12,7 +12,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Content as GeminiContent } from '@google/generative-ai';
+import type { Content as GeminiContent } from '@google/genai';
 import { runCritique } from '@/features/diagnosis/agent-critique';
 import type { ClassificationResult } from '@/features/diagnosis/agent-classify';
 import type { ProseResult } from '@/features/diagnosis/agent-prose';
@@ -25,15 +25,13 @@ import type { ProseResult } from '@/features/diagnosis/agent-prose';
 // stubbing them.
 
 const generateContent = vi.fn();
+// New SDK: model handle returns { client: { models: { generateContent } }, model: string }
 vi.mock('@/lib/ai/ai-diagnosis-backend', () => ({
-    // Both constants exposed: main pipeline uses GEMINI_MODEL_NAME,
-    // Agent 3 uses GEMINI_CRITIQUE_MODEL_NAME. Tests for Agent 3 only
-    // need the critique model factory; we keep the diagnosis one for
-    // any sibling test that imports this mock.
     GEMINI_MODEL_NAME: 'gemini-2.5-flash',
     GEMINI_CRITIQUE_MODEL_NAME: 'gemini-2.5-flash',
-    getDiagnosisModel: () => ({ generateContent }),
-    getCritiqueModel: () => ({ generateContent }),
+    getDiagnosisModel: () => ({ client: { models: { generateContent } }, model: 'gemini-2.5-flash' }),
+    getCritiqueModel: () => ({ client: { models: { generateContent } }, model: 'gemini-2.5-flash' }),
+    getDiagnosisModelByName: () => ({ client: { models: { generateContent } }, model: 'gemini-2.5-flash' }),
 }));
 vi.mock('@/lib/ai/ai-cost-logger', () => ({
     logGeminiUsage: vi.fn(),
@@ -111,15 +109,15 @@ const MOCK_GEMINI_CRITIQUE = {
 
 function makeGenerateContentResult(payload: object) {
     const text = JSON.stringify(payload);
+    // New @google/genai SDK: text is a property, not response.text()
     return {
-        response: {
-            text: () => text,
-            usageMetadata: {
-                promptTokenCount: 100,
-                candidatesTokenCount: 80,
-                totalTokenCount: 180,
-            },
+        text,
+        usageMetadata: {
+            promptTokenCount: 100,
+            candidatesTokenCount: 80,
+            totalTokenCount: 180,
         },
+        candidates: [{ finishReason: 'STOP' }],
     };
 }
 

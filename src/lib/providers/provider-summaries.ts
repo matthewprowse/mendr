@@ -2,8 +2,8 @@
  * Server-only: generate provider copy (customer review summary, about business, past work)
  * using Gemini. Used when stored values are missing on the Pro page.
  */
-import { SchemaType } from '@google/generative-ai';
-import { getGeminiModel } from '@/lib/ai/ai-client';
+import { Type } from '@google/genai';
+import { getGenAiClient, GEMINI_MODEL_NAME } from '@/lib/ai/ai-client';
 
 export type ProviderSummariesInput = {
     name: string;
@@ -23,18 +23,18 @@ export type ProviderSummariesResult = {
 };
 
 const PROVIDER_SUMMARIES_SCHEMA = {
-    type: SchemaType.OBJECT,
+    type: Type.OBJECT,
     properties: {
         customerReviewSummary: {
-            type: SchemaType.STRING,
+            type: Type.STRING,
             description: '3–5 sentences: proportional sentiment summary — tone, common praise, common complaints. Do not name the business or repeat the rating.',
         },
         aboutBusiness: {
-            type: SchemaType.STRING,
+            type: Type.STRING,
             description: '2–3 sentences: what work they do, who they serve, implied history or focus. Base on website content primarily; reviews as weak secondary signal. Never mention the business name — use "The team", "They", or "The business" instead.',
         },
         pastWork: {
-            type: SchemaType.STRING,
+            type: Type.STRING,
             description: '2–4 sentences: types of work or projects from reviews and website — concrete examples only. Do not invent.',
         },
     },
@@ -70,20 +70,20 @@ ${reviewText || 'No reviews yet.'}
 Return a JSON object with fields: customerReviewSummary, aboutBusiness, pastWork.`;
 
     try {
-        const model = getGeminiModel();
-        const result = await model.generateContent({
+        const ai = getGenAiClient();
+        const result = await ai.models.generateContent({
+            model: GEMINI_MODEL_NAME,
             contents: [{ role: 'user', parts: [{ text: prompt }] }],
-            generationConfig: {
+            config: {
                 temperature: 0.3,
                 topK: 20,
                 topP: 0.75,
                 maxOutputTokens: 800,
                 responseMimeType: 'application/json',
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                responseSchema: PROVIDER_SUMMARIES_SCHEMA as any,
+                responseSchema: PROVIDER_SUMMARIES_SCHEMA,
             },
         });
-        const raw = result.response.text().trim();
+        const raw = (result.text ?? '').trim();
         const parsed = JSON.parse(raw) as ProviderSummariesResult;
         const customerReviewSummary = parsed.customerReviewSummary?.trim() ?? '';
         const aboutBusiness         = parsed.aboutBusiness?.trim() ?? '';

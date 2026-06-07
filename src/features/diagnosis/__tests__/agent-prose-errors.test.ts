@@ -26,10 +26,21 @@ import type { ClassificationResult } from '../agent-classify';
 
 const generateContent = vi.fn();
 
+// New @google/genai SDK: model handle is { client, model } but agent-prose
+// calls getGenAiClient() directly for the actual API call.
 vi.mock('@/lib/ai/ai-diagnosis-backend', () => ({
     GEMINI_MODEL_NAME: 'gemini-2.5-flash-test',
-    getDiagnosisModel: () => ({ generateContent }),
-    getDiagnosisModelByName: () => ({ generateContent }),
+    getDiagnosisModel: () => ({ client: { models: { generateContent } }, model: 'gemini-2.5-flash-test' }),
+    getDiagnosisModelByName: () => ({ client: { models: { generateContent } }, model: 'gemini-2.5-flash-test' }),
+}));
+// Also mock the ai-client so getGenAiClient() returns our fake
+vi.mock('@/lib/ai/ai-client', () => ({
+    getGenAiClient: () => ({ models: { generateContent } }),
+    GEMINI_MODEL_NAME: 'gemini-2.5-flash-test',
+    GEMINI_CRITIQUE_MODEL_NAME: 'gemini-2.5-flash-test',
+    GEMINI_ENRICHMENT_MODEL_NAME: 'gemini-2.5-flash-test',
+    getDiagnosisModel: () => ({ client: { models: { generateContent } }, model: 'gemini-2.5-flash-test' }),
+    getDiagnosisModelByName: () => ({ client: { models: { generateContent } }, model: 'gemini-2.5-flash-test' }),
 }));
 
 vi.mock('@/lib/ai/ai-cost-logger', () => ({
@@ -57,12 +68,11 @@ const classification: ClassificationResult = {
 };
 
 function mockGeminiResponse(text: string, finishReason = 'STOP') {
+    // New @google/genai SDK: text is a property, usageMetadata is top-level
     generateContent.mockResolvedValueOnce({
-        response: {
-            text: () => text,
-            usageMetadata: { promptTokenCount: 100, candidatesTokenCount: 200 },
-            candidates: [{ finishReason }],
-        },
+        text,
+        usageMetadata: { promptTokenCount: 100, candidatesTokenCount: 200 },
+        candidates: [{ finishReason }],
     });
 }
 
@@ -71,15 +81,17 @@ function mockGeminiThrows(err: unknown) {
 }
 
 function mockGeminiResponseTextThrows() {
-    generateContent.mockResolvedValueOnce({
-        response: {
-            text: () => {
-                throw new Error('SDK exploded inside text()');
+    // New SDK: text is a property not a method — simulate a getter that throws
+    generateContent.mockResolvedValueOnce(
+        Object.defineProperty(
+            {
+                usageMetadata: { promptTokenCount: 100, candidatesTokenCount: 0 },
+                candidates: [{ finishReason: 'SAFETY' }],
             },
-            usageMetadata: { promptTokenCount: 100, candidatesTokenCount: 0 },
-            candidates: [{ finishReason: 'SAFETY' }],
-        },
-    });
+            'text',
+            { get() { throw new Error('SDK exploded inside text()'); }, configurable: true },
+        ),
+    );
 }
 
 // Long thought (>= MIN_THOUGHT_CHARS = 120 chars) used for happy-path tests.

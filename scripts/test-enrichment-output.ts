@@ -7,13 +7,13 @@
 
 import 'dotenv/config';
 import { createClient } from '@supabase/supabase-js';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenAI } from '@google/genai';
 
 const admin = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
-const genai = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
+const genai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
 
 interface EnrichmentOutput {
     bio: string;
@@ -107,12 +107,12 @@ Extraction rules:
 - service_areas: suburb/area/region names only. Not province or country level.
 - website_quality: high = rich services info, team, contact, portfolio; medium = basic but navigable; low = minimal or clearly stale; none = blocked.`.trim();
 
-    const model = genai.getGenerativeModel({ model: 'gemini-2.5-flash' });
-    const result = await model.generateContent({
+    const result = await genai.models.generateContent({
+        model: 'gemini-2.5-flash',
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.3, maxOutputTokens: 8192 },
+        config: { temperature: 0.3, maxOutputTokens: 8192 },
     });
-    return extractJson(result.response.text().trim());
+    return extractJson((result.text ?? '').trim());
 }
 
 async function main() {

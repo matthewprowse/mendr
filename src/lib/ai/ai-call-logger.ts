@@ -17,7 +17,7 @@
 
 import { createSupabaseAdminClient } from '@/lib/auth/supabase-server';
 import { after } from 'next/server';
-import type { Content as GeminiContent } from '@google/generative-ai';
+import type { Content as GeminiContent } from '@google/genai';
 
 export type AiCallAgentId = '2a' | '2b' | '2c' | '3-critique';
 
@@ -80,7 +80,7 @@ export function textifyGeminiContents(
 
     for (const [i, c] of contents.entries()) {
         out.push(`=== CONTENT[${i}] role=${c.role} ===`);
-        for (const part of c.parts) {
+        for (const part of c.parts ?? []) {
             const p = part as unknown as Record<string, unknown>;
             if (typeof p.text === 'string') {
                 out.push(p.text);

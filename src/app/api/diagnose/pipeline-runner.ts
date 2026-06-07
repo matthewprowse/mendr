@@ -15,7 +15,7 @@
  *   6. logPipelineStep (inside agents)
  */
 
-import type { Content as GeminiContent } from '@google/generative-ai';
+import type { Content as GeminiContent } from '@google/genai';
 import { getDiagnosisModel } from '@/lib/ai/ai-diagnosis-backend';
 import { runClassification, type ClassificationResult } from '@/features/diagnosis/agent-classify';
 import {
@@ -334,9 +334,10 @@ export async function runDiagnosePipelineStreaming(
         const [, classification] = await Promise.all([
             (async () => {
                 try {
-                    const quickStream = await quickModel.generateContentStream({
+                    const quickStream = await quickModel.client.models.generateContentStream({
+                        model: quickModel.model,
                         contents: quickThoughtContents as unknown as GeminiContent[],
-                        generationConfig: {
+                        config: {
                             temperature: 0.2,
                             topP: 0.7,
                             topK: 20,
@@ -345,8 +346,8 @@ export async function runDiagnosePipelineStreaming(
                     });
                     let accum = '';
                     let lastInner = '';
-                    for await (const chunk of quickStream.stream) {
-                        const piece = chunk.text();
+                    for await (const chunk of quickStream) {
+                        const piece = chunk.text ?? '';
                         if (!piece) continue;
                         accum += piece;
                         const inner = extractPartialThoughtInner(accum);

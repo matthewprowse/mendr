@@ -14,17 +14,14 @@
  *   - Each head (classify / prose) can be fine-tuned independently.
  */
 
-import { SchemaType } from '@google/generative-ai';
-import type { Content as GeminiContent } from '@google/generative-ai';
+import { Type } from '@google/genai';
+import type { Content as GeminiContent } from '@google/genai';
 import {
     getDiagnosisModel,
     getDiagnosisModelByName,
     GEMINI_MODEL_NAME,
 } from '@/lib/ai/ai-diagnosis-backend';
-import {
-    getGeminiApiKey,
-    getGeminiModelFromCachedContent,
-} from '@/lib/ai/ai-client';
+import { getGenAiClient } from '@/lib/ai/ai-client';
 import { getOrCreateCachedSystemPrompt } from '@/lib/ai/gemini-cache-manager';
 import { logGeminiUsage } from '@/lib/ai/ai-cost-logger';
 import { logPipelineStep } from '@/lib/ai/ai-logging';
@@ -154,32 +151,32 @@ export class ProseGenerationError extends Error {
 // `thought` is declared FIRST so Gemini streams it before longer fields.
 
 const PROSE_SCHEMA = {
-    type: SchemaType.OBJECT,
+    type: Type.OBJECT,
     properties: {
         thought: {
-            type: SchemaType.STRING,
+            type: Type.STRING,
             description:
                 'A 4-6 sentence reasoning trace showing how you arrived at the diagnosis, 400-700 characters total. Structure: (1) a synthesised summary of what the visible evidence shows across all photos combined (treat them as a single picture of the issue — do NOT enumerate per-image), (2) what specific component appears to have failed, (3) any cascading or secondary effects of that failure, (4) why this conclusion fits the visible evidence better than alternatives. This is the homeowner-facing "How I worked this out" section — they read it to assess whether to trust the diagnosis. STRICT RULE: NEVER reference photos by number or position (no "Image 1", "the second image", "the first photo", "image two", "in the third one"). The homeowner sees a thumbnail grid, not numbered slides. Describe what the camera shows, attribute observations to components or sides (e.g. "the left torsion spring", "the underside of the lid"), never to image indices. No em dashes. No mention of contacting specialists or next steps. Start each sentence with a capital letter.',
         },
         diagnosis: {
-            type: SchemaType.STRING,
+            type: Type.STRING,
             description:
                 'Diagnosis title. Plain language. Max 75 characters and max 7 words. Headline-Style Title Case. No commas, colons, slashes, jargon, or conjunctions like or/and. Pick the single most likely cause. NEVER use generic placeholders like "Unclear", "Needs Clarification", or "Service Not Currently Supported" — even when requires_clarification is true, name the most likely failed component (e.g. "Broken Torsion Spring"). The server may append " (uncertain)" when confidence is low.',
         },
         message: {
-            type: SchemaType.STRING,
+            type: Type.STRING,
             description:
                 '1–2 paragraphs separated by \\n\\n. Paragraph 1 (required): teaching diagnosis — explain the causal chain in plain language anchored in what the photo shows. No alarm words, no em dashes, no meta-commentary. Paragraph 2 (optional): only if a genuinely non-obvious hazard exists that the homeowner must act on before the contractor arrives. Do not describe what the contractor will do — that is covered in contractor_checklist.',
         },
         action_required: {
-            type: SchemaType.STRING,
+            type: Type.STRING,
             description:
                 'Deprecated — leave as an empty string. All contractor and homeowner guidance is now in contractor_checklist and homeowner_prep.',
         },
         contractor_checklist: {
-            type: SchemaType.ARRAY,
+            type: Type.ARRAY,
             items: {
-                type: SchemaType.STRING,
+                type: Type.STRING,
                 description:
                     'A complete sentence starting with a verb, describing one specific thing the contractor will inspect, test, or replace. Ends with a full stop. No em dashes.',
             },
@@ -187,43 +184,43 @@ const PROSE_SCHEMA = {
                 '2–4 full sentences describing what the contractor will concretely do on-site. Each sentence starts with a verb and ends with a full stop. Specific to the diagnosed fault — no generic entries like "Assess the problem." or "Provide a quote." British English. No em dashes. Empty array when requires_clarification or rejected is true.',
         },
         homeowner_prep: {
-            type: SchemaType.STRING,
+            type: Type.STRING,
             description:
                 'One complete sentence: the single most practical thing the homeowner can do before the contractor arrives. Specific to this fault — for example: switch the geyser circuit breaker off at the DB board, isolate the water supply at the mains, clear access to the distribution board, note the error code shown on the display. Ends with a full stop. Return an empty string if nothing genuinely useful applies. No em dashes.',
         },
         image_descriptions: {
-            type: SchemaType.ARRAY,
+            type: Type.ARRAY,
             items: {
-                type: SchemaType.STRING,
+                type: Type.STRING,
                 description:
                     'One entry per image: max 2 plain-language sentences of pure visual observation — name the specific components visible and their condition. Critically: note any component that is MISSING, detached, absent, or asymmetric (e.g. spring present on one side but not the other, bent rod, displaced bracket). Each entry must reference a feature distinguishable only in THAT specific image — never copy-paste between entries. Be specific, not generic. No causal chain beyond what is directly visible. STRICT RULE: NEVER start an entry with "Image N shows...", "The first photo...", "In the second image...", or any reference to the image\'s number or position. Open by naming the component or scene directly (e.g. "The left torsion spring is missing from its bracket...", "A diagonal crack runs from the top corner of the lintel...", "Water staining covers the lower third of the ceiling panel..."). The homeowner is looking at this image when they read this — describe what they\'re seeing, not which slot it occupies.',
             },
             description: 'Exactly one entry per image provided, in order. Count must match the number of images submitted. Each entry must call out a feature visible only in THAT image. No entry may reference its image by number or position — describe what is shown, not which image it is.',
         },
         image_observations: {
-            type: SchemaType.ARRAY,
+            type: Type.ARRAY,
             items: {
-                type: SchemaType.OBJECT,
+                type: Type.OBJECT,
                 properties: {
                     primary_observation: {
-                        type: SchemaType.STRING,
+                        type: Type.STRING,
                         description:
                             'The single most diagnostically significant thing visible in this image, in 5-20 words. Be specific — name the component, condition, and any visible damage or absence. Bad: "a garage door". Good: "left torsion spring is missing from its bracket; the right one is intact and seated correctly". STRICT RULE: do NOT begin with "Image N shows...", "the first/second/third photo...", or any reference to image number or position — open by naming the component or condition directly.',
                     },
                     components_visible: {
-                        type: SchemaType.ARRAY,
-                        items: { type: SchemaType.STRING },
+                        type: Type.ARRAY,
+                        items: { type: Type.STRING },
                         description:
                             'Specific named components the camera clearly shows in this image. Each entry is one named part — for example "right torsion spring", "ceiling-mounted rail", "DB board main breaker", "pressure relief valve". Empty array only when nothing identifiable is visible.',
                     },
                     components_missing_or_damaged: {
-                        type: SchemaType.ARRAY,
-                        items: { type: SchemaType.STRING },
+                        type: Type.ARRAY,
+                        items: { type: Type.STRING },
                         description:
                             'Specific named components that are MISSING, detached, asymmetric, deformed, burnt, or otherwise damaged in this image. Each entry includes the nature of the issue — for example "left torsion spring (absent, only bracket remains)", "connecting rod (bent at midpoint)", "thermostat housing (scorched on lower edge)". Empty array when nothing is visibly damaged or missing.',
                     },
                     role_in_diagnosis: {
-                        type: SchemaType.STRING,
+                        type: Type.STRING,
                         description:
                             'How this image relates to the overall diagnosis. Exactly one of: "primary_evidence" (this image is the strongest direct evidence of the fault — pick exactly one image as primary), "corroborating" (this image supports the primary observation), "contradicting" (this image points to a different cause than the primary; you MUST acknowledge the conflict in `thought` and lower confidence), or "context_only" (this image provides background context but no direct fault evidence).',
                     },
@@ -239,9 +236,9 @@ const PROSE_SCHEMA = {
                 'EXACTLY one entry per image submitted, in input order. Exactly one entry must have role_in_diagnosis === "primary_evidence" when at least one image was submitted. Empty array when no images were submitted.',
         },
         clarification_questions: {
-            type: SchemaType.ARRAY,
+            type: Type.ARRAY,
             items: {
-                type: SchemaType.STRING,
+                type: Type.STRING,
                 description:
                     'A short statement the homeowner taps to confirm — phrased in their own words, describing a symptom or context they can observe. Max 8 words. Must be mutually exclusive with the other chips in this array.',
             },
@@ -249,62 +246,62 @@ const PROSE_SCHEMA = {
                 'Backward-compat flat list of chips for older UI surfaces. When `structured_clarification` is produced, this can be left empty and the server will derive it from the first hypothesis. Otherwise: only populate when requires_clarification is true. Exactly 3–4 chips covering the single most important unknown that would change the diagnosis. Options must be mutually exclusive and collectively exhaustive — the last chip is always a catch-all (e.g. "Something else is happening."). Empty array when requires_clarification is false.',
         },
         structured_clarification: {
-            type: SchemaType.OBJECT,
+            type: Type.OBJECT,
             description:
                 'Required when requires_clarification is true (and not rejected/unserviced). 2–3 ranked hypotheses, each with its own discriminating question and 3 answer chips. Omit / null when requires_clarification is false.',
             properties: {
                 intro: {
-                    type: SchemaType.STRING,
+                    type: Type.STRING,
                     description:
                         'One short sentence (max 25 words) introducing the clarification flow to the homeowner. Plain language. No em dashes. Example: "Two things could be causing this — answering one quick question will narrow it down."',
                 },
                 hypotheses: {
-                    type: SchemaType.ARRAY,
+                    type: Type.ARRAY,
                     items: {
-                        type: SchemaType.OBJECT,
+                        type: Type.OBJECT,
                         properties: {
                             id: {
-                                type: SchemaType.STRING,
+                                type: Type.STRING,
                                 description:
                                     'Stable id for this hypothesis: "h1" for the highest-confidence hypothesis, "h2" for the second, "h3" for the third. Always lowercase.',
                             },
                             label: {
-                                type: SchemaType.STRING,
+                                type: Type.STRING,
                                 description:
                                     'Specific failed component or fault, in Headline-Style Title Case (max 7 words). Example: "Broken Torsion Spring", "Failed Geyser Element", "Burst Mains Supply Pipe". This label becomes the diagnosis title when this hypothesis is selected.',
                             },
                             confidence: {
-                                type: SchemaType.INTEGER,
+                                type: Type.INTEGER,
                                 description:
                                     'Integer 0–100. The model\'s own confidence in this hypothesis. Hypotheses MUST be listed in descending confidence order (h1 highest).',
                             },
                             why: {
-                                type: SchemaType.STRING,
+                                type: Type.STRING,
                                 description:
                                     'One sentence explaining why this hypothesis is plausible given the visible evidence and description. Plain language. No em dashes.',
                             },
                             discriminating_question: {
-                                type: SchemaType.STRING,
+                                type: Type.STRING,
                                 description:
                                     'A single question that, if answered, would shift THIS hypothesis\'s confidence by at least 20 points (up or down). Must be specific to this hypothesis — not a generic "tell me more". Example: "Is the door fully closed, or is it stuck partly open?"',
                             },
                             answer_chips: {
-                                type: SchemaType.ARRAY,
+                                type: Type.ARRAY,
                                 items: {
-                                    type: SchemaType.OBJECT,
+                                    type: Type.OBJECT,
                                     properties: {
                                         id: {
-                                            type: SchemaType.STRING,
+                                            type: Type.STRING,
                                             description:
                                                 'Stable chip id within this hypothesis: "c1", "c2", "c3". Lowercase.',
                                         },
                                         text: {
-                                            type: SchemaType.STRING,
+                                            type: Type.STRING,
                                             description:
                                                 'The chip text the homeowner taps. Max 8 words, plain language. MUST describe the diagnosed subcategory (use the subcategory_id from the system prompt context) — chips that refer to a different equipment type are a hard failure.',
                                         },
                                         effect: {
-                                            type: SchemaType.STRING,
+                                            type: Type.STRING,
                                             description:
                                                 'Exactly one of "confirms" (selecting this chip pushes the hypothesis confidence up by ≥20 points), "rules_out" (pushes it down by ≥20 points), or "partial" (a weaker signal in either direction).',
                                         },
@@ -328,10 +325,10 @@ const PROSE_SCHEMA = {
                         '2–3 hypotheses ranked by confidence descending. h1 is always the highest-confidence label and becomes the diagnosis title.',
                 },
                 escape: {
-                    type: SchemaType.OBJECT,
+                    type: Type.OBJECT,
                     properties: {
                         prompt: {
-                            type: SchemaType.STRING,
+                            type: Type.STRING,
                             description:
                                 'One short sentence inviting the user to describe their situation in free text when none of the hypotheses match. Example: "Doesn\'t match any of these? Tell me what you\'re seeing in your own words."',
                         },
@@ -344,19 +341,19 @@ const PROSE_SCHEMA = {
             required: ['intro', 'hypotheses', 'escape'],
         },
         diy_verification: {
-            type: SchemaType.STRING,
+            type: Type.STRING,
             description:
                 'One sentence describing how the homeowner can themselves verify the diagnosis is correct, without tools and without risk. Must be specific to the diagnosed fault — for example "With the motor disengaged, lift the door by hand; if it stays balanced halfway up the spring tension is fine." or "Place a dry sheet of paper under the joint overnight; a wet patch confirms an active leak." Empty string only when no safe verification exists.',
         },
         photo_request: {
-            type: SchemaType.STRING,
+            type: Type.STRING,
             description:
                 'When zero images were provided or when an additional photo would meaningfully improve the diagnosis, specify exactly what photo would help. Be specific about the angle and what should be visible — for example "A photo of the underside of the geyser showing the pressure relief valve and any drip tray would let me confirm whether the leak is from the valve or the tank." Empty string when no additional photo would help.',
         },
         confidence_drivers: {
-            type: SchemaType.ARRAY,
+            type: Type.ARRAY,
             items: {
-                type: SchemaType.STRING,
+                type: Type.STRING,
                 description:
                     'One short phrase (not a sentence) naming one specific observation that drove the confidence level — either supporting evidence or a limiting factor.',
             },
@@ -1460,40 +1457,32 @@ export async function runProseGeneration(params: {
             process.env.GEMINI_CACHE_ENABLED !== '0' &&
             variantCtx.variant === 'v3.5-native' &&
             proseEffectiveModel === 'gemini-3.5-flash';
-        const apiKey = cacheEnabled ? getGeminiApiKey() : null;
-        const cachedContent =
-            cacheEnabled && apiKey
-                ? await getOrCreateCachedSystemPrompt({
-                      apiKey,
-                      model: `models/${proseEffectiveModel}`,
-                      systemInstruction:
-                          buildProseSystemPrompt_v35_native_static(),
-                      ttlSeconds: 3600,
-                  })
-                : null;
+        const cachedContentName = cacheEnabled
+            ? await getOrCreateCachedSystemPrompt({
+                  model: `models/${proseEffectiveModel}`,
+                  systemInstruction: buildProseSystemPrompt_v35_native_static(),
+                  ttlSeconds: 3600,
+              })
+            : null;
 
         // When cached, pass the dynamic block as the FIRST user-role message
         // (system instruction is already in the cache; passing it again would
         // override the cache). When not cached, build the full system prompt
         // via the resolver as before.
         const dynamicSystemBlock =
-            cachedContent && variantCtx.variant === 'v3.5-native'
+            cachedContentName && variantCtx.variant === 'v3.5-native'
                 ? buildProseSystemPrompt_v35_native_dynamic(
                       params.classification,
                       params.baseSystemInstruction,
                   )
                 : null;
-        const fullSystemPrompt = cachedContent
+        const fullSystemPrompt = cachedContentName
             ? null
             : getProseSystemPrompt(
                   params.classification,
                   params.baseSystemInstruction,
                   variantCtx,
               );
-
-        const model = cachedContent
-            ? getGeminiModelFromCachedContent(cachedContent)
-            : baseModel;
 
         // When images were supplied, tell the model exactly how many descriptions to produce
         // and instruct it to look specifically for absent/detached components in each image.
@@ -1529,15 +1518,12 @@ export async function runProseGeneration(params: {
             },
         ];
 
+        const ai = getGenAiClient();
         const geminiStartedAt = Date.now();
-        const result = await model.generateContent({
-            // Only set systemInstruction when NOT using cachedContent — the
-            // cache already carries it, and overriding here defeats the cache.
-            ...(fullSystemPrompt
-                ? { systemInstruction: { role: 'system' as const, parts: [{ text: fullSystemPrompt }] } }
-                : {}),
+        const result = await ai.models.generateContent({
+            model: baseModel.model,
             contents: proseContents,
-            generationConfig: {
+            config: {
                 // Sampling params come from the variant resolver. The v2.5
                 // values match the historically tuned numbers
                 // (temperature 0.22/0.35, topP 0.8, topK 40, maxOutputTokens
@@ -1545,23 +1531,28 @@ export async function runProseGeneration(params: {
                 // tuning diverges them. See prompts/variants/prompt-variant.ts.
                 ...sampling,
                 responseMimeType: 'application/json',
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                responseSchema: PROSE_SCHEMA as any,
+                responseSchema: PROSE_SCHEMA,
                 // Gemini 2.5 Flash native reasoning — improves diagnostic accuracy and visual
                 // grounding without surfacing thinking text to the homeowner. The thought field
                 // in the schema is a purpose-built 2–3 sentence homeowner-facing explanation;
                 // thinkingBudget improves the quality of that field and all other fields.
                 // Budget of 1024 balances output quality gain against per-call latency.
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                ...({ thinkingConfig: { thinkingBudget: 1024 } } as any),
+                thinkingConfig: { thinkingBudget: 1024 },
+                // Only set systemInstruction when NOT using cachedContent — the
+                // cache already carries it, and overriding here defeats the cache.
+                ...(cachedContentName
+                    ? { cachedContent: cachedContentName }
+                    : fullSystemPrompt
+                      ? { systemInstruction: fullSystemPrompt }
+                      : {}),
             },
         });
 
-        const usage = result.response.usageMetadata;
+        const usage = result.usageMetadata;
         promptTokens = usage?.promptTokenCount;
         completionTokens = usage?.candidatesTokenCount;
         finishReason =
-            (result.response.candidates && result.response.candidates[0]?.finishReason) ||
+            (result.candidates && result.candidates[0]?.finishReason) ||
             undefined;
 
         // Fire-and-forget cost log — never blocks the response
@@ -1574,7 +1565,7 @@ export async function runProseGeneration(params: {
         });
 
         try {
-            raw = result.response.text().trim();
+            raw = (result.text ?? '').trim();
         } catch (texErr) {
             console.error('[agent-prose] response.text() failed', texErr);
             logPipelineStep({

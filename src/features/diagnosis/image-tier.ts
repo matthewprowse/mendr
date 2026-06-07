@@ -3,8 +3,8 @@
  * of one issue or clearly different maintenance subjects.
  */
 
-import { SchemaType } from '@google/generative-ai';
-import { getGeminiModelNamed } from '@/lib/ai/ai-client';
+import { Type } from '@google/genai';
+import { getGenAiClient } from '@/lib/ai/ai-client';
 
 /** Override via env if Google renames or you want a different tiering model. */
 export const DEFAULT_IMAGE_TIER_MODEL =
@@ -31,30 +31,30 @@ export interface ImageTierResult {
 }
 
 const IMAGE_TIER_SCHEMA = {
-    type: SchemaType.OBJECT,
+    type: Type.OBJECT,
     properties: {
         same_subject: {
-            type: SchemaType.BOOLEAN,
+            type: Type.BOOLEAN,
             description:
                 'True if all photos show the same maintenance subject or fault from different angles / redundancy.',
         },
         primary_index: {
-            type: SchemaType.INTEGER,
+            type: Type.INTEGER,
             description: '0-based index of the single best photo for diagnosis (sharpness, fault visible).',
         },
         send_indices: {
-            type: SchemaType.ARRAY,
-            items: { type: SchemaType.INTEGER },
+            type: Type.ARRAY,
+            items: { type: Type.INTEGER },
             description:
                 '0-based indices to pass to the expensive diagnosis model, in ascending order, subset of inputs.',
         },
         secondary_issue_detected: {
-            type: SchemaType.BOOLEAN,
+            type: Type.BOOLEAN,
             description:
                 'True if photos clearly depict two or more unrelated home maintenance issues (e.g. gate motor and DB board).',
         },
         user_message_if_split: {
-            type: SchemaType.STRING,
+            type: Type.STRING,
             description:
                 'If secondary_issue_detected, a short user-facing question asking which issue to diagnose first. Otherwise empty.',
         },
@@ -106,7 +106,7 @@ export async function runImageTiering(parts: InlineImagePart[]): Promise<ImageTi
     };
 
     try {
-        const model = getGeminiModelNamed(DEFAULT_IMAGE_TIER_MODEL);
+        const ai = getGenAiClient();
         const userParts = [
             ...parts.map((p) => ({ inlineData: p.inlineData })),
             {
@@ -124,19 +124,20 @@ Output JSON only matching the schema.`,
             },
         ];
 
-        const result = await model.generateContent({
-            contents: [{ role: 'user', parts: userParts as any }],
-            generationConfig: {
+        const result = await ai.models.generateContent({
+            model: DEFAULT_IMAGE_TIER_MODEL,
+            contents: [{ role: 'user', parts: userParts }],
+            config: {
                 temperature: 0.1,
                 topP: 0.7,
                 topK: 20,
                 maxOutputTokens: 220,
                 responseMimeType: 'application/json',
-                responseSchema: IMAGE_TIER_SCHEMA as any,
+                responseSchema: IMAGE_TIER_SCHEMA,
             },
         });
 
-        const raw = result.response.text().trim();
+        const raw = (result.text ?? '').trim();
         const parsed = JSON.parse(raw) as ImageTierModelOutput;
 
         const secondary = Boolean(parsed.secondary_issue_detected);

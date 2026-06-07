@@ -15,19 +15,21 @@
  * while keeping the observability layer (critique) cheap and stable.
  */
 import {
-    getGeminiModel,
-    getGeminiModelNamed,
+    getGenAiClient,
     GEMINI_MODEL_NAME,
     GEMINI_CRITIQUE_MODEL_NAME,
 } from '@/lib/ai/ai-client';
-import type { GenerativeModel } from '@google/generative-ai';
+import type { GoogleGenAI } from '@google/genai';
 
 export { GEMINI_MODEL_NAME, GEMINI_CRITIQUE_MODEL_NAME };
 
-export function getDiagnosisModel(
-    params?: Parameters<typeof getGeminiModel>[0],
-): GenerativeModel {
-    return getGeminiModel(params);
+export interface DiagnosisModelHandle {
+    client: GoogleGenAI;
+    model: string;
+}
+
+export function getDiagnosisModel(): DiagnosisModelHandle {
+    return { client: getGenAiClient(), model: GEMINI_MODEL_NAME };
 }
 
 /**
@@ -39,16 +41,14 @@ export function getDiagnosisModel(
  */
 export function getDiagnosisModelByName(
     model: string | null | undefined,
-    params?: Parameters<typeof getGeminiModelNamed>[1],
-): GenerativeModel {
-    if (typeof model === 'string' && model.trim().length > 0) {
-        return getGeminiModelNamed(model.trim(), params);
-    }
-    return getGeminiModel(params);
+): DiagnosisModelHandle {
+    const effectiveModel =
+        typeof model === 'string' && model.trim().length > 0
+            ? model.trim()
+            : GEMINI_MODEL_NAME;
+    return { client: getGenAiClient(), model: effectiveModel };
 }
 
-export function getCritiqueModel(
-    params?: Parameters<typeof getGeminiModelNamed>[1],
-): GenerativeModel {
-    return getGeminiModelNamed(GEMINI_CRITIQUE_MODEL_NAME, params);
+export function getCritiqueModel(): DiagnosisModelHandle {
+    return { client: getGenAiClient(), model: GEMINI_CRITIQUE_MODEL_NAME };
 }

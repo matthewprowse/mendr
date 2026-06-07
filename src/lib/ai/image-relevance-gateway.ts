@@ -28,8 +28,8 @@
  * system prompt makes this explicit.
  */
 
-import { SchemaType } from '@google/generative-ai';
-import { getGeminiModelNamed } from '@/lib/ai/ai-client';
+import { Type } from '@google/genai';
+import { getGenAiClient } from '@/lib/ai/ai-client';
 import { logGeminiUsage } from '@/lib/ai/ai-cost-logger';
 import { imageStringToInlineData } from '@/app/api/diagnose/image-loader';
 
@@ -72,18 +72,18 @@ Return ONLY a JSON object:
 Confidence guide: 90+ obvious, 70-89 clear, 50-69 uncertain, <50 very uncertain.`;
 
 const RELEVANCE_SCHEMA = {
-    type: SchemaType.OBJECT,
+    type: Type.OBJECT,
     properties: {
         relevant: {
-            type: SchemaType.BOOLEAN,
+            type: Type.BOOLEAN,
             description: 'True if this is something a homeowner would show a contractor.',
         },
         reason: {
-            type: SchemaType.STRING,
+            type: Type.STRING,
             description: 'One short sentence explaining the verdict.',
         },
         confidence: {
-            type: SchemaType.INTEGER,
+            type: Type.INTEGER,
             description: 'Integer 0-100. Higher = more certain.',
         },
     },
@@ -149,7 +149,7 @@ export async function checkImageRelevance(
             };
         }
 
-        const model = getGeminiModelNamed(GATEWAY_MODEL_NAME);
+        const ai = getGenAiClient();
         const userTurnParts: Array<
             | { text: string }
             | { inlineData: { data: string; mimeType: string } }
@@ -162,32 +162,27 @@ export async function checkImageRelevance(
         });
 
         const geminiStartedAt = Date.now();
-        const result = await model.generateContent({
+        const result = await ai.models.generateContent({
+            model: GATEWAY_MODEL_NAME,
             contents: [{ role: 'user', parts: userTurnParts }],
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            generationConfig: {
+            config: {
                 temperature: 0.1,
                 topP: 0.8,
                 maxOutputTokens: 250,
                 responseMimeType: 'application/json',
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                responseSchema: RELEVANCE_SCHEMA as any,
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            } as any,
-            systemInstruction: {
-                role: 'system',
-                parts: [{ text: SYSTEM_PROMPT }],
+                responseSchema: RELEVANCE_SCHEMA,
+                systemInstruction: SYSTEM_PROMPT,
             },
         });
 
-        const usage = result.response.usageMetadata;
+        const usage = result.usageMetadata;
         void logGeminiUsage(usage, {
             endpoint: 'diagnose/image-relevance-gate',
             modelName: GATEWAY_MODEL_NAME,
             latencyMs: Date.now() - geminiStartedAt,
         });
 
-        const raw = result.response.text().trim();
+        const raw = (result.text ?? '').trim();
         let parsed: RelevanceJson | null = null;
         try {
             parsed = JSON.parse(raw) as RelevanceJson;

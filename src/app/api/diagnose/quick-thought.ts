@@ -9,7 +9,7 @@
  * Behaviour preserved verbatim from the original inline implementation.
  */
 
-import type { Content as GeminiContent } from '@google/generative-ai';
+import type { Content as GeminiContent } from '@google/genai';
 import { getDiagnosisModel } from '@/lib/ai/ai-diagnosis-backend';
 import { buildQuickThoughtPrompt } from '@/features/diagnosis/prompts/user-turn';
 import { stripFillerSentenceStarts } from '@/lib/ai/prompt-utils';
@@ -46,7 +46,7 @@ export async function handleImageThoughtOnly(
     params: QuickThoughtParams,
 ): Promise<Response> {
     const { image, attachmentImages, wantsStream, quotaExtraHeaders } = params;
-    const model = getDiagnosisModel();
+    const modelHandle = getDiagnosisModel();
 
     const imageParts: ContentPart[] = [];
     if (typeof image === 'string' && image.trim()) {
@@ -74,9 +74,10 @@ export async function handleImageThoughtOnly(
 
     if (wantsStream) {
         try {
-            const quickStream = await model.generateContentStream({
+            const quickStream = await modelHandle.client.models.generateContentStream({
+                model: modelHandle.model,
                 contents: quickContents,
-                generationConfig: QUICK_GENERATION_CONFIG,
+                config: QUICK_GENERATION_CONFIG,
             });
             return new Response(
                 new ReadableStream({
@@ -87,8 +88,8 @@ export async function handleImageThoughtOnly(
                         let accum = '';
                         let lastThought = '';
                         try {
-                            for await (const chunk of quickStream.stream) {
-                                const piece = chunk.text();
+                            for await (const chunk of quickStream) {
+                                const piece = chunk.text ?? '';
                                 if (!piece) continue;
                                 accum += piece;
                                 const inner = extractPartialThoughtInner(accum);
@@ -134,25 +135,12 @@ export async function handleImageThoughtOnly(
 
     let thought = '';
     try {
-        const quickResult = await model.generateContent({
+        const quickResult = await modelHandle.client.models.generateContent({
+            model: modelHandle.model,
             contents: quickContents,
-            generationConfig: QUICK_GENERATION_CONFIG,
+            config: QUICK_GENERATION_CONFIG,
         });
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const quickResp = (quickResult as any)?.response;
-        let quickText =
-            quickResp && typeof quickResp.text === 'function' ? quickResp.text() : '';
-        if (!quickText) {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const parts = (quickResult as any)?.response?.candidates?.[0]?.content?.parts;
-            if (Array.isArray(parts)) {
-                quickText = parts
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                    .map((p: any) => (typeof p?.text === 'string' ? p.text : ''))
-                    .join('');
-            }
-        }
-        thought = stripFillerSentenceStarts(extractThoughtText(String(quickText || ''))).trim();
+        thought = stripFillerSentenceStarts(extractThoughtText(String(quickResult.text ?? ''))).trim();
     } catch (quickThoughtErr) {
         console.warn(
             'image_thought_only: Gemini failed; returning fallback thought',

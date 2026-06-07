@@ -1,5 +1,5 @@
-import { SchemaType } from '@google/generative-ai';
-import { getGeminiModel } from '@/lib/ai/ai-client';
+import { Type } from '@google/genai';
+import { getGenAiClient, GEMINI_MODEL_NAME } from '@/lib/ai/ai-client';
 
 type ReviewLike = {
     rating?: number | null;
@@ -18,8 +18,8 @@ function getReviewText(r: ReviewLike): string {
 export function sanitizeCustomerSummary(text: string): string {
     if (!text) return '';
     const cleaned = String(text)
-        .replace(/[“”]/g, '')
-        .replace(/[‘’]/g, '')
+        .replace(/[""]/g, '')
+        .replace(/['']/g, '')
         .replace(/""/g, '')
         .replace(/''/g, '')
         .replace(/—/g, ' ')
@@ -104,31 +104,31 @@ Reviews:
 ${reviewBlock}`.trim();
 
     try {
-        const model = getGeminiModel();
+        const ai = getGenAiClient();
 
-        const result = await model.generateContent({
+        const result = await ai.models.generateContent({
+            model: GEMINI_MODEL_NAME,
             contents: [{ role: 'user', parts: [{ text: prompt }] }],
-            generationConfig: {
+            config: {
                 temperature: 0.35,
                 topP: 0.7,
                 topK: 20,
                 maxOutputTokens: 256,
                 responseMimeType: 'application/json',
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 responseSchema: {
-                    type: SchemaType.OBJECT,
+                    type: Type.OBJECT,
                     properties: {
                         summary: {
-                            type: SchemaType.STRING,
+                            type: Type.STRING,
                             description: 'Exactly 2 complete sentences, combined under 130 characters. British English. No business name, no rating numbers, no audience nouns (homeowners/customers/clients/residents), no em dashes. Lead with specific praise.',
                         },
                     },
                     required: ['summary'],
-                } as any,
+                },
             },
         });
 
-        const raw = result.response.text().trim();
+        const raw = (result.text ?? '').trim();
         const parsed = JSON.parse(raw) as { summary: string };
         let summary = sanitizeCustomerSummary(parsed.summary?.trim() ?? '');
         if (summary) {
@@ -152,4 +152,3 @@ ${reviewBlock}`.trim();
     }
     return null;
 }
-

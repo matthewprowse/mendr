@@ -5,11 +5,11 @@
  * injectable so the parse/validate logic is unit-testable without a real call.
  */
 
-import { getDiagnosisModel } from '@/lib/ai/ai-diagnosis-backend';
+import { getGenAiClient, GEMINI_MODEL_NAME } from '@/lib/ai/ai-client';
 import type { CostResearch } from './research-cost';
 
 type GenModel = {
-    generateContent: (req: unknown) => Promise<{ response: { text: () => string } }>;
+    generateContent: (req: { model: string; contents: unknown; config?: unknown }) => Promise<{ text: string | null }>;
 };
 
 const SYSTEM_PROMPT =
@@ -55,17 +55,26 @@ export async function extractCostWithGemini(
     deps: { model?: GenModel } = {},
 ): Promise<CostResearch | null> {
     if (snippets.length === 0) return null;
-    const model = deps.model ?? (getDiagnosisModel() as unknown as GenModel);
+    // Lazy: only call getGenAiClient() when the default model is actually used
+    // (allows tests to inject a mock model without triggering real SDK init).
+    const defaultModel: GenModel = {
+        generateContent: async (req) => {
+            const result = await getGenAiClient().models.generateContent(req as Parameters<ReturnType<typeof getGenAiClient>['models']['generateContent']>[0]);
+            return { text: result.text ?? null };
+        },
+    };
+    const model = deps.model ?? defaultModel;
 
     const result = await model.generateContent({
+        model: GEMINI_MODEL_NAME,
         contents: [{ role: 'user', parts: [{ text: buildUserPrompt(faultLabel, snippets) }] }],
-        generationConfig: {
+        config: {
             temperature: 0.1,
             maxOutputTokens: 300,
             responseMimeType: 'application/json',
+            systemInstruction: SYSTEM_PROMPT,
         },
-        systemInstruction: { role: 'system', parts: [{ text: SYSTEM_PROMPT }] },
     });
 
-    return parseCostJson(result.response.text());
+    return parseCostJson(result.text ?? '');
 }

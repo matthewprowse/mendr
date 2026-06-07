@@ -26,9 +26,9 @@
  *   'pending'          — default, enrichment not yet attempted
  */
 
-import { SchemaType } from '@google/generative-ai';
+import { Type } from '@google/genai';
 import { createSupabaseAdminClient } from '@/lib/auth/supabase-server';
-import { getGeminiEnrichmentModel } from '@/lib/ai/ai-client';
+import { getGenAiClient, GEMINI_ENRICHMENT_MODEL_NAME } from '@/lib/ai/ai-client';
 import { aiConfig } from '@/lib/ai/ai-config';
 import { sanitizeCustomerSummary } from '@/lib/providers/review-summary';
 import { formatBusinessName } from '@/lib/utils';
@@ -286,32 +286,32 @@ function computeProfileCompleteness(params: {
 }
 
 const COMBINED_ENRICHMENT_SCHEMA = {
-    type: SchemaType.OBJECT,
+    type: Type.OBJECT,
     properties: {
         bio: {
-            type: SchemaType.STRING,
+            type: Type.STRING,
             description: '2–3 factual sentences: what they do, where, what sets them apart. British English. Max 300 chars. No hollow phrases. Never use the business name — refer to them as "The team" or "They" instead.',
         },
         specialisations: {
-            type: SchemaType.ARRAY,
-            items: { type: SchemaType.STRING },
+            type: Type.ARRAY,
+            items: { type: Type.STRING },
             description: '3–8 specific homeowner-facing services. Title Case, max 4 words each, no generic category-only terms.',
         },
         website_quality: {
-            type: SchemaType.STRING,
+            type: Type.STRING,
             description: 'One of: high, medium, low, none.',
         },
         highlights: {
-            type: SchemaType.ARRAY,
-            items: { type: SchemaType.STRING },
+            type: Type.ARRAY,
+            items: { type: Type.STRING },
             description: '3–5 concrete differentiators. Each a full sentence in British English. Never generic.',
         },
         review_summary: {
-            type: SchemaType.STRING,
+            type: Type.STRING,
             description: 'Exactly 2 sentences from reviews. Max 140 chars total. British English. Warm, direct. No business name, no numbers, no audience nouns (homeowners/users/customers/clients/residents).',
         },
         narrative: {
-            type: SchemaType.STRING,
+            type: Type.STRING,
             description: '3–5 sentences about what the business does, concrete job types, and standout qualities. British English plain prose. Never refer to the business by name — use "The team", "They", or "The business" instead. Separate distinct ideas with \\n\\n to create paragraph breaks.',
         },
     },
@@ -352,11 +352,12 @@ Rules (British English throughout):
 - narrative: combine context from both website and reviews. Don't echo bio word-for-word.${params.strictSuffix ? `\n\n${params.strictSuffix}` : ''}`.trim();
 
     try {
-        const model = getGeminiEnrichmentModel();
+        const ai = getGenAiClient();
         const result = await withTimeout(
-            model.generateContent({
+            ai.models.generateContent({
+                model: GEMINI_ENRICHMENT_MODEL_NAME,
                 contents: [{ role: 'user', parts: [{ text: prompt }] }],
-                generationConfig: {
+                config: {
                     temperature: 0.3,
                     topK: 20,
                     topP: 0.75,
@@ -367,16 +368,14 @@ Rules (British English throughout):
                     // truncates mid-string ("Unterminated string in JSON").
                     maxOutputTokens: 2048,
                     responseMimeType: 'application/json',
-                     
-                    responseSchema: COMBINED_ENRICHMENT_SCHEMA as any,
+                    responseSchema: COMBINED_ENRICHMENT_SCHEMA,
                     // Disable model thinking so it does not consume the output budget.
                     thinkingConfig: { thinkingBudget: 0 },
-                     
-                } as any,
+                },
             }),
             AI_ENRICH_TIMEOUT
         );
-        const raw = result.response.text().trim();
+        const raw = (result.text ?? '').trim();
         return JSON.parse(raw) as CombinedEnrichmentOutput;
     } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
@@ -998,21 +997,22 @@ ${reviewsText}`.trim();
 
     let reviewSummary: string | null = null;
     try {
-        const model = getGeminiEnrichmentModel();
+        const ai = getGenAiClient();
         const result = await withTimeout(
-            model.generateContent({
+            ai.models.generateContent({
+                model: GEMINI_ENRICHMENT_MODEL_NAME,
                 contents: [{ role: 'user', parts: [{ text: prompt }] }],
-                generationConfig: {
+                config: {
                     temperature: 0.2,
                     topK: 15,
                     topP: 0.7,
                     maxOutputTokens: 768,
                     responseMimeType: 'application/json',
                     responseSchema: {
-                        type: SchemaType.OBJECT,
+                        type: Type.OBJECT,
                         properties: {
                             review_summary: {
-                                type: SchemaType.STRING,
+                                type: Type.STRING,
                                 description: '2–3 complete sentences, max 350 characters total. British English. Warm and direct. Always end on a full stop. No business name, no ratings, no audience nouns (homeowners/customers/clients/residents).',
                             },
                         },
@@ -1021,12 +1021,11 @@ ${reviewsText}`.trim();
                     // Disable thinking — see runCombinedEnrichment. Without this the
                     // thinking tokens consume maxOutputTokens and truncate the JSON.
                     thinkingConfig: { thinkingBudget: 0 },
-                     
-                } as any,
+                },
             }),
             FAST_REVIEW_SUMMARY_AI_MS
         );
-        const raw = result.response.text().trim();
+        const raw = (result.text ?? '').trim();
         reviewSummary = parseFastReviewSummaryModelJson(raw);
     } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);

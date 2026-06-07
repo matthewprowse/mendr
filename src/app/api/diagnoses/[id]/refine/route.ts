@@ -4,7 +4,7 @@
 export const maxDuration = 60;
 
 import { NextRequest, NextResponse } from 'next/server';
-import type { Content as GeminiContent } from '@google/generative-ai';
+import type { Content as GeminiContent } from '@google/genai';
 import { GEMINI_MODEL_NAME } from '@/lib/ai/ai-diagnosis-backend';
 import { logAiEvent, logPipelineStep } from '@/lib/ai/ai-logging';
 import { logIfDiagnosisJsonShapeUnexpected } from '@/features/diagnosis/diagnosis-json-validate';

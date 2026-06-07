@@ -3,11 +3,16 @@ import { makeRequest } from '@/__tests__/helpers/route-test';
 
 vi.mock('@/lib/rate-limit-config', () => ({ checkRateLimit: vi.fn(async () => null) }));
 
+// New @google/genai SDK: result.text is a property, ai.models.generateContent is the call path
 const generateContent = vi.fn(async () => ({
-    response: { text: () => 'Hi there, please help.' },
+    text: 'Hi there, please help.',
 }));
 vi.mock('@/lib/ai/ai-client', () => ({
-    getGeminiModel: () => ({ generateContent }),
+    getGenAiClient: () => ({ models: { generateContent } }),
+    GEMINI_MODEL_NAME: 'gemini-2.5-flash',
+    GEMINI_CRITIQUE_MODEL_NAME: 'gemini-2.5-flash',
+    GEMINI_ENRICHMENT_MODEL_NAME: 'gemini-2.5-flash',
+    getGeminiApiKey: () => 'test-key',
 }));
 
 beforeEach(() => {

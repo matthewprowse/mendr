@@ -43,9 +43,7 @@ describe('extractCostWithGemini', () => {
     it('calls the model and parses its JSON response', async () => {
         const model = {
             generateContent: vi.fn(async () => ({
-                response: {
-                    text: () => '{"min_zar":1500,"max_zar":6000,"unit":"repair","note":"y"}',
-                },
+                text: '{"min_zar":1500,"max_zar":6000,"unit":"repair","note":"y"}',
             })),
         };
         const out = await extractCostWithGemini('Geyser leak', ['snippet one'], { model });

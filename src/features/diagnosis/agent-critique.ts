@@ -11,8 +11,8 @@
  * server-wide without a deploy if the Gemini cost rises faster than expected.
  */
 
-import { SchemaType } from '@google/generative-ai';
-import type { Content as GeminiContent } from '@google/generative-ai';
+import { Type } from '@google/genai';
+import type { Content as GeminiContent } from '@google/genai';
 import {
     getCritiqueModel,
     GEMINI_CRITIQUE_MODEL_NAME,
@@ -56,50 +56,50 @@ const FAILURE_MODE_VALUES: DiagnosisCritiqueFailureMode[] = [
 ];
 
 const CRITIQUE_SCHEMA = {
-    type: SchemaType.OBJECT,
+    type: Type.OBJECT,
     properties: {
         failure_mode: {
-            type: SchemaType.STRING,
+            type: Type.STRING,
             description: `Exactly one of: ${FAILURE_MODE_VALUES.join(', ')}.`,
         },
         confidence_calibration: {
-            type: SchemaType.OBJECT,
+            type: Type.OBJECT,
             properties: {
-                agent_confidence: { type: SchemaType.INTEGER, description: 'Integer 0-100. The confidence Agent 2a reported.' },
-                critique_confidence: { type: SchemaType.INTEGER, description: 'Integer 0-100. What you think the score should be.' },
-                delta_reasoning: { type: SchemaType.STRING, description: 'One paragraph. Anchored in specific facts from the user content.' },
+                agent_confidence: { type: Type.INTEGER, description: 'Integer 0-100. The confidence Agent 2a reported.' },
+                critique_confidence: { type: Type.INTEGER, description: 'Integer 0-100. What you think the score should be.' },
+                delta_reasoning: { type: Type.STRING, description: 'One paragraph. Anchored in specific facts from the user content.' },
                 rubric_facets_used: {
-                    type: SchemaType.ARRAY,
+                    type: Type.ARRAY,
                     description: 'Short identifiers for facets that informed your critique_confidence.',
-                    items: { type: SchemaType.STRING },
+                    items: { type: Type.STRING },
                 },
             },
             required: ['agent_confidence', 'critique_confidence', 'delta_reasoning', 'rubric_facets_used'],
         },
         knowledge_gap: {
-            type: SchemaType.STRING,
+            type: Type.STRING,
             description: 'One concrete sentence naming the gap, or empty string when failure_mode=none.',
         },
         resolution_would_be: {
-            type: SchemaType.STRING,
+            type: Type.STRING,
             description: 'One concrete homeowner-facing sentence naming what would close the gap, or empty string.',
         },
         considered_alternatives: {
-            type: SchemaType.ARRAY,
+            type: Type.ARRAY,
             description: 'Plain-language fault names the model considered and discarded, max 8 words each.',
-            items: { type: SchemaType.STRING },
+            items: { type: Type.STRING },
         },
         surprise_signals: {
-            type: SchemaType.ARRAY,
+            type: Type.ARRAY,
             description: 'Specific observations the model saw but underweighted.',
-            items: { type: SchemaType.STRING },
+            items: { type: Type.STRING },
         },
         prompt_hypothesis: {
-            type: SchemaType.STRING,
+            type: Type.STRING,
             description: 'Short identifier of suspected prompt segment (e.g. file.ts:SECTION_NAME), or empty string when unattributable.',
         },
         notes_for_human_review: {
-            type: SchemaType.STRING,
+            type: Type.STRING,
             description: '2-3 sentences. Plain English. Briefing for a dashboard reviewer.',
         },
     },
@@ -370,18 +370,19 @@ export async function runDiagnosisCritique({
         ];
 
         const callStart = Date.now();
-        const result = await model.generateContent({
-            systemInstruction: { role: 'system', parts: [{ text: systemPrompt }] },
+        const result = await model.client.models.generateContent({
+            model: model.model,
             contents: critiqueContents,
-            generationConfig: {
+            config: {
                 ...sampling,
                 responseMimeType: 'application/json',
-                responseSchema: CRITIQUE_SCHEMA as never,
+                responseSchema: CRITIQUE_SCHEMA,
+                systemInstruction: systemPrompt,
             },
         });
         const latencyMs = Date.now() - callStart;
 
-        const usage = result.response.usageMetadata;
+        const usage = result.usageMetadata;
         void logGeminiUsage(usage, {
             endpoint: 'diagnose/critique',
             modelName: GEMINI_CRITIQUE_MODEL_NAME,
@@ -390,7 +391,7 @@ export async function runDiagnosisCritique({
             latencyMs,
         });
 
-        const raw = result.response.text().trim();
+        const raw = (result.text ?? '').trim();
         let parsed: unknown;
         try {
             parsed = JSON.parse(raw);

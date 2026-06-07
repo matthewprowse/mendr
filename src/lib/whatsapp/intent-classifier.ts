@@ -10,7 +10,7 @@
  * Never throws — the bot must degrade to a gentle re-prompt, never crash.
  */
 
-import { getGeminiModelNamed } from '@/lib/ai/ai-client';
+import { getGenAiClient } from '@/lib/ai/ai-client';
 import type { ParserOption, IntentClassifier } from './forgiving-parser';
 
 const CLASSIFIER_MODEL = 'gemini-2.5-flash';
@@ -37,14 +37,16 @@ USER REPLY: ${JSON.stringify(reply)}
 Answer with ONLY the single option number (or 0). No words.`;
 
     try {
-        const model = getGeminiModelNamed(CLASSIFIER_MODEL, {
-            generationConfig: {
+        const ai = getGenAiClient();
+        const result = await ai.models.generateContent({
+            model: CLASSIFIER_MODEL,
+            contents: prompt,
+            config: {
                 temperature: 0,
                 maxOutputTokens: 4,
             },
         });
-        const result = await model.generateContent(prompt);
-        const text = result.response.text().trim();
+        const text = (result.text ?? '').trim();
         const match = text.match(/-?\d+/);
         if (!match) return null;
         const n = Number(match[0]);
