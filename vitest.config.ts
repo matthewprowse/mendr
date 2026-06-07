@@ -81,9 +81,9 @@ export default defineConfig({
             // Coverage baseline post-Phase-2 upgrade (vitest v4, lucide v1, shadcn v4)
             // Measured actuals (2026-06-07): stmts 33.65%, branches 27.67%, funcs 22.36%, lines 34.86%
             // Thresholds set to floor(actual). Raise toward plan targets per future phases.
-            // Actuals: stmts 33.65%, branches 27.67%, funcs 22.36%, lines 34.86%
+            // Actuals post-phase-8 (2026-06-07): stmts 33.86%, branches 27.83%, funcs 22.66%, lines 35.09%
             thresholds: {
-                lines: 34,
+                lines: 35,
                 branches: 27,
                 functions: 22,
                 statements: 33,
