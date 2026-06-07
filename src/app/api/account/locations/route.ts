@@ -1,7 +1,7 @@
-/* eslint-disable no-console */
 import { NextRequest, NextResponse } from 'next/server';
 import { checkRateLimit } from '@/lib/rate-limit-config';
 import { createSupabaseServerClient, createSupabaseAdminClient } from '@/lib/auth/supabase-server';
+import { logger } from '@/lib/logging/logger';
 
 type SavedLocation = {
     id: string;
@@ -34,7 +34,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         .maybeSingle();
 
     if (error) {
-        console.error('[locations GET] error:', error);
+        logger.error('locations_get_error', error);
         return NextResponse.json({ error: 'Failed to fetch locations.' }, { status: 500 });
     }
 
@@ -84,7 +84,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         .maybeSingle();
 
     if (fetchError) {
-        console.error('[locations POST] fetch error:', fetchError);
+        logger.error('locations_post_fetch_error', fetchError);
         return NextResponse.json({ error: 'Failed to fetch profile.' }, { status: 500 });
     }
 
@@ -111,7 +111,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         .eq('id', user.id);
 
     if (updateError) {
-        console.error('[locations POST] update error:', updateError);
+        logger.error('locations_post_update_error', updateError);
         return NextResponse.json({ error: 'Failed to save location.' }, { status: 500 });
     }
 
@@ -147,7 +147,7 @@ export async function PATCH(req: NextRequest): Promise<NextResponse> {
             .maybeSingle();
 
         if (fetchError) {
-            console.error('[locations PATCH] fetch error:', fetchError);
+            logger.error('locations_patch_fetch_error', fetchError);
             return NextResponse.json({ error: 'Failed to fetch profile.' }, { status: 500 });
         }
 
@@ -166,13 +166,13 @@ export async function PATCH(req: NextRequest): Promise<NextResponse> {
             .eq('id', user.id);
 
         if (updateError) {
-            console.error('[locations PATCH] update error:', updateError);
+            logger.error('locations_patch_update_error', updateError);
             return NextResponse.json({ error: 'Failed to update location.' }, { status: 500 });
         }
 
         return NextResponse.json({ location: { id, label, address, lat, lng } });
     } catch (err) {
-        console.error('[locations PATCH] unhandled error:', err);
+        logger.error('locations_patch_unhandled', err);
         return NextResponse.json({ error: 'Unexpected error.' }, { status: 500 });
     }
 }
@@ -198,7 +198,7 @@ export async function DELETE(req: NextRequest): Promise<NextResponse> {
             .maybeSingle();
 
         if (fetchError) {
-            console.error('[locations DELETE] fetch error:', fetchError);
+            logger.error('locations_delete_fetch_error', fetchError);
             return NextResponse.json({ error: 'Failed to fetch profile.' }, { status: 500 });
         }
 
@@ -211,13 +211,13 @@ export async function DELETE(req: NextRequest): Promise<NextResponse> {
             .eq('id', user.id);
 
         if (updateError) {
-            console.error('[locations DELETE] update error:', updateError);
+            logger.error('locations_delete_update_error', updateError);
             return NextResponse.json({ error: 'Failed to delete location.' }, { status: 500 });
         }
 
         return NextResponse.json({ ok: true });
     } catch (err) {
-        console.error('[locations DELETE] unhandled error:', err);
+        logger.error('locations_delete_unhandled', err);
         return NextResponse.json({ error: 'Unexpected error.' }, { status: 500 });
     }
 }

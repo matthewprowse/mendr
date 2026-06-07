@@ -1,6 +1,10 @@
+/* eslint-disable no-console */
 import type { NextConfig } from 'next';
 import { PHASE_DEVELOPMENT_SERVER } from 'next/constants';
 import { withSentryConfig } from '@sentry/nextjs';
+import bundleAnalyzer from '@next/bundle-analyzer';
+
+const withBundleAnalyzer = bundleAnalyzer({ enabled: process.env.ANALYZE === 'true' });
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Content Security Policy
@@ -186,7 +190,8 @@ const sentryConfig = {
 
 export default function defineNextConfig(phase: string): NextConfig {
     const nextConfig = createNextConfig(phase);
-    return process.env.NEXT_PUBLIC_SENTRY_DSN
+    const sentryWrapped = process.env.NEXT_PUBLIC_SENTRY_DSN
         ? withSentryConfig(nextConfig, sentryConfig)
         : nextConfig;
+    return withBundleAnalyzer(sentryWrapped);
 }

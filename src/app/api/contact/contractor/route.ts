@@ -1,4 +1,3 @@
-/* eslint-disable no-console */
 import { NextRequest, NextResponse } from 'next/server';
 import { createHash } from 'crypto';
 import { checkRateLimit } from '@/lib/rate-limit-config';
@@ -8,6 +7,7 @@ import {
 } from '@/lib/auth/supabase-server';
 import { notifyContractorOfLead } from '@/lib/providers/notify-contractor-of-lead';
 import { stampFirstContact } from '@/lib/analytics/funnel';
+import { logger } from '@/lib/logging/logger';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -100,7 +100,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         .maybeSingle();
 
     if (providerError) {
-        console.error('[contact/contractor] provider fetch error:', providerError);
+        logger.error('provider_fetch_error', providerError);
         return NextResponse.json({ error: 'Failed to verify provider.' }, { status: 500 });
     }
     if (!provider) {
@@ -115,7 +115,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         .maybeSingle();
 
     if (diagnosisError) {
-        console.error('[contact/contractor] diagnosis fetch error:', diagnosisError);
+        logger.error('diagnosis_fetch_error', diagnosisError);
         return NextResponse.json({ error: 'Failed to fetch diagnosis.' }, { status: 500 });
     }
 
@@ -143,7 +143,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         .select('id');
 
     if (upsertError) {
-        console.error('[contact/contractor] upsert error:', upsertError);
+        logger.error('upsert_error', upsertError);
         return NextResponse.json({ error: 'Failed to record contact event.' }, { status: 500 });
     }
 
@@ -160,7 +160,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
             diagnosisId,
             homeownerWhatsapp,
         }).catch((err) => {
-            console.error('[contact/contractor] lead notification error:', err);
+            logger.error('lead_notification_error', err);
         });
 
         // Record the POPIA consent that authorised sharing this homeowner's
@@ -175,7 +175,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
                 consent_text_version: consentTextVersion,
             });
             if (consentError) {
-                console.warn('[contact/contractor] consent record skipped:', consentError.message);
+                logger.warn('consent_record_skipped', { detail: consentError.message });
             }
 
             // Seed the Pro's CRM with this homeowner. Insert-only (ignoreDuplicates)
@@ -191,7 +191,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
                 { onConflict: 'provider_id,homeowner_user_id', ignoreDuplicates: true }
             );
             if (customerError) {
-                console.warn('[contact/contractor] customer seed skipped:', customerError.message);
+                logger.warn('customer_seed_skipped', { detail: customerError.message });
             }
         }
     }
@@ -205,7 +205,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         .update({ diagnosis_confirmed: true })
         .eq('id', diagnosisId);
     if (confirmError) {
-        console.warn('[contact/contractor] diagnosis_confirmed update skipped:', confirmError.message);
+        logger.warn('diagnosis_confirmed_update_skipped', { detail: confirmError.message });
     }
 
     return NextResponse.json({ ok: true });

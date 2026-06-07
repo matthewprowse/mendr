@@ -1,4 +1,4 @@
-/* eslint-disable no-console */
+import { logger } from '@/lib/logging/logger';
 /**
  * Multi-agent pipeline orchestrator for /api/diagnose.
  *
@@ -124,7 +124,7 @@ export function buildStreamingNDJSONResponse(
                         },
                     );
                 } catch (e) {
-                    console.error('Multi-agent pipeline error:', e);
+                    logger.error('multi_agent_pipeline_error', e);
                     controller.error(e);
                     return;
                 }
@@ -269,12 +269,7 @@ export async function runDiagnosePipelineNonStreaming(
 
     let rawProse: ProseResult;
     if (shouldShortCircuitProseOnClarification(classification)) {
-        console.warn(
-            JSON.stringify({
-                event: 'prose_short_circuited',
-                reason: 'requires_clarification',
-            }),
-        );
+        logger.warn('prose_short_circuited', { reason: 'requires_clarification' });
         rawProse = buildStubProseForClarification();
     } else {
         ({ prose: rawProse } = await runProseWithFallback({
@@ -375,12 +370,7 @@ export async function runDiagnosePipelineStreaming(
 
         let rawProseStream: ProseResult;
         if (shouldShortCircuitProseOnClarification(classification)) {
-            console.warn(
-                JSON.stringify({
-                    event: 'prose_short_circuited',
-                    reason: 'requires_clarification',
-                }),
-            );
+            logger.warn('prose_short_circuited', { reason: 'requires_clarification' });
             rawProseStream = buildStubProseForClarification();
         } else {
             ({ prose: rawProseStream } = await runProseWithFallback({
@@ -418,12 +408,7 @@ export async function runDiagnosePipelineStreaming(
 
     let rawProse: ProseResult;
     if (shouldShortCircuitProseOnClarification(classification)) {
-        console.warn(
-            JSON.stringify({
-                event: 'prose_short_circuited',
-                reason: 'requires_clarification',
-            }),
-        );
+        logger.warn('prose_short_circuited', { reason: 'requires_clarification' });
         rawProse = buildStubProseForClarification();
     } else {
         ({ prose: rawProse } = await runProseWithFallback({
