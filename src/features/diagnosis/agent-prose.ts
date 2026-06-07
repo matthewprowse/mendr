@@ -969,7 +969,7 @@ function applyThoughtTitleDisconnectRewrite(parsed: ProseResult): void {
 
     // Mirror legacy flat field so the UI's fallback path also has content.
     parsed.clarification_questions =
-        parsed.structured_clarification.hypotheses[0].answer_chips.map((c) => c.text);
+        parsed.structured_clarification?.hypotheses[0]?.answer_chips.map((c) => c.text) ?? [];
 }
 
 /**

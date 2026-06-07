@@ -207,7 +207,7 @@ describe('runCritique — mocked Gemini on the garage-door fixture', () => {
             userId: null,
         });
         expect(result).not.toBeNull();
-        const cc = result!.confidence_calibration;
+        const cc = result!.confidence_calibration!;
         expect(cc.agent_confidence).toBe(60);
         expect(cc.critique_confidence).toBe(90);
         expect(cc.critique_confidence).toBeGreaterThan(cc.agent_confidence);

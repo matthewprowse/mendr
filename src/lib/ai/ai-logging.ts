@@ -49,6 +49,8 @@ export type PipelineStepName =
     | 'image-tier'
     | 'agent-classify'
     | 'agent-prose'
+    | 'agent-reasoning'
+    | 'agent-critique'
     | 'conversation-write'
     | 'provider-match'
     | 'stream-complete';
@@ -77,6 +79,12 @@ export interface PipelineStepEvent {
 
     /** Completion token count reported by usageMetadata, if available. */
     completionTokens?: number;
+
+    /** Cached content token count reported by usageMetadata, if available. */
+    cachedContentTokens?: number;
+
+    /** Thinking/reasoning token count reported by usageMetadata, if available. */
+    thinkingTokens?: number;
 
     /** Error message when status is 'error'. */
     errorMessage?: string;

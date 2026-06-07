@@ -17,9 +17,11 @@ vi.mock('@/lib/auth/supabase-server', () => ({
     createSupabaseAdminClient: vi.fn(async () => supabase),
 }));
 vi.mock('resend', () => ({
-    Resend: vi.fn(() => ({
-        emails: { send: vi.fn(async () => ({ data: { id: 'x' }, error: null })) },
-    })),
+    Resend: vi.fn(function (this: object) {
+        Object.assign(this, {
+            emails: { send: vi.fn(async () => ({ data: { id: 'x' }, error: null })) },
+        });
+    }),
 }));
 
 beforeEach(() => {

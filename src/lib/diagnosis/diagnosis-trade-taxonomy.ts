@@ -47,6 +47,26 @@ export interface TaxonomySubcategory {
      * classification logic. Longest-match-wins applies here.
      */
     readonly inferenceAnchors: readonly string[];
+    /**
+     * Structured failure-mode catalog for Agent 2b prompt injection (Phase 2 of the
+     * Diagnostic-Accuracy-Hardening-Plan). Optional during rollout — when absent,
+     * the failure-mode serialiser returns an empty string and Agent 2b falls back
+     * to general-knowledge reasoning.
+     */
+    readonly failureModes?: readonly FailureMode[];
+}
+
+/** One failure mode in the SA-residential catalog for a subcategory. */
+export interface FailureMode {
+    readonly id: string;
+    readonly label: string;
+    readonly description: string;
+    readonly diagnosticCues: ReadonlyArray<{ type: string; description: string }>;
+    readonly urgency: 'now' | 'soon' | 'when_convenient' | 'planned';
+    readonly typicalRepair: {
+        readonly summary: string;
+        readonly costBand: 'minor' | 'medium' | 'major' | 'replacement';
+    };
 }
 
 function assertKnownTrades(rows: TaxonomySubcategory[]): void {

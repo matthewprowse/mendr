@@ -31,9 +31,9 @@ describe('normaliseCritique — well-formed input', () => {
         const result = normaliseCritique(wellFormed);
         expect(result).not.toBeNull();
         expect(result?.failure_mode).toBe('prompt_blind_spot');
-        expect(result?.confidence_calibration.agent_confidence).toBe(78);
-        expect(result?.confidence_calibration.critique_confidence).toBe(90);
-        expect(result?.confidence_calibration.rubric_facets_used).toEqual([
+        expect(result?.confidence_calibration!.agent_confidence).toBe(78);
+        expect(result?.confidence_calibration!.critique_confidence).toBe(90);
+        expect(result?.confidence_calibration!.rubric_facets_used).toEqual([
             'component_named',
             'symptom_unique',
         ]);
@@ -42,7 +42,7 @@ describe('normaliseCritique — well-formed input', () => {
         expect(result?.considered_alternatives).toHaveLength(2);
         expect(result?.surprise_signals).toHaveLength(1);
         expect(result?.prompt_hypothesis).toBe('output-format.ts:confidence_definition');
-        expect(result?.notes_for_human_review.length).toBeGreaterThan(0);
+        expect(result?.notes_for_human_review!.length).toBeGreaterThan(0);
     });
 });
 
@@ -94,8 +94,8 @@ describe('normaliseCritique — confidence_calibration', () => {
                 rubric_facets_used: [],
             },
         });
-        expect(r?.confidence_calibration.agent_confidence).toBe(0);
-        expect(r?.confidence_calibration.critique_confidence).toBe(100);
+        expect(r?.confidence_calibration!.agent_confidence).toBe(0);
+        expect(r?.confidence_calibration!.critique_confidence).toBe(100);
     });
 
     it('defaults to 0 when the field is missing or non-numeric', () => {
@@ -106,8 +106,8 @@ describe('normaliseCritique — confidence_calibration', () => {
                 rubric_facets_used: [],
             },
         });
-        expect(r?.confidence_calibration.agent_confidence).toBe(0);
-        expect(r?.confidence_calibration.critique_confidence).toBe(0);
+        expect(r?.confidence_calibration!.agent_confidence).toBe(0);
+        expect(r?.confidence_calibration!.critique_confidence).toBe(0);
     });
 
     it('drops empty rubric_facets_used entries', () => {
@@ -120,7 +120,7 @@ describe('normaliseCritique — confidence_calibration', () => {
                 rubric_facets_used: ['component_named', '', '   ', 42 as unknown as string],
             },
         });
-        expect(r?.confidence_calibration.rubric_facets_used).toEqual(['component_named']);
+        expect(r?.confidence_calibration!.rubric_facets_used).toEqual(['component_named']);
     });
 });
 

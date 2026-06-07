@@ -38,7 +38,8 @@ const COST_BAND_DESCRIPTIONS: Record<FailureMode['typicalRepair']['costBand'], s
 const URGENCY_DESCRIPTIONS: Record<FailureMode['urgency'], string> = {
     now: 'address immediately (safety or escalating damage)',
     soon: 'address within days (degrades if unattended)',
-    planned: 'schedule when convenient',
+    when_convenient: 'schedule when convenient',
+    planned: 'schedule when convenient (planned maintenance)',
 };
 
 function renderFailureMode(mode: FailureMode): string {

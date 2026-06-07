@@ -7,9 +7,11 @@ let verifyImpl: (payload: string, headers: Record<string, string>) => unknown = 
 });
 
 vi.mock('standardwebhooks', () => ({
-    Webhook: vi.fn().mockImplementation((_secret: string) => ({
-        verify: (...args: Parameters<typeof verifyImpl>) => verifyImpl(...args),
-    })),
+    Webhook: vi.fn(function (this: object, _secret: string) {
+        Object.assign(this, {
+            verify: (...args: Parameters<typeof verifyImpl>) => verifyImpl(...args),
+        });
+    }),
 }));
 
 vi.mock('@/lib/auth-email-dispatch', () => ({

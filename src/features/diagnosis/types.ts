@@ -95,6 +95,36 @@ export interface DiagnosisData {
      */
     trade_candidates?: Array<{ trade: string; score: number }>;
     /**
+     * Agent 2b: structured multi-hypothesis clarification payload.
+     * Only present when requires_clarification is true and Agent 2b produced
+     * per-hypothesis discriminating questions with answer chips.
+     */
+    structured_clarification?: {
+        /** Short intro text shown above the hypothesis cards. */
+        intro?: string;
+        /** Ordered list of hypotheses, each with its own discriminating question + chips. */
+        hypotheses: Array<{
+            id: string;
+            label: string;
+            /** 0–100 confidence percentage for display. */
+            confidence: number;
+            /** Optional one-sentence "why we think this" shown below the label. */
+            why?: string;
+            /** The discriminating question for this hypothesis. */
+            discriminating_question?: string;
+            answer_chips: Array<{
+                id: string;
+                text: string;
+                /** Optional effect hint for the hypothesis-update logic. */
+                effect?: 'confirms' | 'rules_out' | 'partial';
+            }>;
+        }>;
+        /** Optional escape-hatch card config (free-text note prompt). */
+        escape?: {
+            prompt: string;
+        };
+    };
+    /**
      * Phase 4 — deterministic confidence score computed from observable input/output
      * signals (image count, description length, taxonomy match, etc.) at the time the
      * agent ran. Separate from the model's self-reported `confidence` integer above;
@@ -115,4 +145,85 @@ export interface DiagnosisData {
             isRejectedOrUnserviced: boolean;
         };
     };
+}
+
+// ── Agent 2c: Diagnostic Reasoning ───────────────────────────────────────────
+
+/** One hypothesis the reasoning agent is weighing. */
+export interface DiagnosticHypothesis {
+    id: string;
+    label: string;
+    confidence_alone: number;
+    evidence_for: string[];
+    evidence_against: string[];
+}
+
+/** One clarification chip produced by Agent 2c. */
+export interface DiagnosticChip {
+    id: string;
+    /** Display text shown to the user on the chip button. */
+    text: string;
+    supports: string | null;
+    rules_out: string[];
+}
+
+/** Full output of Agent 2c (diagnostic reasoning sub-agent). */
+export interface DiagnosticReasoning {
+    round: 1 | 2;
+    hypotheses: DiagnosticHypothesis[];
+    chips: DiagnosticChip[];
+    /** The open question the agent cannot resolve from current evidence. */
+    what_we_dont_know: string;
+    /** One sentence explaining why this question determines the diagnosis. */
+    why_it_matters: string;
+    /** What the agent will do if the user cannot answer this round's question. */
+    next_step_if_unresolved: 'ask_again' | 'commit_low_confidence';
+}
+
+// ── Facets (Agent 2a quality signals) ────────────────────────────────────────
+
+/** Image and description quality signals used by computeRecommendedAction. */
+export interface DiagnosisFacets {
+    image_sufficiency: 'absent' | 'partial' | 'sufficient';
+    component_confidence: number;
+    cause_confidence: number;
+    /** Overall trade match confidence (0–100). */
+    trade_confidence?: number;
+    /** Explicit unknowns extracted from the description. */
+    explicit_unknowns?: string[];
+    /** Observations the model committed to in this round. */
+    committed_observations?: string[];
+}
+
+/** Decision produced by computeRecommendedAction. */
+export type RecommendedAction = 'commit' | 'ask' | 'commit_low_confidence';
+
+// ── Agent 3: Self-Critique ────────────────────────────────────────────────────
+
+export type DiagnosisCritiqueFailureMode =
+    | 'none'
+    | 'image_quality'
+    | 'ambiguous_symptoms'
+    | 'taxonomy_gap'
+    | 'multi_fault'
+    | 'description_unclear'
+    | 'prompt_blind_spot'
+    | 'low_signal_evidence'
+    | 'rubric_miscalibration'
+    | 'other';
+
+export interface DiagnosisCritique {
+    failure_mode: DiagnosisCritiqueFailureMode;
+    confidence_calibration: {
+        agent_confidence: number;
+        critique_confidence: number;
+        delta_reasoning: string;
+        rubric_facets_used: string[];
+    } | null;
+    knowledge_gap: string | null;
+    resolution_would_be: string | null;
+    considered_alternatives: string[];
+    surprise_signals: string[];
+    prompt_hypothesis: string | null;
+    notes_for_human_review: string | null;
 }

@@ -14,9 +14,11 @@ vi.mock('@/lib/auth/supabase-server', () => ({
 
 vi.mock('@google-cloud/speech', () => {
     return {
-        SpeechClient: vi.fn().mockImplementation(() => ({
-            recognize: (...args: unknown[]) => recognizeSpy(...args),
-        })),
+        SpeechClient: vi.fn(function (this: object) {
+            Object.assign(this, {
+                recognize: (...args: unknown[]) => recognizeSpy(...args),
+            });
+        }),
         protos: {
             google: {
                 cloud: {

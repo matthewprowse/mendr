@@ -2,7 +2,8 @@
 
 import { Fragment, useState } from 'react';
 import Link from 'next/link';
-import { ChevronDown, Facebook, Instagram, Linkedin, Twitter } from 'lucide-react';
+// Note: Facebook, Instagram, Linkedin, Twitter removed from lucide-react v1; replaced with generic icons
+import { ChevronDown, Globe, Link as LinkIcon, Share2 } from 'lucide-react';
 import { AnimatePresence, MotionConfig, motion } from 'framer-motion';
 import { StartDiagnosisButton } from '@/app/page/components/start-diagnosis-button';
 import { LandingHeader } from '@/components/landing-header';
@@ -74,10 +75,10 @@ const FAQS = [
 ];
 
 const SOCIAL_LINKS = [
-    { href: 'https://x.com/', label: 'X', icon: Twitter },
-    { href: 'https://www.linkedin.com/', label: 'LinkedIn', icon: Linkedin },
-    { href: 'https://www.instagram.com/', label: 'Instagram', icon: Instagram },
-    { href: 'https://www.facebook.com/', label: 'Facebook', icon: Facebook },
+    { href: 'https://x.com/', label: 'X', icon: Share2 },
+    { href: 'https://www.linkedin.com/', label: 'LinkedIn', icon: LinkIcon },
+    { href: 'https://www.instagram.com/', label: 'Instagram', icon: Globe },
+    { href: 'https://www.facebook.com/', label: 'Facebook', icon: Globe },
 ] as const;
 
 export function HomeMarketingPageClient() {
