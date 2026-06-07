@@ -1,0 +1,62 @@
+name: refresh-llm-fixtures
+
+# Manual-trigger only. Re-runs pinned classify/prose scenarios against the
+# live Gemini API and opens a PR with the fixture diff for human review.
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: refresh-fixtures-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    name: refresh LLM fixtures and open PR
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+      pull-requests: write
+    env:
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Re-capture LLM fixtures
+        run: pnpm scripts:refresh-llm-fixtures
+
+      - name: Open pull request with fixture diff
+        uses: peter-evans/create-pull-request@v6
+        with:
+          commit-message: 'chore(fixtures): refresh LLM fixtures from live Gemini run'
+          branch: chore/refresh-llm-fixtures
+          delete-branch: true
+          title: 'chore(fixtures): refresh LLM fixtures from live Gemini run'
+          add-paths: |
+            src/features/diagnosis/__tests__/fixtures/classify/*.json
+            src/features/diagnosis/__tests__/fixtures/prose/*.json
+          body: |
+            ## Refreshed LLM fixtures
+
+            Opened by the `refresh-llm-fixtures` workflow (manual dispatch).
+
+            ### Review checklist before merge
+            - [ ] Every changed fixture represents a correct diagnosis for its input
+            - [ ] `pnpm test` passes against new fixtures
+            - [ ] No unexpected model drift (large diffs warrant investigation)
