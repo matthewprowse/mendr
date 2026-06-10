@@ -1,0 +1,11 @@
+{
+    "name": "unserviced - home related but not offered",
+    "raw": "{\"subcategory_id\":\"none_unmapped\",\"trade\":\"N/A\",\"trade_detail\":\"\",\"confidence\":80,\"rejected\":false,\"requires_clarification\":false,\"unserviced\":true,\"refetch_providers\":false,\"unsupported_reason\":\"Aircon installation is not currently in our service catalogue for the Western Cape.\",\"failed_component\":\"\",\"cascading_damage\":\"\"}",
+    "expected": {
+        "trade": "N/A",
+        "subcategory_id": "none_unmapped",
+        "rejected": false,
+        "unserviced": true,
+        "unsupported_reason": "Aircon installation is not currently in our service catalogue for the Western Cape."
+    }
+}

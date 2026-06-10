@@ -1,0 +1,67 @@
+name: diagnosis-accuracy-eval
+
+# Weekly diagnostic-accuracy trend (see docs/Test Suite Audit June 2026.md, Phase E1).
+#
+# Runs the rebuilt accuracy harness against the LIVE Gemini classifier and
+# records trade accuracy as a trend. This is NOT a pass/fail gate — a dip in
+# accuracy should open an investigation, never block a merge. The job is
+# budget-gated: it only runs live when the GEMINI_API_KEY secret is present,
+# otherwise it self-skips the live step (the cheap structure check + the
+# fixture drift guard already run in the per-PR unit suite).
+#
+# The per-PR suite covers the scoring logic and the SERVICE_LABELS drift guard
+# (src/features/diagnosis/__evals__/__tests__). Only the token-spending live
+# run lives here.
+
+on:
+  schedule:
+    - cron: '0 4 * * 1' # 04:00 UTC every Monday
+  workflow_dispatch:
+
+jobs:
+  accuracy-trend:
+    name: live accuracy trend
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Live accuracy eval (budget-gated)
+        if: ${{ env.HAS_KEY != '' }}
+        env:
+          HAS_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          DIAGNOSIS_EVAL_LIVE: '1'
+        run: pnpm eval:accuracy --json | tee diagnosis-accuracy-report.json
+
+      - name: Skip notice when GEMINI_API_KEY is unset
+        if: ${{ env.HAS_KEY == '' }}
+        env:
+          HAS_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: echo "::warning::GEMINI_API_KEY secret not set — live accuracy eval skipped. Structure check + fixture drift guard still run per-PR."
+
+      - name: Upload accuracy report
+        if: ${{ env.HAS_KEY != '' }}
+        env:
+          HAS_KEY: ${{ secrets.GEMINI_API_KEY }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: diagnosis-accuracy-report
+          path: diagnosis-accuracy-report.json
+          retention-days: 90

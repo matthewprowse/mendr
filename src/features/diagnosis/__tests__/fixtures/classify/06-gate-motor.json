@@ -1,0 +1,14 @@
+{
+    "name": "gate motor fault - security trade with cascading damage",
+    "raw": "{\"subcategory_id\":\"gate_motor_fault\",\"trade\":\"Security\",\"trade_detail\":\"Gate Motor / Gate Fault\",\"confidence\":88,\"rejected\":false,\"requires_clarification\":false,\"unserviced\":false,\"refetch_providers\":false,\"unsupported_reason\":\"\",\"failed_component\":\"gate motor PCB control board\",\"cascading_damage\":\"capacitor leakage and corroded relay contacts\"}",
+    "expected": {
+        "trade": "Security",
+        "trade_detail": "Gate Motor / Gate Fault",
+        "subcategory_id": "gate_motor_fault",
+        "confidence": 88,
+        "rejected": false,
+        "requires_clarification": false,
+        "failed_component": "gate motor PCB control board",
+        "cascading_damage": "capacitor leakage and corroded relay contacts"
+    }
+}

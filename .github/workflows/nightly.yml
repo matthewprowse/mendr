@@ -1,0 +1,110 @@
+name: nightly
+
+# Nightly deep-verification run (see docs/Test Suite Audit June 2026.md, Phase A4).
+#
+# Runs the suites that are too slow or too costly for the per-PR gate:
+#   • test:db          — PGlite suite (also blocking per-PR; here for trend continuity)
+#   • test:integration — *.branch.test.ts against a REAL Postgres via SUPABASE_DB_URL.
+#                        Requires the SUPABASE_DB_URL repo secret (a Supabase branch
+#                        connection string). Without the secret the tests self-skip,
+#                        so this stays green-but-useless until the secret is added.
+#   • e2e              — full Playwright run against a production build.
+#
+# Not a PR gate. Failures here should open an issue, not block merges.
+
+on:
+  schedule:
+    - cron: '0 3 * * *' # 03:00 UTC nightly
+  workflow_dispatch:
+
+jobs:
+  db-and-integration:
+    name: db + real-postgres integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: DB tests (PGlite)
+        run: pnpm test:db
+
+      - name: Integration tests (Supabase branch)
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: pnpm test:integration
+
+      - name: Warn when SUPABASE_DB_URL is unset
+        if: ${{ env.HAS_DB_URL == '' }}
+        env:
+          HAS_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: echo "::warning::SUPABASE_DB_URL secret not set — branch integration tests self-skipped."
+
+  e2e:
+    name: nightly playwright e2e
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      NEXT_TELEMETRY_DISABLED: '1'
+      MOCK_LLM: '1'
+      MOCK_PLACES: '1'
+      MOCK_BRAVE: '1'
+      CI: 'true'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-playwright-
+
+      - name: Install Playwright Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Build Next.js
+        run: pnpm build
+
+      - name: Run Playwright tests
+        run: pnpm test:e2e
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly-playwright-report
+          path: playwright-report/
+          retention-days: 7

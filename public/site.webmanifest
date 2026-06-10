@@ -1,0 +1,10 @@
+{
+  "name": "Mendr",
+  "short_name": "Mendr",
+  "description": "Home maintenance diagnosis and local provider matching in the Western Cape.",
+  "start_url": "/",
+  "display": "browser",
+  "background_color": "#ffffff",
+  "theme_color": "#0d0d0d",
+  "icons": []
+}

@@ -1,0 +1,71 @@
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+# dependencies
+/node_modules
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# testing
+/coverage
+
+# next.js
+/.next/
+/out/
+
+# production
+/build
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# env files (never commit secrets; .env.example and .env.test.example are committed)
+.env
+.env.local
+.env.development.local
+.env.test
+.env.test.local
+.env.production.local
+.env.bak*
+!.env.example
+!.env.test.example
+
+# backups & build scratch (never commit)
+*.bak
+*.backup-*
+/build.log
+/build-spec.txt
+/tmp/
+
+# Playwright E2E artifacts
+/playwright-report/
+/test-results/
+/playwright/.cache/
+
+# vercel
+.vercel
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+
+# Local Claude Code agent state (per-machine)
+.claude/
+.next-preview
+
+# generated perf benchmark artifacts
+scripts/perf/reports/
+
+# local credentials (second layer; credentials/.gitignore is the first)
+credentials/

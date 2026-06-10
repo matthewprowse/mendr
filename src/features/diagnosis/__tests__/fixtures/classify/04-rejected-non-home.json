@@ -1,0 +1,17 @@
+{
+    "name": "rejected - photo not home maintenance",
+    "raw": "{\"subcategory_id\":\"none_unmapped\",\"trade\":\"N/A\",\"trade_detail\":\"\",\"confidence\":5,\"rejected\":true,\"requires_clarification\":false,\"unserviced\":false,\"refetch_providers\":false,\"unsupported_reason\":\"Image shows a pet, not a home maintenance issue.\",\"failed_component\":\"\",\"cascading_damage\":\"\"}",
+    "expected": {
+        "trade": "N/A",
+        "trade_detail": "",
+        "subcategory_id": "none_unmapped",
+        "confidence": 5,
+        "rejected": true,
+        "requires_clarification": false,
+        "unserviced": false,
+        "refetch_providers": false,
+        "unsupported_reason": "Image shows a pet, not a home maintenance issue.",
+        "failed_component": "",
+        "cascading_damage": ""
+    }
+}

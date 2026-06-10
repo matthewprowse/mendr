@@ -1,0 +1,87 @@
+'use client';
+
+import { useState } from 'react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Button } from '@/components/ui/button';
+import { useAuth } from '@/context/auth-context';
+
+export function UserAvatarMenu() {
+    const [open, setOpen] = useState(false);
+    const { user, signOut, isLoading } = useAuth();
+    const router = useRouter();
+
+    const handleSignOut = async () => {
+        setOpen(false);
+        await signOut();
+        router.push('/');
+    };
+
+    const fullName = user?.user_metadata?.full_name;
+    const displayName =
+        typeof fullName === 'string' && fullName.trim()
+            ? fullName.trim()
+            : (user?.email?.split('@')[0] ?? 'Account');
+
+    const initials =
+        typeof fullName === 'string' && fullName.trim()
+            ? fullName
+                  .split(' ')
+                  .map((n: string) => n[0])
+                  .join('')
+                  .slice(0, 2)
+                  .toUpperCase()
+            : user?.email
+              ? user.email.slice(0, 2).toUpperCase()
+              : null;
+
+    // Do not render avatar/menu at all while auth is loading or when user is not logged in.
+    if (isLoading || !user) return null;
+
+    return (
+        <Popover open={open} onOpenChange={setOpen}>
+            <PopoverTrigger asChild>
+                <button
+                    type="button"
+                    className="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                    aria-label="Account menu"
+                >
+                    <Avatar className="h-9 w-9 cursor-pointer transition-opacity hover:opacity-90">
+                        <AvatarFallback className="h-9 w-9 bg-secondary text-secondary-foreground text-xs font-semibold">
+                            {initials ?? ''}
+                        </AvatarFallback>
+                    </Avatar>
+                </button>
+            </PopoverTrigger>
+            <PopoverContent
+                align="end"
+                sideOffset={8}
+                side="bottom"
+                className="w-54 rounded-md border-input/75 bg-popover shadow-none"
+            >
+
+                <div className="flex items-center gap-0.5 p-1 -mx-2 pb-3 -mt-2 border-b border-input/75 mb-3">
+                    <div className="flex flex-col gap-1">
+                        <p className="text-sm font-medium text-foreground">{displayName}</p>
+                        <p className="truncate text-xs text-muted-foreground">
+                            {user.email ?? 'Account'}
+                        </p>
+                    </div>
+                </div>
+                <div className="flex flex-col gap-1 border-t border-input/75 pt-3 -mx-1 -mb-1">
+                    <Button
+                        variant="secondary"
+                        size="sm"
+                        className="w-full justify-start font-normal transition-all duration-250"
+                        onClick={handleSignOut}
+                    >
+                        Log Out
+                    </Button>
+                </div>
+
+            </PopoverContent>
+        </Popover>
+    );
+}

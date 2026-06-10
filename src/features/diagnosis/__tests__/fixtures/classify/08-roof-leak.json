@@ -1,0 +1,10 @@
+{
+    "name": "roof leak repair - building trade",
+    "raw": "{\"subcategory_id\":\"roof_leak_repair\",\"trade\":\"Building\",\"trade_detail\":\"Roof Leak / Repair\",\"confidence\":90,\"rejected\":false,\"requires_clarification\":false,\"unserviced\":false,\"refetch_providers\":false,\"unsupported_reason\":\"\",\"failed_component\":\"flashing around chimney\",\"cascading_damage\":\"water stain on ceiling below\"}",
+    "expected": {
+        "subcategory_id": "roof_leak_repair",
+        "confidence": 90,
+        "failed_component": "flashing around chimney",
+        "cascading_damage": "water stain on ceiling below"
+    }
+}

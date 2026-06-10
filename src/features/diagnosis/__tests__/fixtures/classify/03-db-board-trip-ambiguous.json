@@ -1,0 +1,15 @@
+{
+    "name": "DB board tripping - confidence below 85 triggers clarification",
+    "raw": "{\"subcategory_id\":\"db_board_tripping\",\"trade\":\"Electrical\",\"trade_detail\":\"DB Board / Tripping\",\"confidence\":72,\"rejected\":false,\"requires_clarification\":true,\"unserviced\":false,\"refetch_providers\":false,\"unsupported_reason\":\"\",\"failed_component\":\"earth leakage breaker\",\"cascading_damage\":\"\"}",
+    "expected": {
+        "trade": "Electrical",
+        "trade_detail": "DB Board / Tripping",
+        "subcategory_id": "db_board_tripping",
+        "confidence": 72,
+        "rejected": false,
+        "requires_clarification": true,
+        "unserviced": false,
+        "refetch_providers": false,
+        "failed_component": "earth leakage breaker"
+    }
+}

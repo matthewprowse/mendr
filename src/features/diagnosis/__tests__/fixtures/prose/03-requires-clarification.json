@@ -1,0 +1,11 @@
+{
+    "name": "low confidence - requires_clarification triggers chips",
+    "raw": "{\"thought\":\"The image shows a section of a roof in poor light with what appears to be staining, but the angle makes it impossible to tell whether the source is rain ingress, a plumbing overflow, or rising damp from below. The texture of the staining is uneven, which is consistent with multiple possible causes. Without confirmation of when the staining appeared (after rain, after running the geyser, in summer vs winter), I cannot commit to a single diagnosis. The most likely candidates are a roof leak above the staining or a damp issue tracking from the wall behind.\",\"diagnosis\":\"Possible Damp Or Roof Leak\",\"message\":\"The staining visible on the ceiling could be either a roof leak from above or rising damp tracking from the wall. The pattern alone is not enough to commit to one cause without more information.\\n\\nIf you can recall whether the staining appeared after heavy rain, or whether it gets worse in winter, that will narrow it down considerably.\",\"action_required\":\"\",\"contractor_checklist\":[],\"homeowner_prep\":\"\",\"image_descriptions\":[\"Uneven brown staining visible on a section of ceiling, with no clear source point or active drip visible.\"],\"image_observations\":[{\"primary_observation\":\"Uneven brown staining visible on the ceiling, no active drip or clear source point.\",\"components_visible\":[\"ceiling boards\",\"cornice edge\"],\"components_missing_or_damaged\":[\"ceiling boards (stained, possibly water-damaged)\"],\"role_in_diagnosis\":\"primary_evidence\"}],\"clarification_questions\":[\"It started after heavy rain.\",\"It gets worse in winter.\",\"It appeared suddenly with no rain.\",\"Something else is happening.\"],\"diy_verification\":\"\",\"photo_request\":\"A photo of the wall directly below the stain and any visible roof tiles or sheeting above would help confirm whether this is rain ingress or rising damp.\",\"confidence_drivers\":[\"Ambiguous staining pattern\",\"No active drip visible\",\"Source not in frame\"]}",
+    "expected": {
+        "diagnosis": "Possible Damp Or Roof Leak",
+        "clarification_questions_count": 4,
+        "contractor_checklist_count": 0,
+        "image_observations_count": 1,
+        "primary_evidence_count": 1
+    }
+}
