@@ -80,6 +80,8 @@ jobs:
       MOCK_PLACES: '1'
       MOCK_BRAVE: '1'
       CI: 'true'
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co' }}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder-anon-key' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4

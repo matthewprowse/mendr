@@ -21,10 +21,8 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { PGlite } from '@electric-sql/pglite';
 
-// After the migration squash, the individual incremental migrations live here
-// (migrations/ holds only the generated baseline). The PGlite/pg harnesses load
-// these specific Pro migrations on a stub base; the baseline is what a real
-// Supabase branch builds from.
+// Consolidated pro-portal DDL derived from the original incremental migrations.
+// A single file keeps the harness independent of individual migration timestamps.
 export const MIGRATIONS_DIR = join(process.cwd(), 'supabase', 'migrations_pre_baseline');
 
 /** Read a migration file's SQL by filename. */
@@ -34,17 +32,7 @@ export function readMigration(file: string): string {
 
 /** Pro-portal migrations, in apply order, layered on the base schema. */
 export const PRO_MIGRATIONS = [
-    '20260604130000_lead_consents_and_refinement_count.sql',
-    '20260604160000_lead_states_and_provider_merge.sql',
-    '20260605123139_provider_claims.sql',
-    '20260605152115_provider_customers.sql',
-    '20260605160926_jobs.sql',
-    '20260605161456_quotes.sql',
-    '20260605162340_invoices.sql',
-    '20260605163225_provider_members.sql',
-    '20260605163239_provider_members_fix_rls_recursion.sql',
-    '20260605163403_get_user_id_by_email_rpc.sql',
-    '20260605170401_providers_plan_tier.sql',
+    'pro_portal.sql',
 ];
 
 export const ROLES_AUTH_SQL = `
